@@ -102,5 +102,5 @@ PID_FILE="/tmp/lobster-guardian.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat
 	@echo "- **env**: 配置文件，可调整巡检频率和路径。" >> $(PKG_DIR)/README.md
 	@# 压缩发布包 (Compression) & 清理目录 (Cleanup)
 	@echo "📦 Compressing release package: $(PKG_NAME).tar.gz"
-	@cd $(RELEASE_ROOT) && tar -czf $(PKG_NAME).tar.gz $(PKG_NAME) && rm -rf $(PKG_NAME)
+	@cd $(RELEASE_ROOT) && COPYFILE_DISABLE=1 tar -czf $(PKG_NAME).tar.gz $(PKG_NAME) && rm -rf $(PKG_NAME)
 	@echo "✅ Release package: $(RELEASE_ROOT)/$(PKG_NAME).tar.gz"

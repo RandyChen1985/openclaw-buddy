@@ -182,7 +182,8 @@ rm -f "${BINARY_NAME}"
 # 10. 压缩发布包 (Compression) & 清理目录 (Cleanup)
 echo "📦 正在压缩发布包: ${PKG_NAME}.tar.gz"
 cd "${RELEASE_ROOT}"
-tar -czf "${PKG_NAME}.tar.gz" "${PKG_NAME}"
+# 使用 COPYFILE_DISABLE=1 禁用 macOS 特有的元数据文件 (._文件)
+COPYFILE_DISABLE=1 tar -czf "${PKG_NAME}.tar.gz" "${PKG_NAME}"
 echo "🧹 清理发布包目录: ${PKG_NAME}"
 rm -rf "${PKG_NAME}"
 cd ..
