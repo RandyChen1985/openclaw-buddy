@@ -83,7 +83,9 @@ cd "$(dirname "$0")"
 
 # 1. 环境预检查: OpenClaw 是否安装
 if ! command -v openclaw &> /dev/null; then
-    echo "❌ 错误: 未找到 'openclaw' 命令，请确保它已安装在 PATH 中。"
+    echo "❌ 错误: 未找到 'openclaw' 命令。"
+    echo "💡 提示: 请确保它已安装在 PATH 中。当前 PATH 为: $PATH"
+    echo "💡 建议: 如果您使用 NVM，请尝试使用 'bash start.sh' 或直接 './start.sh' 运行。"
     exit 1
 fi
 

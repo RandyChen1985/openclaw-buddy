@@ -66,7 +66,8 @@ release: build
 	@echo '# 故障诊断报表（Markdown 格式）的存放目录' >> $(PKG_DIR)/env
 	@echo 'REPORT_DIR="./reports"' >> $(PKG_DIR)/env
 	@# 创建运行脚本（支持后台运行与自检）
-	@printf '#!/bin/bash\ncd "$$(dirname "$$0")"\n# 1. 环境预检查\nif ! command -v openclaw &> /dev/null; then\n  echo "❌ Error: openclaw command not found."\n  exit 1\nfi\n# 2. 状态预检查\nif ! openclaw status &> /dev/null; then\n  echo "⚠️ Warning: OpenClaw is not running. Service will attempt to start it if needed."\nfi\nPID_FILE="/tmp/lobster-guardian.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  if ps -p $$PID > /dev/null; then\n    echo "❌ 有孚小龙虾带外服务已经运行中 (PID: $$PID)."\n    exit 1\n  fi\n  rm -f "$$PID_FILE"\nfi\necho "🚀 正在后台启动有孚小龙虾带外服务..."\nnohup ./lib/$(BINARY_NAME) >> ./logs/guardian.log 2>&1 &\nPID=$$!\necho "✅ 有孚小龙虾带外服务启动成功，PID: $$PID"\necho "📝 日志文件: ./logs/guardian.log"\n' > $(PKG_DIR)/start.sh
+	@printf '#!/bin/bash\ncd "$$(dirname "$$0")"\n# 1. 环境预检查\nif ! command -v openclaw &> /dev/null; then\n  echo "❌ Error: openclaw command not found."\n  echo "💡 Current PATH: $$PATH"\n  exit 1\nfi\n# 2. 状态预检查\nif ! openclaw status &> /dev/null; then\n  echo "⚠️ Warning: OpenClaw is not running. Service will attempt to start it if needed."\nfi\n
+PID_FILE="/tmp/lobster-guardian.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  if ps -p $$PID > /dev/null; then\n    echo "❌ 有孚小龙虾带外服务已经运行中 (PID: $$PID)."\n    exit 1\n  fi\n  rm -f "$$PID_FILE"\nfi\necho "🚀 正在后台启动有孚小龙虾带外服务..."\nnohup ./lib/$(BINARY_NAME) >> ./logs/guardian.log 2>&1 &\nPID=$$!\necho "✅ 有孚小龙虾带外服务启动成功，PID: $$PID"\necho "📝 日志文件: ./logs/guardian.log"\n' > $(PKG_DIR)/start.sh
 	@chmod +x $(PKG_DIR)/start.sh
 	@# 创建停止脚本
 	@printf '#!/bin/bash\nPID_FILE="/tmp/lobster-guardian.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  kill $$PID && echo "Stopped Service (PID: $$PID)"\n  rm -f "$$PID_FILE"\nelse\n  echo "服务未在运行 (PID 文件不存在)。"\nfi\n' > $(PKG_DIR)/stop.sh
