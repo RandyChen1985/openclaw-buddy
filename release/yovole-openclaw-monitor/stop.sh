@@ -5,5 +5,5 @@ if [ -f "$PID_FILE" ]; then
     kill $PID && echo "Stopped Guardian (PID: $PID)"
     rm -f "$PID_FILE"
 else
-    echo "Guardian is not running (PID file not found)."
+    echo "Guardian 未在运行 (未找到 PID 文件)。"
 fi

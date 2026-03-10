@@ -27,34 +27,34 @@ release: build
 	@mkdir -p $(PKG_DIR)/logs
 	@mkdir -p $(PKG_DIR)/reports
 	@cp $(BINARY_NAME) $(PKG_DIR)/lib/
-	@# 创建带有详细说明的 .env 文件
-	@echo '# 🦞 OpenClaw 守护者 (Lobster Guardian) 配置文件' > $(PKG_DIR)/.env
-	@echo '' >> $(PKG_DIR)/.env
-	@echo '# [基础配置]' >> $(PKG_DIR)/.env
-	@echo '# OpenClaw 的配置目录路径，守护进程会监控此目录下的 openclaw.json' >> $(PKG_DIR)/.env
-	@echo 'OPENCLAW_CONFIG_DIR="$(HOME)/.openclaw"' >> $(PKG_DIR)/.env
-	@echo '' >> $(PKG_DIR)/.env
-	@echo '# [监控配置]' >> $(PKG_DIR)/.env
-	@echo '# 巡检频率（单位：秒），默认每 30 秒探测一次小龙虾状态' >> $(PKG_DIR)/.env
-	@echo 'CHECK_INTERVAL_SECONDS=30' >> $(PKG_DIR)/.env
-	@echo '' >> $(PKG_DIR)/.env
-	@echo '# 小龙虾网关监听的健康检查端口（默认：18789）' >> $(PKG_DIR)/.env
-	@echo 'HEALTH_PORT=18789' >> $(PKG_DIR)/.env
-	@echo '' >> $(PKG_DIR)/.env
-	@echo '# [告警配置]' >> $(PKG_DIR)/.env
-	@echo '# 是否启用钉钉告警 (true/false)' >> $(PKG_DIR)/.env
-	@echo 'DINGDING_ENABLED=false' >> $(PKG_DIR)/.env
-	@echo '# 钉钉 Webhook Access Token' >> $(PKG_DIR)/.env
-	@echo 'DINGDING_ACCESS_TOKEN=""' >> $(PKG_DIR)/.env
-	@echo '# 钉钉 Webhook 签名密钥 (可选)' >> $(PKG_DIR)/.env
-	@echo 'DINGDING_SECRET=""' >> $(PKG_DIR)/.env
-	@echo '' >> $(PKG_DIR)/.env
-	@echo '# [日志与报表]' >> $(PKG_DIR)/.env
-	@echo '# 守护进程自身的日志存放路径' >> $(PKG_DIR)/.env
-	@echo 'LOG_FILE="./logs/guardian.log"' >> $(PKG_DIR)/.env
-	@echo '' >> $(PKG_DIR)/.env
-	@echo '# 故障诊断报表（Markdown 格式）的存放目录' >> $(PKG_DIR)/.env
-	@echo 'REPORT_DIR="./reports"' >> $(PKG_DIR)/.env
+	@# 创建带有详细说明的 env 文件
+	@echo '# 🦞 OpenClaw 守护者 (Lobster Guardian) 配置文件' > $(PKG_DIR)/env
+	@echo '' >> $(PKG_DIR)/env
+	@echo '# [基础配置]' >> $(PKG_DIR)/env
+	@echo '# OpenClaw 的配置目录路径，守护进程会监控此目录下的 openclaw.json' >> $(PKG_DIR)/env
+	@echo 'OPENCLAW_CONFIG_DIR="$(HOME)/.openclaw"' >> $(PKG_DIR)/env
+	@echo '' >> $(PKG_DIR)/env
+	@echo '# [监控配置]' >> $(PKG_DIR)/env
+	@echo '# 巡检频率（单位：秒），默认每 30 秒探测一次小龙虾状态' >> $(PKG_DIR)/env
+	@echo 'CHECK_INTERVAL_SECONDS=30' >> $(PKG_DIR)/env
+	@echo '' >> $(PKG_DIR)/env
+	@echo '# 小龙虾网关监听的健康检查端口（默认：18789）' >> $(PKG_DIR)/env
+	@echo 'HEALTH_PORT=18789' >> $(PKG_DIR)/env
+	@echo '' >> $(PKG_DIR)/env
+	@echo '# [告警配置]' >> $(PKG_DIR)/env
+	@echo '# 是否启用钉钉告警 (true/false)' >> $(PKG_DIR)/env
+	@echo 'DINGDING_ENABLED=false' >> $(PKG_DIR)/env
+	@echo '# 钉钉 Webhook Access Token' >> $(PKG_DIR)/env
+	@echo 'DINGDING_ACCESS_TOKEN=""' >> $(PKG_DIR)/env
+	@echo '# 钉钉 Webhook 签名密钥 (可选)' >> $(PKG_DIR)/env
+	@echo 'DINGDING_SECRET=""' >> $(PKG_DIR)/env
+	@echo '' >> $(PKG_DIR)/env
+	@echo '# [日志与报表]' >> $(PKG_DIR)/env
+	@echo '# 守护进程自身的日志存放路径' >> $(PKG_DIR)/env
+	@echo 'LOG_FILE="./logs/guardian.log"' >> $(PKG_DIR)/env
+	@echo '' >> $(PKG_DIR)/env
+	@echo '# 故障诊断报表（Markdown 格式）的存放目录' >> $(PKG_DIR)/env
+	@echo 'REPORT_DIR="./reports"' >> $(PKG_DIR)/env
 	@# 创建运行脚本（支持后台运行与自检）
 	@printf '#!/bin/bash\ncd "$$(dirname "$$0")"\nPID_FILE="/tmp/lobster-guardian.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  if ps -p $$PID > /dev/null; then\n    echo "❌ Guardian is already running (PID: $$PID)."\n    exit 1\n  fi\n  rm -f "$$PID_FILE"\nfi\necho "🚀 Starting Guardian in background..."\nnohup ./lib/$(BINARY_NAME) >> ./logs/guardian.log 2>&1 &\nPID=$$!\necho "✅ Guardian started with PID: $$PID"\necho "📝 Log file: ./logs/guardian.log"\n' > $(PKG_DIR)/start.sh
 	@chmod +x $(PKG_DIR)/start.sh

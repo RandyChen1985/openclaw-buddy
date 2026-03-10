@@ -32,9 +32,9 @@ mkdir -p "${PKG_DIR}/reports"
 # 4. 移动二进制文件
 mv "${BINARY_NAME}" "${PKG_DIR}/lib/"
 
-# 5. 生成 .env 配置文件 (带详细说明)
-echo "📝 生成配置文件: .env"
-cat <<EOF > "${PKG_DIR}/.env"
+# 5. 生成 env 配置文件 (带详细说明)
+echo "📝 生成配置文件: env"
+cat <<EOF > "${PKG_DIR}/env"
 # 🦞 OpenClaw 守护者 (Lobster Guardian) 配置文件
 
 # [基础配置]
@@ -71,26 +71,40 @@ cat <<'EOF' > "${PKG_DIR}/start.sh"
 # 自动进入脚本所在目录
 cd "$(dirname "$0")"
 
-# 检查是否已经在运行
+# 1. 环境预检查: OpenClaw 是否安装
+if ! command -v openclaw &> /dev/null; then
+    echo "❌ 错误: 未找到 'openclaw' 命令，请确保它已安装在 PATH 中。"
+    exit 1
+fi
+
+# 2. 状态预检查: OpenClaw 是否已启动
+# 守护进程的设计初衷是守护已运行的服务，若服务未运行则不启动守护
+if ! openclaw status &> /dev/null; then
+    echo "⚠️ 警告: 检测到 OpenClaw 网关可能未在运行或配置错误。"
+    echo "💡 提示: 请先使用 'openclaw gateway' 启动服务后再运行 Guardian。"
+    # exit 1 # 如果您希望强制要求启动，可以取消此处的注释
+fi
+
+# 3. 检查 Guardian 是否已经在运行
 PID_FILE="/tmp/lobster-guardian.pid"
 if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")
     if ps -p $PID > /dev/null; then
-        echo "❌ Guardian is already running (PID: $PID)."
+        echo "❌ Guardian 已经运行中 (PID: $PID)。"
         exit 1
     fi
     rm -f "$PID_FILE"
 fi
 
-# 后台运行逻辑
-echo "🚀 Starting Guardian in background..."
+# 4. 后台运行逻辑
+echo "🚀 正在后台启动 Guardian..."
 # 我们将标准输出和错误流重定向到 logs/guardian.log
 nohup ./lib/lobster-guardian >> ./logs/guardian.log 2>&1 &
 
 # 获取刚启动的 PID
 PID=$!
-echo "✅ Guardian started with PID: $PID"
-echo "📝 Log file: ./logs/guardian.log"
+echo "✅ Guardian 启动成功，PID: $PID"
+echo "📝 日志文件: ./logs/guardian.log"
 EOF
 chmod +x "${PKG_DIR}/start.sh"
 
@@ -104,7 +118,7 @@ if [ -f "$PID_FILE" ]; then
     kill $PID && echo "Stopped Guardian (PID: $PID)"
     rm -f "$PID_FILE"
 else
-    echo "Guardian is not running (PID file not found)."
+    echo "Guardian 未在运行 (未找到 PID 文件)。"
 fi
 EOF
 chmod +x "${PKG_DIR}/stop.sh"
@@ -138,7 +152,7 @@ cat <<EOF > "${PKG_DIR}/README.md"
 - **lib/**: 存放核心二进制程序。
 - **logs/**: 存放 Guardian 自身的运行日志。
 - **reports/**: 存放服务崩溃后的差异分析报表。
-- **.env**: 配置文件，可调整巡检频率和路径。
+- **env**: 配置文件，可调整巡检频率和路径。
 EOF
 
 # 9. 清理中间产物 (Cleanup)

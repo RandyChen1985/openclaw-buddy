@@ -3,7 +3,7 @@
 
 # Logs
 **/logs/
-.env
+env
 
 # Go dependencies
 vendor/

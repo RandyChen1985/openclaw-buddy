@@ -19,7 +19,7 @@ type Config struct {
 }
 
 func LoadConfig() (*Config, error) {
-	_ = godotenv.Load() // Ignore error if .env doesn't exist
+	_ = godotenv.Load("env") // Load the file named "env" instead of ".env"
 
 	interval, _ := strconv.Atoi(getEnv("CHECK_INTERVAL_SECONDS", "30"))
 	healthPort, _ := strconv.Atoi(getEnv("HEALTH_PORT", "18789"))

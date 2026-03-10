@@ -62,7 +62,7 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
    ```
 
 2. **配置钉钉告警**:
-   在 `release/yovole-openclaw-monitor/.env` 中配置：
+   在 `release/yovole-openclaw-monitor/env` 中配置：
    ```env
    DINGDING_ENABLED=true
    DINGDING_ACCESS_TOKEN="你的Token"
