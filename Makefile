@@ -91,3 +91,7 @@ release: build
 	@echo "- **logs/**: 存放 Guardian 自身的运行日志。" >> $(PKG_DIR)/README.md
 	@echo "- **reports/**: 存放服务崩溃后的差异分析报表。" >> $(PKG_DIR)/README.md
 	@echo "- **env**: 配置文件，可调整巡检频率和路径。" >> $(PKG_DIR)/README.md
+	@# 压缩发布包 (Compression) & 清理目录 (Cleanup)
+	@echo "📦 Compressing release package: $(PKG_NAME).tar.gz"
+	@cd $(RELEASE_ROOT) && tar -czf $(PKG_NAME).tar.gz $(PKG_NAME) && rm -rf $(PKG_NAME)
+	@echo "✅ Release package: $(RELEASE_ROOT)/$(PKG_NAME).tar.gz"

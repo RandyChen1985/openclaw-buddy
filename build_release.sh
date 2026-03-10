@@ -177,6 +177,14 @@ EOF
 echo "🧹 清理根目录中间产物: ${BINARY_NAME}"
 rm -f "${BINARY_NAME}"
 
+# 10. 压缩发布包 (Compression) & 清理目录 (Cleanup)
+echo "📦 正在压缩发布包: ${PKG_NAME}.tar.gz"
+cd "${RELEASE_ROOT}"
+tar -czf "${PKG_NAME}.tar.gz" "${PKG_NAME}"
+echo "🧹 清理发布包目录: ${PKG_NAME}"
+rm -rf "${PKG_NAME}"
+cd ..
+
 echo "--------------------------------------------------"
-echo "✅ 打包完成！发布包位于: ${PKG_DIR}"
+echo "✅ 打包完成！发布包位于: ${RELEASE_ROOT}/${PKG_NAME}.tar.gz"
 echo "--------------------------------------------------"

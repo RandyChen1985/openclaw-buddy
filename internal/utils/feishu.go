@@ -7,6 +7,7 @@ import (
 	"log"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
+	larkevent "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 )
@@ -29,7 +30,12 @@ func NewFeishu(appID, appSecret string) *Feishu {
 
 // StartLongConnection 启动 WebSocket 长链接
 func (f *Feishu) StartLongConnection(ctx context.Context) {
-	wsClient := larkws.NewClient(f.AppID, f.AppSecret)
+	// 必须创建一个 EventDispatcher，即使它不处理任何事件，否则 SDK 内部会 panic
+	eventHandler := larkevent.NewEventDispatcher("", "")
+	
+	wsClient := larkws.NewClient(f.AppID, f.AppSecret,
+		larkws.WithEventHandler(eventHandler),
+	)
 
 	go func() {
 		log.Printf("🔗 Feishu WebSocket Long-connection starting...")
@@ -42,7 +48,6 @@ func (f *Feishu) StartLongConnection(ctx context.Context) {
 
 // SendInteractiveCard 发送交互式卡片消息
 func (f *Feishu) SendInteractiveCard(ctx context.Context, receiveID, title, text string) error {
-	// 使用 map 构建卡片结构，确保序列化时自动转义特殊字符
 	cardMap := map[string]interface{}{
 		"config": map[string]interface{}{
 			"wide_screen_mode": true,

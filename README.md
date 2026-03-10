@@ -15,12 +15,12 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
 
 ## ✨ 核心特性
 
-- **🛡️ 强生存依赖**：启动时自动校验 OpenClaw 运行状态。
+- **🛡️ 环境自检**：启动时自动校验 OpenClaw 环境，若未启动则输出警告并持续守候。
 - **🔄 多级自愈 (Multi-tier Healing)**：
     - **Tier 1: 配置回滚**：自动从 `openclaw.json.bak` 恢复上一个稳定配置。
     - **Tier 2: 深度修复**：若回滚失败，调用 `openclaw doctor --fix` 自动修复运行环境。
 - **📊 差异分析**：宕机时自动生成 Markdown 格式的故障差异报表（Diff Report）。
-- **🔔 主动告警**：集成飞书 Webhook，实时推送故障、尝试自愈及成功恢复的 Markdown 消息。
+- **🔔 主动告警**：集成飞书 WebSocket 长连接模式，实时推送服务启动、故障及自愈成功的交互式卡片消息。
 - **🔒 单例保护**：利用 `/tmp/lobster-guardian.pid` 文件锁防止多个实例冲突。
 
 ## ⚙️ 运行流程
@@ -30,7 +30,9 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
                │
        [ Singleton Check ] ──────▶ Fail? ──▶ Exit
                │
-    [ Env & Running Check ] ─────▶ Not Running? ──▶ Exit & Prompt
+    [ Env & Path Check ] ────────▶ Fail? ──▶ Exit
+               │
+    [ Running Check ] ───────────▶ No? ───▶ Warning & Wait
                │
     ┌───▶ [ Health Probe ] (Every 30s)
     │          │
@@ -44,7 +46,7 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
     │   2. Compare Diff & Generate MD Report
     │   3. Rollback (bak -> current)
     │   4. IF Fail -> Run 'openclaw doctor --fix'
-    │   5. Force Restart (--force)
+    │   5. Force Restart (--force) (Non-blocking)
     │   6. Send Feishu Alert 🔔
     └──────────┘
 ```
@@ -57,13 +59,10 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
 2026/03/10 12:25:23 🛡️ Guardian started (PID: 30362). Watching OpenClaw...
 2026/03/10 12:25:23 🛡️ Guardian monitor loop started. Every 30 seconds.
 2026/03/10 12:25:58 ✅ OpenClaw is healthy.
-2026/03/10 12:26:28 ✅ OpenClaw is healthy.
-2026/03/10 12:26:57 ✅ OpenClaw is healthy.
-2026/03/10 12:27:27 ✅ OpenClaw is healthy.
+...
 2026/03/10 12:27:53 ⚠️ Port 18789 is not listening! Service might be down.
 2026/03/10 12:27:53 🛠️ Initiating self-healing process for reason: Port Down
 2026/03/10 12:27:53 🔄 Attempting to recover service...
-2026/03/10 12:27:53 🔄 Rolling back configuration from backup...
 2026/03/10 12:27:53 ✅ Config rollback successful.
 2026/03/10 12:27:53 🚀 Requesting gateway force start...
 2026/03/10 12:27:53 ✨ Gateway start request sent. Self-healing cycle completed.
@@ -82,20 +81,27 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
    ```bash
    ./build_release.sh
    ```
+   打包完成后，最终产物为：`release/yovole-openclaw-monitor.tar.gz`
 
-2. **配置飞书告警 (应用长连接模式)**:
-   在 `release/yovole-openclaw-monitor/env` 中配置：
+2. **部署与运行**:
+   ```bash
+   tar -zxvf yovole-openclaw-monitor.tar.gz
+   cd yovole-openclaw-monitor
+   
+   # 编辑配置文件
+   vi env
+   
+   # 启动服务
+   ./start.sh
+   ```
+
+3. **配置飞书告警 (应用长连接模式)**:
+   在 `env` 中配置：
    ```env
    FEISHU_ENABLED=true
    FEISHU_APP_ID="你的AppID"
    FEISHU_APP_SECRET="你的AppSecret"
-   FEISHU_CHAT_ID="接收通知的群组ID或用户ID"
-   ```
-
-3. **运行服务**:
-   ```bash
-   cd release/yovole-openclaw-monitor
-   ./start.sh
+   FEISHU_CHAT_ID="接收通知的群聊ID (oc_xxx) 或个人 ID (ou_xxx)"
    ```
 
 ## 📄 开源协议
