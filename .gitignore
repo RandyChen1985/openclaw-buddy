@@ -1,10 +1,8 @@
 # Binaries
-/release/
 /lobster-guardian
 
-# Logs and Reports
+# Logs
 **/logs/
-**/reports/
 .env
 
 # Go dependencies
