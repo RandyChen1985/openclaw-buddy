@@ -11,6 +11,10 @@ type Config struct {
 	OpenClawConfigDir    string
 	CheckIntervalSeconds int
 	LogFile              string
+	LogMaxSize           int  // 每个日志文件最大 MB 数
+	LogMaxBackups        int  // 保留旧日志文件的最大个数
+	LogMaxAge            int  // 保留旧日志文件的最大天数
+	LogCompress          bool // 是否压缩旧日志
 	ReportDir            string
 	HealthPort           int
 	FeishuEnabled        bool
@@ -26,10 +30,20 @@ func LoadConfig() (*Config, error) {
 	healthPort, _ := strconv.Atoi(getEnv("HEALTH_PORT", "18789"))
 	feishuEnabled, _ := strconv.ParseBool(getEnv("FEISHU_ENABLED", "false"))
 
+	// 日志轮转配置
+	maxSize, _ := strconv.Atoi(getEnv("LOG_MAX_SIZE", "10"))
+	maxBackups, _ := strconv.Atoi(getEnv("LOG_MAX_BACKUPS", "5"))
+	maxAge, _ := strconv.Atoi(getEnv("LOG_MAX_AGE", "7"))
+	compress, _ := strconv.ParseBool(getEnv("LOG_COMPRESS", "true"))
+
 	return &Config{
 		OpenClawConfigDir:    getEnv("OPENCLAW_CONFIG_DIR", os.Getenv("HOME")+"/.openclaw"),
 		CheckIntervalSeconds: interval,
 		LogFile:              getEnv("LOG_FILE", "./logs/guardian.log"),
+		LogMaxSize:           maxSize,
+		LogMaxBackups:        maxBackups,
+		LogMaxAge:            maxAge,
+		LogCompress:          compress,
 		ReportDir:            getEnv("REPORT_DIR", "./reports"),
 		HealthPort:           healthPort,
 		FeishuEnabled:        feishuEnabled,

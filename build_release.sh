@@ -61,6 +61,14 @@ FEISHU_CHAT_ID=""
 # [日志与报表]
 # 守护进程自身的日志存放路径
 LOG_FILE="./logs/guardian.log"
+# 日志切分最大 MB (默认: 10)
+LOG_MAX_SIZE=10
+# 保留旧日志文件的最大个数 (默认: 5)
+LOG_MAX_BACKUPS=5
+# 保留旧日志文件的最大天数 (默认: 7)
+LOG_MAX_AGE=7
+# 是否压缩旧日志 (true/false)
+LOG_COMPRESS=true
 
 # 故障诊断报表（Markdown 格式）的存放目录
 REPORT_DIR="./reports"

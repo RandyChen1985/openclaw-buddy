@@ -54,6 +54,14 @@ release: build
 	@echo '# [日志与报表]' >> $(PKG_DIR)/env
 	@echo '# 守护进程自身的日志存放路径' >> $(PKG_DIR)/env
 	@echo 'LOG_FILE="./logs/guardian.log"' >> $(PKG_DIR)/env
+	@echo '# 日志切分最大 MB (默认: 10)' >> $(PKG_DIR)/env
+	@echo 'LOG_MAX_SIZE=10' >> $(PKG_DIR)/env
+	@echo '# 保留旧日志文件的最大个数 (默认: 5)' >> $(PKG_DIR)/env
+	@echo 'LOG_MAX_BACKUPS=5' >> $(PKG_DIR)/env
+	@echo '# 保留旧日志文件的最大天数 (默认: 7)' >> $(PKG_DIR)/env
+	@echo 'LOG_MAX_AGE=7' >> $(PKG_DIR)/env
+	@echo '# 是否压缩旧日志 (true/false)' >> $(PKG_DIR)/env
+	@echo 'LOG_COMPRESS=true' >> $(PKG_DIR)/env
 	@echo '' >> $(PKG_DIR)/env
 	@echo '# 故障诊断报表（Markdown 格式）的存放目录' >> $(PKG_DIR)/env
 	@echo 'REPORT_DIR="./reports"' >> $(PKG_DIR)/env
