@@ -49,6 +49,28 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
     └──────────┘
 ```
 
+## 📊 运行实例
+
+以下是 `logs/guardian.log` 中记录的一次真实自愈过程：
+
+```text
+2026/03/10 12:25:23 🛡️ Guardian started (PID: 30362). Watching OpenClaw...
+2026/03/10 12:25:23 🛡️ Guardian monitor loop started. Every 30 seconds.
+2026/03/10 12:25:58 ✅ OpenClaw is healthy.
+2026/03/10 12:26:28 ✅ OpenClaw is healthy.
+2026/03/10 12:26:57 ✅ OpenClaw is healthy.
+2026/03/10 12:27:27 ✅ OpenClaw is healthy.
+2026/03/10 12:27:53 ⚠️ Port 18789 is not listening! Service might be down.
+2026/03/10 12:27:53 🛠️ Initiating self-healing process for reason: Port Down
+2026/03/10 12:27:53 🔄 Attempting to recover service...
+2026/03/10 12:27:53 🔄 Rolling back configuration from backup...
+2026/03/10 12:27:53 ✅ Config rollback successful.
+2026/03/10 12:27:53 🚀 Requesting gateway force start...
+2026/03/10 12:27:53 ✨ Gateway start request sent. Self-healing cycle completed.
+2026/03/10 12:27:53 🔄 Returning to monitoring loop...
+2026/03/10 12:28:27 ✅ OpenClaw is healthy.
+```
+
 ## 🛠️ 如何编译与打包
 
 ### 前提条件

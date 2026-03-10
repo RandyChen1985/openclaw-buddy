@@ -83,9 +83,9 @@ fi
 # 守护进程的设计初衷是守护已运行的服务，若服务未运行则不启动守护
 # 尝试通过 openclaw status 或检测 18789 端口来判断
 if ! openclaw status &> /dev/null; then
-    echo "❌ 错误: 检测到 OpenClaw 网关未在运行。"
-    echo "💡 提示: 请先使用 'openclaw gateway' 启动服务后再运行 Guardian。"
-    exit 1
+    echo "⚠️ 警告: 检测到 OpenClaw 网关可能未在运行。"
+    echo "💡 提示: 监控将继续启动，并在检测到故障时尝试拉起服务。"
+    # exit 1 # 取消强制退出，仅作提示
 fi
 
 # 3. 检查 Guardian 是否已经在运行
@@ -139,6 +139,21 @@ cat <<EOF > "${PKG_DIR}/README.md"
 3. **多级自愈**：检测到配置错误导致的启动失败后，自动将 \`openclaw.json.bak\` 还原；若回滚失败或缺失备份，则执行 \`openclaw doctor --fix\` 自动修复环境。
 4. **强制自愈**：执行 \`openclaw gateway --force\` 强行恢复服务。
 5. **主动告警**：支持通过飞书 Webhook 发送故障与自愈成功的实时告警。
+
+## 📊 运行实例
+以下是 \`logs/guardian.log\` 中记录的一次真实自愈过程：
+\`\`\`text
+2026/03/10 12:25:23 🛡️ Guardian started (PID: 30362). Watching OpenClaw...
+2026/03/10 12:25:23 🛡️ Guardian monitor loop started. Every 30 seconds.
+2026/03/10 12:25:58 ✅ OpenClaw is healthy.
+2026/03/10 12:27:53 ⚠️ Port 18789 is not listening! Service might be down.
+2026/03/10 12:27:53 🛠️ Initiating self-healing process for reason: Port Down
+2026/03/10 12:27:53 🔄 Attempting to recover service...
+2026/03/10 12:27:53 ✅ Config rollback successful.
+2026/03/10 12:27:53 🚀 Requesting gateway force start...
+2026/03/10 12:27:53 ✨ Gateway start request sent. Self-healing cycle completed.
+2026/03/10 12:28:27 ✅ OpenClaw is healthy.
+\`\`\`
 
 ## 🚀 快速开始
 ### 前提条件

@@ -117,14 +117,14 @@ func (g *Guardian) heal(reason string) {
 	}
 
 	// 4. Force restart
-	log.Printf("🚀 Attempting to force start gateway...")
+	log.Printf("🚀 Requesting gateway force start...")
 	if err := process.ForceStartGateway(); err != nil {
-		log.Printf("❌ Failed to restart gateway: %v", err)
+		log.Printf("❌ Failed to initiate gateway start: %v", err)
 		g.notifyFeishu(context.Background(), "❌ 小龙虾自愈失败", fmt.Sprintf("节点: %s\n严重级别: ERROR\n原因: 进程拉起失败: %v", hostname, err))
 		return
 	}
 
-	log.Printf("✨ Self-healing completed.")
+	log.Printf("✨ Gateway start request sent. Self-healing cycle completed.")
 	recoveryMethod := "配置回滚"
 	if !recovered {
 		recoveryMethod = "强行重启 (未执行配置恢复)"
@@ -133,6 +133,8 @@ func (g *Guardian) heal(reason string) {
 	}
 
 	g.notifyFeishu(context.Background(), "✅ 小龙虾自愈成功", fmt.Sprintf("节点: %s\n状态: ✅ 已自动恢复上线\n操作: %s 并强行重启%s", hostname, recoveryMethod, reportMsg))
+	
+	log.Printf("🔄 Returning to monitoring loop...")
 }
 
 func (g *Guardian) notifyFeishu(ctx context.Context, title, text string) {

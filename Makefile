@@ -58,7 +58,7 @@ release: build
 	@echo '# 故障诊断报表（Markdown 格式）的存放目录' >> $(PKG_DIR)/env
 	@echo 'REPORT_DIR="./reports"' >> $(PKG_DIR)/env
 	@# 创建运行脚本（支持后台运行与自检）
-	@printf '#!/bin/bash\ncd "$$(dirname "$$0")"\n# 1. 环境预检查\nif ! command -v openclaw &> /dev/null; then\n  echo "❌ Error: openclaw command not found."\n  exit 1\nfi\n# 2. 状态预检查\nif ! openclaw status &> /dev/null; then\n  echo "❌ Error: OpenClaw is not running. Please start it first."\n  exit 1\nfi\nPID_FILE="/tmp/lobster-guardian.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  if ps -p $$PID > /dev/null; then\n    echo "❌ Guardian is already running (PID: $$PID)."\n    exit 1\n  fi\n  rm -f "$$PID_FILE"\nfi\necho "🚀 Starting Guardian in background..."\nnohup ./lib/$(BINARY_NAME) >> ./logs/guardian.log 2>&1 &\nPID=$$!\necho "✅ Guardian started with PID: $$PID"\necho "📝 Log file: ./logs/guardian.log"\n' > $(PKG_DIR)/start.sh
+	@printf '#!/bin/bash\ncd "$$(dirname "$$0")"\n# 1. 环境预检查\nif ! command -v openclaw &> /dev/null; then\n  echo "❌ Error: openclaw command not found."\n  exit 1\nfi\n# 2. 状态预检查\nif ! openclaw status &> /dev/null; then\n  echo "⚠️ Warning: OpenClaw is not running. Guardian will attempt to start it if needed."\nfi\nPID_FILE="/tmp/lobster-guardian.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  if ps -p $$PID > /dev/null; then\n    echo "❌ Guardian is already running (PID: $$PID)."\n    exit 1\n  fi\n  rm -f "$$PID_FILE"\nfi\necho "🚀 Starting Guardian in background..."\nnohup ./lib/$(BINARY_NAME) >> ./logs/guardian.log 2>&1 &\nPID=$$!\necho "✅ Guardian started with PID: $$PID"\necho "📝 Log file: ./logs/guardian.log"\n' > $(PKG_DIR)/start.sh
 	@chmod +x $(PKG_DIR)/start.sh
 	@# 创建停止脚本
 	@printf '#!/bin/bash\nPID_FILE="/tmp/lobster-guardian.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  kill $$PID && echo "Stopped Guardian (PID: $$PID)"\n  rm -f "$$PID_FILE"\nelse\n  echo "Guardian is not running."\nfi\n' > $(PKG_DIR)/stop.sh
@@ -73,7 +73,7 @@ release: build
 	@echo "2. **故障诊断**：一旦发现服务宕机，自动对比当前的 \`openclaw.json\` 与备份配置的差异并生成 Markdown 报表。" >> $(PKG_DIR)/README.md
 	@echo "3. **多级自愈**：检测到配置错误导致的启动失败后，自动将 \`openclaw.json.bak\` 还原；若回滚失败或缺失备份，则执行 \`openclaw doctor --fix\` 自动修复环境。" >> $(PKG_DIR)/README.md
 	@echo "4. **强制自愈**：执行 \`openclaw gateway --force\` 强行恢复服务。" >> $(PKG_DIR)/README.md
-	@echo "5. **主动告警**：支持通过钉钉 Webhook 发送故障与自愈成功的实时告警。" >> $(PKG_DIR)/README.md
+	@echo "5. **主动告警**：支持通过飞书 Webhook 发送故障与自愈成功的实时告警。" >> $(PKG_DIR)/README.md
 	@echo "" >> $(PKG_DIR)/README.md
 	@echo "## 🚀 快速开始" >> $(PKG_DIR)/README.md
 	@echo "### 前提条件" >> $(PKG_DIR)/README.md
@@ -90,4 +90,4 @@ release: build
 	@echo "- **lib/**: 存放核心二进制程序。" >> $(PKG_DIR)/README.md
 	@echo "- **logs/**: 存放 Guardian 自身的运行日志。" >> $(PKG_DIR)/README.md
 	@echo "- **reports/**: 存放服务崩溃后的差异分析报表。" >> $(PKG_DIR)/README.md
-	@echo "- **.env**: 配置文件，可调整巡检频率和路径。" >> $(PKG_DIR)/README.md
+	@echo "- **env**: 配置文件，可调整巡检频率和路径。" >> $(PKG_DIR)/README.md

@@ -40,13 +40,11 @@ func main() {
 		log.Printf("🦞 OpenClaw Version: %s", version)
 	}
 
-	// 4. Strong Running Dependency Check
+	// 4. Running Dependency Check (Warning only)
 	if !process.IsPortListening(cfg.HealthPort) {
-		log.Fatalf("❌ OpenClaw is NOT running. Please start the gateway manually before running the Guardian.")
-	}
-
-	if err := process.CheckHealth(); err != nil {
-		log.Fatalf("❌ OpenClaw health check failed: %v. Please ensure OpenClaw is working correctly.", err)
+		log.Printf("⚠️ Warning: OpenClaw is NOT running. Guardian will wait for it to start.")
+	} else if err := process.CheckHealth(); err != nil {
+		log.Printf("⚠️ Warning: OpenClaw health check failed: %v. Guardian will attempt to heal if needed.", err)
 	}
 
 	// 5. Setup Context and Signal Handling
