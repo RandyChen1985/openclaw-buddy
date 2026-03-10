@@ -57,22 +57,22 @@ func main() {
 
 	// 5. Running Dependency Check (Warning only)
 	if !process.IsPortListening(cfg.HealthPort) {
-		log.Printf("⚠️ Warning: OpenClaw is NOT running. Guardian will wait for it to start.")
+		log.Printf("⚠️ Warning: OpenClaw 未运行. 有孚小龙虾带外服务将等待启动.")
 	} else if err := process.CheckHealth(); err != nil {
-		log.Printf("⚠️ Warning: OpenClaw health check failed: %v. Guardian will attempt to heal if needed.", err)
+		log.Printf("⚠️ Warning: OpenClaw 健康检查失败: %v. 有孚小龙虾带外服务将尝试自愈.", err)
 	}
 
 	// 6. Setup Context and Signal Handling
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// 7. Start Guardian
+	// 7. Start Service
 	g := guardian.NewGuardian(cfg)
 	
-	log.Printf("🛡️ Guardian started (PID: %d). Watching OpenClaw...", os.Getpid())
+	log.Printf("🛡️ 有孚小龙虾带外服务已启动 (PID: %d). 正在监控 OpenClaw...", os.Getpid())
 	
 	go g.Run(ctx)
 
 	<-ctx.Done()
-	log.Printf("👋 Guardian shutting down gracefully...")
+	log.Printf("👋 有孚小龙虾带外服务正在退出...")
 }

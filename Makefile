@@ -28,7 +28,7 @@ release: build
 	@mkdir -p $(PKG_DIR)/reports
 	@cp $(BINARY_NAME) $(PKG_DIR)/lib/
 	@# 创建带有详细说明的 env 文件
-	@echo '# 🦞 OpenClaw 守护者 (Lobster Guardian) 配置文件' > $(PKG_DIR)/env
+	@echo '# 🦞 有孚小龙虾带外服务配置文件' > $(PKG_DIR)/env
 	@echo '' >> $(PKG_DIR)/env
 	@echo '# [基础配置]' >> $(PKG_DIR)/env
 	@echo '# OpenClaw 的配置目录路径，守护进程会监控此目录下的 openclaw.json' >> $(PKG_DIR)/env
@@ -52,7 +52,7 @@ release: build
 	@echo 'FEISHU_CHAT_ID=""' >> $(PKG_DIR)/env
 	@echo '' >> $(PKG_DIR)/env
 	@echo '# [日志与报表]' >> $(PKG_DIR)/env
-	@echo '# 守护进程自身的日志存放路径' >> $(PKG_DIR)/env
+	@echo '# 本服务的日志存放路径' >> $(PKG_DIR)/env
 	@echo 'LOG_FILE="./logs/guardian.log"' >> $(PKG_DIR)/env
 	@echo '# 日志切分最大 MB (默认: 10)' >> $(PKG_DIR)/env
 	@echo 'LOG_MAX_SIZE=10' >> $(PKG_DIR)/env
@@ -66,15 +66,15 @@ release: build
 	@echo '# 故障诊断报表（Markdown 格式）的存放目录' >> $(PKG_DIR)/env
 	@echo 'REPORT_DIR="./reports"' >> $(PKG_DIR)/env
 	@# 创建运行脚本（支持后台运行与自检）
-	@printf '#!/bin/bash\ncd "$$(dirname "$$0")"\n# 1. 环境预检查\nif ! command -v openclaw &> /dev/null; then\n  echo "❌ Error: openclaw command not found."\n  exit 1\nfi\n# 2. 状态预检查\nif ! openclaw status &> /dev/null; then\n  echo "⚠️ Warning: OpenClaw is not running. Guardian will attempt to start it if needed."\nfi\nPID_FILE="/tmp/lobster-guardian.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  if ps -p $$PID > /dev/null; then\n    echo "❌ Guardian is already running (PID: $$PID)."\n    exit 1\n  fi\n  rm -f "$$PID_FILE"\nfi\necho "🚀 Starting Guardian in background..."\nnohup ./lib/$(BINARY_NAME) >> ./logs/guardian.log 2>&1 &\nPID=$$!\necho "✅ Guardian started with PID: $$PID"\necho "📝 Log file: ./logs/guardian.log"\n' > $(PKG_DIR)/start.sh
+	@printf '#!/bin/bash\ncd "$$(dirname "$$0")"\n# 1. 环境预检查\nif ! command -v openclaw &> /dev/null; then\n  echo "❌ Error: openclaw command not found."\n  exit 1\nfi\n# 2. 状态预检查\nif ! openclaw status &> /dev/null; then\n  echo "⚠️ Warning: OpenClaw is not running. Service will attempt to start it if needed."\nfi\nPID_FILE="/tmp/lobster-guardian.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  if ps -p $$PID > /dev/null; then\n    echo "❌ 有孚小龙虾带外服务已经运行中 (PID: $$PID)."\n    exit 1\n  fi\n  rm -f "$$PID_FILE"\nfi\necho "🚀 正在后台启动有孚小龙虾带外服务..."\nnohup ./lib/$(BINARY_NAME) >> ./logs/guardian.log 2>&1 &\nPID=$$!\necho "✅ 有孚小龙虾带外服务启动成功，PID: $$PID"\necho "📝 日志文件: ./logs/guardian.log"\n' > $(PKG_DIR)/start.sh
 	@chmod +x $(PKG_DIR)/start.sh
 	@# 创建停止脚本
-	@printf '#!/bin/bash\nPID_FILE="/tmp/lobster-guardian.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  kill $$PID && echo "Stopped Guardian (PID: $$PID)"\n  rm -f "$$PID_FILE"\nelse\n  echo "Guardian is not running."\nfi\n' > $(PKG_DIR)/stop.sh
+	@printf '#!/bin/bash\nPID_FILE="/tmp/lobster-guardian.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  kill $$PID && echo "Stopped Service (PID: $$PID)"\n  rm -f "$$PID_FILE"\nelse\n  echo "服务未在运行 (PID 文件不存在)。"\nfi\n' > $(PKG_DIR)/stop.sh
 	@chmod +x $(PKG_DIR)/stop.sh
 	@# 生成 README.md
-	@echo "# 🦞 Lobster Guardian (小龙虾守护者)" > $(PKG_DIR)/README.md
+	@echo "# 🦞 有孚小龙虾带外服务 (Lobster Guardian)" > $(PKG_DIR)/README.md
 	@echo "" >> $(PKG_DIR)/README.md
-	@echo "本项目是专门为 **OpenClaw (小龙虾)** 设计的独立守护程序。它作为“带外管理”工具运行，旨在解决 OpenClaw 因配置改错导致网关宕机、进而导致管理界面失联的问题。" >> $(PKG_DIR)/README.md
+	@echo "本项目是专门为 **OpenClaw (小龙虾)** 设计的独立带外管理程序。它作为“哨兵”运行，旨在解决 OpenClaw 因配置改错导致网关宕机、进而导致管理界面失联的问题。" >> $(PKG_DIR)/README.md
 	@echo "" >> $(PKG_DIR)/README.md
 	@echo "## 🛠️ 工作原理" >> $(PKG_DIR)/README.md
 	@echo "1. **周期性健康检查**：每隔 30 秒通过 TCP 端口和 CLI 命令探测 OpenClaw 运行状态。" >> $(PKG_DIR)/README.md
@@ -90,13 +90,13 @@ release: build
 	@echo "" >> $(PKG_DIR)/README.md
 	@echo "### 运行与停止" >> $(PKG_DIR)/README.md
 	@echo "\`\`\`bash" >> $(PKG_DIR)/README.md
-	@echo "./start.sh   # 启动守护进程" >> $(PKG_DIR)/README.md
-	@echo "./stop.sh    # 停止守护进程" >> $(PKG_DIR)/README.md
+	@echo "./start.sh   # 启动带外服务" >> $(PKG_DIR)/README.md
+	@echo "./stop.sh    # 停止带外服务" >> $(PKG_DIR)/README.md
 	@echo "\`\`\`" >> $(PKG_DIR)/README.md
 	@echo "" >> $(PKG_DIR)/README.md
 	@echo "## 📂 目录说明" >> $(PKG_DIR)/README.md
 	@echo "- **lib/**: 存放核心二进制程序。" >> $(PKG_DIR)/README.md
-	@echo "- **logs/**: 存放 Guardian 自身的运行日志。" >> $(PKG_DIR)/README.md
+	@echo "- **logs/**: 存放服务的运行日志。" >> $(PKG_DIR)/README.md
 	@echo "- **reports/**: 存放服务崩溃后的差异分析报表。" >> $(PKG_DIR)/README.md
 	@echo "- **env**: 配置文件，可调整巡检频率和路径。" >> $(PKG_DIR)/README.md
 	@# 压缩发布包 (Compression) & 清理目录 (Cleanup)

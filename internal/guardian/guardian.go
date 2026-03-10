@@ -35,10 +35,11 @@ func (g *Guardian) Run(ctx context.Context) {
 	if g.feishu != nil {
 		g.feishu.StartLongConnection(ctx)
 		hostname, _ := os.Hostname()
-		g.notifyFeishu(context.Background(), "🛡️ Guardian 已启动", fmt.Sprintf("节点: %s\n状态: ✅ 监控运行中\n版本: 🦞 OpenClaw Monitor", hostname))
+		status := process.GetGatewayStatus()
+		g.notifyFeishu(context.Background(), "🛡️ 有孚小龙虾带外服务已启动", fmt.Sprintf("节点: %s\n状态: ✅ 监控运行中\n版本: 🦞 OpenClaw Monitor\n\n---\n**OpenClaw 状态详情:**\n%s", hostname, status))
 	}
 
-	log.Printf("🛡️ Guardian monitor loop started. Every %d seconds.", g.config.CheckIntervalSeconds)
+	log.Printf("🛡️ 有孚小龙虾带外服务巡检循环已启动. Every %d seconds.", g.config.CheckIntervalSeconds)
 
 	for {
 		select {
@@ -46,7 +47,7 @@ func (g *Guardian) Run(ctx context.Context) {
 			g.check()
 		case <-ctx.Done():
 			hostname, _ := os.Hostname()
-			g.notifyFeishu(context.Background(), "👋 Guardian 已停止", fmt.Sprintf("节点: %s\n状态: ⏹️ 服务已正常退出", hostname))
+			g.notifyFeishu(context.Background(), "👋 有孚小龙虾带外服务已停止", fmt.Sprintf("节点: %s\n状态: ⏹️ 服务已正常退出", hostname))
 			return
 		}
 	}
@@ -72,7 +73,8 @@ func (g *Guardian) heal(reason string) {
 	log.Printf("🛠️ Initiating self-healing process for reason: %s", reason)
 
 	hostname, _ := os.Hostname()
-	g.notifyFeishu(context.Background(), "⚠️ 小龙虾故障报警", fmt.Sprintf("节点: %s\n状态: ⚠️ 检测到服务宕机\n原因: %s\n正在尝试自愈...", hostname, reason))
+	statusBefore := process.GetGatewayStatus()
+	g.notifyFeishu(context.Background(), "⚠️ 小龙虾故障报警", fmt.Sprintf("节点: %s\n状态: ⚠️ 检测到服务宕机\n原因: %s\n正在尝试自愈...\n\n---\n**当前状态详情:**\n%s", hostname, reason, statusBefore))
 
 	configPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json")
 	backupPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json.bak")
@@ -124,6 +126,10 @@ func (g *Guardian) heal(reason string) {
 		return
 	}
 
+	// 稍微等待网关状态更新
+	time.Sleep(3 * time.Second)
+	statusAfter := process.GetGatewayStatus()
+
 	log.Printf("✨ Gateway start request sent. Self-healing cycle completed.")
 	recoveryMethod := "配置回滚"
 	if !recovered {
@@ -132,7 +138,7 @@ func (g *Guardian) heal(reason string) {
 		recoveryMethod = "Doctor 修复"
 	}
 
-	g.notifyFeishu(context.Background(), "✅ 小龙虾自愈成功", fmt.Sprintf("节点: %s\n状态: ✅ 已自动恢复上线\n操作: %s 并强行重启%s", hostname, recoveryMethod, reportMsg))
+	g.notifyFeishu(context.Background(), "✅ 小龙虾自愈成功", fmt.Sprintf("节点: %s\n状态: ✅ 已自动恢复上线\n操作: %s 并强行重启%s\n\n---\n**恢复后状态详情:**\n%s", hostname, recoveryMethod, reportMsg, statusAfter))
 	
 	log.Printf("🔄 Returning to monitoring loop...")
 }

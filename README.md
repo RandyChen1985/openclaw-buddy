@@ -1,9 +1,9 @@
-# 🦞 Lobster Guardian (小龙虾守护者)
+# 🦞 有孚小龙虾带外服务 (Lobster Guardian)
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/yovole/openclaw-monitor)](https://goreportcard.com/report/github.com/yovole/openclaw-monitor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Lobster Guardian** 是一个专为 **OpenClaw (小龙虾 AI Agent)** 设计的企业级带外管理 (Out-of-band Management) 守护程序。
+**有孚小龙虾带外服务 (Lobster Guardian)** 是一个专为 **OpenClaw (小龙虾 AI Agent)** 设计的企业级带外管理 (Out-of-band Management) 程序。
 
 ---
 
@@ -11,7 +11,7 @@
 
 OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口（Web UI & Channels）深度集成在网关进程中，一旦用户误修改 `openclaw.json` 配置导致网关无法启动，用户将彻底失去修复手段，形成“自闭环”失联。
 
-**Lobster Guardian** 作为“带外哨兵”运行，确保在极端配置故障下能够通过多级自愈逻辑自动恢复服务。
+**有孚小龙虾带外服务** 作为“带外哨兵”运行，确保在极端配置故障下能够通过多级自愈逻辑自动恢复服务。
 
 ## ✨ 核心特性
 
@@ -26,7 +26,7 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
 ## ⚙️ 运行流程
 
 ```text
-       [ Start Guardian ]
+       [ Start Service ]
                │
        [ Singleton Check ] ──────▶ Fail? ──▶ Exit
                │
@@ -56,8 +56,8 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
 以下是 `logs/guardian.log` 中记录的一次真实自愈过程：
 
 ```text
-2026/03/10 12:25:23 🛡️ Guardian started (PID: 30362). Watching OpenClaw...
-2026/03/10 12:25:23 🛡️ Guardian monitor loop started. Every 30 seconds.
+2026/03/10 12:25:23 🛡️ 有孚小龙虾带外服务已启动 (PID: 30362). 正在监控 OpenClaw...
+2026/03/10 12:25:23 🛡️ 有孚小龙虾带外服务巡检循环已启动. Every 30 seconds.
 2026/03/10 12:25:58 ✅ OpenClaw is healthy.
 ...
 2026/03/10 12:27:53 ⚠️ Port 18789 is not listening! Service might be down.

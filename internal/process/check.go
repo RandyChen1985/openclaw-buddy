@@ -25,6 +25,15 @@ func GetVersion() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+func GetGatewayStatus() string {
+	cmd := exec.Command("openclaw", "gateway", "status")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("获取状态失败: %v", err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
 func IsPortListening(port int) bool {
 	timeout := 2 * time.Second
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), timeout)
