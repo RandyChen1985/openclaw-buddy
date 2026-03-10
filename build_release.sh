@@ -5,7 +5,7 @@
 
 # 设置变量
 BINARY_NAME="lobster-guardian"
-RELEASE_ROOT="release"
+RELEASE_ROOT="temp"
 PKG_NAME="yovole-openclaw-monitor"
 PKG_DIR="${RELEASE_ROOT}/${PKG_NAME}"
 
@@ -179,15 +179,6 @@ EOF
 echo "🧹 清理根目录中间产物: ${BINARY_NAME}"
 rm -f "${BINARY_NAME}"
 
-# 10. 压缩发布包 (Compression) & 清理目录 (Cleanup)
-echo "📦 正在压缩发布包: ${PKG_NAME}.tar.gz"
-cd "${RELEASE_ROOT}"
-# 使用 COPYFILE_DISABLE=1 禁用 macOS 特有的元数据文件 (._文件)
-COPYFILE_DISABLE=1 tar -czf "${PKG_NAME}.tar.gz" "${PKG_NAME}"
-echo "🧹 清理发布包目录: ${PKG_NAME}"
-rm -rf "${PKG_NAME}"
-cd ..
-
 echo "--------------------------------------------------"
-echo "✅ 打包完成！发布包位于: ${RELEASE_ROOT}/${PKG_NAME}.tar.gz"
+echo "✅ 构建完成！发布包目录位于: ${PKG_DIR}"
 echo "--------------------------------------------------"

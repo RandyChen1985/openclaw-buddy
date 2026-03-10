@@ -73,20 +73,31 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
 ## 🛠️ 如何编译与打包
 
 ### 前提条件
-- Go 1.22 或更高版本
-- 系统已安装 `openclaw` 二进制文件
+- **Go 1.22 或更高版本**
+  - *Linux 快速安装*:
+    ```bash
+    # 1. 下载并解压到 /usr/local
+    wget https://go.dev/dl/go1.22.1.linux-amd64.tar.gz
+    sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.22.1.linux-amd64.tar.gz
+    
+    # 2. 配置环境变量 (写入 .bashrc)
+    echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc && source ~/.bashrc
+    
+    # 3. 验证
+    go version
+    ```
+- **系统已安装 `openclaw` 二进制文件**
 
 ### 快速开始
-1. **一键打包**:
+1. **一键构建**:
    ```bash
    ./build_release.sh
    ```
-   打包完成后，最终产物为：`release/yovole-openclaw-monitor.tar.gz`
+   构建完成后，产物位于：`temp/yovole-openclaw-monitor/`
 
-2. **部署与运行**:
+2. **运行服务**:
    ```bash
-   tar -zxvf yovole-openclaw-monitor.tar.gz
-   cd yovole-openclaw-monitor
+   cd temp/yovole-openclaw-monitor
    
    # 编辑配置文件
    vi env
