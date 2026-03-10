@@ -13,9 +13,10 @@ type Config struct {
 	LogFile              string
 	ReportDir            string
 	HealthPort           int
-	DingTalkEnabled      bool
-	DingTalkToken        string
-	DingTalkSecret       string
+	FeishuEnabled        bool
+	FeishuAppID          string
+	FeishuAppSecret      string
+	FeishuChatID         string
 }
 
 func LoadConfig() (*Config, error) {
@@ -23,17 +24,18 @@ func LoadConfig() (*Config, error) {
 
 	interval, _ := strconv.Atoi(getEnv("CHECK_INTERVAL_SECONDS", "30"))
 	healthPort, _ := strconv.Atoi(getEnv("HEALTH_PORT", "18789"))
-	dingEnabled, _ := strconv.ParseBool(getEnv("DINGDING_ENABLED", "false"))
+	feishuEnabled, _ := strconv.ParseBool(getEnv("FEISHU_ENABLED", "false"))
 
 	return &Config{
 		OpenClawConfigDir:    getEnv("OPENCLAW_CONFIG_DIR", os.Getenv("HOME")+"/.openclaw"),
 		CheckIntervalSeconds: interval,
-		LogFile:              getEnv("LOG_FILE", "./guardian.log"),
+		LogFile:              getEnv("LOG_FILE", "./logs/guardian.log"),
 		ReportDir:            getEnv("REPORT_DIR", "./reports"),
 		HealthPort:           healthPort,
-		DingTalkEnabled:      dingEnabled,
-		DingTalkToken:        getEnv("DINGDING_ACCESS_TOKEN", ""),
-		DingTalkSecret:       getEnv("DINGDING_SECRET", ""),
+		FeishuEnabled:        feishuEnabled,
+		FeishuAppID:          getEnv("FEISHU_APP_ID", ""),
+		FeishuAppSecret:      getEnv("FEISHU_APP_SECRET", ""),
+		FeishuChatID:         getEnv("FEISHU_CHAT_ID", ""),
 	}, nil
 }
 

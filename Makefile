@@ -42,12 +42,14 @@ release: build
 	@echo 'HEALTH_PORT=18789' >> $(PKG_DIR)/env
 	@echo '' >> $(PKG_DIR)/env
 	@echo '# [告警配置]' >> $(PKG_DIR)/env
-	@echo '# 是否启用钉钉告警 (true/false)' >> $(PKG_DIR)/env
-	@echo 'DINGDING_ENABLED=false' >> $(PKG_DIR)/env
-	@echo '# 钉钉 Webhook Access Token' >> $(PKG_DIR)/env
-	@echo 'DINGDING_ACCESS_TOKEN=""' >> $(PKG_DIR)/env
-	@echo '# 钉钉 Webhook 签名密钥 (可选)' >> $(PKG_DIR)/env
-	@echo 'DINGDING_SECRET=""' >> $(PKG_DIR)/env
+	@echo '# 是否启用飞书告警 (true/false)' >> $(PKG_DIR)/env
+	@echo 'FEISHU_ENABLED=false' >> $(PKG_DIR)/env
+	@echo '# 飞书应用 App ID' >> $(PKG_DIR)/env
+	@echo 'FEISHU_APP_ID=""' >> $(PKG_DIR)/env
+	@echo '# 飞书应用 App Secret' >> $(PKG_DIR)/env
+	@echo 'FEISHU_APP_SECRET=""' >> $(PKG_DIR)/env
+	@echo '# 接收通知的 Chat ID (群组 ID 或 Open ID)' >> $(PKG_DIR)/env
+	@echo 'FEISHU_CHAT_ID=""' >> $(PKG_DIR)/env
 	@echo '' >> $(PKG_DIR)/env
 	@echo '# [日志与报表]' >> $(PKG_DIR)/env
 	@echo '# 守护进程自身的日志存放路径' >> $(PKG_DIR)/env
@@ -56,7 +58,7 @@ release: build
 	@echo '# 故障诊断报表（Markdown 格式）的存放目录' >> $(PKG_DIR)/env
 	@echo 'REPORT_DIR="./reports"' >> $(PKG_DIR)/env
 	@# 创建运行脚本（支持后台运行与自检）
-	@printf '#!/bin/bash\ncd "$$(dirname "$$0")"\nPID_FILE="/tmp/lobster-guardian.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  if ps -p $$PID > /dev/null; then\n    echo "❌ Guardian is already running (PID: $$PID)."\n    exit 1\n  fi\n  rm -f "$$PID_FILE"\nfi\necho "🚀 Starting Guardian in background..."\nnohup ./lib/$(BINARY_NAME) >> ./logs/guardian.log 2>&1 &\nPID=$$!\necho "✅ Guardian started with PID: $$PID"\necho "📝 Log file: ./logs/guardian.log"\n' > $(PKG_DIR)/start.sh
+	@printf '#!/bin/bash\ncd "$$(dirname "$$0")"\n# 1. 环境预检查\nif ! command -v openclaw &> /dev/null; then\n  echo "❌ Error: openclaw command not found."\n  exit 1\nfi\n# 2. 状态预检查\nif ! openclaw status &> /dev/null; then\n  echo "❌ Error: OpenClaw is not running. Please start it first."\n  exit 1\nfi\nPID_FILE="/tmp/lobster-guardian.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  if ps -p $$PID > /dev/null; then\n    echo "❌ Guardian is already running (PID: $$PID)."\n    exit 1\n  fi\n  rm -f "$$PID_FILE"\nfi\necho "🚀 Starting Guardian in background..."\nnohup ./lib/$(BINARY_NAME) >> ./logs/guardian.log 2>&1 &\nPID=$$!\necho "✅ Guardian started with PID: $$PID"\necho "📝 Log file: ./logs/guardian.log"\n' > $(PKG_DIR)/start.sh
 	@chmod +x $(PKG_DIR)/start.sh
 	@# 创建停止脚本
 	@printf '#!/bin/bash\nPID_FILE="/tmp/lobster-guardian.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  kill $$PID && echo "Stopped Guardian (PID: $$PID)"\n  rm -f "$$PID_FILE"\nelse\n  echo "Guardian is not running."\nfi\n' > $(PKG_DIR)/stop.sh

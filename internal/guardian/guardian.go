@@ -15,14 +15,14 @@ import (
 )
 
 type Guardian struct {
-	config   *config.Config
-	dingTalk *utils.DingTalk
+	config *config.Config
+	feishu *utils.Feishu
 }
 
 func NewGuardian(cfg *config.Config) *Guardian {
 	g := &Guardian{config: cfg}
-	if cfg.DingTalkEnabled {
-		g.dingTalk = utils.NewDingTalk(cfg.DingTalkToken, cfg.DingTalkSecret)
+	if cfg.FeishuEnabled {
+		g.feishu = utils.NewFeishu(cfg.FeishuAppID, cfg.FeishuAppSecret)
 	}
 	return g
 }
@@ -31,6 +31,13 @@ func (g *Guardian) Run(ctx context.Context) {
 	ticker := time.NewTicker(time.Duration(g.config.CheckIntervalSeconds) * time.Second)
 	defer ticker.Stop()
 
+	// 启动飞书 WebSocket 长链接
+	if g.feishu != nil {
+		g.feishu.StartLongConnection(ctx)
+		hostname, _ := os.Hostname()
+		g.notifyFeishu(context.Background(), "🛡️ Guardian 已启动", fmt.Sprintf("节点: %s\n状态: ✅ 监控运行中\n版本: 🦞 OpenClaw Monitor", hostname))
+	}
+
 	log.Printf("🛡️ Guardian monitor loop started. Every %d seconds.", g.config.CheckIntervalSeconds)
 
 	for {
@@ -38,6 +45,8 @@ func (g *Guardian) Run(ctx context.Context) {
 		case <-ticker.C:
 			g.check()
 		case <-ctx.Done():
+			hostname, _ := os.Hostname()
+			g.notifyFeishu(context.Background(), "👋 Guardian 已停止", fmt.Sprintf("节点: %s\n状态: ⏹️ 服务已正常退出", hostname))
 			return
 		}
 	}
@@ -63,7 +72,7 @@ func (g *Guardian) heal(reason string) {
 	log.Printf("🛠️ Initiating self-healing process for reason: %s", reason)
 
 	hostname, _ := os.Hostname()
-	g.notifyDingTalk("⚠️ 小龙虾故障报警", fmt.Sprintf("### 🦞 小龙虾故障报警\n\n- **节点**: %s\n- **状态**: ⚠️ 检测到服务宕机\n- **原因**: %s\n- **正在尝试自愈...**", hostname, reason))
+	g.notifyFeishu(context.Background(), "⚠️ 小龙虾故障报警", fmt.Sprintf("节点: %s\n状态: ⚠️ 检测到服务宕机\n原因: %s\n正在尝试自愈...", hostname, reason))
 
 	configPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json")
 	backupPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json.bak")
@@ -111,7 +120,7 @@ func (g *Guardian) heal(reason string) {
 	log.Printf("🚀 Attempting to force start gateway...")
 	if err := process.ForceStartGateway(); err != nil {
 		log.Printf("❌ Failed to restart gateway: %v", err)
-		g.notifyDingTalk("❌ 小龙虾自愈失败", fmt.Sprintf("### 🦞 小龙虾自愈失败\n\n- **节点**: %s\n- **严重级别**: ERROR\n- **原因**: 进程拉起失败: %v", hostname, err))
+		g.notifyFeishu(context.Background(), "❌ 小龙虾自愈失败", fmt.Sprintf("节点: %s\n严重级别: ERROR\n原因: 进程拉起失败: %v", hostname, err))
 		return
 	}
 
@@ -122,15 +131,15 @@ func (g *Guardian) heal(reason string) {
 	} else if _, err := os.Stat(backupPath); err != nil {
 		recoveryMethod = "Doctor 修复"
 	}
-	
-	g.notifyDingTalk("✅ 小龙虾自愈成功", fmt.Sprintf("### 🦞 小龙虾自愈成功\n\n- **节点**: %s\n- **状态**: ✅ 已自动恢复上线\n- **操作**: %s 并强行重启%s", hostname, recoveryMethod, reportMsg))
+
+	g.notifyFeishu(context.Background(), "✅ 小龙虾自愈成功", fmt.Sprintf("节点: %s\n状态: ✅ 已自动恢复上线\n操作: %s 并强行重启%s", hostname, recoveryMethod, reportMsg))
 }
 
-func (g *Guardian) notifyDingTalk(title, text string) {
-	if g.dingTalk != nil {
+func (g *Guardian) notifyFeishu(ctx context.Context, title, text string) {
+	if g.feishu != nil && g.config.FeishuChatID != "" {
 		go func() {
-			if err := g.dingTalk.SendMarkdown(title, text); err != nil {
-				log.Printf("❌ Failed to send DingTalk notification: %v", err)
+			if err := g.feishu.SendInteractiveCard(ctx, g.config.FeishuChatID, title, text); err != nil {
+				log.Printf("❌ Failed to send Feishu notification: %v", err)
 			}
 		}()
 	}

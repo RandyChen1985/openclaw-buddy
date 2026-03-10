@@ -20,7 +20,7 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
     - **Tier 1: 配置回滚**：自动从 `openclaw.json.bak` 恢复上一个稳定配置。
     - **Tier 2: 深度修复**：若回滚失败，调用 `openclaw doctor --fix` 自动修复运行环境。
 - **📊 差异分析**：宕机时自动生成 Markdown 格式的故障差异报表（Diff Report）。
-- **🔔 主动告警**：集成钉钉 Webhook，实时推送故障、尝试自愈及成功恢复的 Markdown 消息。
+- **🔔 主动告警**：集成飞书 Webhook，实时推送故障、尝试自愈及成功恢复的 Markdown 消息。
 - **🔒 单例保护**：利用 `/tmp/lobster-guardian.pid` 文件锁防止多个实例冲突。
 
 ## ⚙️ 运行流程
@@ -45,7 +45,7 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
     │   3. Rollback (bak -> current)
     │   4. IF Fail -> Run 'openclaw doctor --fix'
     │   5. Force Restart (--force)
-    │   6. Send DingTalk Alert 🔔
+    │   6. Send Feishu Alert 🔔
     └──────────┘
 ```
 
@@ -61,12 +61,13 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
    ./build_release.sh
    ```
 
-2. **配置钉钉告警**:
+2. **配置飞书告警 (应用长连接模式)**:
    在 `release/yovole-openclaw-monitor/env` 中配置：
    ```env
-   DINGDING_ENABLED=true
-   DINGDING_ACCESS_TOKEN="你的Token"
-   DINGDING_SECRET="你的密钥"
+   FEISHU_ENABLED=true
+   FEISHU_APP_ID="你的AppID"
+   FEISHU_APP_SECRET="你的AppSecret"
+   FEISHU_CHAT_ID="接收通知的群组ID或用户ID"
    ```
 
 3. **运行服务**:

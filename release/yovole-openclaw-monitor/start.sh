@@ -10,10 +10,11 @@ fi
 
 # 2. 状态预检查: OpenClaw 是否已启动
 # 守护进程的设计初衷是守护已运行的服务，若服务未运行则不启动守护
+# 尝试通过 openclaw status 或检测 18789 端口来判断
 if ! openclaw status &> /dev/null; then
-    echo "⚠️ 警告: 检测到 OpenClaw 网关可能未在运行或配置错误。"
+    echo "❌ 错误: 检测到 OpenClaw 网关未在运行。"
     echo "💡 提示: 请先使用 'openclaw gateway' 启动服务后再运行 Guardian。"
-    # exit 1 # 如果您希望强制要求启动，可以取消此处的注释
+    exit 1
 fi
 
 # 3. 检查 Guardian 是否已经在运行

@@ -39,7 +39,7 @@ cat <<EOF > "${PKG_DIR}/env"
 
 # [基础配置]
 # OpenClaw 的配置目录路径，守护进程会监控此目录下的 openclaw.json
-OPENCLAW_CONFIG_DIR="$(echo $HOME)/.openclaw"
+OPENCLAW_CONFIG_DIR="$HOME/.openclaw"
 
 # [监控配置]
 # 巡检频率（单位：秒），默认每 30 秒探测一次小龙虾状态
@@ -49,12 +49,14 @@ CHECK_INTERVAL_SECONDS=30
 HEALTH_PORT=18789
 
 # [告警配置]
-# 是否启用钉钉告警 (true/false)
-DINGDING_ENABLED=false
-# 钉钉 Webhook Access Token
-DINGDING_ACCESS_TOKEN=""
-# 钉钉 Webhook 签名密钥 (可选)
-DINGDING_SECRET=""
+# 是否启用飞书告警 (true/false)
+FEISHU_ENABLED=false
+# 飞书应用 App ID
+FEISHU_APP_ID=""
+# 飞书应用 App Secret
+FEISHU_APP_SECRET=""
+# 接收通知的 Chat ID (群组 ID 或 Open ID)
+FEISHU_CHAT_ID=""
 
 # [日志与报表]
 # 守护进程自身的日志存放路径
@@ -79,10 +81,11 @@ fi
 
 # 2. 状态预检查: OpenClaw 是否已启动
 # 守护进程的设计初衷是守护已运行的服务，若服务未运行则不启动守护
+# 尝试通过 openclaw status 或检测 18789 端口来判断
 if ! openclaw status &> /dev/null; then
-    echo "⚠️ 警告: 检测到 OpenClaw 网关可能未在运行或配置错误。"
+    echo "❌ 错误: 检测到 OpenClaw 网关未在运行。"
     echo "💡 提示: 请先使用 'openclaw gateway' 启动服务后再运行 Guardian。"
-    # exit 1 # 如果您希望强制要求启动，可以取消此处的注释
+    exit 1
 fi
 
 # 3. 检查 Guardian 是否已经在运行
@@ -135,7 +138,7 @@ cat <<EOF > "${PKG_DIR}/README.md"
 2. **故障诊断**：一旦发现服务宕机，自动对比当前的 \`openclaw.json\` 与备份配置的差异并生成 Markdown 报表。
 3. **多级自愈**：检测到配置错误导致的启动失败后，自动将 \`openclaw.json.bak\` 还原；若回滚失败或缺失备份，则执行 \`openclaw doctor --fix\` 自动修复环境。
 4. **强制自愈**：执行 \`openclaw gateway --force\` 强行恢复服务。
-5. **主动告警**：支持通过钉钉 Webhook 发送故障与自愈成功的实时告警。
+5. **主动告警**：支持通过飞书 Webhook 发送故障与自愈成功的实时告警。
 
 ## 🚀 快速开始
 ### 前提条件
