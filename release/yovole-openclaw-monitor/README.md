@@ -9,6 +9,21 @@
 4. **强制自愈**：执行 `openclaw gateway --force` 强行恢复服务。
 5. **主动告警**：支持通过飞书 Webhook 发送故障与自愈成功的实时告警。
 
+## 📊 运行实例
+以下是 `logs/guardian.log` 中记录的一次真实自愈过程：
+```text
+2026/03/10 12:25:23 🛡️ Guardian started (PID: 30362). Watching OpenClaw...
+2026/03/10 12:25:23 🛡️ Guardian monitor loop started. Every 30 seconds.
+2026/03/10 12:25:58 ✅ OpenClaw is healthy.
+2026/03/10 12:27:53 ⚠️ Port 18789 is not listening! Service might be down.
+2026/03/10 12:27:53 🛠️ Initiating self-healing process for reason: Port Down
+2026/03/10 12:27:53 🔄 Attempting to recover service...
+2026/03/10 12:27:53 ✅ Config rollback successful.
+2026/03/10 12:27:53 🚀 Requesting gateway force start...
+2026/03/10 12:27:53 ✨ Gateway start request sent. Self-healing cycle completed.
+2026/03/10 12:28:27 ✅ OpenClaw is healthy.
+```
+
 ## 🚀 快速开始
 ### 前提条件
 - 启动本程序前，请确保 **OpenClaw 已经正常运行**。

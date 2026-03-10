@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -28,7 +29,6 @@ func NewFeishu(appID, appSecret string) *Feishu {
 
 // StartLongConnection 启动 WebSocket 长链接
 func (f *Feishu) StartLongConnection(ctx context.Context) {
-	// 修正为正确的 SDK 调用方式
 	wsClient := larkws.NewClient(f.AppID, f.AppSecret)
 
 	go func() {
@@ -42,23 +42,42 @@ func (f *Feishu) StartLongConnection(ctx context.Context) {
 
 // SendInteractiveCard 发送交互式卡片消息
 func (f *Feishu) SendInteractiveCard(ctx context.Context, receiveID, title, text string) error {
-	card := fmt.Sprintf(`{
-		"config": { "wide_screen_mode": true },
-		"header": {
-			"title": { "tag": "plain_text", "content": "%s" },
-			"template": "blue"
+	// 使用 map 构建卡片结构，确保序列化时自动转义特殊字符
+	cardMap := map[string]interface{}{
+		"config": map[string]interface{}{
+			"wide_screen_mode": true,
 		},
-		"elements": [
-			{ "tag": "markdown", "content": "%s" }
-		]
-	}`, title, text)
+		"header": map[string]interface{}{
+			"title": map[string]interface{}{
+				"tag":     "plain_text",
+				"content": title,
+			},
+			"template": "blue",
+		},
+		"elements": []interface{}{
+			map[string]interface{}{
+				"tag":     "markdown",
+				"content": text,
+			},
+		},
+	}
+
+	cardBytes, err := json.Marshal(cardMap)
+	if err != nil {
+		return fmt.Errorf("failed to marshal feishu card: %v", err)
+	}
+
+	receiveIdType := larkim.ReceiveIdTypeChatId
+	if len(receiveID) > 3 && receiveID[:3] == "ou_" {
+		receiveIdType = larkim.ReceiveIdTypeOpenId
+	}
 
 	req := larkim.NewCreateMessageReqBuilder().
-		ReceiveIdType(larkim.ReceiveIdTypeChatId). // 默认发送到群组，如果是个人可改为 OpenId
+		ReceiveIdType(receiveIdType).
 		Body(larkim.NewCreateMessageReqBodyBuilder().
 			ReceiveId(receiveID).
 			MsgType(larkim.MsgTypeInteractive).
-			Content(card).
+			Content(string(cardBytes)).
 			Build()).
 		Build()
 
@@ -72,11 +91,4 @@ func (f *Feishu) SendInteractiveCard(ctx context.Context, receiveID, title, text
 	}
 
 	return nil
-}
-
-// SendSimpleMarkdown 发送简单的 Markdown 消息到默认频道
-func (f *Feishu) SendSimpleMarkdown(ctx context.Context, title, text string) error {
-	// 这里可以扩展从配置中读取接收 ID (ChatID)
-	// 暂时预留此接口
-	return f.SendInteractiveCard(ctx, "oc_xxxxxx", title, text) // 此处 oc_xxxxxx 需替换为真实的 ChatID
 }
