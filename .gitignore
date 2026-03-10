@@ -1,0 +1,14 @@
+# Binaries
+/release/
+/lobster-guardian
+
+# Logs and Reports
+**/logs/
+**/reports/
+.env
+
+# Go dependencies
+vendor/
+
+# OS files
+.DS_Store
