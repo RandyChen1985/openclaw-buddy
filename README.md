@@ -81,7 +81,10 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
     sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.22.1.linux-amd64.tar.gz
     
     # 2. 配置环境变量 (写入 .bashrc)
-    echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc && source ~/.bashrc
+    echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
+    # 解决国内下载依赖失败问题 (设置 GOPROXY)
+    echo 'export GOPROXY=https://goproxy.cn,direct' >> ~/.bashrc
+    source ~/.bashrc
     
     # 3. 验证
     go version
