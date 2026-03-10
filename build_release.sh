@@ -39,7 +39,7 @@ cat <<EOF > "${PKG_DIR}/env"
 
 # [基础配置]
 # OpenClaw 的配置目录路径，守护进程会监控此目录下的 openclaw.json
-OPENCLAW_CONFIG_DIR="$HOME/.openclaw"
+OPENCLAW_CONFIG_DIR="~/.openclaw"
 
 # [监控配置]
 # 巡检频率（单位：秒），默认每 30 秒探测一次小龙虾状态

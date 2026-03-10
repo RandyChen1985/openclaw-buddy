@@ -32,7 +32,7 @@ release: build
 	@echo '' >> $(PKG_DIR)/env
 	@echo '# [基础配置]' >> $(PKG_DIR)/env
 	@echo '# OpenClaw 的配置目录路径，守护进程会监控此目录下的 openclaw.json' >> $(PKG_DIR)/env
-	@echo 'OPENCLAW_CONFIG_DIR="$(HOME)/.openclaw"' >> $(PKG_DIR)/env
+	@echo 'OPENCLAW_CONFIG_DIR="~/.openclaw"' >> $(PKG_DIR)/env
 	@echo '' >> $(PKG_DIR)/env
 	@echo '# [监控配置]' >> $(PKG_DIR)/env
 	@echo '# 巡检频率（单位：秒），默认每 30 秒探测一次小龙虾状态' >> $(PKG_DIR)/env

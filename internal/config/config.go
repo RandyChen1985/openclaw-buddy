@@ -37,7 +37,7 @@ func LoadConfig() (*Config, error) {
 	compress, _ := strconv.ParseBool(getEnv("LOG_COMPRESS", "true"))
 
 	return &Config{
-		OpenClawConfigDir:    getEnv("OPENCLAW_CONFIG_DIR", os.Getenv("HOME")+"/.openclaw"),
+		OpenClawConfigDir:    expandPath(getEnv("OPENCLAW_CONFIG_DIR", "~/.openclaw")),
 		CheckIntervalSeconds: interval,
 		LogFile:              getEnv("LOG_FILE", "./logs/guardian.log"),
 		LogMaxSize:           maxSize,
@@ -58,4 +58,16 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// expandPath 将路径中的 ~ 展开为当前用户的主目录
+func expandPath(path string) string {
+	if len(path) > 0 && path[0] == '~' {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return home + path[1:]
+	}
+	return path
 }
