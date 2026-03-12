@@ -41,6 +41,12 @@ func (g *Guardian) Run(ctx context.Context) {
 
 	log.Printf("🛡️ 有孚小龙虾带外服务巡检循环已启动. Every %d seconds.", g.config.CheckIntervalSeconds)
 
+	// 启动时检查：如果服务正常，先备份一份配置
+	if process.IsPortListening(g.config.HealthPort) && process.CheckHealth() == nil {
+		log.Printf("📦 Service is healthy on startup. Performing initial backup...")
+		g.backupConfig()
+	}
+
 	for {
 		select {
 		case <-ticker.C:
@@ -54,19 +60,53 @@ func (g *Guardian) Run(ctx context.Context) {
 }
 
 func (g *Guardian) check() {
-	if !process.IsPortListening(g.config.HealthPort) {
-		log.Printf("⚠️ Port %d is not listening! Service might be down.", g.config.HealthPort)
-		g.heal("Port Down")
+	var lastErr error
+	var reason string
+
+	for i := 1; i <= g.config.MaxRetries; i++ {
+		// 1. Port Check
+		if !process.IsPortListening(g.config.HealthPort) {
+			reason = "Port Down"
+			lastErr = fmt.Errorf("port %d is not listening", g.config.HealthPort)
+		} else {
+			// 2. Health Check
+			if err := process.CheckHealth(); err != nil {
+				reason = "Health Check Failure"
+				lastErr = err
+			} else {
+				// Success!
+				log.Printf("✅ OpenClaw is healthy. Updating configuration backup...")
+				g.backupConfig()
+				return
+			}
+		}
+
+		if i < g.config.MaxRetries {
+			log.Printf("⚠️ Check failed (attempt %d/%d): %v. Retrying in 2 seconds...", i, g.config.MaxRetries, lastErr)
+			time.Sleep(2 * time.Second)
+		}
+	}
+
+	// If we reach here, all retries failed
+	log.Printf("🚨 All %d checks failed. Initiating self-healing. Last error: %v", g.config.MaxRetries, lastErr)
+	g.heal(reason)
+}
+
+func (g *Guardian) backupConfig() {
+	configPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json")
+	backupPath := filepath.Join(g.config.BackupDir, "openclaw.json.bak")
+
+	// 确保备份目录存在
+	if err := os.MkdirAll(g.config.BackupDir, 0755); err != nil {
+		log.Printf("❌ Failed to create backup directory: %v", err)
 		return
 	}
 
-	if err := process.CheckHealth(); err != nil {
-		log.Printf("⚠️ Health check failed: %v", err)
-		g.heal("Health Check Failure")
-		return
+	if err := copyFile(configPath, backupPath); err != nil {
+		log.Printf("❌ Failed to backup configuration: %v", err)
+	} else {
+		log.Printf("✅ Configuration backed up to %s", backupPath)
 	}
-
-	log.Printf("✅ OpenClaw is healthy.")
 }
 
 func (g *Guardian) heal(reason string) {
@@ -77,14 +117,20 @@ func (g *Guardian) heal(reason string) {
 	g.notifyFeishu(context.Background(), "⚠️ 小龙虾故障报警", fmt.Sprintf("节点: %s\n状态: ⚠️ 检测到服务宕机\n原因: %s\n正在尝试自愈...\n\n---\n**当前状态详情:**\n%s", hostname, reason, statusBefore))
 
 	configPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json")
-	backupPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json.bak")
+	// 仍然从 OpenClaw 目录找 bak 作为兜底，但优先使用我们自己的 BackupDir
+	ourBackupPath := filepath.Join(g.config.BackupDir, "openclaw.json.bak")
+	legacyBackupPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json.bak")
 	errorPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json.err")
 
 	// 1. Backup current broken config
 	_ = copyFile(configPath, errorPath)
 
-	// 2. Generate Report
-	reportPath, err := analyzer.GenerateReport(g.config.ReportDir, g.config.OpenClawConfigDir, configPath, backupPath)
+	// 2. Generate Report (优先用我们的备份对比)
+	reportPath, err := analyzer.GenerateReport(g.config.ReportDir, g.config.OpenClawConfigDir, configPath, ourBackupPath)
+	if err != nil {
+		// 如果我们自己的备份不存在，回退到 legacy 路径生成报告
+		reportPath, err = analyzer.GenerateReport(g.config.ReportDir, g.config.OpenClawConfigDir, configPath, legacyBackupPath)
+	}
 	reportMsg := ""
 	if err == nil {
 		reportMsg = fmt.Sprintf("\n- **诊断报表**: %s", reportPath)
@@ -93,18 +139,30 @@ func (g *Guardian) heal(reason string) {
 	// 3. Rollback config or Doctor Fix
 	log.Printf("🔄 Attempting to recover service...")
 	recovered := false
+	recoveryMethodUsed := ""
 
-	// Tier 1: Try Rollback
-	if _, err := os.Stat(backupPath); err == nil {
-		log.Printf("🔄 Rolling back configuration from backup...")
-		if err := copyFile(backupPath, configPath); err == nil {
+	// Tier 1: Try Rollback from OUR backup directory
+	if _, err := os.Stat(ourBackupPath); err == nil {
+		log.Printf("🔄 Rolling back configuration from our backup directory...")
+		if err := copyFile(ourBackupPath, configPath); err == nil {
 			recovered = true
-			log.Printf("✅ Config rollback successful.")
+			recoveryMethodUsed = "配置回滚 (来自守护进程备份)"
+			log.Printf("✅ Config rollback (from our backup) successful.")
 		} else {
-			log.Printf("❌ Failed to rollback config: %v", err)
+			log.Printf("❌ Failed to rollback config from our backup: %v", err)
 		}
-	} else {
-		log.Printf("⚠️ Backup config not found. Skipping rollback.")
+	}
+
+	// Tier 1.5: Fallback to legacy backup if ours failed/missing
+	if !recovered {
+		if _, err := os.Stat(legacyBackupPath); err == nil {
+			log.Printf("🔄 Rolling back configuration from legacy backup...")
+			if err := copyFile(legacyBackupPath, configPath); err == nil {
+				recovered = true
+				recoveryMethodUsed = "配置回滚 (来自 OpenClaw 备份)"
+				log.Printf("✅ Config rollback (from legacy backup) successful.")
+			}
+		}
 	}
 
 	// Tier 2: Doctor Fix if rollback skipped or failed
@@ -112,6 +170,7 @@ func (g *Guardian) heal(reason string) {
 		log.Printf("🩺 Running 'openclaw doctor --fix' as secondary recovery strategy...")
 		if err := process.RunDoctorFix(); err == nil {
 			recovered = true
+			recoveryMethodUsed = "Doctor 修复"
 			log.Printf("✅ 'openclaw doctor --fix' completed successfully.")
 		} else {
 			log.Printf("❌ 'openclaw doctor --fix' failed: %v", err)
@@ -131,14 +190,12 @@ func (g *Guardian) heal(reason string) {
 	statusAfter := process.GetGatewayStatus()
 
 	log.Printf("✨ Gateway start request sent. Self-healing cycle completed.")
-	recoveryMethod := "配置回滚"
+	
 	if !recovered {
-		recoveryMethod = "强行重启 (未执行配置恢复)"
-	} else if _, err := os.Stat(backupPath); err != nil {
-		recoveryMethod = "Doctor 修复"
+		recoveryMethodUsed = "强行重启 (未执行配置恢复)"
 	}
 
-	g.notifyFeishu(context.Background(), "✅ 小龙虾自愈成功", fmt.Sprintf("节点: %s\n状态: ✅ 已自动恢复上线\n操作: %s 并强行重启%s\n\n---\n**恢复后状态详情:**\n%s", hostname, recoveryMethod, reportMsg, statusAfter))
+	g.notifyFeishu(context.Background(), "✅ 小龙虾自愈成功", fmt.Sprintf("节点: %s\n状态: ✅ 已自动恢复上线\n操作: %s 并强行重启%s\n\n---\n**恢复后状态详情:**\n%s", hostname, recoveryMethodUsed, reportMsg, statusAfter))
 	
 	log.Printf("🔄 Returning to monitoring loop...")
 }

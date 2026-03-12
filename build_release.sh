@@ -28,6 +28,7 @@ echo "📂 创建目录结构: ${PKG_DIR}"
 mkdir -p "${PKG_DIR}/lib"
 mkdir -p "${PKG_DIR}/logs"
 mkdir -p "${PKG_DIR}/reports"
+mkdir -p "${PKG_DIR}/backups"
 
 # 4. 移动二进制文件
 mv "${BINARY_NAME}" "${PKG_DIR}/lib/"
@@ -41,9 +42,15 @@ cat <<EOF > "${PKG_DIR}/env"
 # OpenClaw 的配置目录路径，守护进程会监控此目录下的 openclaw.json
 OPENCLAW_CONFIG_DIR="~/.openclaw"
 
+# 守护进程自己的备份存放目录（存储最近一次已知的健康配置）
+BACKUP_DIR="./backups"
+
 # [监控配置]
 # 巡检频率（单位：秒），默认每 30 秒探测一次小龙虾状态
 CHECK_INTERVAL_SECONDS=30
+
+# 宕机确认重试次数（默认 3 次），避免因网络瞬抖导致的误报警
+MAX_RETRIES=3
 
 # 小龙虾网关监听的健康检查端口（默认：18789）
 HEALTH_PORT=18789
@@ -142,11 +149,15 @@ cat <<EOF > "${PKG_DIR}/README.md"
 本项目是专门为 **OpenClaw (小龙虾)** 设计的独立带外管理程序。它作为“哨兵”运行，旨在解决 OpenClaw 因配置改错导致网关宕机、进而导致管理界面失联的问题。
 
 ## 🛠️ 工作原理
-1. **周期性健康检查**：每隔 30 秒通过 TCP 端口和 CLI 命令探测 OpenClaw 运行状态。
-2. **故障诊断**：一旦发现服务宕机，自动对比当前的 \`openclaw.json\` 与备份配置的差异并生成 Markdown 报表。
-3. **多级自愈**：检测到配置错误导致的启动失败后，自动将 \`openclaw.json.bak\` 还原；若回滚失败或缺失备份，则执行 \`openclaw doctor --fix\` 自动修复环境。
-4. **强制自愈**：执行 \`openclaw gateway --force\` 强行恢复服务。
-5. **主动告警**：支持通过飞书 Webhook 发送故障与自愈成功的实时告警。
+1. **周期性健康检查**：每隔 30 秒探测一次 OpenClaw 运行状态（连续失败 3 次才触发自愈）。
+2. **主动配置备份**：巡检正常时，自动备份最新的健康配置到 \`backups/\` 目录。
+3. **故障诊断**：一旦确认服务宕机，自动生成对比报表。
+4. **多级自愈**：
+    - **优先还原**：尝试从 \`backups/\` 还原最近一次健康的配置。
+    - **兜底还原**：尝试从 OpenClaw 默认备份目录还原。
+    - **环境修复**：执行 \`openclaw doctor --fix\` 自动修复环境。
+5. **强制自愈**：执行 \`openclaw gateway --force\` 强行拉起服务。
+6. **主动告警**：支持通过飞书 Webhook 发送实时通知。
 
 ## 📊 运行实例
 以下是 \`logs/guardian.log\` 中记录的一次真实自愈过程：

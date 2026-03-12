@@ -9,7 +9,9 @@ import (
 
 type Config struct {
 	OpenClawConfigDir    string
+	BackupDir            string
 	CheckIntervalSeconds int
+	MaxRetries           int
 	LogFile              string
 	LogMaxSize           int  // 每个日志文件最大 MB 数
 	LogMaxBackups        int  // 保留旧日志文件的最大个数
@@ -27,6 +29,7 @@ func LoadConfig() (*Config, error) {
 	_ = godotenv.Load("env") // Load the file named "env" instead of ".env"
 
 	interval, _ := strconv.Atoi(getEnv("CHECK_INTERVAL_SECONDS", "30"))
+	maxRetries, _ := strconv.Atoi(getEnv("MAX_RETRIES", "3"))
 	healthPort, _ := strconv.Atoi(getEnv("HEALTH_PORT", "18789"))
 	feishuEnabled, _ := strconv.ParseBool(getEnv("FEISHU_ENABLED", "false"))
 
@@ -38,7 +41,9 @@ func LoadConfig() (*Config, error) {
 
 	return &Config{
 		OpenClawConfigDir:    expandPath(getEnv("OPENCLAW_CONFIG_DIR", "~/.openclaw")),
+		BackupDir:            getEnv("BACKUP_DIR", "./backups"),
 		CheckIntervalSeconds: interval,
+		MaxRetries:           maxRetries,
 		LogFile:              getEnv("LOG_FILE", "./logs/guardian.log"),
 		LogMaxSize:           maxSize,
 		LogMaxBackups:        maxBackups,
