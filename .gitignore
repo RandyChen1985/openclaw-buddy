@@ -18,3 +18,4 @@ internal/api/dist/
 monitor_test
 data/
 temp-dev-test/
+backups/

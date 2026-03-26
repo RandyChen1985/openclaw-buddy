@@ -114,3 +114,7 @@ func (s *Server) setupStaticFiles() {
 func (s *Server) Run() error {
 	return s.engine.Run(fmt.Sprintf(":%d", s.cfg.WebPort))
 }
+
+func (s *Server) GetEngine() *gin.Engine {
+	return s.engine
+}
