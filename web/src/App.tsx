@@ -988,24 +988,33 @@ const Dashboard = () => {
   const transitionMask = isTransitioning && (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(255, 255, 255, 0.7)', backdropFilter: 'blur(4px)',
+      background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(8px)',
       zIndex: 9999, display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', gap: 20
+      alignItems: 'center', justifyContent: 'center', padding: 20
     }}>
       <div style={{
-        padding: '32px 40px', background: '#fff', borderRadius: 24,
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+        padding: isMobile ? '24px 20px' : '32px 40px', 
+        background: '#fff', 
+        borderRadius: 24,
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20,
-        minWidth: 320
+        width: isMobile ? '100%' : 'auto',
+        maxWidth: 340,
+        minWidth: isMobile ? 0 : 320
       }}>
-        <Spin size="large" />
+        <div style={{ position: 'relative' }}>
+          <Spin size="large" />
+        </div>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>正在同步网关状态</div>
-          <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>指令已确认，等待 OpenClaw 反馈...</div>
-          <div style={{ 
-            marginTop: 12, padding: '4px 12px', background: '#f8fafc', 
-            borderRadius: 20, fontSize: 12, color: '#3b82f6', 
-            fontWeight: 600, display: 'inline-block', border: '1px solid #dbeafe'
+          <div style={{ color: '#64748b', fontSize: 13, marginTop: 6, padding: '0 10px' }}>
+            指令已确认，正在等待网关反馈状态...
+          </div>
+          <div style={{
+            marginTop: 16, padding: '6px 16px', background: '#eff6ff',
+            borderRadius: 20, fontSize: 13, color: '#2563eb',
+            fontWeight: 700, display: 'inline-block', border: '1px solid #dbeafe',
+            boxShadow: '0 2px 4px rgba(37,99,235,0.1)'
           }}>
             已等待 {transitionSeconds}s
           </div>
@@ -1030,7 +1039,7 @@ const Dashboard = () => {
               onClick={() => window.location.reload()}
               style={{ borderRadius: 8, background: '#2563eb' }}
             >
-              刷新页面
+              强制刷新
             </Button>
           </div>
         )}
@@ -1091,10 +1100,9 @@ const Dashboard = () => {
         footer={null}
         onCancel={() => setConfirmModal(prev => ({ ...prev, open: false }))}
         centered
-        width={400}
+        width={isMobile ? '92%' : 400}
         styles={{ body: { padding: 0, overflow: 'hidden', borderRadius: 16 } }}
-      >
-        <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center' }}>
+      >        <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center' }}>
           <div style={{ 
             width: 56, height: 56, borderRadius: '50%',
             background: `${confirmModal.color}15`,
