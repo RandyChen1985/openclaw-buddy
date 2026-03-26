@@ -62,14 +62,10 @@ func (g *Guardian) Run(ctx context.Context) {
 }
 
 func (g *Guardian) check() {
-	// 检查软开关
-	if utils.GetSetting("self_healing_enabled", "false") != "true" {
-		log.Printf("ℹ️ Self-healing monitoring is disabled via soft switch. Skipping...")
-		return
-	}
-
 	var lastErr error
 	var reason string
+
+	isSelfHealingEnabled := utils.GetSetting("self_healing_enabled", "false") == "true"
 
 	for i := 1; i <= g.config.MaxRetries; i++ {
 		// 1. Port Check
@@ -101,9 +97,16 @@ func (g *Guardian) check() {
 	}
 
 	// If we reach here, all retries failed
-	log.Printf("🚨 All %d checks failed. Initiating self-healing. Last error: %v", g.config.MaxRetries, lastErr)
+	log.Printf("🚨 All %d checks failed. Last error: %v", g.config.MaxRetries, lastErr)
 	g.recordHealthCheck("Down", 0, lastErr.Error())
-	g.heal(reason)
+	
+	// Only trigger healing if switch is enabled
+	if isSelfHealingEnabled {
+		log.Printf("🛠️ Initiating self-healing process.")
+		g.heal(reason)
+	} else {
+		log.Printf("ℹ️ Self-healing is disabled via soft switch. Skipping recovery actions.")
+	}
 }
 
 func (g *Guardian) recordHealthCheck(status string, responseTime int, errorMsg string) {

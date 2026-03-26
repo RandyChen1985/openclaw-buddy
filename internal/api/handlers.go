@@ -156,3 +156,19 @@ func (s *Server) getHealEvents(c *gin.Context) {
 
 	c.JSON(http.StatusOK, events)
 }
+
+func (s *Server) installWeChatPlugin(c *gin.Context) {
+	go func() {
+		_ = process.InstallWeChatPlugin()
+	}()
+	c.JSON(http.StatusAccepted, gin.H{"message": "Installation started"})
+}
+
+func (s *Server) checkWeChatPlugin(c *gin.Context) {
+	status, err := process.GetWeChatPluginStatus()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, status)
+}

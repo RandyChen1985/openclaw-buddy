@@ -4,15 +4,13 @@ import {
   Space, Tooltip, Badge, Tag,
   Row, Col, List, message,
   ConfigProvider, Menu, Drawer, Spin, Modal, Progress,
+  QRCode,
 } from 'antd';
 import {
-  Activity, Terminal,
-  RefreshCw, Play, Square, LogOut,
-  LayoutDashboard, Boxes, Zap,
-  MessageSquare, Menu as MenuIcon,
-  Smartphone, Cpu,
-  Server, RadioTower, CheckCircle2, XCircle,
-  KeyRound,
+  Activity, Boxes, Cloud, Cpu, KeyRound,
+  LayoutDashboard, LogOut, Menu as MenuIcon,
+  Play, RefreshCw, Server, Smartphone, Square,
+  Terminal, Zap, 
 } from 'lucide-react';
 import axios from 'axios';
 import {
@@ -249,6 +247,11 @@ const Dashboard = () => {
   });
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [qrData, setQrData] = useState<{ qrcode_url: string, expires_at: string } | null>(null);
+  const [weixinStatus, setWeixinStatus] = useState<any>(null);
+  const [loadingWeixin, setLoadingWeixin] = useState(false);
+  const [checkWeixinSeconds, setCheckWeixinSeconds] = useState(0);
+  const [isGettingQR, setIsGettingQR] = useState(false);
+  const [qrSeconds, setQrSeconds] = useState(0);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -269,6 +272,18 @@ const Dashboard = () => {
     }
     return () => clearInterval(interval);
   }, [isTransitioning]);
+
+  useEffect(() => {
+    let interval: any;
+    if (weixinStatus === null) {
+      interval = setInterval(() => {
+        setCheckWeixinSeconds(s => s + 1);
+      }, 1000);
+    } else {
+      setCheckWeixinSeconds(0);
+    }
+    return () => clearInterval(interval);
+  }, [weixinStatus]);
 
   const fetchData = async () => {
     try {
@@ -296,6 +311,29 @@ const Dashboard = () => {
     }
   };
 
+  const fetchWeixinStatus = async () => {
+    try {
+      const res = await api.get('/v1/wechat/plugin/status');
+      setWeixinStatus(res.data);
+    } catch (err) {
+      console.error('Fetch weixin status error', err);
+    }
+  };
+
+  const handleInstallWeixin = async () => {
+    try {
+      setLoadingWeixin(true);
+      await api.post('/v1/wechat/install');
+      message.loading('微信插件安装指令已发出，请稍候约 30-60s...', 5);
+      // 延时刷新状态
+      setTimeout(fetchWeixinStatus, 30000);
+    } catch (err) {
+      message.error('安装指令发送失败');
+    } finally {
+      setLoadingWeixin(false);
+    }
+  };
+
   useEffect(() => {
     let timer: any;
     if (isTransitioning) {
@@ -309,6 +347,7 @@ const Dashboard = () => {
         setRefreshCountdown(prev => {
           if (prev <= 1) {
             fetchData();
+            fetchWeixinStatus();
             return 10;
           }
           return prev - 1;
@@ -400,19 +439,27 @@ const Dashboard = () => {
   }, [activeTab]);
 
   const fetchWeChatQRCode = async () => {
-    setIsTransitioning(true); // 借用遮罩显示加载
+    if (isGettingQR) return;
+    
+    setIsGettingQR(true);
+    setQrSeconds(0);
+    const interval = setInterval(() => {
+      setQrSeconds(s => s + 1);
+    }, 1000);
+
     try {
-      const res = await axios.get('/v1/wechat/qrcode');
+      const res = await api.get('/v1/wechat/qrcode?force=true');
       if (res.data && res.data.qrcode_url) {
         setQrData(res.data);
         setQrModalVisible(true);
       } else {
-        message.warning('无法解析到二维码，请检查后端日志');
+        message.warning('无法解析到二维码，请检查后端日志或确保微信插件已正确配置');
       }
     } catch (err: any) {
       message.error('获取微信授权码失败: ' + (err.response?.data?.error || '网络连接超时'));
     } finally {
-      setIsTransitioning(false);
+      clearInterval(interval);
+      setIsGettingQR(false);
     }
   };
 
@@ -691,61 +738,72 @@ const Dashboard = () => {
                 </div>
               </div>
             </Modal>
-
-            {/* 微信二维码弹窗 */}
-            <Modal
-              title={null}
-              open={qrModalVisible}
-              footer={null}
-              onCancel={() => setQrModalVisible(false)}
-              centered
-              width={340}
-              styles={{ body: { padding: 0, overflow: 'hidden', borderRadius: 16 } }}
-            >
-              <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center' }}>
-                <div style={{ fontSize: 40, marginBottom: 16 }}>🦞</div>
-                <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>微信授权登录</h3>
-                <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
-                  请使用需要绑定的微信扫码<br />授权后 OpenClaw 将自动完成同步
-                </p>
-                <div style={{
-                  background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #f1f5f9',
-                  display: 'inline-block', marginBottom: 24
-                }}>
-                  {qrData && (
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(qrData.qrcode_url)}`}
-                      alt="WeChat Login"
-                      style={{ width: 160, height: 160 }}
-                    />
-                  )}
-                </div>
-                <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                  二维码有效期至: {dayjs(qrData?.expires_at).format('HH:mm:ss')}
-                </div>
-                <Button
-                  block
-                  type="primary"
-                  size="large"
-                  onClick={() => setQrModalVisible(false)}
-                  style={{ marginTop: 24, borderRadius: 8, height: 48, fontWeight: 600 }}
-                >
-                  我知道了
-                </Button>
-              </div>
-            </Modal>
           </div>
         );
 
       case 'components':
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* 微信插件状态卡片 */}
+            <Card
+              styles={{ body: { padding: 20 } }}
+              style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ padding: 12, background: '#eef2ff', borderRadius: 12, flexShrink: 0 }}><Cloud size={24} color="#4f46e5" /></div>
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 15, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      微信官方插件 (openclaw-weixin)
+                      {weixinStatus === null ? (
+                        <Tag color="processing" icon={<RefreshCw size={10} style={{ animation: 'spin 2s linear infinite' }} />} style={{ borderRadius: 4, fontSize: 11 }}>监测中 ({checkWeixinSeconds}s)</Tag>
+                      ) : weixinStatus.installed ? (
+                        <Tag color="success" style={{ borderRadius: 4, fontSize: 11 }}>已安装 v{weixinStatus.version}</Tag>
+                      ) : (
+                        <Tag color="error" style={{ borderRadius: 4, fontSize: 11 }}>未安装</Tag>
+                      )}
+                    </div>
+                    <div style={{ color: '#64748b', fontSize: 12 }}>
+                      {weixinStatus === null 
+                        ? '正在连接插件系统并检索状态...'
+                        : weixinStatus.installed 
+                          ? `运行状态: ${weixinStatus.status} (已托管至配置中心)`
+                          : '核心组件缺失，需完成安装后方可获取登录码'}
+                    </div>
+                  </div>
+                </div>
+                {weixinStatus !== null && !weixinStatus.installed && (
+                  <Button 
+                    type="primary" 
+                    icon={<Zap size={14} />} 
+                    loading={loadingWeixin}
+                    onClick={handleInstallWeixin}
+                    style={{ borderRadius: 8, height: 36 }}
+                  >
+                    一键安装插件
+                  </Button>
+                )}
+              </div>
+            </Card>
+
             {/* 微信登录迁移至此 */}
             <Card
-              onClick={() => handleControl('wechat')}
+              onClick={() => {
+                if (isGettingQR) return;
+                if (!weixinStatus?.installed) {
+                  message.warning('请先完成微信插件安装');
+                  return;
+                }
+                handleControl('wechat');
+              }}
               styles={{ body: { padding: 20 } }}
-              style={{ borderRadius: 12, border: '1px solid #e2e8f0', cursor: 'pointer', transition: 'all 0.2s' }}
-              hoverable
+              style={{ 
+                borderRadius: 12, border: '1px solid #e2e8f0', 
+                cursor: (weixinStatus?.installed && !isGettingQR) ? 'pointer' : 'not-allowed', 
+                transition: 'all 0.2s',
+                opacity: (weixinStatus?.installed && !isGettingQR) ? 1 : 0.6
+              }}
+              hoverable={weixinStatus?.installed && !isGettingQR}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                 <div style={{ padding: 12, background: '#f0fdf4', borderRadius: 12, flexShrink: 0 }}><Smartphone size={24} color="#16a34a" /></div>
@@ -756,58 +814,6 @@ const Dashboard = () => {
               </div>
             </Card>
 
-            <Row gutter={[20, 20]}>
-              <Col xs={24} lg={12}>
-                <Card
-                  title={<div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: '#475569' }}><Cpu size={14} color="#3b82f6" />核心插件</div>}
-                  styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 52 }, body: { padding: '0 20px' } }}
-                  style={{ borderRadius: 12, border: '1px solid #e2e8f0', height: '100%' }}
-                >
-                  {(status?.plugins || []).length === 0 ? (
-                    <div style={{ padding: '48px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>暂无插件数据</div>
-                  ) : (
-                    <List
-                      dataSource={status?.plugins || []}
-                      renderItem={(item: any) => (
-                        <List.Item style={{ padding: '14px 0', borderBottom: '1px solid #f8fafc' }}>
-                          <Space>
-                            {item.online ? <CheckCircle2 size={16} color="#22c55e" /> : <XCircle size={16} color="#cbd5e1" />}
-                            <span style={{ color: '#334155', fontWeight: 500, fontSize: 13 }}>{item.name}</span>
-                          </Space>
-                          <Tag color={item.online ? 'success' : 'default'} bordered={false} style={{ borderRadius: 6, margin: 0, fontSize: 11 }}>
-                            {item.online ? '运行中' : '已停用'}
-                          </Tag>
-                        </List.Item>
-                      )}
-                    />
-                  )}
-                </Card>
-              </Col>
-              <Col xs={24} lg={12}>
-                <Card
-                  title={<div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: '#475569' }}><RadioTower size={14} color="#6366f1" />通信渠道</div>}
-                  styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 52 }, body: { padding: '0 20px' } }}
-                  style={{ borderRadius: 12, border: '1px solid #e2e8f0', height: '100%' }}
-                >
-                  {(status?.channels || []).length === 0 ? (
-                    <div style={{ padding: '48px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>暂无渠道数据</div>
-                  ) : (
-                    <List
-                      dataSource={status?.channels || []}
-                      renderItem={(item: any) => (
-                        <List.Item style={{ padding: '14px 0', borderBottom: '1px solid #f8fafc' }}>
-                          <Space>
-                            <MessageSquare size={15} color="#94a3b8" />
-                            <span style={{ color: '#334155', fontWeight: 500, fontSize: 13 }}>{item.name}</span>
-                          </Space>
-                          <Badge status={item.online ? 'processing' : 'default'} text={<span style={{ color: '#64748b', fontSize: 12 }}>{item.online ? '已连接' : '已断开'}</span>} />
-                        </List.Item>
-                      )}
-                    />
-                  )}
-                </Card>
-              </Col>
-            </Row>
           </div>
         );
 
@@ -874,7 +880,9 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, fontWeight: 600 }}>当前状态: {selfHealingEnabled ? '运行中' : '已禁用'}</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, fontWeight: 600 }}>
+                    当前状态: <span style={{ color: selfHealingEnabled ? '#16a34a' : '#ef4444' }}>{selfHealingEnabled ? '运行中' : '已禁用'}</span>
+                  </div>
                   <Button 
                     type={selfHealingEnabled ? "default" : "primary"}
                     size="large"
@@ -1024,49 +1032,134 @@ const Dashboard = () => {
     </div>
   );
 
-  if (isMobile) {
-    return (
-      <Layout style={{ minHeight: '100vh', background: '#f8fafc' }}>
-        {transitionMask}
-        {headerEl(() => setMobileMenuOpen(true))}
-        <Content style={{ padding: 16, background: '#f8fafc' }}>
-          {renderContent()}
-        </Content>
-        <Drawer
-          placement="left"
-          closable={false}
-          onClose={() => setMobileMenuOpen(false)}
-          open={mobileMenuOpen}
-          styles={{ body: { padding: 0, background: '#0f172a', display: 'flex', flexDirection: 'column', height: '100%' } }}
-          width={240}
-        >
-          {sidebarContent(() => setMobileMenuOpen(false))}
-        </Drawer>
-      </Layout>
-    );
-  }
-
+  // 渲染逻辑整合
   return (
-    <Layout style={{ minHeight: '100vh', background: '#f8fafc' }}>
+    <>
       {transitionMask}
-      <Sider
-        width={220}
-        collapsedWidth={64}
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        style={{ background: '#0f172a', position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 30, display: 'flex', flexDirection: 'column' }}
-      >
-        {sidebarContent()}
-      </Sider>
-      <Layout style={{ marginLeft: collapsed ? 64 : 220, transition: 'margin-left 0.2s', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-        {headerEl()}
-        <Content style={{ padding: 24, background: '#f8fafc', flex: 1 }}>
-          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+      
+      {isMobile ? (
+        <Layout style={{ minHeight: '100vh', background: '#f8fafc' }}>
+          {headerEl(() => setMobileMenuOpen(true))}
+          <Content style={{ padding: 16, background: '#f8fafc' }}>
             {renderContent()}
+          </Content>
+          <Drawer
+            placement="left"
+            closable={false}
+            onClose={() => setMobileMenuOpen(false)}
+            open={mobileMenuOpen}
+            styles={{ body: { padding: 0, background: '#0f172a', display: 'flex', flexDirection: 'column', height: '100%' } }}
+            width={240}
+          >
+            {sidebarContent(() => setMobileMenuOpen(false))}
+          </Drawer>
+        </Layout>
+      ) : (
+        <Layout style={{ minHeight: '100vh', background: '#f8fafc' }}>
+          <Sider
+            width={220}
+            collapsedWidth={64}
+            collapsed={collapsed}
+            onCollapse={setCollapsed}
+            style={{ background: '#0f172a', position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 30, display: 'flex', flexDirection: 'column' }}
+          >
+            {sidebarContent()}
+          </Sider>
+          <Layout style={{ marginLeft: collapsed ? 64 : 220, transition: 'margin-left 0.2s', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+            {headerEl()}
+            <Content style={{ padding: 24, background: '#f8fafc', flex: 1 }}>
+              <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+                {renderContent()}
+              </div>
+            </Content>
+          </Layout>
+        </Layout>
+      )}
+
+      {/* 全局业务模态框 */}
+      
+      {/* 指令确认 */}
+      <Modal
+        title={null}
+        open={confirmModal.open}
+        footer={null}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, open: false }))}
+        centered
+        width={400}
+        styles={{ body: { padding: 0, overflow: 'hidden', borderRadius: 16 } }}
+      >
+        <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center' }}>
+          <div style={{ 
+            width: 56, height: 56, borderRadius: '50%',
+            background: `${confirmModal.color}15`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            marginBottom: 16, margin: '0 auto 16px'
+          }}>
+            {confirmModal.action === 'start' && <Play size={24} color={confirmModal.color} />}
+            {confirmModal.action === 'stop' && <Square size={24} color={confirmModal.color} />}
+            {confirmModal.action === 'restart' && <RefreshCw size={24} color={confirmModal.color} />}
           </div>
-        </Content>
-      </Layout>
-    </Layout>
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>{confirmModal.title}</h3>
+          <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
+            {confirmModal.action === 'stop'
+              ? '确定要停止 OpenClaw 网关吗？这将导致所有渠道通信中断。'
+              : `您正在请求 ${confirmModal.title} 指令，系统将异步处理。`}
+          </p>
+          <div style={{ display: 'flex', gap: 12, width: '100%' }}>
+            <Button block size="large" onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))} style={{ borderRadius: 8 }}>取消</Button>
+            <Button block type="primary" size="large" onClick={executeControl} style={{ borderRadius: 8, background: confirmModal.color, borderColor: confirmModal.color, fontWeight: 600 }}>确认指令</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 微信二维码获取遮罩 */}
+      <Modal
+        open={isGettingQR}
+        footer={null}
+        closable={false}
+        centered
+        styles={{ body: { padding: '40px 24px', textAlign: 'center' } }}
+        width={320}
+      >
+        <Spin size="large" />
+        <div style={{ marginTop: 24, fontWeight: 600, color: '#1e293b' }}>正在请求微信登录指令...</div>
+        <div style={{ marginTop: 8, color: '#64748b', fontSize: 13 }}>后端处理中 ({qrSeconds}s)</div>
+        <div style={{ marginTop: 16, fontSize: 12, color: '#94a3b8' }}>初始化微信连接可能需要 10-20 秒</div>
+      </Modal>
+
+      {/* 微信二维码弹窗 (移动至顶层以保证稳定性) */}
+      <Modal
+        title={null}
+        open={qrModalVisible}
+        footer={null}
+        onCancel={() => setQrModalVisible(false)}
+        centered
+        width={340}
+        styles={{ body: { padding: 0, overflow: 'hidden', borderRadius: 16 } }}
+      >
+        <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center' }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>🦞</div>
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>微信授权登录</h3>
+          <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
+            请使用需要绑定的微信扫码<br />授权后 OpenClaw 将自动完成同步
+          </p>
+          <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #f1f5f9', display: 'inline-block', marginBottom: 16 }}>
+            {qrData && <QRCode value={qrData.qrcode_url} size={180} bordered={false} color="#1e293b" />}
+          </div>
+          <div style={{ padding: '0 24px', marginBottom: 24 }}>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>备选链接 (可直接在浏览器打开)</div>
+              <div style={{ fontSize: 12, background: '#f1f5f9', padding: '8px 12px', borderRadius: 8, wordBreak: 'break-all', color: '#475569', fontFamily: 'monospace', border: '1px solid #e2e8f0' }}>
+                {qrData?.qrcode_url}
+              </div>
+              <Button type="link" size="small" onClick={() => window.open(qrData?.qrcode_url, '_blank')} style={{ marginTop: 8 }}>在浏览器中打开连接</Button>
+          </div>
+          <div style={{ fontSize: 11, color: '#94a3b8', padding: '12px 0', borderTop: '1px solid #f1f5f9', background: '#fafafa' }}>
+            二维码有效期至: {qrData?.expires_at ? dayjs(qrData.expires_at).format('HH:mm:ss') : '--:--'}
+          </div>
+          <Button block type="primary" size="large" onClick={() => setQrModalVisible(false)} style={{ marginTop: 24, borderRadius: 10, fontWeight: 700 }}>已完成扫码</Button>
+        </div>
+      </Modal>
+    </>
   );
 };
 

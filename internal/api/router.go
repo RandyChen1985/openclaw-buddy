@@ -78,6 +78,8 @@ func (s *Server) setupRoutes() {
 
 		v1.GET("/stats/health", s.getHealthStats)
 		v1.GET("/wechat/qrcode", s.getWeChatQRCode)
+		v1.GET("/wechat/plugin/status", s.checkWeChatPlugin)
+		v1.POST("/wechat/install", s.installWeChatPlugin)
 		v1.GET("/ws/logs", s.streamLogs)
 
 		// Self-healing management
