@@ -34,7 +34,7 @@ type ServiceStatus struct {
 	Details string `json:"details,omitempty"`
 }
 
-func GetStructuredStatus() (OpenClawStatus, error) {
+func GetStructuredStatus(port int) (OpenClawStatus, error) {
 	status := OpenClawStatus{
 		Plugins:  []ServiceStatus{},
 		Channels: []ServiceStatus{},
@@ -50,9 +50,9 @@ func GetStructuredStatus() (OpenClawStatus, error) {
 	status.Metrics = getSystemMetrics()
 
 	// 1. 解析网关状态：仅使用端口监听判断，确保最快响应速度
-	if IsPortListening(18789) {
+	if IsPortListening(port) {
 		status.Gateway.Status = "Running"
-		pid, _ := GetPIDByPort(18789)
+		pid, _ := GetPIDByPort(port)
 		status.Gateway.PID = pid
 		status.Gateway.Runtime = "Active (Port Monitored)"
 	} else {

@@ -7,6 +7,7 @@
 
 ## 2. API 接口 (API V1)
 - [ ] **状态查询**: `GET /v1/openclaw/status` 返回结构化 JSON，包含 PID 和 Runtime。
+- [ ] **配置端口检查**: 修改 `env` 中的 `HEALTH_PORT` 后，系统概览应能正确反映该端口的监听状态。
 - [ ] **异步控制**: `POST /v1/gateway/restart` 应立即返回 202 并触发后台进程重启。
 - [ ] **历史统计**: `GET /v1/stats/health` 应返回至少过去 24 小时的 SQLite 记录。
 - [ ] **微信二维码**: `GET /v1/wechat/qrcode` 应返回 `qrcode_url` 且支持 5 分钟缓存。
