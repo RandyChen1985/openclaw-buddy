@@ -15,31 +15,32 @@ import (
 
 var DB *sql.DB
 
-func InitDB(dbPath string) error {
+func InitDB(dbPath string) (string, error) {
 	// Ensure directory exists
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create db directory: %v", err)
+		return "", fmt.Errorf("failed to create db directory: %v", err)
 	}
 
 	var err error
 	DB, err = sql.Open("sqlite", dbPath)
 	if err != nil {
-		return fmt.Errorf("failed to open database: %v", err)
+		return "", fmt.Errorf("failed to open database: %v", err)
 	}
 
 	if err = DB.Ping(); err != nil {
-		return fmt.Errorf("failed to ping database: %v", err)
+		return "", fmt.Errorf("failed to ping database: %v", err)
 	}
 
-	if err = createTables(); err != nil {
-		return fmt.Errorf("failed to create tables: %v", err)
+	activeToken, err := createTables()
+	if err != nil {
+		return "", fmt.Errorf("failed to create tables: %v", err)
 	}
 
-	return nil
+	return activeToken, nil
 }
 
-func createTables() error {
+func createTables() (string, error) {
 	queries := []string{
 		`CREATE TABLE IF NOT EXISTS health_checks (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,22 +66,23 @@ func createTables() error {
 	for _, query := range queries {
 		_, err := DB.Exec(query)
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
 
 	// 初始化“首次启动时间”
 	firstRun := GetSetting("first_run_at", "")
+	activeToken := ""
 	if firstRun == "" {
 		now := time.Now().Format("2006-01-02 15:04:05")
 		_ = SetSetting("first_run_at", now)
 
 		// 首次启动：生成随机 Token 并更新 env 文件
-		newToken := generateRandomToken(16)
-		_ = UpdateEnvToken(newToken)
+		activeToken = generateRandomToken(16)
+		_ = UpdateEnvToken(activeToken)
 	}
 
-	return nil
+	return activeToken, nil
 }
 
 func generateRandomToken(n int) string {

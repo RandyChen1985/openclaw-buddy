@@ -1,6 +1,7 @@
 package process
 
 import (
+	"encoding/json"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -27,6 +28,15 @@ type GatewayStatus struct {
 	Runtime string `json:"runtime"`
 	PID     int    `json:"pid"`
 	Status  string `json:"status"` // "Running" or "Stopped"
+}
+
+type Device struct {
+	RequestId string   `json:"requestId"`
+	Name      string   `json:"name"`
+	Role      string   `json:"role"`
+	Scopes    []string `json:"scopes"`
+	Status    string   `json:"status"`
+	CreatedAt string   `json:"createdAt"`
 }
 
 type ServiceStatus struct {
@@ -113,6 +123,44 @@ func parseValue(input, pattern string) string {
 		return strings.TrimSpace(matches[1])
 	}
 	return ""
+}
+
+func GetOpenClawDevices() ([]Device, error) {
+	cmd := exec.Command("openclaw", "devices", "list", "--json")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, err
+	}
+
+	var allDevices []Device
+	if err := json.Unmarshal(out, &allDevices); err != nil {
+		return nil, err
+	}
+
+	var pendingDevices []Device
+	for _, dev := range allDevices {
+		if dev.Status == "pending" {
+			pendingDevices = append(pendingDevices, dev)
+		}
+	}
+
+	return pendingDevices, nil
+}
+
+func finalizeList(list []string) []string {
+	if len(list) == 0 {
+		return []string{}
+	}
+	s := strings.Join(list, "")
+	parts := strings.Split(s, ",")
+	var result []string
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 func splitTableLine(line string) []string {

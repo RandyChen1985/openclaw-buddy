@@ -232,10 +232,14 @@ const Dashboard = () => {
   const [status, setStatus] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [wsLogs, setWsLogs] = useState<string[]>([]);
+  const [botsModels, setBotsModels] = useState<any>(null);
+  const [devices, setDevices] = useState<any[]>([]);
   const [activeTab, setActiveKey] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const [loadingBots, setLoadingBots] = useState(false);
+  const [loadingDevices, setLoadingDevices] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionSeconds, setTransitionSeconds] = useState(0);
@@ -251,7 +255,6 @@ const Dashboard = () => {
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [qrData, setQrData] = useState<{ qrcode_url: string, expires_at: string } | null>(null);
   const [weixinStatus, setWeixinStatus] = useState<any>(null);
-  const [botsModels, setBotsModels] = useState<any>({ bots: [], models: [] });
   const [chatChannels, setChatChannels] = useState<any[]>([]);
   const [loadingWeixin, setLoadingWeixin] = useState(false);
   const [checkWeixinSeconds, setCheckWeixinSeconds] = useState(0);
@@ -362,9 +365,41 @@ const Dashboard = () => {
     return () => clearInterval(timer);
   }, [isTransitioning]);
 
+  const fetchBotsModels = async () => {
+    try {
+      setLoadingBots(true);
+      const res = await api.get('/v1/openclaw/bots-models');
+      setBotsModels(res.data);
+    } catch (err) {
+      console.error('Fetch bots error', err);
+    } finally {
+      setLoadingBots(false);
+    }
+  };
+
+  const fetchDevices = async () => {
+    try {
+      setLoadingDevices(true);
+      const res = await api.get('/v1/openclaw/devices');
+      setDevices(res.data);
+    } catch (err) {
+      console.error('Fetch devices error', err);
+    } finally {
+      setLoadingDevices(false);
+    }
+  };
+
   useEffect(() => {
     fetchData(); // 初始加载
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'bots-models') {
+      fetchBotsModels();
+    } else if (activeTab === 'devices') {
+      fetchDevices();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     const tokenStr = localStorage.getItem('guardian_token');
@@ -442,15 +477,6 @@ const Dashboard = () => {
     }
   };
 
-  const fetchBotsModels = async () => {
-    try {
-      const res = await api.get('/v1/openclaw/bots-models');
-      setBotsModels(res.data);
-    } catch (err) {
-      console.error('Fetch bots/models error', err);
-    }
-  };
-
   useEffect(() => {
     if (activeTab === 'tools') {
       fetchSelfHealingStatus();
@@ -462,6 +488,9 @@ const Dashboard = () => {
     }
     if (activeTab === 'bots-models') {
       fetchBotsModels();
+    }
+    if (activeTab === 'devices') {
+      fetchDevices();
     }
   }, [activeTab]);
 
@@ -520,6 +549,7 @@ const Dashboard = () => {
     { key: 'dashboard', icon: <LayoutDashboard size={16} />, label: '系统概览' },
     { key: 'bots-models', icon: <Command size={16} />, label: '虾兵蟹将' },
     { key: 'components', icon: <Boxes size={16} />, label: '渠道绑定' },
+    { key: 'devices', icon: <Smartphone size={16} />, label: '设备绑定' },
     { key: 'logs', icon: <Terminal size={16} />, label: '实时日志' },
     { key: 'tools', icon: <Zap size={16} />, label: '自愈管理' },
     { key: 'external', icon: <ExternalLink size={16} />, label: '龙虾面板' },
@@ -646,7 +676,14 @@ const Dashboard = () => {
                     </div>
                     <div>
                       <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>系统安装于</div>
-                      <div style={{ fontFamily: 'monospace', color: '#64748b', fontSize: 12 }}>{status?.installed_at || '—'}</div>
+                      <div style={{ 
+                        fontFamily: 'monospace', 
+                        color: '#64748b', 
+                        fontSize: window.innerWidth < 768 ? 10 : 12,
+                        whiteSpace: 'nowrap' 
+                      }}>
+                        {window.innerWidth < 768 ? (status?.installed_at?.split(' ')[0] || '—') : (status?.installed_at || '—')}
+                      </div>
                     </div>
                   </div>
                 </Card>
@@ -772,56 +809,62 @@ const Dashboard = () => {
               <div style={{ color: '#64748b', fontSize: 13 }}>当前 OpenClaw 实例中配置的机器人与 AI 模型资产</div>
             </div>
 
-            <Row gutter={[24, 24]}>
-              <Col span={24}>
-                <Card
-                  title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Boxes size={18} /> 小龙虾们 (Bots)</span>}
-                  styles={{ body: { padding: '12px 24px' } }}
-                  style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
-                >
-                  <List
-                    dataSource={botsModels.bots}
-                    renderItem={(bot: any) => (
-                      <List.Item style={{ padding: '16px 0' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
-                          <div style={{ fontSize: 28 }}>{bot.emoji || '🤖'}</div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 15 }}>{bot.id}</div>
-                            <div style={{ color: '#64748b', fontSize: 12, marginTop: 2 }}>使用模型: <Tag color="blue" style={{ borderRadius: 4, margin: 0, scale: '0.9' }}>{bot.model}</Tag></div>
+            {loadingBots && !botsModels ? (
+              <div style={{ padding: '60px 0', textAlign: 'center' }}>
+                <Spin tip="加载资产中..." />
+              </div>
+            ) : (
+              <Row gutter={[24, 24]}>
+                <Col span={24}>
+                  <Card
+                    title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Boxes size={18} /> 小龙虾们 (Bots)</span>}
+                    styles={{ body: { padding: '12px 24px' } }}
+                    style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
+                  >
+                    <List
+                      dataSource={botsModels?.bots || []}
+                      renderItem={(bot: any) => (
+                        <List.Item style={{ padding: '16px 0' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
+                            <div style={{ fontSize: 28 }}>{bot.emoji || '🤖'}</div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 15 }}>{bot.id}</div>
+                              <div style={{ color: '#64748b', fontSize: 12, marginTop: 2 }}>使用模型: <Tag color="blue" style={{ borderRadius: 4, margin: 0, scale: '0.9' }}>{bot.model}</Tag></div>
+                            </div>
+                            <Tag color="success" style={{ borderRadius: 12 }}>已就绪</Tag>
                           </div>
-                          <Tag color="success" style={{ borderRadius: 12 }}>已就绪</Tag>
-                        </div>
-                      </List.Item>
-                    )}
-                    locale={{ emptyText: <div style={{ padding: '32px 0', color: '#94a3b8' }}>暂未配置机器人</div> }}
-                  />
-                </Card>
-              </Col>
+                        </List.Item>
+                      )}
+                      locale={{ emptyText: <div style={{ padding: '32px 0', color: '#94a3b8' }}>暂未配置机器人</div> }}
+                    />
+                  </Card>
+                </Col>
 
-              <Col span={24}>
-                <Card
-                  title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Cpu size={18} /> 模型军团 (Models)</span>}
-                  styles={{ body: { padding: '12px 24px' } }}
-                  style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
-                >
-                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, padding: '12px 0' }}>
-                    {botsModels.models.length > 0 ? botsModels.models.map((m: any) => (
-                      <div key={m.id} style={{
-                        background: '#f8fafc', padding: '12px 16px', borderRadius: 12, border: '1px solid #f1f5f9',
-                        minWidth: 200, display: 'flex', flexDirection: 'column', gap: 4
-                      }}>
-                        <div style={{ fontWeight: 600, color: '#334155', fontSize: 14 }}>{m.name}</div>
-                        <div style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, color: '#94a3b8' }}>
-                           <Cloud size={10} /> {m.provider}
+                <Col span={24}>
+                  <Card
+                    title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Cpu size={18} /> 模型军团 (Models)</span>}
+                    styles={{ body: { padding: '12px 24px' } }}
+                    style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
+                  >
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, padding: '12px 0' }}>
+                      {botsModels?.models && botsModels.models.length > 0 ? botsModels.models.map((m: any) => (
+                        <div key={m.id} style={{
+                          background: '#f8fafc', padding: '12px 16px', borderRadius: 12, border: '1px solid #f1f5f9',
+                          minWidth: 200, display: 'flex', flexDirection: 'column', gap: 4
+                        }}>
+                          <div style={{ fontWeight: 600, color: '#334155', fontSize: 14 }}>{m.name}</div>
+                          <div style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, color: '#94a3b8' }}>
+                            <Cloud size={10} /> {m.provider}
+                          </div>
                         </div>
-                      </div>
-                    )) : (
-                      <div style={{ textAlign: 'center', width: '100%', padding: '32px 0', color: '#94a3b8' }}>暂未配置模型</div>
-                    )}
-                   </div>
-                </Card>
-              </Col>
-            </Row>
+                      )) : (
+                        <div style={{ textAlign: 'center', width: '100%', padding: '32px 0', color: '#94a3b8' }}>暂未配置模型</div>
+                      )}
+                    </div>
+                  </Card>
+                </Col>
+              </Row>
+            )}
           </div>
         );
 
@@ -1021,35 +1064,121 @@ const Dashboard = () => {
           </div>
         );
 
+      case 'devices':
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <Card
+              title={<span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={20} /> 待授权设备</span>}
+              styles={{ body: { padding: '0 24px' } }}
+              style={{ borderRadius: 16, border: '1px solid #e2e8f0' }}
+            >
+              <div style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9', marginBottom: 16, color: '#64748b', fontSize: 13 }}>
+                以下是请求连接到 OpenClaw 的设备，状态为 <b>Pending</b>。请在终端执行 <code>openclaw devices approve &lt;requestId&gt;</code> 进行授权。
+              </div>
+              {(loadingDevices && devices.length === 0) ? (
+                <div style={{ padding: '60px 0', textAlign: 'center' }}>
+                  <Spin tip="加载设备列表中..." />
+                </div>
+              ) : (devices.length === 0) ? (
+                <div style={{ padding: '60px 0', textAlign: 'center', color: '#94a3b8' }}>
+                  <div style={{ fontSize: 40, marginBottom: 16 }}>📱</div>
+                  <div style={{ fontSize: 13 }}>暂无待处理的设备请求</div>
+                </div>
+              ) : (
+                <List
+                  dataSource={devices}
+                  renderItem={(item: any) => (
+                    <List.Item style={{ padding: '24px 0', borderBottom: '1px solid #f8fafc' }}>
+                      <List.Item.Meta
+                        avatar={
+                          <div style={{ 
+                            width: 48, height: 48, borderRadius: 12, background: '#f8fafc',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3b82f6'
+                          }}>
+                            <Smartphone size={24} />
+                          </div>
+                        }
+                        title={
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>{item.name}</span>
+                            <Tag color="orange" style={{ borderRadius: 4, margin: 0 }}>待处理</Tag>
+                          </div>
+                        }
+                        description={
+                          <div style={{ marginTop: 12 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '8px 12px', fontSize: 13 }}>
+                              <span style={{ color: '#94a3b8' }}>请求 ID:</span>
+                              <span style={{ fontFamily: 'monospace', color: '#334155', background: '#f1f5f9', padding: '2px 6px', borderRadius: 4, fontSize: 12 }}>{item.requestId}</span>
+                              
+                              <span style={{ color: '#94a3b8' }}>请求角色:</span>
+                              <span style={{ color: '#334155' }}><Tag color="blue">{item.role}</Tag></span>
+                              
+                              <span style={{ color: '#94a3b8' }}>请求权限:</span>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                {item.scopes?.map((s: string) => <Tag key={s} style={{ margin: 0 }}>{s}</Tag>)}
+                              </div>
+                              
+                              <span style={{ color: '#94a3b8' }}>请求时间:</span>
+                              <span style={{ color: '#64748b' }}>{item.createdAt ? dayjs(item.createdAt).format('YYYY-MM-DD HH:mm:ss') : '—'}</span>
+                            </div>
+                          </div>
+                        }
+                      />
+                    </List.Item>
+                  )}
+                />
+              )}
+            </Card>
+          </div>
+        );
+
       case 'tools':
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             {/* 软开关卡片 */}
             <Card
-              styles={{ body: { padding: '24px 28px' } }}
+              styles={{ body: { padding: window.innerWidth < 768 ? '20px' : '24px 28px' } }}
               style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: window.innerWidth < 768 ? 'column' : 'row',
+                alignItems: window.innerWidth < 768 ? 'flex-start' : 'center', 
+                justifyContent: 'space-between',
+                gap: 20
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: window.innerWidth < 768 ? 16 : 20 }}>
                   <div style={{ 
-                    width: 52, height: 52, borderRadius: 14, 
+                    width: window.innerWidth < 768 ? 44 : 52, 
+                    height: window.innerWidth < 768 ? 44 : 52, 
+                    borderRadius: 12, 
                     background: selfHealingEnabled ? '#f0f9ff' : '#f8fafc',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0
                   }}>
-                    <Zap size={26} color={selfHealingEnabled ? '#3b82f6' : '#94a3b8'} fill={selfHealingEnabled ? '#3b82f6' : 'none'} style={{ opacity: selfHealingEnabled ? 1 : 0.5 }} />
+                    <Zap size={window.innerWidth < 768 ? 22 : 26} color={selfHealingEnabled ? '#3b82f6' : '#94a3b8'} fill={selfHealingEnabled ? '#3b82f6' : 'none'} style={{ opacity: selfHealingEnabled ? 1 : 0.5 }} />
                   </div>
                   <div>
-                    <div style={{ fontWeight: 800, color: '#1e293b', fontSize: 17, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ fontWeight: 800, color: '#1e293b', fontSize: window.innerWidth < 768 ? 16 : 17, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
                       自动自愈服务
                       <Badge status={selfHealingEnabled ? 'processing' : 'default'} />
                     </div>
                     <div style={{ color: '#64748b', fontSize: 13, maxWidth: 500, lineHeight: 1.5 }}>
-                      开启后，当巡检发现网关宕机或响应超时，系统将自动尝试执行 `Doctor Fix`、配置回滚并重启服务。
+                      开启后，当巡检发现网关宕机或响应超时，系统将自动尝试执行修复、配置回滚并重启服务。
                     </div>
                   </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, fontWeight: 600 }}>
+                <div style={{ 
+                  textAlign: window.innerWidth < 768 ? 'left' : 'right',
+                  width: window.innerWidth < 768 ? '100%' : 'auto',
+                  borderTop: window.innerWidth < 768 ? '1px solid #f1f5f9' : 'none',
+                  paddingTop: window.innerWidth < 768 ? 16 : 0,
+                  display: 'flex',
+                  flexDirection: window.innerWidth < 768 ? 'row' : 'column',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}>
+                  <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: window.innerWidth < 768 ? 0 : 8, fontWeight: 600 }}>
                     当前状态: <span style={{ color: selfHealingEnabled ? '#16a34a' : '#ef4444' }}>{selfHealingEnabled ? '运行中' : '已禁用'}</span>
                   </div>
                   <Button 
@@ -1355,6 +1484,26 @@ const Dashboard = () => {
 // ─── App Root ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('guardian_token'));
+
+  useEffect(() => {
+    // 注册 401 拦截器，处理会话过期或令牌失效
+    const interceptor = api.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response && error.response.status === 401) {
+          localStorage.removeItem('guardian_token');
+          setToken(null);
+          // 仅在当前确实有 token 的情况下提示，避免初次加载时拦截器重复报错覆盖登录界面逻辑
+          if (token) {
+            message.error('会话已过期或凭据失效，请重新登录');
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    return () => api.interceptors.response.eject(interceptor);
+  }, [token]);
 
   useEffect(() => {
     // 处理 URL 中的 token 自动登录

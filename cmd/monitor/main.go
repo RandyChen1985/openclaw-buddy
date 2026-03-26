@@ -44,8 +44,13 @@ func main() {
 	log.SetOutput(mw)
 
 	// 4. Initialize SQLite DB
-	if err := utils.InitDB(cfg.DBFile); err != nil {
+	newToken, err := utils.InitDB(cfg.DBFile)
+	if err != nil {
 		log.Fatalf("❌ Failed to initialize database: %v", err)
+	}
+	if newToken != "" {
+		cfg.Token = newToken
+		log.Printf("🔑 First run detected. Generated new random token: %s", newToken)
 	}
 	log.Printf("📦 Database initialized at %s", cfg.DBFile)
 

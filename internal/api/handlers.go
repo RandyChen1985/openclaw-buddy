@@ -64,6 +64,15 @@ func (s *Server) getOpenClawBotsModels(c *gin.Context) {
 	c.JSON(http.StatusOK, res)
 }
 
+func (s *Server) getOpenClawDevices(c *gin.Context) {
+	devices, err := process.GetOpenClawDevices()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, devices)
+}
+
 func (s *Server) getOpenClawStatus(c *gin.Context) {
 	status, err := process.GetStructuredStatus(s.cfg.HealthPort)
 	if err != nil {

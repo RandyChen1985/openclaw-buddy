@@ -70,6 +70,7 @@ func (s *Server) setupRoutes() {
 		v1.GET("/openclaw/status", s.getOpenClawStatus)
 		v1.GET("/openclaw/dashboard-url", s.getDashboardURL)
 		v1.GET("/openclaw/bots-models", s.getOpenClawBotsModels)
+		v1.GET("/openclaw/devices", s.getOpenClawDevices)
 		
 		gateway := v1.Group("/gateway")
 		{
