@@ -2,6 +2,7 @@ package process
 
 import (
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -31,12 +32,17 @@ type GatewayStatus struct {
 }
 
 type Device struct {
-	RequestId string   `json:"requestId"`
-	Name      string   `json:"name"`
-	Role      string   `json:"role"`
-	Scopes    []string `json:"scopes"`
-	Status    string   `json:"status"`
-	CreatedAt string   `json:"createdAt"`
+	RequestId   string   `json:"requestId"` // 仅针对待处理设备
+	DeviceId    string   `json:"deviceId"`  // 仅针对已配对设备
+	DisplayName string   `json:"displayName"`
+	Platform    string   `json:"platform"`
+	ClientId    string   `json:"clientId"`
+	ClientMode  string   `json:"clientMode"`
+	Role        string   `json:"role"`
+	Scopes      []string `json:"scopes"`
+	Status      string   `json:"status"` // "pending" 或 "paired"
+	CreatedAtMs int64    `json:"createdAtMs"`
+	ApprovedAtMs int64   `json:"approvedAtMs"`
 }
 
 type ServiceStatus struct {
@@ -127,24 +133,48 @@ func parseValue(input, pattern string) string {
 
 func GetOpenClawDevices() ([]Device, error) {
 	cmd := exec.Command("openclaw", "devices", "list", "--json")
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output() // 仅读取 stdout，通常能过滤掉输出到 stderr 的插件日志
 	if err != nil {
 		return nil, err
 	}
 
-	var allDevices []Device
-	if err := json.Unmarshal(out, &allDevices); err != nil {
+	var resp struct {
+		Pending []Device `json:"pending"`
+		Paired  []Device `json:"paired"`
+	}
+
+	// 过滤 ANSI 码并精准定位 JSON 起始位置
+	raw := StripANSI(string(out))
+	// 设备列表是个对象，所以我们寻找第一个 '{'。
+	// 使用 strings.Index("{") 避免误匹配日志标签如 "[plugins]"
+	idx := strings.Index(raw, "{")
+	if idx != -1 {
+		raw = raw[idx:]
+	}
+
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 		return nil, err
 	}
 
-	var pendingDevices []Device
-	for _, dev := range allDevices {
-		if dev.Status == "pending" {
-			pendingDevices = append(pendingDevices, dev)
-		}
+	var all []Device
+	for _, d := range resp.Pending {
+		d.Status = "pending"
+		all = append(all, d)
+	}
+	for _, d := range resp.Paired {
+		d.Status = "paired"
+		all = append(all, d)
 	}
 
-	return pendingDevices, nil
+	return all, nil
+}
+
+func ApproveDevice(requestId string) error {
+	cmd := exec.Command("openclaw", "devices", "approve", requestId)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("批准设备失败: %s", string(out))
+	}
+	return nil
 }
 
 func finalizeList(list []string) []string {

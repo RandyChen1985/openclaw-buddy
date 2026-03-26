@@ -73,6 +73,23 @@ func (s *Server) getOpenClawDevices(c *gin.Context) {
 	c.JSON(http.StatusOK, devices)
 }
 
+func (s *Server) approveDevice(c *gin.Context) {
+	var req struct {
+		RequestId string `json:"requestId" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "requestId 不能为空"})
+		return
+	}
+
+	if err := process.ApproveDevice(req.RequestId); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "设备批准成功"})
+}
+
 func (s *Server) getOpenClawStatus(c *gin.Context) {
 	status, err := process.GetStructuredStatus(s.cfg.HealthPort)
 	if err != nil {

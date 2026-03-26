@@ -240,6 +240,7 @@ const Dashboard = () => {
   const [fetching, setFetching] = useState(true);
   const [loadingBots, setLoadingBots] = useState(false);
   const [loadingDevices, setLoadingDevices] = useState(false);
+  const [loadingChannels, setLoadingChannels] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionSeconds, setTransitionSeconds] = useState(0);
@@ -468,12 +469,29 @@ const Dashboard = () => {
     }
   };
 
+  const handleApproveDevice = async (requestId: string) => {
+    try {
+      setLoadingDevices(true);
+      await api.post('/v1/openclaw/devices/approve', { requestId });
+      message.success('设备已成功批准');
+      fetchDevices(); // 刷新列表
+    } catch (err: any) {
+      console.error('Approve device error', err);
+      message.error(`批准失败: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setLoadingDevices(false);
+    }
+  };
+
   const fetchChatChannels = async () => {
     try {
+      setLoadingChannels(true);
       const res = await api.get('/v1/wechat/config/status');
       setChatChannels(res.data);
     } catch (err) {
-      console.error('Fetch chat channels error', err);
+      console.error('Fetch channels error', err);
+    } finally {
+      setLoadingChannels(false);
     }
   };
 
@@ -572,7 +590,7 @@ const Dashboard = () => {
   };
 
   const sidebarContent = (onSelect?: () => void) => (
-    <>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Logo */}
       <div style={{
         height: 56, display: 'flex', alignItems: 'center',
@@ -616,7 +634,7 @@ const Dashboard = () => {
       </div>
 
       {/* Logout */}
-      <div style={{ padding: '0 8px 16px' }}>
+      <div style={{ padding: '0 8px 16px', borderTop: '1px solid rgba(51,65,85,0.3)' }}>
         <Tooltip title={collapsed && !onSelect ? '退出登录' : ''} placement="right">
           <Button
             block
@@ -634,7 +652,7 @@ const Dashboard = () => {
           </Button>
         </Tooltip>
       </div>
-    </>
+    </div>
   );
 
   const renderContent = () => {
@@ -875,16 +893,24 @@ const Dashboard = () => {
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             {/* 已绑定渠道概览 */}
-            {configuredChannels.length > 0 && (
-              <Card
-                title={<span style={{ fontSize: 13, fontWeight: 500, color: '#475569' }}>已绑定渠道</span>}
-                styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 40 }, body: { padding: '16px 20px' } }}
-                style={{ 
-                  borderRadius: 12, border: '1px solid #e2e8f0',
-                  animation: 'fade-in-up 0.5s ease-out 0.1s forwards',
-                  opacity: 0 // 开始时透明
-                }}
-              >
+            <Card
+              title={<span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#475569' }}><CheckCircle size={14} /> 已绑定渠道</span>}
+              styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 40 }, body: { padding: '16px 20px' } }}
+              style={{ 
+                borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 20, 
+                background: '#f8fafc', animation: 'fade-in-up 0.5s ease-out 0.1s forwards', 
+                opacity: 0 // 开始时透明
+              }}
+            >
+              {loadingChannels && chatChannels.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                  <Spin size="small" tip="正在同步渠道信息..." />
+                </div>
+              ) : configuredChannels.length === 0 ? (
+                <div style={{ color: '#94a3b8', fontSize: 12, textAlign: 'center', padding: '12px 0' }}>
+                  暂无已绑定渠道，请在下方选择插件进行配置
+                </div>
+              ) : (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {configuredChannels.map(c => (
                     <Tag key={c.name} color="blue" icon={<CheckCircle size={10} />} style={{ borderRadius: 4, padding: '2px 8px' }}>
@@ -892,8 +918,8 @@ const Dashboard = () => {
                     </Tag>
                   ))}
                 </div>
-              </Card>
-            )}
+              )}
+            </Card>
 
             {/* 微信插件状态卡片 */}
             <Card
@@ -1065,62 +1091,130 @@ const Dashboard = () => {
         );
 
       case 'devices':
+        const pendingDevices = devices.filter(d => d.status === 'pending');
+        const pairedDevices = devices.filter(d => d.status === 'paired');
+
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {/* 1. 待批准设备请求 */}
             <Card
-              title={<span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={20} /> 待授权设备</span>}
+              title={<span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={20} color="#f59e0b" /> 待处理连接请求</span>}
               styles={{ body: { padding: '0 24px' } }}
-              style={{ borderRadius: 16, border: '1px solid #e2e8f0' }}
+              style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
             >
-              <div style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9', marginBottom: 16, color: '#64748b', fontSize: 13 }}>
-                以下是请求连接到 OpenClaw 的设备，状态为 <b>Pending</b>。请在终端执行 <code>openclaw devices approve &lt;requestId&gt;</code> 进行授权。
+              <div style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9', marginBottom: 0, color: '#64748b', fontSize: 13 }}>
+                以下设备正在请求接入 OpenClaw，请审核并决定是否批准授权。
               </div>
-              {(loadingDevices && devices.length === 0) ? (
-                <div style={{ padding: '60px 0', textAlign: 'center' }}>
-                  <Spin tip="加载设备列表中..." />
+              {loadingDevices && pendingDevices.length === 0 ? (
+                <div style={{ padding: '40px 0', textAlign: 'center' }}>
+                  <Spin tip="同步中..." size="small" />
                 </div>
-              ) : (devices.length === 0) ? (
-                <div style={{ padding: '60px 0', textAlign: 'center', color: '#94a3b8' }}>
-                  <div style={{ fontSize: 40, marginBottom: 16 }}>📱</div>
+              ) : pendingDevices.length === 0 ? (
+                <div style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8' }}>
                   <div style={{ fontSize: 13 }}>暂无待处理的设备请求</div>
                 </div>
               ) : (
                 <List
-                  dataSource={devices}
+                  dataSource={pendingDevices}
                   renderItem={(item: any) => (
-                    <List.Item style={{ padding: '24px 0', borderBottom: '1px solid #f8fafc' }}>
+                    <List.Item 
+                      style={{ padding: '20px 0', borderBottom: '1px solid #f8fafc' }}
+                      actions={[
+                        <Button 
+                          key="approve"
+                          type="primary" 
+                          icon={<CheckCircle size={14} />} 
+                          size="small"
+                          onClick={() => handleApproveDevice(item.requestId)}
+                          style={{ borderRadius: 6, fontSize: 12 }}
+                        >
+                          批准授权
+                        </Button>
+                      ]}
+                    >
                       <List.Item.Meta
                         avatar={
                           <div style={{ 
-                            width: 48, height: 48, borderRadius: 12, background: '#f8fafc',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3b82f6'
+                            width: 40, height: 40, borderRadius: 10, background: '#fffbeb',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b'
                           }}>
-                            <Smartphone size={24} />
+                            <Smartphone size={20} />
                           </div>
                         }
                         title={
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>{item.name}</span>
-                            <Tag color="orange" style={{ borderRadius: 4, margin: 0 }}>待处理</Tag>
+                            <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 15 }}>{item.displayName || '未知设备'}</span>
+                            <Tag color="orange" style={{ borderRadius: 4, margin: 0, fontSize: 11 }}>待批准</Tag>
                           </div>
                         }
                         description={
-                          <div style={{ marginTop: 12 }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '8px 12px', fontSize: 13 }}>
-                              <span style={{ color: '#94a3b8' }}>请求 ID:</span>
-                              <span style={{ fontFamily: 'monospace', color: '#334155', background: '#f1f5f9', padding: '2px 6px', borderRadius: 4, fontSize: 12 }}>{item.requestId}</span>
-                              
-                              <span style={{ color: '#94a3b8' }}>请求角色:</span>
-                              <span style={{ color: '#334155' }}><Tag color="blue">{item.role}</Tag></span>
-                              
-                              <span style={{ color: '#94a3b8' }}>请求权限:</span>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                {item.scopes?.map((s: string) => <Tag key={s} style={{ margin: 0 }}>{s}</Tag>)}
-                              </div>
-                              
-                              <span style={{ color: '#94a3b8' }}>请求时间:</span>
-                              <span style={{ color: '#64748b' }}>{item.createdAt ? dayjs(item.createdAt).format('YYYY-MM-DD HH:mm:ss') : '—'}</span>
-                            </div>
+                          <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '80px 1fr', gap: '4px 12px', fontSize: 12 }}>
+                            <span style={{ color: '#94a3b8' }}>请求 ID:</span>
+                            <Tooltip title={item.requestId}>
+                              <span style={{ fontFamily: 'monospace', color: '#2563eb', background: '#eff6ff', padding: '1px 6px', borderRadius: 4, cursor: 'help' }}>
+                                {item.requestId?.substring(0, 12)}...
+                              </span>
+                            </Tooltip>
+                            <span style={{ color: '#94a3b8' }}>操作系统:</span>
+                            <span style={{ color: '#475569' }}>{item.platform || '—'}</span>
+                          </div>
+                        }
+                      />
+                    </List.Item>
+                  )}
+                />
+              )}
+            </Card>
+
+            {/* 2. 已成功配对设备 */}
+            <Card
+              title={<span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={20} color="#10b981" /> 已配对合规设备</span>}
+              styles={{ body: { padding: '0 24px' } }}
+              style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
+            >
+              <div style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9', marginBottom: 0, color: '#64748b', fontSize: 13 }}>
+                当前已成功配对并获准通过 OpenClaw 终端的合法设备及应用列表。
+              </div>
+              {loadingDevices && pairedDevices.length === 0 ? (
+                <div style={{ padding: '40px 0', textAlign: 'center' }}>
+                  <Spin tip="同步中..." size="small" />
+                </div>
+              ) : pairedDevices.length === 0 ? (
+                <div style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8' }}>
+                  <div style={{ fontSize: 13 }}>暂无已配对的设备信息</div>
+                </div>
+              ) : (
+                <List
+                  dataSource={pairedDevices}
+                  renderItem={(item: any) => (
+                    <List.Item style={{ padding: '20px 0', borderBottom: '1px solid #f8fafc' }}>
+                      <List.Item.Meta
+                        avatar={
+                          <div style={{ 
+                            width: 40, height: 40, borderRadius: 10, background: '#f0fdf4',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981'
+                          }}>
+                            <Smartphone size={20} />
+                          </div>
+                        }
+                        title={
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 15 }}>{item.displayName || '未知设备'}</span>
+                            <Tag color="success" style={{ borderRadius: 4, margin: 0, fontSize: 11 }}>已加固</Tag>
+                          </div>
+                        }
+                        description={
+                          <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '80px 1fr', gap: '4px 12px', fontSize: 12 }}>
+                            <span style={{ color: '#94a3b8' }}>设备 ID:</span>
+                            <Tooltip title={item.deviceId}>
+                              <span style={{ fontFamily: 'monospace', color: '#2563eb', background: '#eff6ff', padding: '1px 6px', borderRadius: 4, cursor: 'help' }}>
+                                {item.deviceId?.substring(0, 12)}...
+                              </span>
+                            </Tooltip>
+                            <span style={{ color: '#94a3b8' }}>操作系统:</span>
+                            <span style={{ color: '#475569' }}>{item.platform || '—'}</span>
+                            <span style={{ color: '#94a3b8' }}>运行模式:</span>
+                            <span><Tag color="blue" style={{ margin: 0, fontSize: 10 }}>{item.clientMode || '—'}</Tag></span>
                           </div>
                         }
                       />
