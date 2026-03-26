@@ -10,7 +10,7 @@ import {
   Activity, Boxes, Cloud, Cpu, KeyRound,
   LayoutDashboard, LogOut, Menu as MenuIcon,
   Play, RefreshCw, Server, Smartphone, Square,
-  Terminal, Zap, CheckCircle, AlertCircle, ExternalLink
+  Terminal, Zap, CheckCircle, AlertCircle, ExternalLink, Command
 } from 'lucide-react';
 import axios from 'axios';
 import {
@@ -35,6 +35,10 @@ const globalStyles = `
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 `;
 
 // ─── Loading Component ─────────────────────────────────────────────────────────
@@ -43,7 +47,6 @@ const CrayfishLoading = () => (
     display: 'flex', flexDirection: 'column', alignItems: 'center',
     justifyContent: 'center', height: 400, gap: 24,
   }}>
-    <style>{globalStyles}</style>
     <div style={{
       fontSize: 14, fontFamily: 'monospace', color: '#2563eb',
       lineHeight: 1.2, whiteSpace: 'pre', textAlign: 'center',
@@ -248,6 +251,7 @@ const Dashboard = () => {
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [qrData, setQrData] = useState<{ qrcode_url: string, expires_at: string } | null>(null);
   const [weixinStatus, setWeixinStatus] = useState<any>(null);
+  const [botsModels, setBotsModels] = useState<any>({ bots: [], models: [] });
   const [chatChannels, setChatChannels] = useState<any[]>([]);
   const [loadingWeixin, setLoadingWeixin] = useState(false);
   const [checkWeixinSeconds, setCheckWeixinSeconds] = useState(0);
@@ -438,6 +442,15 @@ const Dashboard = () => {
     }
   };
 
+  const fetchBotsModels = async () => {
+    try {
+      const res = await api.get('/v1/openclaw/bots-models');
+      setBotsModels(res.data);
+    } catch (err) {
+      console.error('Fetch bots/models error', err);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'tools') {
       fetchSelfHealingStatus();
@@ -446,6 +459,9 @@ const Dashboard = () => {
     if (activeTab === 'components') {
       fetchWeixinStatus();
       fetchChatChannels();
+    }
+    if (activeTab === 'bots-models') {
+      fetchBotsModels();
     }
   }, [activeTab]);
 
@@ -502,6 +518,7 @@ const Dashboard = () => {
 
   const navItems = [
     { key: 'dashboard', icon: <LayoutDashboard size={16} />, label: '系统概览' },
+    { key: 'bots-models', icon: <Command size={16} />, label: '虾兵蟹将' },
     { key: 'components', icon: <Boxes size={16} />, label: '渠道绑定' },
     { key: 'logs', icon: <Terminal size={16} />, label: '实时日志' },
     { key: 'tools', icon: <Zap size={16} />, label: '自愈管理' },
@@ -743,6 +760,67 @@ const Dashboard = () => {
           </div>
         );
 
+      case 'bots-models':
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 6 }}>虾兵蟹将</div>
+              <div style={{ color: '#64748b', fontSize: 13 }}>当前 OpenClaw 实例中配置的机器人与 AI 模型资产</div>
+            </div>
+
+            <Row gutter={[24, 24]}>
+              <Col span={24}>
+                <Card
+                  title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Boxes size={18} /> 小龙虾们 (Bots)</span>}
+                  styles={{ body: { padding: '12px 24px' } }}
+                  style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
+                >
+                  <List
+                    dataSource={botsModels.bots}
+                    renderItem={(bot: any) => (
+                      <List.Item style={{ padding: '16px 0' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
+                          <div style={{ fontSize: 28 }}>{bot.emoji || '🤖'}</div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 15 }}>{bot.id}</div>
+                            <div style={{ color: '#64748b', fontSize: 12, marginTop: 2 }}>使用模型: <Tag color="blue" style={{ borderRadius: 4, margin: 0, scale: '0.9' }}>{bot.model}</Tag></div>
+                          </div>
+                          <Tag color="success" style={{ borderRadius: 12 }}>已就绪</Tag>
+                        </div>
+                      </List.Item>
+                    )}
+                    locale={{ emptyText: <div style={{ padding: '32px 0', color: '#94a3b8' }}>暂未配置机器人</div> }}
+                  />
+                </Card>
+              </Col>
+
+              <Col span={24}>
+                <Card
+                  title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Cpu size={18} /> 模型军团 (Models)</span>}
+                  styles={{ body: { padding: '12px 24px' } }}
+                  style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
+                >
+                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, padding: '12px 0' }}>
+                    {botsModels.models.length > 0 ? botsModels.models.map((m: any) => (
+                      <div key={m.id} style={{
+                        background: '#f8fafc', padding: '12px 16px', borderRadius: 12, border: '1px solid #f1f5f9',
+                        minWidth: 200, display: 'flex', flexDirection: 'column', gap: 4
+                      }}>
+                        <div style={{ fontWeight: 600, color: '#334155', fontSize: 14 }}>{m.name}</div>
+                        <div style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, color: '#94a3b8' }}>
+                           <Cloud size={10} /> {m.provider}
+                        </div>
+                      </div>
+                    )) : (
+                      <div style={{ textAlign: 'center', width: '100%', padding: '32px 0', color: '#94a3b8' }}>暂未配置模型</div>
+                    )}
+                   </div>
+                </Card>
+              </Col>
+            </Row>
+          </div>
+        );
+
       case 'components':
         const configuredChannels = chatChannels.filter(c => c.configured);
         const hasWeixinConfig = configuredChannels.some(c => c.name.toLowerCase().includes('weixin'));
@@ -754,7 +832,11 @@ const Dashboard = () => {
               <Card
                 title={<span style={{ fontSize: 13, fontWeight: 500, color: '#475569' }}>已绑定渠道</span>}
                 styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 40 }, body: { padding: '16px 20px' } }}
-                style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
+                style={{ 
+                  borderRadius: 12, border: '1px solid #e2e8f0',
+                  animation: 'fade-in-up 0.5s ease-out 0.1s forwards',
+                  opacity: 0 // 开始时透明
+                }}
               >
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {configuredChannels.map(c => (
@@ -769,7 +851,11 @@ const Dashboard = () => {
             {/* 微信插件状态卡片 */}
             <Card
               styles={{ body: { padding: 20 } }}
-              style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
+              style={{ 
+                borderRadius: 12, border: '1px solid #e2e8f0',
+                animation: 'fade-in-up 0.5s ease-out 0.2s forwards',
+                opacity: 0
+              }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -818,14 +904,17 @@ const Dashboard = () => {
             </Card>
 
             {/* 微信登录卡片优化 */}
-            <div>
+            <div style={{ 
+              animation: 'fade-in-up 0.5s ease-out 0.3s forwards',
+              opacity: 0 
+            }}>
               {hasWeixinConfig && (
                 <div style={{ 
                   background: '#fffbeb', color: '#b45309', fontSize: 11, 
-                  padding: '6px 14px', borderRadius: '10px 10px 0 0', 
+                  padding: '8px 20px', borderRadius: '12px 12px 0 0', 
                   border: '1px solid #fef3c7', borderBottom: 'none',
                   display: 'flex', alignItems: 'center', gap: 8,
-                  marginLeft: 12, width: 'fit-content', fontWeight: 600
+                  fontWeight: 600, width: '100%'
                 }}>
                   <AlertCircle size={14} /> 已经绑定过微信，重复绑定则覆盖之前的配置
                 </div>
@@ -841,7 +930,7 @@ const Dashboard = () => {
                 }}
                 styles={{ body: { padding: 20 } }}
                 style={{ 
-                  borderRadius: hasWeixinConfig ? '0 12px 12px 12px' : 12, border: '1px solid #e2e8f0', 
+                  borderRadius: hasWeixinConfig ? '0 0 12px 12px' : 12, border: '1px solid #e2e8f0', 
                   cursor: (weixinStatus?.installed && !isGettingQR) ? 'pointer' : 'not-allowed', 
                   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                   background: weixinStatus?.installed ? 'white' : '#f8fafc',
@@ -1120,6 +1209,7 @@ const Dashboard = () => {
   // 渲染逻辑整合
   return (
     <>
+      <style>{globalStyles}</style>
       {transitionMask}
       
       {isMobile ? (
