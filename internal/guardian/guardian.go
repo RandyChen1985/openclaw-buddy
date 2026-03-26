@@ -31,6 +31,18 @@ func (g *Guardian) Run(ctx context.Context) {
 	ticker := time.NewTicker(time.Duration(g.config.CheckIntervalSeconds) * time.Second)
 	defer ticker.Stop()
 
+	// 每天清理一次旧数据 (保留7天)
+	cleanupTicker := time.NewTicker(24 * time.Hour)
+	defer cleanupTicker.Stop()
+
+	// 启动时立即执行一次清理
+	go func() {
+		rows, err := utils.CleanupOldData(7)
+		if err == nil && rows > 0 {
+			log.Printf("🧹 [DB] 已自动清理超过 7 天的旧监控数据 (共 %d 条).", rows)
+		}
+	}()
+
 	// 启动飞书 WebSocket 长链接
 	if g.feishu != nil {
 		g.feishu.StartLongConnection(ctx)
@@ -53,11 +65,15 @@ func (g *Guardian) Run(ctx context.Context) {
 			}
 		}
 	}
-
 	for {
 		select {
 		case <-ticker.C:
 			g.check()
+		case <-cleanupTicker.C:
+			rows, _ := utils.CleanupOldData(7)
+			if rows > 0 {
+				log.Printf("🧹 [DB] 定时清理任务：已移除 %d 条过期监控数据.", rows)
+			}
 		case <-ctx.Done():
 			hostname, _ := os.Hostname()
 			g.notifyFeishu(context.Background(), "👋 有孚小龙虾监控服务已停止", fmt.Sprintf("节点: %s\n状态: ⏹️ 服务已正常退出", hostname))

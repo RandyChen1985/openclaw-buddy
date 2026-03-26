@@ -87,3 +87,21 @@ func SetSetting(key, value string) error {
 	_, err := DB.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value)
 	return err
 }
+
+func CleanupOldData(days int) (int64, error) {
+	if DB == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+
+	query := fmt.Sprintf("DELETE FROM health_checks WHERE timestamp < datetime('now', '-%d days')", days)
+	res, err := DB.Exec(query)
+	if err != nil {
+		return 0, err
+	}
+	rowsAffected, _ := res.RowsAffected()
+
+	queryHeal := fmt.Sprintf("DELETE FROM heal_events WHERE timestamp < datetime('now', '-%d days')", days)
+	_, _ = DB.Exec(queryHeal)
+
+	return rowsAffected, nil
+}
