@@ -43,10 +43,14 @@ func (g *Guardian) Run(ctx context.Context) {
 
 	// 启动时检查：如果服务正常，根据开关状态决定是否备份
 	isSelfHealingEnabled := utils.GetSetting("self_healing_enabled", "false") == "true"
-	if isSelfHealingEnabled && process.IsPortListening(g.config.HealthPort) {
+	if process.IsPortListening(g.config.HealthPort) {
 		if _, err := process.CheckHealth(); err == nil {
-			log.Printf("📦 Service is healthy on startup. Performing initial backup...")
-			g.backupConfig()
+			if isSelfHealingEnabled {
+				log.Printf("📦 Service is healthy on startup. Performing initial backup...")
+				g.backupConfig()
+			} else {
+				log.Printf("ℹ️ [自愈服务] 当前开关已关闭，启动时跳过配置备份流程。")
+			}
 		}
 	}
 
@@ -109,7 +113,7 @@ func (g *Guardian) check() {
 		log.Printf("🛠️ Initiating self-healing process.")
 		g.heal(reason)
 	} else {
-		log.Printf("ℹ️ Self-healing is disabled via soft switch. Skipping recovery actions.")
+		log.Printf("ℹ️ [自愈服务] 当前开关已关闭，忽略本次自愈服务流程。")
 	}
 }
 
