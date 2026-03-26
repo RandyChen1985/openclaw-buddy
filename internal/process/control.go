@@ -3,6 +3,7 @@ package process
 import (
 	"fmt"
 	"os/exec"
+	"time"
 )
 
 func ForceStartGateway() error {
@@ -20,6 +21,37 @@ func ForceStartGateway() error {
 	}()
 	
 	return nil
+}
+
+func StopGateway(port int) error {
+	// 1. 尝试标准停止命令
+	cmd := exec.Command("openclaw", "gateway", "stop")
+	_ = cmd.Run() // 忽略错误，因为可能是散装进程
+
+	// 2. 等待一小会儿让进程自行退出
+	time.Sleep(1500 * time.Millisecond)
+
+	// 3. 检查端口是否还在。如果在，强制 kill
+	if IsPortListening(port) {
+		pid, err := GetPIDByPort(port)
+		if err == nil && pid > 0 {
+			killCmd := exec.Command("kill", "-9", fmt.Sprintf("%d", pid))
+			_ = killCmd.Run()
+		}
+	}
+
+	return nil
+}
+
+func RestartGateway(port int) error {
+	// 1. 先执行带强杀逻辑的停止
+	_ = StopGateway(port)
+
+	// 2. 确保旧进程释放资源 (StopGateway 内部已有等待，这里加 500ms 缓冲)
+	time.Sleep(500 * time.Millisecond)
+
+	// 3. 重新启动
+	return ForceStartGateway()
 }
 
 func RunDoctorFix() error {

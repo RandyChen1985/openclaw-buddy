@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -44,10 +45,33 @@ func IsPortListening(port int) bool {
 	return true
 }
 
-func CheckHealth() error {
+func CheckHealth() (time.Duration, error) {
+	start := time.Now()
 	cmd := exec.Command("openclaw", "health")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("openclaw health check failed: %v", err)
+	err := cmd.Run()
+	elapsed := time.Since(start)
+	if err != nil {
+		return elapsed, fmt.Errorf("openclaw health check failed: %v", err)
 	}
-	return nil
+	return elapsed, nil
+}
+
+func GetPIDByPort(port int) (int, error) {
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("lsof -t -i :%d", port))
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("no process listening on port %d", port)
+	}
+	pidStr := strings.TrimSpace(string(out))
+	if pidStr == "" {
+		return 0, fmt.Errorf("empty PID for port %d", port)
+	}
+	// lsof -t might return multiple PIDs if multiple processes are bound (unlikely for TCP LISTEN)
+	// we take the first one
+	firstPid := strings.Split(pidStr, "\n")[0]
+	pid, err := strconv.Atoi(firstPid)
+	if err != nil {
+		return 0, fmt.Errorf("invalid PID format: %s", firstPid)
+	}
+	return pid, nil
 }

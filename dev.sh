@@ -51,7 +51,7 @@ fi
 
 # 4. 编译后端到隔离目录
 echo "🏗️  正在编译后端..."
-go build -o "$DEV_ROOT/lobster-monitor-dev" cmd/monitor/main.go
+go build -o "$DEV_ROOT/lobster-monitor-dev" ./cmd/monitor/main.go
 if [ $? -ne 0 ]; then
     echo "❌ 编译失败！"
     exit 1

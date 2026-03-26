@@ -42,9 +42,11 @@ func (g *Guardian) Run(ctx context.Context) {
 	log.Printf("🛡️ 有孚小龙虾监控服务巡检循环已启动. Every %d seconds.", g.config.CheckIntervalSeconds)
 
 	// 启动时检查：如果服务正常，先备份一份配置
-	if process.IsPortListening(g.config.HealthPort) && process.CheckHealth() == nil {
-		log.Printf("📦 Service is healthy on startup. Performing initial backup...")
-		g.backupConfig()
+	if process.IsPortListening(g.config.HealthPort) {
+		if _, err := process.CheckHealth(); err == nil {
+			log.Printf("📦 Service is healthy on startup. Performing initial backup...")
+			g.backupConfig()
+		}
 	}
 
 	for {
@@ -60,6 +62,12 @@ func (g *Guardian) Run(ctx context.Context) {
 }
 
 func (g *Guardian) check() {
+	// 检查软开关
+	if utils.GetSetting("self_healing_enabled", "false") != "true" {
+		log.Printf("ℹ️ Self-healing monitoring is disabled via soft switch. Skipping...")
+		return
+	}
+
 	var lastErr error
 	var reason string
 
@@ -70,13 +78,16 @@ func (g *Guardian) check() {
 			lastErr = fmt.Errorf("port %d is not listening", g.config.HealthPort)
 		} else {
 			// 2. Health Check
-			if err := process.CheckHealth(); err != nil {
+			elapsed, err := process.CheckHealth()
+			responseTimeMs := int(elapsed.Milliseconds())
+			
+			if err != nil {
 				reason = "Health Check Failure"
 				lastErr = err
 			} else {
 				// Success!
-				log.Printf("✅ OpenClaw is healthy. Updating configuration backup...")
-				g.recordHealthCheck("Healthy", 0, "")
+				log.Printf("✅ OpenClaw is healthy (Latency: %dms). Updating configuration backup...", responseTimeMs)
+				g.recordHealthCheck("Healthy", responseTimeMs, "")
 				g.backupConfig()
 				return
 			}

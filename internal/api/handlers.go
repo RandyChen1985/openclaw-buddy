@@ -38,11 +38,21 @@ func (s *Server) startGateway(c *gin.Context) {
 }
 
 func (s *Server) stopGateway(c *gin.Context) {
-	s.runAsyncCommand(c, "gateway", "stop")
+	go func() {
+		_ = process.StopGateway(s.cfg.HealthPort)
+	}()
+	c.JSON(http.StatusAccepted, gin.H{
+		"message": "Stop command initiated with force fallback",
+	})
 }
 
 func (s *Server) restartGateway(c *gin.Context) {
-	s.runAsyncCommand(c, "gateway", "restart")
+	go func() {
+		_ = process.RestartGateway(s.cfg.HealthPort)
+	}()
+	c.JSON(http.StatusAccepted, gin.H{
+		"message": "Restart command initiated (Stop + Start)",
+	})
 }
 
 func (s *Server) runAsyncCommand(c *gin.Context, args ...string) {
@@ -84,4 +94,65 @@ func (s *Server) getHealthStats(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, stats)
+}
+
+func (s *Server) getSelfHealingSetting(c *gin.Context) {
+	enabled := utils.GetSetting("self_healing_enabled", "false")
+	c.JSON(http.StatusOK, gin.H{"enabled": enabled == "true"})
+}
+
+func (s *Server) updateSelfHealingSetting(c *gin.Context) {
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	val := "false"
+	if req.Enabled {
+		val = "true"
+	}
+
+	if err := utils.SetSetting("self_healing_enabled", val); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "enabled": req.Enabled})
+}
+
+func (s *Server) getHealEvents(c *gin.Context) {
+	rows, err := utils.DB.Query(`
+		SELECT id, timestamp, reason, method, result, report_path 
+		FROM heal_events 
+		ORDER BY timestamp DESC 
+		LIMIT 50
+	`)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	type HealEvent struct {
+		ID         int    `json:"id"`
+		Timestamp  string `json:"timestamp"`
+		Reason     string `json:"reason"`
+		Method     string `json:"method"`
+		Result     string `json:"result"`
+		ReportPath string `json:"report_path"`
+	}
+
+	events := []HealEvent{}
+	for rows.Next() {
+		var ev HealEvent
+		if err := rows.Scan(&ev.ID, &ev.Timestamp, &ev.Reason, &ev.Method, &ev.Result, &ev.ReportPath); err != nil {
+			continue
+		}
+		events = append(events, ev)
+	}
+
+	c.JSON(http.StatusOK, events)
 }

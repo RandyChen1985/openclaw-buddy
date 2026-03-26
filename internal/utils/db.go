@@ -52,6 +52,10 @@ func createTables() error {
 			result TEXT,
 			report_path TEXT
 		);`,
+		`CREATE TABLE IF NOT EXISTS settings (
+			key TEXT PRIMARY KEY,
+			value TEXT
+		);`,
 	}
 
 	for _, query := range queries {
@@ -62,4 +66,24 @@ func createTables() error {
 	}
 
 	return nil
+}
+
+func GetSetting(key, defaultValue string) string {
+	if DB == nil {
+		return defaultValue
+	}
+	var value string
+	err := DB.QueryRow("SELECT value FROM settings WHERE key = ?", key).Scan(&value)
+	if err != nil {
+		return defaultValue
+	}
+	return value
+}
+
+func SetSetting(key, value string) error {
+	if DB == nil {
+		return fmt.Errorf("database not initialized")
+	}
+	_, err := DB.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value)
+	return err
 }

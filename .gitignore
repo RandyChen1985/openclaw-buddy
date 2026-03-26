@@ -1,6 +1,7 @@
 # Binaries
 /temp/
 /lobster-guardian
+/lobster-monitor-dev
 
 # Logs
 **/logs/
