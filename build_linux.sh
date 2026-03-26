@@ -114,8 +114,10 @@ chmod +x "${PKG_DIR}/stop.sh"
 echo "📦 正在生成归档压缩包..."
 TAR_FILE="lobster-guardian-linux-${VERSION}.tar.gz"
 cd "${RELEASE_ROOT}"
-# COPYFILE_DISABLE=1 防止 macOS 产生 ._ 文件，--exclude 确保排除已存在的元数据文件
-COPYFILE_DISABLE=1 tar -czf "${TAR_FILE}" --exclude='._*' "${PKG_NAME}"
+# COPYFILE_DISABLE=1 防止 macOS 产生 ._ 文件
+# --no-xattrs 防止 Linux tar 提取时提示 LIBARCHIVE.xattr 警告
+# --exclude 确保排除已存在的元数据文件
+COPYFILE_DISABLE=1 tar --no-xattrs -czf "${TAR_FILE}" --exclude='._*' "${PKG_NAME}"
 cd ..
 
 echo "--------------------------------------------------"

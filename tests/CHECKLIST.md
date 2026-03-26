@@ -12,6 +12,7 @@
 - [ ] **历史统计**: `GET /v1/stats/health` 应返回至少过去 24 小时的 SQLite 记录。
 - [ ] **微信二维码**: `GET /v1/wechat/qrcode` 应返回 `qrcode_url` 且支持 5 分钟缓存。
 - [ ] **资产查询**: `GET /v1/openclaw/bots-models` 应正确解析并返回机器人与模型列表。
+- [ ] **解析鲁棒性**: `openclaw models list` 输出中包含插件日志（带 ANSI 颜色、时间戳）时，不应将其误识别为模型。
 - [ ] **外部地址前缀**: 设置 `EXTERNAL_DASHBOARD_URL` 后，龙虾面板跳转链接应包含该前缀。
 - [ ] **Dashboard URL 容错**: `openclaw dashboard` 命令耗时较长（>10s）时，接口应支持 30s 超时控制。
 
@@ -33,6 +34,6 @@
 
 ## 5. 构建与部署 (Build)
 - [ ] **多平台打包**: 分别运行 `./build_mac.sh` 和 `./build_linux.sh`，检查 `release/` 下是否存在对应的 `.tar.gz`。
-- [ ] **打包清理**: 检查生成的 .tar.gz 压缩包内是否已彻底排除以 `._` 开头的 macOS 元数据文件。
+- [ ] **打包清理**: 检查生成的 .tar.gz 压缩包内是否已彻底排除以 `._` 开头的 macOS 元数据文件，且在 Linux 上解压时不应出现 `LIBARCHIVE.xattr` 警告。
 - [ ] **产物体积**: 检查 Linux 版二进制文件是否已通过 `ldflags` 压缩（约 27MB 左右）。
 - [ ] **环境隔离**: 检查生成的 `env` 文件是否包含新增的 `EXTERNAL_DASHBOARD_URL` 配置项。

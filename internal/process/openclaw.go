@@ -37,17 +37,15 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 	// 1. 解析 Bots: openclaw agents list
 	cmdBots := exec.Command("openclaw", "agents", "list")
 	outBots, _ := cmdBots.CombinedOutput()
-	
+
 	var currentBot *OpenClawBot
 	scannerBots := bufio.NewScanner(strings.NewReader(string(outBots)))
 	for scannerBots.Scan() {
 		line := scannerBots.Text()
-		trimmedLine := strings.TrimSpace(line)
-		
-		// 忽略日志行
-		if len(trimmedLine) > 8 && trimmedLine[8] == '+' {
+		if IsLogLine(line) {
 			continue
 		}
+		trimmedLine := strings.TrimSpace(StripANSI(line))
 
 		// 匹配 Agent ID: "- main (default)"
 		if strings.HasPrefix(trimmedLine, "- ") {
@@ -88,17 +86,15 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 	// 2. 解析 Models: openclaw models list
 	cmdModels := exec.Command("openclaw", "models", "list")
 	outModels, _ := cmdModels.CombinedOutput()
-	
+
 	scannerModels := bufio.NewScanner(strings.NewReader(string(outModels)))
 	isTableStarted := false
 	for scannerModels.Scan() {
 		line := scannerModels.Text()
-		trimmedLine := strings.TrimSpace(line)
-
-		// 忽略日志行
-		if len(trimmedLine) > 8 && trimmedLine[8] == '+' {
+		if IsLogLine(line) {
 			continue
 		}
+		trimmedLine := strings.TrimSpace(StripANSI(line))
 
 		// 识别表头
 		if strings.HasPrefix(trimmedLine, "Model") && strings.Contains(trimmedLine, "Ctx") {
@@ -107,8 +103,9 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 		}
 
 		if isTableStarted && trimmedLine != "" && !strings.Contains(trimmedLine, "OpenClaw") {
-			fields := strings.Fields(line)
-			if len(fields) >= 1 {
+			fields := strings.Fields(trimmedLine)
+			// 模型列表至少应包含 Model, Input, Ctx 3个核心字段
+			if len(fields) >= 3 {
 				modelID := fields[0]
 				tags := ""
 				if len(fields) >= 5 {
@@ -125,3 +122,5 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 
 	return res, nil
 }
+
+
