@@ -10,6 +10,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func (s *Server) getWeChatConfigStatus(c *gin.Context) {
+	channels, err := process.GetChatChannels()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, channels)
+}
+
 func (s *Server) getOpenClawStatus(c *gin.Context) {
 	status, err := process.GetStructuredStatus(s.cfg.HealthPort)
 	if err != nil {

@@ -10,7 +10,7 @@ import {
   Activity, Boxes, Cloud, Cpu, KeyRound,
   LayoutDashboard, LogOut, Menu as MenuIcon,
   Play, RefreshCw, Server, Smartphone, Square,
-  Terminal, Zap, 
+  Terminal, Zap, CheckCircle, AlertCircle
 } from 'lucide-react';
 import axios from 'axios';
 import {
@@ -248,6 +248,7 @@ const Dashboard = () => {
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [qrData, setQrData] = useState<{ qrcode_url: string, expires_at: string } | null>(null);
   const [weixinStatus, setWeixinStatus] = useState<any>(null);
+  const [chatChannels, setChatChannels] = useState<any[]>([]);
   const [loadingWeixin, setLoadingWeixin] = useState(false);
   const [checkWeixinSeconds, setCheckWeixinSeconds] = useState(0);
   const [isGettingQR, setIsGettingQR] = useState(false);
@@ -428,10 +429,23 @@ const Dashboard = () => {
     }
   };
 
+  const fetchChatChannels = async () => {
+    try {
+      const res = await api.get('/v1/wechat/config/status');
+      setChatChannels(res.data);
+    } catch (err) {
+      console.error('Fetch chat channels error', err);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'tools') {
       fetchSelfHealingStatus();
       fetchHealEvents();
+    }
+    if (activeTab === 'components') {
+      fetchWeixinStatus();
+      fetchChatChannels();
     }
   }, [activeTab]);
 
@@ -708,8 +722,28 @@ const Dashboard = () => {
         );
 
       case 'components':
+        const configuredChannels = chatChannels.filter(c => c.configured);
+        const hasWeixinConfig = configuredChannels.some(c => c.name.toLowerCase().includes('weixin'));
+
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* 已绑定渠道概览 */}
+            {configuredChannels.length > 0 && (
+              <Card
+                title={<span style={{ fontSize: 13, fontWeight: 500, color: '#475569' }}>已绑定渠道</span>}
+                styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 40 }, body: { padding: '16px 20px' } }}
+                style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
+              >
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {configuredChannels.map(c => (
+                    <Tag key={c.name} color="blue" icon={<CheckCircle size={10} />} style={{ borderRadius: 4, padding: '2px 8px' }}>
+                      {c.name}
+                    </Tag>
+                  ))}
+                </div>
+              </Card>
+            )}
+
             {/* 微信插件状态卡片 */}
             <Card
               styles={{ body: { padding: 20 } }}
@@ -762,66 +796,78 @@ const Dashboard = () => {
             </Card>
 
             {/* 微信登录卡片优化 */}
-            <Card
-              onClick={() => {
-                if (isGettingQR) return;
-                if (!weixinStatus?.installed) {
-                  message.warning('请先完成微信插件安装');
-                  return;
-                }
-                handleControl('wechat');
-              }}
-              styles={{ body: { padding: 20 } }}
-              style={{ 
-                borderRadius: 12, border: '1px solid #e2e8f0', 
-                cursor: (weixinStatus?.installed && !isGettingQR) ? 'pointer' : 'not-allowed', 
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                background: weixinStatus?.installed ? 'white' : '#f8fafc',
-                opacity: (weixinStatus?.installed && !isGettingQR) ? 1 : 0.6,
-                transform: (weixinStatus?.installed && !isGettingQR) ? 'none' : 'scale(0.995)',
-                boxShadow: (weixinStatus?.installed && !isGettingQR) ? '0 1px 2px rgba(0,0,0,0.03)' : 'none'
-              }}
-              hoverable={weixinStatus?.installed && !isGettingQR}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <div style={{ 
-                    padding: 12, 
-                    background: weixinStatus?.installed ? '#f0fdf4' : '#f1f5f9', 
-                    borderRadius: 12, 
-                    flexShrink: 0,
-                    transition: 'all 0.3s'
-                  }}>
-                    <Smartphone size={24} color={weixinStatus?.installed ? '#16a34a' : '#94a3b8'} />
-                  </div>
-                  <div>
+            <div>
+              {hasWeixinConfig && (
+                <div style={{ 
+                  background: '#fffbeb', color: '#b45309', fontSize: 11, 
+                  padding: '6px 14px', borderRadius: '10px 10px 0 0', 
+                  border: '1px solid #fef3c7', borderBottom: 'none',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  marginLeft: 12, width: 'fit-content', fontWeight: 600
+                }}>
+                  <AlertCircle size={14} /> 已经绑定过微信，重复绑定则覆盖之前的配置
+                </div>
+              )}
+              <Card
+                onClick={() => {
+                  if (isGettingQR) return;
+                  if (!weixinStatus?.installed) {
+                    message.warning('请先完成微信插件安装');
+                    return;
+                  }
+                  handleControl('wechat');
+                }}
+                styles={{ body: { padding: 20 } }}
+                style={{ 
+                  borderRadius: hasWeixinConfig ? '0 12px 12px 12px' : 12, border: '1px solid #e2e8f0', 
+                  cursor: (weixinStatus?.installed && !isGettingQR) ? 'pointer' : 'not-allowed', 
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  background: weixinStatus?.installed ? 'white' : '#f8fafc',
+                  opacity: (weixinStatus?.installed && !isGettingQR) ? 1 : 0.6,
+                  transform: (weixinStatus?.installed && !isGettingQR) ? 'none' : 'scale(0.995)',
+                  boxShadow: (weixinStatus?.installed && !isGettingQR) ? '0 1px 2px rgba(0,0,0,0.03)' : 'none'
+                }}
+                hoverable={weixinStatus?.installed && !isGettingQR}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                     <div style={{ 
-                      fontWeight: 700, 
-                      color: weixinStatus?.installed ? '#1e293b' : '#64748b', 
-                      fontSize: 15, 
-                      marginBottom: 4,
+                      padding: 12, 
+                      background: weixinStatus?.installed ? '#f0fdf4' : '#f1f5f9', 
+                      borderRadius: 12, 
+                      flexShrink: 0,
                       transition: 'all 0.3s'
                     }}>
-                      获取微信登录码
+                      <Smartphone size={24} color={weixinStatus?.installed ? '#16a34a' : '#94a3b8'} />
                     </div>
-                    <div style={{ color: '#64748b', fontSize: 12 }}>生成用于身份授权的微信二维码，用于绑定个人微信，有效期 5 分钟</div>
+                    <div>
+                      <div style={{ 
+                        fontWeight: 700, 
+                        color: weixinStatus?.installed ? '#1e293b' : '#64748b', 
+                        fontSize: 15, 
+                        marginBottom: 4,
+                        transition: 'all 0.3s'
+                      }}>
+                        获取微信登录码
+                      </div>
+                      <div style={{ color: '#64748b', fontSize: 12 }}>生成用于身份授权的微信二维码，用于绑定个人微信，有效期 5 分钟</div>
+                    </div>
                   </div>
+                  {weixinStatus?.installed && (
+                    <div style={{ 
+                      color: '#16a34a', 
+                      fontSize: 12, 
+                      fontWeight: 500, 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 4 
+                    }}>
+                      立即获取 <RefreshCw size={12} />
+                    </div>
+                  )}
                 </div>
-                {weixinStatus?.installed && (
-                  <div style={{ 
-                    color: '#16a34a', 
-                    fontSize: 12, 
-                    fontWeight: 500, 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: 4 
-                  }}>
-                    立即获取 <RefreshCw size={12} />
-                  </div>
-                )}
-              </div>
-            </Card>
-
+              </Card>
+            </div>
           </div>
         );
 

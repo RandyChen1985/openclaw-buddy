@@ -161,6 +161,47 @@ func GetWeChatPluginStatus() (*WeChatPluginStatus, error) {
 	return status, nil
 }
 
+type ChatChannel struct {
+	Name       string `json:"name"`
+	Configured bool   `json:"configured"`
+}
+
+func GetChatChannels() ([]ChatChannel, error) {
+	log.Printf("🔍 Executing: openclaw channels list (Detecting Configured Channels)")
+	res, _ := RunCommandWithTimeout(10*time.Second, "openclaw", "channels", "list")
+
+	var channels []ChatChannel
+	lines := strings.Split(res.Output, "\n")
+	isChannelSection := false
+
+	for _, line := range lines {
+		trimmedLine := strings.TrimSpace(StripANSI(line))
+		if strings.Contains(trimmedLine, "Chat channels:") {
+			isChannelSection = true
+			continue
+		}
+
+		if isChannelSection && strings.HasPrefix(trimmedLine, "- ") {
+			namePart := strings.TrimPrefix(trimmedLine, "- ")
+			// 格式通常为: - Name: configured, ... 或 - Name: not configured, ...
+			isConfigured := strings.Contains(namePart, ": configured")
+			
+			// 提取名称 (冒号之前的部分)
+			name := namePart
+			if idx := strings.Index(namePart, ":"); idx != -1 {
+				name = strings.TrimSpace(namePart[:idx])
+			}
+
+			channels = append(channels, ChatChannel{
+				Name:       name,
+				Configured: isConfigured,
+			})
+		}
+	}
+
+	return channels, nil
+}
+
 func InstallWeChatPlugin() error {
 	// 1. 安装插件
 	log.Printf("📦 Installing WeChat plugin...")
