@@ -635,7 +635,7 @@ const Dashboard = () => {
                       {status?.gateway?.runtime || '—'}
                     </div>
                   </div>
-                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16, display: 'grid', gridTemplateColumns: '0.8fr 1fr 1.2fr', gap: 12 }}>
                     <div>
                       <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>PID</div>
                       <div style={{ fontFamily: 'monospace', color: '#334155', fontWeight: 600, fontSize: 13 }}>{status?.gateway?.pid || '—'}</div>
@@ -643,6 +643,10 @@ const Dashboard = () => {
                     <div>
                       <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>最近更新</div>
                       <div style={{ fontFamily: 'monospace', color: '#64748b', fontSize: 13 }}>{dayjs().format('HH:mm:ss')}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>系统安装于</div>
+                      <div style={{ fontFamily: 'monospace', color: '#64748b', fontSize: 12 }}>{status?.installed_at || '—'}</div>
                     </div>
                   </div>
                 </Card>

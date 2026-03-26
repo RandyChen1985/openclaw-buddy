@@ -14,12 +14,13 @@ type SystemMetrics struct {
 }
 
 type OpenClawStatus struct {
-	Version  string          `json:"version"`
-	Gateway  GatewayStatus   `json:"gateway"`
-	Metrics  SystemMetrics   `json:"metrics"`
-	Plugins  []ServiceStatus `json:"plugins"`
-	Channels []ServiceStatus `json:"channels"`
-	Agents   []ServiceStatus `json:"agents"`
+	Version     string          `json:"version"`
+	InstalledAt string          `json:"installed_at"`
+	Gateway     GatewayStatus   `json:"gateway"`
+	Metrics     SystemMetrics   `json:"metrics"`
+	Plugins     []ServiceStatus `json:"plugins"`
+	Channels    []ServiceStatus `json:"channels"`
+	Agents      []ServiceStatus   `json:"agents"`
 }
 
 type GatewayStatus struct {

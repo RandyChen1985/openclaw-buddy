@@ -70,6 +70,7 @@ func (s *Server) getOpenClawStatus(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	status.InstalledAt = utils.GetSetting("first_run_at", "未知")
 	c.JSON(http.StatusOK, status)
 }
 

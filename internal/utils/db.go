@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -63,6 +64,16 @@ func createTables() error {
 		if err != nil {
 			return err
 		}
+	}
+
+	// 初始化“首次启动时间”
+	firstRun := GetSetting("first_run_at", "")
+	if firstRun == "" {
+		now := os.Getenv("CURRENT_TIME")
+		if now == "" {
+			now = time.Now().Format("2006-01-02 15:04:05")
+		}
+		_ = SetSetting("first_run_at", now)
 	}
 
 	return nil
