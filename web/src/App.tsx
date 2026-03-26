@@ -511,13 +511,15 @@ const Dashboard = () => {
   const isRunning = status?.gateway?.status === 'Running';
 
   const handleOpenExternal = async () => {
+    const hide = message.loading('正在获取面板授权地址，请稍候...', 0);
     try {
-      message.loading('正在获取面板授权地址...', 1.5);
       const res = await api.get('/v1/openclaw/dashboard-url');
+      hide();
       if (res.data.url) {
         window.open(res.data.url, '_blank');
       }
     } catch (err) {
+      hide();
       message.error('获取面板地址失败，请确认网关是否在线');
     }
   };
