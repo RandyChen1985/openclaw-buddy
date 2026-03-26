@@ -11,3 +11,9 @@ vendor/
 
 # OS files
 .DS_Store
+release_pkg/
+web/node_modules/
+web/dist/
+internal/api/dist/
+monitor_test
+data/

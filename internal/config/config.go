@@ -23,6 +23,9 @@ type Config struct {
 	FeishuAppID          string
 	FeishuAppSecret      string
 	FeishuChatID         string
+	DBFile               string
+	Token                string
+	WebPort              int
 }
 
 func LoadConfig() (*Config, error) {
@@ -31,6 +34,7 @@ func LoadConfig() (*Config, error) {
 	interval, _ := strconv.Atoi(getEnv("CHECK_INTERVAL_SECONDS", "30"))
 	maxRetries, _ := strconv.Atoi(getEnv("MAX_RETRIES", "3"))
 	healthPort, _ := strconv.Atoi(getEnv("HEALTH_PORT", "18789"))
+	webPort, _ := strconv.Atoi(getEnv("WEB_PORT", "3000"))
 	feishuEnabled, _ := strconv.ParseBool(getEnv("FEISHU_ENABLED", "false"))
 
 	// 日志轮转配置
@@ -55,6 +59,9 @@ func LoadConfig() (*Config, error) {
 		FeishuAppID:          getEnv("FEISHU_APP_ID", ""),
 		FeishuAppSecret:      getEnv("FEISHU_APP_SECRET", ""),
 		FeishuChatID:         getEnv("FEISHU_CHAT_ID", ""),
+		DBFile:               getEnv("DB_FILE", "./data/guardian.db"),
+		Token:                getEnv("GUARDIAN_TOKEN", "lobster-guardian-2026"),
+		WebPort:              webPort,
 	}, nil
 }
 

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"yovole-openclaw-monitor/internal/api"
 	"yovole-openclaw-monitor/internal/config"
 	"yovole-openclaw-monitor/internal/guardian"
 	"yovole-openclaw-monitor/internal/process"
@@ -39,40 +40,40 @@ func main() {
 		MaxAge:     cfg.LogMaxAge,
 		Compress:   cfg.LogCompress,
 	}
-	// MultiWriter ensures logs go to both the file and console
 	mw := io.MultiWriter(os.Stdout, logRotate)
 	log.SetOutput(mw)
 
-	// 4. Environment Check
+	// 4. Initialize SQLite DB
+	if err := utils.InitDB(cfg.DBFile); err != nil {
+		log.Fatalf("❌ Failed to initialize database: %v", err)
+	}
+	log.Printf("📦 Database initialized at %s", cfg.DBFile)
+
+	// 5. Environment Check
 	if _, err := process.CheckBinaryInPath("openclaw"); err != nil {
 		log.Fatalf("❌ %v", err)
-	}
-
-	version, err := process.GetVersion()
-	if err != nil {
-		log.Printf("⚠️ Could not get OpenClaw version: %v", err)
-	} else {
-		log.Printf("🦞 OpenClaw Version: %s", version)
-	}
-
-	// 5. Running Dependency Check (Warning only)
-	if !process.IsPortListening(cfg.HealthPort) {
-		log.Printf("⚠️ Warning: OpenClaw 未运行. 有孚小龙虾带外服务将等待启动.")
-	} else if err := process.CheckHealth(); err != nil {
-		log.Printf("⚠️ Warning: OpenClaw 健康检查失败: %v. 有孚小龙虾带外服务将尝试自愈.", err)
 	}
 
 	// 6. Setup Context and Signal Handling
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// 7. Start Service
+	// 7. Start Guardian Worker (Background)
 	g := guardian.NewGuardian(cfg)
-	
-	log.Printf("🛡️ 有孚小龙虾带外服务已启动 (PID: %d). 正在监控 OpenClaw...", os.Getpid())
-	
+	log.Printf("🛡️ Guardian Worker starting...")
 	go g.Run(ctx)
 
+	// 8. Start Web Server
+	server := api.NewServer(cfg)
+	log.Printf("🚀 Web Server starting on http://0.0.0.0:%d (Token: %s)", cfg.WebPort, cfg.Token)
+	
+	go func() {
+		if err := server.Run(); err != nil {
+			log.Printf("❌ Web Server failed: %v", err)
+			stop()
+		}
+	}()
+
 	<-ctx.Done()
-	log.Printf("👋 有孚小龙虾带外服务正在退出...")
+	log.Printf("👋 有孚小龙虾监控服务正在退出...")
 }

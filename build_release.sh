@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# 🦞 有孚小龙虾带外服务一键打包发布脚本
-# 用途：编译 Go 程序并生成标准的工业级发布包目录结构
+# 🦞 有孚小龙虾监控 (Lobster Guardian) 一键打包发布脚本
+# 用途：编译前端 React 项目 -> 嵌入 Go 程序 -> 生成发布包
 
 # 设置变量
-BINARY_NAME="lobster-guardian"
-RELEASE_ROOT="temp"
+BINARY_NAME="lobster-monitor"
+RELEASE_ROOT="release_pkg"
 PKG_NAME="yovole-openclaw-monitor"
 PKG_DIR="${RELEASE_ROOT}/${PKG_NAME}"
 
@@ -15,118 +15,113 @@ echo "🚀 开始打包发布流程..."
 echo "🧹 清理旧文件: ${RELEASE_ROOT}"
 rm -rf "${RELEASE_ROOT}"
 
-# 2. 编译 Go 二进制程序
+# 2. 编译前端项目
+echo "🏗️ 正在编译前端项目 (web)..."
+if [ -d "web" ]; then
+    cd web
+    npm install --silent
+    npm run build --silent
+    cd ..
+    
+    # 移动产物到 Go embed 目录
+    mkdir -p internal/api/dist
+    rm -rf internal/api/dist/*
+    cp -r web/dist/* internal/api/dist/
+else
+    echo "❌ 错误: 未找到 web 目录"
+    exit 1
+fi
+
+# 3. 编译 Go 二进制程序
 echo "🏗️ 正在编译 Go 程序: ${BINARY_NAME}..."
-go build -o "${BINARY_NAME}" cmd/guardian/main.go
+go build -o "${BINARY_NAME}" cmd/monitor/main.go
 if [ $? -ne 0 ]; then
     echo "❌ 编译失败，请检查 Go 环境和代码！"
     exit 1
 fi
 
-# 3. 创建发布目录结构
+# 4. 创建发布目录结构
 echo "📂 创建目录结构: ${PKG_DIR}"
 mkdir -p "${PKG_DIR}/lib"
 mkdir -p "${PKG_DIR}/logs"
 mkdir -p "${PKG_DIR}/reports"
 mkdir -p "${PKG_DIR}/backups"
+mkdir -p "${PKG_DIR}/data"
 
-# 4. 移动二进制文件
+# 5. 移动二进制文件
 mv "${BINARY_NAME}" "${PKG_DIR}/lib/"
 
-# 5. 生成 env 配置文件 (带详细说明)
+# 6. 生成 env 配置文件 (带详细说明)
 echo "📝 生成配置文件: env"
 cat <<EOF > "${PKG_DIR}/env"
-# 🦞 有孚小龙虾带外服务配置文件
+# 🦞 有孚小龙虾监控 (Lobster Guardian) 配置文件
+
+# [Web 服务配置]
+# Web 管理面板监听端口
+WEB_PORT=3000
+# 管理员访问令牌 (Token)，用于 API 和 Web 登录校验
+GUARDIAN_TOKEN="lobster-guardian-2026"
+
+# [数据库配置]
+# SQLite 数据库文件路径
+DB_FILE="./data/guardian.db"
 
 # [基础配置]
-# OpenClaw 的配置目录路径，守护进程会监控此目录下的 openclaw.json
+# OpenClaw 的配置目录路径
 OPENCLAW_CONFIG_DIR="~/.openclaw"
-
-# 守护进程自己的备份存放目录（存储最近一次已知的健康配置）
+# 守护进程自己的备份存放目录
 BACKUP_DIR="./backups"
 
 # [监控配置]
-# 巡检频率（单位：秒），默认每 30 秒探测一次小龙虾状态
+# 巡检频率（秒）
 CHECK_INTERVAL_SECONDS=30
-
-# 宕机确认重试次数（默认 3 次），避免因网络瞬抖导致的误报警
+# 宕机确认重试次数
 MAX_RETRIES=3
-
-# 小龙虾网关监听的健康检查端口（默认：18789）
+# 小龙虾网关健康检查端口
 HEALTH_PORT=18789
 
 # [告警配置]
-# 是否启用飞书告警 (true/false)
 FEISHU_ENABLED=false
-# 飞书应用 App ID
 FEISHU_APP_ID=""
-# 飞书应用 App Secret
 FEISHU_APP_SECRET=""
-# 接收通知的 Chat ID (群组 ID 或 Open ID)
 FEISHU_CHAT_ID=""
 
 # [日志与报表]
-# 本服务的日志存放路径
 LOG_FILE="./logs/guardian.log"
-# 日志切分最大 MB (默认: 10)
 LOG_MAX_SIZE=10
-# 保留旧日志文件的最大个数 (默认: 5)
 LOG_MAX_BACKUPS=5
-# 保留旧日志文件的最大天数 (默认: 7)
 LOG_MAX_AGE=7
-# 是否压缩旧日志 (true/false)
 LOG_COMPRESS=true
-
-# 故障诊断报表（Markdown 格式）的存放目录
 REPORT_DIR="./reports"
 EOF
 
-# 6. 生成启动脚本 (start.sh)
+# 7. 生成启动脚本 (start.sh)
 echo "📜 生成启动脚本: start.sh"
 cat <<'EOF' > "${PKG_DIR}/start.sh"
 #!/bin/bash
-# 自动进入脚本所在目录
 cd "$(dirname "$0")"
 
-# 1. 环境预检查: OpenClaw 是否安装
-if ! command -v openclaw &> /dev/null; then
-    echo "❌ 错误: 未找到 'openclaw' 命令。"
-    echo "💡 提示: 请确保它已安装在 PATH 中。当前 PATH 为: $PATH"
-    echo "💡 建议: 如果您使用 NVM，请尝试使用 'bash start.sh' 或直接 './start.sh' 运行。"
-    exit 1
-fi
-
-# 2. 状态预检查: OpenClaw 是否已启动
-# 带外服务的初衷是守护已运行的服务，若服务未运行则不中断启动，仅作提示
-if ! openclaw status &> /dev/null; then
-    echo "⚠️ 警告: 检测到 OpenClaw 网关可能未在运行。"
-    echo "💡 提示: 监控将继续启动，并在检测到故障时尝试拉起服务。"
-fi
-
-# 3. 检查服务是否已经在运行
+# 1. 检查服务是否已经在运行
 PID_FILE="/tmp/lobster-guardian.pid"
 if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")
     if ps -p $PID > /dev/null; then
-        echo "❌ 有孚小龙虾带外服务已经运行中 (PID: $PID)。"
+        echo "❌ 服务已经在运行中 (PID: $PID)。"
         exit 1
     fi
     rm -f "$PID_FILE"
 fi
 
-# 4. 后台运行逻辑
-echo "🚀 正在后台启动有孚小龙虾带外服务..."
-# 我们将标准输出和错误流重定向到 logs/guardian.log
-nohup ./lib/lobster-guardian >> ./logs/guardian.log 2>&1 &
-
-# 获取刚启动的 PID
+# 2. 启动服务
+echo "🚀 正在后台启动有孚小龙虾监控服务..."
+nohup ./lib/lobster-monitor >> ./logs/guardian.log 2>&1 &
 PID=$!
-echo "✅ 有孚小龙虾带外服务启动成功，PID: $PID"
-echo "📝 日志文件: ./logs/guardian.log"
+echo "✅ 启动成功，PID: $PID"
+echo "🌐 Web 管理地址: http://localhost:3000"
 EOF
 chmod +x "${PKG_DIR}/start.sh"
 
-# 7. 生成停止脚本 (stop.sh)
+# 8. 生成停止脚本 (stop.sh)
 echo "📜 生成停止脚本: stop.sh"
 cat <<'EOF' > "${PKG_DIR}/stop.sh"
 #!/bin/bash
@@ -136,59 +131,10 @@ if [ -f "$PID_FILE" ]; then
     kill $PID && echo "Stopped Service (PID: $PID)"
     rm -f "$PID_FILE"
 else
-    echo "服务未在运行 (未找到 PID 文件)。"
+    echo "服务未在运行。"
 fi
 EOF
 chmod +x "${PKG_DIR}/stop.sh"
-
-# 8. 生成帮助文档 (README.md)
-echo "📖 生成帮助文档: README.md"
-cat <<EOF > "${PKG_DIR}/README.md"
-# 🦞 有孚小龙虾带外服务 (Lobster Guardian)
-
-本项目是专门为 **OpenClaw (小龙虾)** 设计的独立带外管理程序。它作为“哨兵”运行，旨在解决 OpenClaw 因配置改错导致网关宕机、进而导致管理界面失联的问题。
-
-## 🛠️ 工作原理
-1. **周期性健康检查**：每隔 30 秒探测一次 OpenClaw 运行状态（连续失败 3 次才触发自愈）。
-2. **主动配置备份**：巡检正常时，自动备份最新的健康配置到 \`backups/\` 目录。
-3. **故障诊断**：一旦确认服务宕机，自动生成对比报表。
-4. **多级自愈**：
-    - **优先还原**：尝试从 \`backups/\` 还原最近一次健康的配置。
-    - **兜底还原**：尝试从 OpenClaw 默认备份目录还原。
-    - **环境修复**：执行 \`openclaw doctor --fix\` 自动修复环境。
-5. **强制自愈**：执行 \`openclaw gateway --force\` 强行拉起服务。
-6. **主动告警**：支持通过飞书 Webhook 发送实时通知。
-
-## 📊 运行实例
-以下是 \`logs/guardian.log\` 中记录的一次真实自愈过程：
-\`\`\`text
-2026/03/10 12:25:23 🛡️ 有孚小龙虾带外服务已启动 (PID: 30362). 正在监控 OpenClaw...
-2026/03/10 12:25:23 🛡️ 有孚小龙虾带外服务巡检循环已启动. Every 30 seconds.
-2026/03/10 12:25:58 ✅ OpenClaw is healthy.
-...
-\`\`\`
-
-## 🚀 快速开始
-### 前提条件
-- 启动本程序前，请确保 **OpenClaw 已经正常运行**。
-- 本程序采用单例模式运行，PID 锁文件位于 \`/tmp/lobster-guardian.pid\`。
-
-### 运行与停止
-\`\`\`bash
-./start.sh   # 启动带外服务
-./stop.sh    # 停止带外服务
-\`\`\`
-
-## 📂 目录说明
-- **lib/**: 存放核心二进制程序。
-- **logs/**: 存放服务的运行日志。
-- **reports/**: 存放服务崩溃后的差异分析报表。
-- **env**: 配置文件，可调整巡检频率和路径。
-EOF
-
-# 9. 清理中间产物 (Cleanup)
-echo "🧹 清理根目录中间产物: ${BINARY_NAME}"
-rm -f "${BINARY_NAME}"
 
 echo "--------------------------------------------------"
 echo "✅ 构建完成！发布包目录位于: ${PKG_DIR}"
