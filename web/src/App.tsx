@@ -1133,7 +1133,7 @@ const Dashboard = () => {
         closable={false}
         centered
         styles={{ body: { padding: '40px 24px', textAlign: 'center' } }}
-        width={320}
+        width={isMobile ? '80%' : 320}
       >
         <Spin size="large" />
         <div style={{ marginTop: 24, fontWeight: 600, color: '#1e293b' }}>正在请求微信登录指令...</div>
