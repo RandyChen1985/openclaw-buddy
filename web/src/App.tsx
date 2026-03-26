@@ -701,59 +701,7 @@ const Dashboard = () => {
                 </Button>
               </div>
             </Card>
-            {/* 自定义确认弹窗 */}
-            <Modal
-              open={confirmModal.open}
-              onCancel={() => setConfirmModal(prev => ({ ...prev, open: false }))}
-              footer={null}
-              centered
-              width={340}
-              styles={{ body: { padding: '32px 24px' } }}
-              style={{ borderRadius: 16, overflow: 'hidden' }}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                <div style={{
-                  width: 56, height: 56, borderRadius: '50%',
-                  background: `${confirmModal.color}15`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  marginBottom: 16
-                }}>
-                  {confirmModal.action === 'start' && <Play size={24} color={confirmModal.color} />}
-                  {confirmModal.action === 'stop' && <Square size={24} color={confirmModal.color} />}
-                  {confirmModal.action === 'restart' && <RefreshCw size={24} color={confirmModal.color} />}
-                </div>
-                <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>{confirmModal.title}</h3>
-                <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
-                  {confirmModal.action === 'stop'
-                    ? '确定要停止 OpenClaw 网关吗？这将导致所有渠道通信中断。'
-                    : `您正在请求 ${confirmModal.title} 指令，系统将异步处理。`}
-                </p>
-                <div style={{ display: 'flex', gap: 12, width: '100%' }}>
-                  <Button
-                    block
-                    size="large"
-                    onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}
-                    style={{ borderRadius: 8 }}
-                  >
-                    取消
-                  </Button>
-                  <Button
-                    block
-                    type="primary"
-                    size="large"
-                    onClick={executeControl}
-                    style={{
-                      borderRadius: 8,
-                      background: confirmModal.color,
-                      borderColor: confirmModal.color,
-                      fontWeight: 600
-                    }}
-                  >
-                    确认指令
-                  </Button>
-                </div>
-              </div>
-            </Modal>
+            {/* 自定义确认弹窗已迁移至全局，此处移除 */}
           </div>
         );
 
