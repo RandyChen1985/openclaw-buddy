@@ -1218,7 +1218,18 @@ const Dashboard = () => {
           <div style={{ marginBottom: 20 }}>
               <Button type="link" size="small" onClick={() => window.open(qrData?.qrcode_url, '_blank')}>在浏览器中打开授权链接</Button>
           </div>
-          <Button block type="primary" size="large" onClick={() => setQrModalVisible(false)} style={{ borderRadius: 10, fontWeight: 700 }}>已完成扫码</Button>
+          <Button 
+            block 
+            type="primary" 
+            size="large" 
+            onClick={() => {
+              setQrModalVisible(false);
+              fetchChatChannels();
+            }} 
+            style={{ borderRadius: 10, fontWeight: 700 }}
+          >
+            已完成扫码
+          </Button>
         </div>
       </Modal>
     </>
