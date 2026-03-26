@@ -18,14 +18,17 @@ type WeChatQRCode struct {
 }
 
 type WeChatPluginStatus struct {
-	Installed bool   `json:"installed"`
-	Status    string `json:"status"`
-	Version   string `json:"version"`
+	Installed bool      `json:"installed"`
+	Status    string    `json:"status"`
+	Version   string    `json:"version"`
+	LastCheck time.Time `json:"last_check"`
 }
 
 var (
-	qrCodeCache *WeChatQRCode
-	cacheMutex  sync.Mutex
+	qrCodeCache     *WeChatQRCode
+	statusCache     *WeChatPluginStatus
+	statusCacheTime time.Time
+	cacheMutex      sync.Mutex
 )
 
 func GetWeChatQRCode(force bool) (*WeChatQRCode, error) {
@@ -116,13 +119,23 @@ func GetWeChatQRCode(force bool) (*WeChatQRCode, error) {
 }
 
 func GetWeChatPluginStatus() (*WeChatPluginStatus, error) {
+	cacheMutex.Lock()
+	// 如果缓存存在且未超过 5 分钟，直接返回
+	if statusCache != nil && time.Since(statusCacheTime) < 5*time.Minute {
+		defer cacheMutex.Unlock()
+		return statusCache, nil
+	}
+	cacheMutex.Unlock()
+
 	// 执行 openclaw plugins list | grep weixin
-	res, _ := RunCommandWithTimeout(5*time.Second, "openclaw", "plugins", "list")
+	log.Printf("🔍 Executing: openclaw plugins list (Detecting WeChat Plugin Status)")
+	res, _ := RunCommandWithTimeout(8*time.Second, "openclaw", "plugins", "list")
 	
 	status := &WeChatPluginStatus{
 		Installed: false,
 		Status:    "Not Installed",
 		Version:   "Unknown",
+		LastCheck: time.Now(),
 	}
 
 	lines := strings.Split(res.Output, "\n")
@@ -137,6 +150,13 @@ func GetWeChatPluginStatus() (*WeChatPluginStatus, error) {
 			break
 		}
 	}
+
+	// 更新缓存
+	cacheMutex.Lock()
+	statusCache = status
+	statusCacheTime = time.Now()
+	statusCache.LastCheck = statusCacheTime
+	cacheMutex.Unlock()
 
 	return status, nil
 }

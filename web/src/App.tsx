@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Layout, Card, Button, Input, Form,
-  Space, Tooltip, Badge, Tag,
+  Tooltip, Badge, Tag,
   Row, Col, List, message,
   ConfigProvider, Menu, Drawer, Spin, Modal, Progress,
   QRCode,
@@ -653,14 +653,23 @@ const Dashboard = () => {
               title={<span style={{ fontSize: 13, fontWeight: 500, color: '#475569' }}>快捷操作</span>}
               styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 52 }, body: { padding: '16px 24px' } }}
             >
-              <Space wrap>
+              <div style={{ 
+                display: 'flex', 
+                flexWrap: 'wrap', 
+                gap: 12,
+                width: '100%'
+              }}>
                 <Button
                   type="primary"
                   size="large"
                   icon={<Play size={14} />}
                   onClick={() => handleControl('start')}
                   disabled={isRunning}
-                  style={{ fontWeight: 500 }}
+                  style={{ 
+                    fontWeight: 500, 
+                    flex: window.innerWidth < 768 ? '1 1 calc(50% - 6px)' : 'none',
+                    minWidth: window.innerWidth < 768 ? 0 : 120
+                  }}
                 >
                   启动网关
                 </Button>
@@ -670,7 +679,11 @@ const Dashboard = () => {
                   icon={<Square size={14} />}
                   onClick={() => handleControl('stop')}
                   disabled={!isRunning}
-                  style={{ fontWeight: 500 }}
+                  style={{ 
+                    fontWeight: 500, 
+                    flex: window.innerWidth < 768 ? '1 1 calc(50% - 6px)' : 'none',
+                    minWidth: window.innerWidth < 768 ? 0 : 120
+                  }}
                 >
                   停止网关
                 </Button>
@@ -678,13 +691,16 @@ const Dashboard = () => {
                   size="large"
                   icon={<RefreshCw size={14} />}
                   onClick={() => handleControl('restart')}
-                  style={{ fontWeight: 500 }}
+                  style={{ 
+                    fontWeight: 500, 
+                    flex: window.innerWidth < 768 ? '1 1 100%' : 'none',
+                    minWidth: window.innerWidth < 768 ? 0 : 120
+                  }}
                 >
                   重启网关
                 </Button>
-              </Space>
+              </div>
             </Card>
-
             {/* 自定义确认弹窗 */}
             <Modal
               open={confirmModal.open}
@@ -767,7 +783,16 @@ const Dashboard = () => {
                       {weixinStatus === null 
                         ? '正在连接插件系统并检索状态...'
                         : weixinStatus.installed 
-                          ? `运行状态: ${weixinStatus.status} (已托管至配置中心)`
+                          ? (
+                            <span>
+                              运行状态: {weixinStatus.status} (已托管至配置中心)
+                              {weixinStatus.last_check && (
+                                <span style={{ marginLeft: 8, opacity: 0.6 }}>
+                                  [上次检测: {dayjs(weixinStatus.last_check).format('HH:mm:ss')}]
+                                </span>
+                              )}
+                            </span>
+                          )
                           : '核心组件缺失，需完成安装后方可获取登录码'}
                     </div>
                   </div>
@@ -786,7 +811,7 @@ const Dashboard = () => {
               </div>
             </Card>
 
-            {/* 微信登录迁移至此 */}
+            {/* 微信登录卡片优化 */}
             <Card
               onClick={() => {
                 if (isGettingQR) return;
@@ -800,17 +825,50 @@ const Dashboard = () => {
               style={{ 
                 borderRadius: 12, border: '1px solid #e2e8f0', 
                 cursor: (weixinStatus?.installed && !isGettingQR) ? 'pointer' : 'not-allowed', 
-                transition: 'all 0.2s',
-                opacity: (weixinStatus?.installed && !isGettingQR) ? 1 : 0.6
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                background: weixinStatus?.installed ? 'white' : '#f8fafc',
+                opacity: (weixinStatus?.installed && !isGettingQR) ? 1 : 0.6,
+                transform: (weixinStatus?.installed && !isGettingQR) ? 'none' : 'scale(0.995)',
+                boxShadow: (weixinStatus?.installed && !isGettingQR) ? '0 1px 2px rgba(0,0,0,0.03)' : 'none'
               }}
               hoverable={weixinStatus?.installed && !isGettingQR}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{ padding: 12, background: '#f0fdf4', borderRadius: 12, flexShrink: 0 }}><Smartphone size={24} color="#16a34a" /></div>
-                <div>
-                  <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 15, marginBottom: 4 }}>获取微信登录码</div>
-                  <div style={{ color: '#64748b', fontSize: 12 }}>生成用于身份授权的微信二维码，用于绑定个人微信，有效期 5 分钟</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ 
+                    padding: 12, 
+                    background: weixinStatus?.installed ? '#f0fdf4' : '#f1f5f9', 
+                    borderRadius: 12, 
+                    flexShrink: 0,
+                    transition: 'all 0.3s'
+                  }}>
+                    <Smartphone size={24} color={weixinStatus?.installed ? '#16a34a' : '#94a3b8'} />
+                  </div>
+                  <div>
+                    <div style={{ 
+                      fontWeight: 700, 
+                      color: weixinStatus?.installed ? '#1e293b' : '#64748b', 
+                      fontSize: 15, 
+                      marginBottom: 4,
+                      transition: 'all 0.3s'
+                    }}>
+                      获取微信登录码
+                    </div>
+                    <div style={{ color: '#64748b', fontSize: 12 }}>生成用于身份授权的微信二维码，用于绑定个人微信，有效期 5 分钟</div>
+                  </div>
                 </div>
+                {weixinStatus?.installed && (
+                  <div style={{ 
+                    color: '#16a34a', 
+                    fontSize: 12, 
+                    fontWeight: 500, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 4 
+                  }}>
+                    立即获取 <RefreshCw size={12} />
+                  </div>
+                )}
               </div>
             </Card>
 
