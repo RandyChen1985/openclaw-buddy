@@ -70,6 +70,7 @@ MAX_RETRIES=3
 HEALTH_PORT=18789
 LOG_FILE="./logs/guardian.log"
 REPORT_DIR="./reports"
+EXTERNAL_DASHBOARD_URL=""
 EOF
 
 # 6. 切换到隔离目录启动服务

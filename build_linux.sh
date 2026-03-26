@@ -49,6 +49,8 @@ MAX_RETRIES=3
 HEALTH_PORT=18789
 LOG_FILE="./logs/guardian.log"
 REPORT_DIR="./reports"
+# 生产环境可选：外部访问域名 (例如 https://agent.example.com)，用于龙虾面板跳转
+EXTERNAL_DASHBOARD_URL=""
 EOF
 
 # 生成 Linux 启动脚本 (start.sh)
