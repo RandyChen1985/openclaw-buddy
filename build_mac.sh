@@ -36,7 +36,7 @@ mv "${BINARY_NAME}" "${PKG_DIR}/lib/lobster-monitor"
 cat <<EOF > "${PKG_DIR}/env"
 # 🦞 有孚小龙虾监控 (macOS 版)
 WEB_PORT=3000
-GUARDIAN_TOKEN="lobster-guardian-2026"
+GUARDIAN_TOKEN="sk-replace-me-on-first-run"
 DB_FILE="./data/guardian.db"
 OPENCLAW_CONFIG_DIR="~/.openclaw"
 BACKUP_DIR="./backups"

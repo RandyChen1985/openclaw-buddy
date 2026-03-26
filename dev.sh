@@ -61,7 +61,7 @@ fi
 echo "📝 生成隔离环境配置: $DEV_ROOT/env"
 cat <<EOF > "$DEV_ROOT/env"
 WEB_PORT=3000
-GUARDIAN_TOKEN="lobster-guardian-2026"
+GUARDIAN_TOKEN="sk-replace-me-on-first-run"
 DB_FILE="./data/guardian.db"
 OPENCLAW_CONFIG_DIR="~/.openclaw"
 BACKUP_DIR="./backups"

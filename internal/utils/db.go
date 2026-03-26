@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
+	"math/rand"
 
 	_ "modernc.org/sqlite"
 )
@@ -69,14 +72,43 @@ func createTables() error {
 	// 初始化“首次启动时间”
 	firstRun := GetSetting("first_run_at", "")
 	if firstRun == "" {
-		now := os.Getenv("CURRENT_TIME")
-		if now == "" {
-			now = time.Now().Format("2006-01-02 15:04:05")
-		}
+		now := time.Now().Format("2006-01-02 15:04:05")
 		_ = SetSetting("first_run_at", now)
+
+		// 首次启动：生成随机 Token 并更新 env 文件
+		newToken := generateRandomToken(16)
+		_ = UpdateEnvToken(newToken)
 	}
 
 	return nil
+}
+
+func generateRandomToken(n int) string {
+	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	rand.Seed(time.Now().UnixNano())
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return "sk-" + string(b)
+}
+
+func UpdateEnvToken(newToken string) error {
+	envPath := "env"
+	content, err := os.ReadFile(envPath)
+	if err != nil {
+		return err
+	}
+
+	re := regexp.MustCompile(`(?m)^GUARDIAN_TOKEN\s*=.*$`)
+	newContent := re.ReplaceAllString(string(content), "GUARDIAN_TOKEN="+newToken)
+	
+	// 如果没找到，追加到末尾
+	if !strings.Contains(newContent, "GUARDIAN_TOKEN=") {
+		newContent += "\nGUARDIAN_TOKEN=" + newToken
+	}
+
+	return os.WriteFile(envPath, []byte(newContent), 0644)
 }
 
 func GetSetting(key, defaultValue string) string {
