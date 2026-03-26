@@ -379,14 +379,11 @@ const Dashboard = () => {
   }, [wsLogs]);
 
   const handleControl = (action: string) => {
-    if (action === 'wechat') {
-      fetchWeChatQRCode();
-      return;
-    }
     const config: Record<string, { title: string, color: string }> = {
       'start': { title: '启动 OpenClaw 网关', color: '#2563eb' },
       'stop': { title: '停止 OpenClaw 网关', color: '#ef4444' },
       'restart': { title: '重启 OpenClaw 网关', color: '#6366f1' },
+      'wechat': { title: '获取微信登录码', color: '#16a34a' },
     };
     setConfirmModal({
       open: true,
@@ -467,6 +464,11 @@ const Dashboard = () => {
     const { action } = confirmModal;
     setConfirmModal(prev => ({ ...prev, open: false }));
     
+    if (action === 'wechat') {
+      fetchWeChatQRCode();
+      return;
+    }
+
     // 根据动作预设目标状态
     if (action === 'start' || action === 'restart') {
       setTargetStatus('Running');
@@ -1112,12 +1114,19 @@ const Dashboard = () => {
             {confirmModal.action === 'start' && <Play size={24} color={confirmModal.color} />}
             {confirmModal.action === 'stop' && <Square size={24} color={confirmModal.color} />}
             {confirmModal.action === 'restart' && <RefreshCw size={24} color={confirmModal.color} />}
+            {confirmModal.action === 'wechat' && <Smartphone size={24} color={confirmModal.color} />}
           </div>
           <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>{confirmModal.title}</h3>
           <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
-            {confirmModal.action === 'stop'
-              ? '确定要停止 OpenClaw 网关吗？这将导致所有渠道通信中断。'
-              : `您正在请求 ${confirmModal.title} 指令，系统将异步处理。`}
+            {confirmModal.action === 'stop' && '确定要停止 OpenClaw 网关吗？这将导致所有渠道通信中断。'}
+            {confirmModal.action === 'wechat' && (
+              <span style={{ textAlign: 'left', display: 'inline-block' }}>
+                请确认：<br />
+                1. 您的微信已升级到<b>最新版本</b><br />
+                2. 系统设置中的插件模块已支持<b>小龙虾</b>
+              </span>
+            )}
+            {['start', 'restart'].includes(confirmModal.action) && `您正在请求 ${confirmModal.title} 指令，系统将异步处理。`}
           </p>
           <div style={{ display: 'flex', gap: 12, width: '100%' }}>
             <Button block size="large" onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))} style={{ borderRadius: 8 }}>取消</Button>
