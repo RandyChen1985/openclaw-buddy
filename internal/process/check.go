@@ -1,9 +1,11 @@
 package process
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -54,6 +56,28 @@ func CheckHealth() (time.Duration, error) {
 		return elapsed, fmt.Errorf("openclaw health check failed: %v", err)
 	}
 	return elapsed, nil
+}
+
+func GetDashboardURL() (string, error) {
+	// 使用 context 增加超时控制，防止命令卡死
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "openclaw", "dashboard", "--no-open")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to execute dashboard command: %v", err)
+	}
+
+	output := string(out)
+	// 使用正则匹配 Dashboard URL: http://...
+	re := regexp.MustCompile(`Dashboard URL: (https?://[^\s\n]+)`)
+	matches := re.FindStringSubmatch(output)
+	if len(matches) > 1 {
+		return strings.TrimSpace(matches[1]), nil
+	}
+
+	return "", fmt.Errorf("dashboard URL not found in command output")
 }
 
 func GetPIDByPort(port int) (int, error) {

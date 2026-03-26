@@ -68,6 +68,7 @@ func (s *Server) setupRoutes() {
 	v1.Use(AuthMiddleware(s.cfg.Token))
 	{
 		v1.GET("/openclaw/status", s.getOpenClawStatus)
+		v1.GET("/openclaw/dashboard-url", s.getDashboardURL)
 		
 		gateway := v1.Group("/gateway")
 		{

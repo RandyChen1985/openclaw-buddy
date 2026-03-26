@@ -13,6 +13,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func (s *Server) getDashboardURL(c *gin.Context) {
+	url, err := process.GetDashboardURL()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"url": url})
+}
+
 func (s *Server) proxyLobsterDashboard(c *gin.Context) {
 	targetPort := s.cfg.HealthPort
 	targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", targetPort))

@@ -510,6 +510,18 @@ const Dashboard = () => {
 
   const isRunning = status?.gateway?.status === 'Running';
 
+  const handleOpenExternal = async () => {
+    try {
+      message.loading('正在获取面板授权地址...', 1.5);
+      const res = await api.get('/v1/openclaw/dashboard-url');
+      if (res.data.url) {
+        window.open(res.data.url, '_blank');
+      }
+    } catch (err) {
+      message.error('获取面板地址失败，请确认网关是否在线');
+    }
+  };
+
   const sidebarContent = (onSelect?: () => void) => (
     <>
       {/* Logo */}
@@ -539,7 +551,14 @@ const Dashboard = () => {
         <Menu
           mode="inline"
           selectedKeys={[activeTab]}
-          onClick={({ key }) => { setActiveKey(key); onSelect?.(); }}
+          onClick={({ key }) => { 
+            if (key === 'external') {
+              handleOpenExternal();
+              return;
+            }
+            setActiveKey(key); 
+            onSelect?.(); 
+          }}
           items={navItems}
           theme="dark"
           className="border-none"
@@ -994,17 +1013,6 @@ const Dashboard = () => {
                 />
               )}
             </Card>
-          </div>
-        );
-
-      case 'external':
-        return (
-          <div style={{ width: '100%', height: 'calc(100vh - 120px)', borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0', background: '#fff' }}>
-            <iframe 
-              src={`${window.location.origin}/v1/proxy/#token=71937201d0ba32c6c14047dd15487a0cbf0cd1f3a05e07f8`} 
-              style={{ width: '100%', height: '100%', border: 'none' }}
-              title="Lobster Dashboard"
-            />
           </div>
         );
 
