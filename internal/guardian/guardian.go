@@ -41,8 +41,9 @@ func (g *Guardian) Run(ctx context.Context) {
 
 	log.Printf("🛡️ 有孚小龙虾监控服务巡检循环已启动. Every %d seconds.", g.config.CheckIntervalSeconds)
 
-	// 启动时检查：如果服务正常，先备份一份配置
-	if process.IsPortListening(g.config.HealthPort) {
+	// 启动时检查：如果服务正常，根据开关状态决定是否备份
+	isSelfHealingEnabled := utils.GetSetting("self_healing_enabled", "false") == "true"
+	if isSelfHealingEnabled && process.IsPortListening(g.config.HealthPort) {
 		if _, err := process.CheckHealth(); err == nil {
 			log.Printf("📦 Service is healthy on startup. Performing initial backup...")
 			g.backupConfig()
@@ -82,9 +83,12 @@ func (g *Guardian) check() {
 				lastErr = err
 			} else {
 				// Success!
-				log.Printf("✅ OpenClaw is healthy (Latency: %dms). Updating configuration backup...", responseTimeMs)
 				g.recordHealthCheck("Healthy", responseTimeMs, "")
-				g.backupConfig()
+				if isSelfHealingEnabled {
+					log.Printf("✅ OpenClaw is healthy (Latency: %dms). Updating configuration backup...", responseTimeMs)
+					g.backupConfig()
+				}
+				// Switch is off: Just record metrics silently to keep dashboard updated
 				return
 			}
 		}
