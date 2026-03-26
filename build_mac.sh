@@ -98,7 +98,8 @@ chmod +x "${PKG_DIR}/stop.sh"
 echo "📦 正在归档..."
 TAR_FILE="lobster-guardian-mac-${VERSION}.tar.gz"
 cd "${RELEASE_ROOT}"
-tar -czf "${TAR_FILE}" "${PKG_NAME}"
+# COPYFILE_DISABLE=1 防止 macOS 产生 ._ 文件，--exclude 确保排除已存在的元数据文件
+COPYFILE_DISABLE=1 tar -czf "${TAR_FILE}" --exclude='._*' "${PKG_NAME}"
 cd ..
 
 echo "--------------------------------------------------"

@@ -3,6 +3,7 @@ package process
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"os/exec"
 	"regexp"
@@ -59,22 +60,28 @@ func CheckHealth() (time.Duration, error) {
 }
 
 func GetDashboardURL(externalPrefix string) (string, error) {
-	// 使用 context 增加超时控制，防止命令卡死
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// 使用 context 增加超时控制，将超时增加到 30 秒
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	log.Printf("[Dashboard] 执行命令: openclaw dashboard --no-open")
 	cmd := exec.CommandContext(ctx, "openclaw", "dashboard", "--no-open")
 	out, err := cmd.CombinedOutput()
+	output := string(out)
+	
 	if err != nil {
+		log.Printf("[Dashboard] 命令执行失败: %v, 输出: %s", err, output)
 		return "", fmt.Errorf("failed to execute dashboard command: %v", err)
 	}
 
-	output := string(out)
+	log.Printf("[Dashboard] 命令执行成功，输出长度: %d", len(output))
+
 	// 使用正则匹配 Dashboard URL: http://...
 	re := regexp.MustCompile(`Dashboard URL: (https?://[^\s\n]+)`)
 	matches := re.FindStringSubmatch(output)
 	if len(matches) > 1 {
 		rawURL := strings.TrimSpace(matches[1])
+		log.Printf("[Dashboard] 匹配到原始 URL: %s", rawURL)
 		
 		// 如果配置了外部前缀，执行替换
 		if externalPrefix != "" {
@@ -83,13 +90,16 @@ func GetDashboardURL(externalPrefix string) (string, error) {
 				// 拼接：外部前缀 + Token 部分
 				// 确保前缀结尾处理正确
 				prefix := strings.TrimSuffix(externalPrefix, "/")
-				return prefix + "/" + rawURL[idx:], nil
+				finalURL := prefix + "/" + rawURL[idx:]
+				log.Printf("[Dashboard] 应用外部前缀后 URL: %s", finalURL)
+				return finalURL, nil
 			}
 		}
 		
 		return rawURL, nil
 	}
 
+	log.Printf("[Dashboard] 未在输出中找到 URL 模式")
 	return "", fmt.Errorf("dashboard URL not found in command output")
 }
 
