@@ -1262,6 +1262,21 @@ const Dashboard = () => {
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('guardian_token'));
 
+  useEffect(() => {
+    // 处理 URL 中的 token 自动登录
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get('token');
+    
+    if (urlToken) {
+      localStorage.setItem('guardian_token', urlToken);
+      setToken(urlToken);
+      // 清理 URL 中的 token 参数，保持地址栏干净且安全
+      const newUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, '', newUrl);
+      message.success('已通过 URL Token 自动登录');
+    }
+  }, []);
+
   return (
     <ConfigProvider theme={{
       token: {
