@@ -10,7 +10,7 @@ import {
   Activity, Boxes, Cloud, Cpu, KeyRound,
   LayoutDashboard, LogOut, Menu as MenuIcon,
   Play, RefreshCw, Server, Smartphone, Square,
-  Terminal, Zap, CheckCircle, AlertCircle
+  Terminal, Zap, CheckCircle, AlertCircle, ExternalLink
 } from 'lucide-react';
 import axios from 'axios';
 import {
@@ -505,6 +505,7 @@ const Dashboard = () => {
     { key: 'components', icon: <Boxes size={16} />, label: '渠道绑定' },
     { key: 'logs', icon: <Terminal size={16} />, label: '实时日志' },
     { key: 'tools', icon: <Zap size={16} />, label: '自愈管理' },
+    { key: 'external', icon: <ExternalLink size={16} />, label: '龙虾面板' },
   ];
 
   const isRunning = status?.gateway?.status === 'Running';
@@ -993,6 +994,17 @@ const Dashboard = () => {
                 />
               )}
             </Card>
+          </div>
+        );
+
+      case 'external':
+        return (
+          <div style={{ width: '100%', height: 'calc(100vh - 120px)', borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0', background: '#fff' }}>
+            <iframe 
+              src="http://127.0.0.1:18789/#token=71937201d0ba32c6c14047dd15487a0cbf0cd1f3a05e07f8" 
+              style={{ width: '100%', height: '100%', border: 'none' }}
+              title="Lobster Dashboard"
+            />
           </div>
         );
 
