@@ -14,7 +14,7 @@ import (
 )
 
 func (s *Server) getDashboardURL(c *gin.Context) {
-	url, err := process.GetDashboardURL()
+	url, err := process.GetDashboardURL(s.cfg.ExternalDashboardURL)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -26,6 +26,7 @@ type Config struct {
 	DBFile               string
 	Token                string
 	WebPort              int
+	ExternalDashboardURL string
 }
 
 func LoadConfig() (*Config, error) {
@@ -62,6 +63,7 @@ func LoadConfig() (*Config, error) {
 		DBFile:               getEnv("DB_FILE", "./data/guardian.db"),
 		Token:                getEnv("GUARDIAN_TOKEN", "lobster-guardian-2026"),
 		WebPort:              webPort,
+		ExternalDashboardURL: getEnv("EXTERNAL_DASHBOARD_URL", ""),
 	}, nil
 }
 

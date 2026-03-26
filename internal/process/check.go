@@ -58,7 +58,7 @@ func CheckHealth() (time.Duration, error) {
 	return elapsed, nil
 }
 
-func GetDashboardURL() (string, error) {
+func GetDashboardURL(externalPrefix string) (string, error) {
 	// 使用 context 增加超时控制，防止命令卡死
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -74,7 +74,20 @@ func GetDashboardURL() (string, error) {
 	re := regexp.MustCompile(`Dashboard URL: (https?://[^\s\n]+)`)
 	matches := re.FindStringSubmatch(output)
 	if len(matches) > 1 {
-		return strings.TrimSpace(matches[1]), nil
+		rawURL := strings.TrimSpace(matches[1])
+		
+		// 如果配置了外部前缀，执行替换
+		if externalPrefix != "" {
+			// 找到 # 符号的位置（Token 的起点）
+			if idx := strings.Index(rawURL, "#"); idx != -1 {
+				// 拼接：外部前缀 + Token 部分
+				// 确保前缀结尾处理正确
+				prefix := strings.TrimSuffix(externalPrefix, "/")
+				return prefix + "/" + rawURL[idx:], nil
+			}
+		}
+		
+		return rawURL, nil
 	}
 
 	return "", fmt.Errorf("dashboard URL not found in command output")
