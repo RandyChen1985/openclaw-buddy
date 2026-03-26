@@ -1157,7 +1157,7 @@ const Dashboard = () => {
         footer={null}
         onCancel={() => setQrModalVisible(false)}
         centered
-        width={340}
+        width={isMobile ? '90%' : 340}
         styles={{ body: { padding: 0, overflow: 'hidden', borderRadius: 16 } }}
       >
         <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center' }}>
@@ -1166,20 +1166,13 @@ const Dashboard = () => {
           <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
             请使用需要绑定的微信扫码<br />授权后 OpenClaw 将自动完成同步
           </p>
-          <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #f1f5f9', display: 'inline-block', marginBottom: 16 }}>
-            {qrData && <QRCode value={qrData.qrcode_url} size={180} bordered={false} color="#1e293b" />}
+          <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #f1f5f9', display: 'inline-block', marginBottom: 12 }}>
+            {qrData && <QRCode value={qrData.qrcode_url} size={isMobile ? 160 : 180} bordered={false} color="#1e293b" />}
           </div>
-          <div style={{ padding: '0 24px', marginBottom: 24 }}>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>备选链接 (可直接在浏览器打开)</div>
-              <div style={{ fontSize: 12, background: '#f1f5f9', padding: '8px 12px', borderRadius: 8, wordBreak: 'break-all', color: '#475569', fontFamily: 'monospace', border: '1px solid #e2e8f0' }}>
-                {qrData?.qrcode_url}
-              </div>
-              <Button type="link" size="small" onClick={() => window.open(qrData?.qrcode_url, '_blank')} style={{ marginTop: 8 }}>在浏览器中打开连接</Button>
+          <div style={{ marginBottom: 20 }}>
+              <Button type="link" size="small" onClick={() => window.open(qrData?.qrcode_url, '_blank')}>在浏览器中打开授权链接</Button>
           </div>
-          <div style={{ fontSize: 11, color: '#94a3b8', padding: '12px 0', borderTop: '1px solid #f1f5f9', background: '#fafafa' }}>
-            二维码有效期至: {qrData?.expires_at ? dayjs(qrData.expires_at).format('HH:mm:ss') : '--:--'}
-          </div>
-          <Button block type="primary" size="large" onClick={() => setQrModalVisible(false)} style={{ marginTop: 24, borderRadius: 10, fontWeight: 700 }}>已完成扫码</Button>
+          <Button block type="primary" size="large" onClick={() => setQrModalVisible(false)} style={{ borderRadius: 10, fontWeight: 700 }}>已完成扫码</Button>
         </div>
       </Modal>
     </>
