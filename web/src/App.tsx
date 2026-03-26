@@ -1001,7 +1001,7 @@ const Dashboard = () => {
         return (
           <div style={{ width: '100%', height: 'calc(100vh - 120px)', borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0', background: '#fff' }}>
             <iframe 
-              src="http://127.0.0.1:18789/#token=71937201d0ba32c6c14047dd15487a0cbf0cd1f3a05e07f8" 
+              src={`${window.location.origin}/v1/proxy/#token=71937201d0ba32c6c14047dd15487a0cbf0cd1f3a05e07f8`} 
               style={{ width: '100%', height: '100%', border: 'none' }}
               title="Lobster Dashboard"
             />

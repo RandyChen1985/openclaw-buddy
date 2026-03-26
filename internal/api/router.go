@@ -87,6 +87,9 @@ func (s *Server) setupRoutes() {
 		v1.GET("/settings/self-healing", s.getSelfHealingSetting)
 		v1.POST("/settings/self-healing", s.updateSelfHealingSetting)
 		v1.GET("/heal/events", s.getHealEvents)
+
+		// Proxy for external dashboard
+		v1.Any("/proxy/*path", s.proxyLobsterDashboard)
 	}
 
 	s.setupStaticFiles()

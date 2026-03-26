@@ -1,7 +1,10 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"strings"
 	"time"
 	"yovole-openclaw-monitor/internal/process"
@@ -9,6 +12,30 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+func (s *Server) proxyLobsterDashboard(c *gin.Context) {
+	targetPort := s.cfg.HealthPort
+	targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", targetPort))
+
+	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+
+	// 修改响应头以允许嵌入
+	proxy.ModifyResponse = func(res *http.Response) error {
+		res.Header.Del("Content-Security-Policy")
+		res.Header.Del("X-Frame-Options")
+		// 允许跨域
+		res.Header.Set("Access-Control-Allow-Origin", "*")
+		return nil
+	}
+
+	// 统一处理路径：剥离 /v1/proxy 前缀
+	c.Request.URL.Path = strings.TrimPrefix(c.Request.URL.Path, "/v1/proxy")
+	if c.Request.URL.Path == "" {
+		c.Request.URL.Path = "/"
+	}
+
+	proxy.ServeHTTP(c.Writer, c.Request)
+}
 
 func (s *Server) getWeChatConfigStatus(c *gin.Context) {
 	channels, err := process.GetChatChannels()
