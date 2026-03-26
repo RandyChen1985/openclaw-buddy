@@ -71,6 +71,9 @@ func (g *Guardian) check() {
 	var reason string
 
 	isSelfHealingEnabled := utils.GetSetting("self_healing_enabled", "false") == "true"
+	if !isSelfHealingEnabled {
+		log.Printf("🔍 [巡检] 自愈服务开关目前处于【关闭】状态，本次巡检将仅记录监控数据，不触发自动修复。")
+	}
 
 	for i := 1; i <= g.config.MaxRetries; i++ {
 		// 1. Port Check
@@ -91,8 +94,9 @@ func (g *Guardian) check() {
 				if isSelfHealingEnabled {
 					log.Printf("✅ OpenClaw is healthy (Latency: %dms). Updating configuration backup...", responseTimeMs)
 					g.backupConfig()
+				} else {
+					log.Printf("✅ OpenClaw is healthy (Latency: %dms). [自愈流程已跳过]")
 				}
-				// Switch is off: Just record metrics silently to keep dashboard updated
 				return
 			}
 		}
