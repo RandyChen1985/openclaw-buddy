@@ -77,6 +77,28 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
 3.  **参数配置**: 修改 `env` 文件（首次启动会自动生成 16 位随机 `GUARDIAN_TOKEN`）。
 4.  **启动服务**: `./start.sh`
 
+## 🔌 API 接口说明
+
+Lobster Guardian 提供了一套标准的 RESTful API 供外部系统集成或移动端调用。
+
+### 认证方式
+所有 V1 接口均需通过 HTTP Header 进行认证：
+- **Header**: `Authorization`
+- **Value**: `Bearer <YOUR_GUARDIAN_TOKEN>`
+
+### 核心接口预览
+| 路径 | 方法 | 功能说明 |
+| :--- | :--- | :--- |
+| `/v1/openclaw/status` | GET | 获取网关核心运行状态、版本及运行时长 |
+| `/v1/gateway/start` | POST | 启动小龙虾网关进程 |
+| `/v1/gateway/stop` | POST | 停止小龙虾网关进程 |
+| `/v1/gateway/restart` | POST | 重启小龙虾网关进程 |
+| `/v1/openclaw/devices` | GET | 获取设备列表 (包含待处理与已配对) |
+| `/v1/openclaw/devices/approve` | POST | 批准设备接入 (Body: `{"requestId": "..."}`) |
+| `/v1/openclaw/bots-models` | GET | 获取当前配置的所有机器人与模型信息 |
+| `/v1/wechat/qrcode` | GET | 获取微信插件登录二维码 (流式解析) |
+| `/v1/stats/health` | GET | 获取近 24 小时的心跳延迟统计数据 |
+
 ## ⚙️ 配置文件说明 (env)
 
 ```env

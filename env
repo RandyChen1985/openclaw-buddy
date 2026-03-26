@@ -1,0 +1,51 @@
+# 🦞 有孚小龙虾管理监控 (Lobster Guardian) 核心配置
+
+# [服务基础]
+# Guardian 面板监听端口 (用于浏览器访问及 API 交互)
+WEB_PORT=3000
+
+# 访问面板所需的认证令牌 (强烈建议首次运行后修改为高强度随机字符串)
+GUARDIAN_TOKEN="sk-replace-me-on-first-run"
+
+# [存储与目录]
+# SQLite 数据库文件路径 (存储网关运行记录、自愈开关状态及历史指标数据)
+DB_FILE="./data/guardian.db"
+
+# OpenClaw (小龙虾) 的配置根目录 (程序将从中读取 openclaw.json 并监控其变动)
+OPENCLAW_CONFIG_DIR="~/.openclaw"
+
+# 自动备份配置文件的存储目录 (在发生自愈回滚时将从中提取最近的健康快照)
+BACKUP_DIR="./backups"
+
+# Guardian 自身的运行日志保存路径 (包含启动信息及监控诊断详情)
+LOG_FILE="./logs/guardian.log"
+
+# 故障诊断报表与异常配置 (.err) 的归档目录
+REPORT_DIR="./reports"
+
+# [监控策略]
+# 网关健康状态检查的频率 (单位：秒，建议 30-60)
+CHECK_INTERVAL_SECONDS=30
+
+# 判定网关服务彻底失效前的最大重试次数 (避免因网络抖动触发误判自愈)
+MAX_RETRIES=3
+
+# OpenClaw 网关监听的健康检查端口 (通常在 openclaw.json 中配置为 18789)
+HEALTH_PORT=18789
+
+# [高级选项]
+# (可选) 外部访问域名或公网 URL (例如 https://agent.yovole.com)，用于在 Guardian 内部跳转龙虾面板
+EXTERNAL_DASHBOARD_URL=""
+
+# [飞书通知 (可选)]
+# 是否启用飞书机器人报警通知
+FEISHU_ENABLED=false
+
+# 飞书自建应用的 App ID (用于发送富文本交互卡片)
+FEISHU_APP_ID=""
+
+# 飞书自建应用的 App Secret
+FEISHU_APP_SECRET=""
+
+# 接收报警通知的群聊 ID (需先将机器人拉入群聊)
+FEISHU_CHAT_ID=""

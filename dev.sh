@@ -57,23 +57,43 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 5. 在隔离目录创建本地 env 配置
+# 6. 生成隔离环境配置: $DEV_ROOT/env
 echo "📝 生成隔离环境配置: $DEV_ROOT/env"
 cat <<EOF > "$DEV_ROOT/env"
+# 🦞 有孚小龙虾监控 (Lobster Guardian) 隔离开发配置
 WEB_PORT=3000
 GUARDIAN_TOKEN="sk-replace-me-on-first-run"
+
+# [存储与目录]
+# 隔离数据存储路径 (相对于执行路径)
 DB_FILE="./data/guardian.db"
+# OpenClaw 配置文件目录
 OPENCLAW_CONFIG_DIR="~/.openclaw"
+# 各类运行资产存放目录
 BACKUP_DIR="./backups"
-CHECK_INTERVAL_SECONDS=30
-MAX_RETRIES=3
-HEALTH_PORT=18789
 LOG_FILE="./logs/guardian.log"
 REPORT_DIR="./reports"
+
+# [监控策略]
+# 监控轮询间隔 (秒)
+CHECK_INTERVAL_SECONDS=30
+# 网关健康检查端口
+HEALTH_PORT=18789
+# 最大容错重试次数
+MAX_RETRIES=3
+
+# [高级选项]
+# 外部跳转链接 (可选)
 EXTERNAL_DASHBOARD_URL=""
+
+# [飞书通知 (可选)]
+FEISHU_ENABLED=false
+FEISHU_APP_ID=""
+FEISHU_APP_SECRET=""
+FEISHU_CHAT_ID=""
 EOF
 
-# 6. 切换到隔离目录启动服务
+# 7. 切换到隔离目录启动服务
 cd "$DEV_ROOT"
 echo "🚀 启动服务..."
 # 启动时指定 PID 文件位置 (cmd/monitor/main.go 中使用了 /tmp/lobster-guardian.pid, 我们这里稍微做一下兼容，或者由启动命令管理)

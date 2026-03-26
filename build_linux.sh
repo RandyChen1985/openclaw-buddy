@@ -39,18 +39,38 @@ mv "${BINARY_NAME}" "${PKG_DIR}/lib/lobster-monitor"
 # 4. 生成 Linux 默认 env 配置文件
 cat <<EOF > "${PKG_DIR}/env"
 # 🦞 有孚小龙虾监控 (Linux 生产环境)
+# Guardian 面板监听端口
 WEB_PORT=3000
+# 访问面板所需的认证令牌 (sk- 开头)
 GUARDIAN_TOKEN="sk-replace-me-on-first-run"
+
+# [存储与目录]
+# SQLite 数据库文件路径 (存储记录与自愈开关)
 DB_FILE="./data/guardian.db"
-OPENCLAW_CONFIG_DIR="~/.openclaw" # Linux 下通常位于此路径
+# OpenClaw 配置文件目录
+OPENCLAW_CONFIG_DIR="~/.openclaw"
+# 各类运行资产存放目录
 BACKUP_DIR="./backups"
-CHECK_INTERVAL_SECONDS=30
-MAX_RETRIES=3
-HEALTH_PORT=18789
 LOG_FILE="./logs/guardian.log"
 REPORT_DIR="./reports"
-# 生产环境可选：外部访问域名 (例如 https://agent.example.com)，用于龙虾面板跳转
+
+# [监控策略]
+# 监控轮询间隔 (秒)
+CHECK_INTERVAL_SECONDS=30
+# 网关健康检查端口
+HEALTH_PORT=18789
+# 最大重试次数
+MAX_RETRIES=3
+
+# [高级选项]
+# 外部跳转链接 (可选)
 EXTERNAL_DASHBOARD_URL=""
+
+# [飞书通知 (可选)]
+FEISHU_ENABLED=false
+FEISHU_APP_ID=""
+FEISHU_APP_SECRET=""
+FEISHU_CHAT_ID=""
 EOF
 
 # 生成 Linux 启动脚本 (start.sh)
