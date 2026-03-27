@@ -97,16 +97,18 @@ func createTables(existingToken string) (string, error) {
 		}
 	}
 
-	// 初始化默认快捷指令
-	var count int
-	_ = DB.QueryRow("SELECT COUNT(*) FROM quick_commands").Scan(&count)
-	if count == 0 {
-		defaults := []struct{ Label, Prompt, Icon string }{
-			{"我的 Soul", "告诉我关于 我的 Soul 的配置信息", "Sparkles"},
-			{"我的 Identity", "告诉我关于 我的 Identity 的配置信息", "UserCircle"},
-			{"我的 Memory", "我们今天都聊了啥，看看记忆的内容", "Brain"},
-		}
-		for _, d := range defaults {
+	// 初始化默认快捷指令 (系统级指令，不可删除)
+	defaults := []struct{ Label, Prompt, Icon string }{
+		{"我的 Soul", "告诉我关于 我的 Soul 的配置信息", "Sparkles"},
+		{"我的 Identity", "告诉我关于 我的 Identity 的配置信息", "UserCircle"},
+		{"我的 Memory", "我们今天都聊了啥，看看记忆的内容", "Brain"},
+		{"我当前的模型", "我当前使用的什么模型", "Bot"},
+		{"系统模型列表", "系统目前配置了哪些模型", "Cpu"},
+	}
+	for _, d := range defaults {
+		var exists int
+		_ = DB.QueryRow("SELECT COUNT(*) FROM quick_commands WHERE label = ?", d.Label).Scan(&exists)
+		if exists == 0 {
 			_, _ = DB.Exec("INSERT INTO quick_commands (label, prompt, icon, is_system) VALUES (?, ?, ?, 1)", d.Label, d.Prompt, d.Icon)
 		}
 	}

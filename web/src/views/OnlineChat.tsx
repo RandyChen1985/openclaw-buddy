@@ -372,25 +372,25 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           </div>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flex: isMobile ? 1 : 'none', justifyContent: 'flex-end', minWidth: 0 }}>
+            {!isMobile && <span style={{ color: '#64748b', fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap' }}>请选择机器人:</span>}
             <Select 
               placeholder="选择机器人" 
-              style={{ width: isMobile ? 'auto' : 240, flex: isMobile ? 1 : 'none', minWidth: isMobile ? 120 : 0, height: 48 }} 
+              style={{ width: isMobile ? 'auto' : 240, flex: isMobile ? 1 : 'none', minWidth: isMobile ? 120 : 0, height: 40 }} 
               value={selectedBot}
               onChange={setSelectedBot}
               loading={loadingBots}
               dropdownStyle={{ borderRadius: 8, minWidth: 260 }}
               listHeight={400}
-              size="large"
             >
               {botList.map((bot: any) => (
                 <Option key={bot.id} value={`openclaw:${bot.id}`}>
-                  <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2', padding: '2px 0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 20 }}>
-                      <span style={{ fontSize: 16 }}>🦞</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0' }}>
+                    <span style={{ fontSize: 18 }}>🦞</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2' }}>
                       <span style={{ fontWeight: 600, color: '#1e293b', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bot.name || bot.id}</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginLeft: 22, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>
-                      {bot.model || '未设定'}
+                      <span style={{ fontSize: 10, color: '#94a3b8', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {bot.model || '未设定'}
+                      </span>
                     </div>
                   </div>
                 </Option>
@@ -410,8 +410,33 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         border: '1px solid #e2e8f0',
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        position: 'relative'
       }}>
+        {!selectedBot && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(255,255,255,0.65)',
+            backdropFilter: 'blur(3px)',
+            zIndex: 10,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexDirection: 'column',
+            gap: 12,
+            animation: 'fade-in 0.3s ease'
+          }}>
+            <div style={{ padding: '24px 32px', background: '#fff', borderRadius: 16, boxShadow: '0 12px 40px rgba(0,0,0,0.1)', border: '1px solid #f1f5f9', textAlign: 'center' }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>☝️</div>
+              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>请先在右上方选择一个对话机器人</div>
+              <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>选择后即可开始实时交互测试</div>
+            </div>
+          </div>
+        )}
         <div 
           ref={scrollRef}
           style={{ 
@@ -473,25 +498,54 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                   }}>
                     {msg.role === 'assistant' ? (
                       <div className="markdown-body">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {msg.content}
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            a: ({ node, ...props }) => {
+                              const href = props.href || '';
+                              const isAction = href.startsWith('action:');
+                              if (isAction) {
+                                // 解码，因为预处理时编码了
+                                const actionText = decodeURIComponent(href.replace('action:', ''));
+                                return (
+                                  <Button 
+                                    size="small" 
+                                    type="link"
+                                    onClick={() => handleSend(actionText)}
+                                    style={{ 
+                                      padding: '0 8px', 
+                                      height: 24, 
+                                      fontSize: 12, 
+                                      background: '#f0f9ff', 
+                                      borderRadius: 12, 
+                                      border: '1px solid #bae6fd',
+                                      color: '#0369a1',
+                                      margin: '2px 4px',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      fontWeight: 600,
+                                      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+                                    }}
+                                  >
+                                    <Zap size={10} style={{ marginRight: 4 }} />
+                                    {props.children}
+                                  </Button>
+                                );
+                              }
+                              return <a {...props} target="_blank" rel="noopener noreferrer" />;
+                            }
+                          }}
+                        >
+                          {msg.content.replace(/\[([^\]]+)\]\(action:([^\)]+)\)/g, (_, label, action) => {
+                            return `[${label}](action:${encodeURIComponent(action.trim())})`;
+                          })}
                         </ReactMarkdown>
                       </div>
                     ) : (
                       msg.content
                     )}
-                    {/* 消息气泡内的时间戳 */}
-                    <div style={{ 
-                      fontSize: 10, 
-                      color: msg.role === 'user' ? 'rgba(255,255,255,0.7)' : '#94a3b8', 
-                      marginTop: 4, 
-                      textAlign: 'right',
-                      // 如果用户消息，文字靠右，否则靠左
-                    }}>
-                      {msg.timestamp}
-                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 2, alignItems: 'center' }}>
                     <Button 
                       type="text" 
                       size="small" 
@@ -508,6 +562,9 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                         onClick={handleRegenerate}
                       >重试</Button>
                     )}
+                    <span style={{ fontSize: 10, color: '#94a3b8', opacity: 0.8, marginLeft: 4 }}>
+                      {msg.timestamp}
+                    </span>
                   </div>
                 </div>
               </div>

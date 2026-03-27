@@ -17,6 +17,10 @@
 - [ ] **外部地址前缀**: 设置 `EXTERNAL_DASHBOARD_URL` 后，龙虾面板跳转链接应包含该前缀。
 - [ ] **Dashboard URL 容错**: `openclaw dashboard` 命令耗时较长（>10s）时，接口应支持 30s 超时控制。
 - [ ] **任务状态追踪**: `GET /v1/tasks/status?task_id=<id>` 应能正确返回异步任务（如重启网关）的 Running/Completed/Failed 状态。
+- [ ] **聊天配置检查**: `GET /v1/openclaw/chat/status` 应返回当前 `chatCompletions` 是否启用。
+- [ ] **对话一键开启**: `POST /v1/openclaw/chat/enable` 应自动更新 `openclaw.json` 并触发异步重启任务。
+- [ ] **流式对话服务**: `POST /v1/openclaw/chat/completions` 应兼容 OpenAI 协议，且在 `stream: true` 时返回标准 SSE 流。
+- [ ] **快捷指令管理**: `GET/POST /v1/openclaw/chat/quick-commands` 应能存取用户自定义的对话话术。
 
 ## 3. Web 界面 (Dashboard)
 - [ ] **登录流**: 未登录用户访问根目录应显示登录框。
@@ -28,6 +32,9 @@
 - [ ] **同步时间展示**: 顶部标题栏应显示“同步于: XXX”标签。
 - [ ] **加载反馈**: 点击“刷新”按钮或初始加载时，应显示 Spin 动画且按钮进入 Loading 状态。
 - [ ] **页面动画**: 切换页面时，区块应有明显的淡入（Fade-in）过渡。
+- [ ] **对话实验室**: 点击“对话实验室”菜单应能正常进入聊天界面，并自动加载机器人列表。
+- [ ] **输入框锁死**: 回复生成期间，发送按钮应变为“停止”图标，且输入框应短暂禁用以防重复提交。
+- [ ] **历史记录清空**: 点击“清空”按钮后，本地会话消息应立即移除。
 
 ## 4. 守护逻辑 (Guardian)
 - [ ] **数据库持久化**: 巡检后检查 SQLite `health_checks` 表是否有新纪录。

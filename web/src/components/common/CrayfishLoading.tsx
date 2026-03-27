@@ -3,7 +3,8 @@
 const CrayfishLoading = () => (
   <div style={{
     display: 'flex', flexDirection: 'column', alignItems: 'center',
-    justifyContent: 'center', height: 400, gap: 24,
+    justifyContent: 'center', height: '100vh', width: '100%', gap: 24,
+    background: '#f8fafc'
   }}>
     <div style={{
       fontSize: 14, fontFamily: 'monospace', color: '#2563eb',

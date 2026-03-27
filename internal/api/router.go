@@ -88,6 +88,7 @@ func (s *Server) setupRoutes() {
 			oc.GET("/skills", s.getOpenClawSkills)
 			oc.DELETE("/skills/:name", s.uninstallSkill)
 			oc.POST("/skills/reload", s.reloadSkills)
+			oc.GET("/sessions", s.getSessions)
 		}
 		
 		gateway := v1.Group("/gateway")

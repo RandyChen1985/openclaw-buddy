@@ -28,6 +28,20 @@ type OpenClawModel struct {
 	IsDefault bool   `json:"isDefault"`
 }
 
+type OpenClawSession struct {
+	Key           string `json:"key"`
+	AgentID       string `json:"agentId"`
+	Model         string `json:"model"`
+	Kind          string `json:"kind"`
+	AgeMs         int64  `json:"ageMs"`
+	InputTokens   int    `json:"inputTokens"`
+	OutputTokens  int    `json:"outputTokens"`
+	TotalTokens   int    `json:"totalTokens"`
+	ContextTokens int    `json:"contextTokens"`
+	SessionID     string `json:"sessionId"`
+	UpdatedAt     int64  `json:"updatedAt"`
+}
+
 type OpenClawBotsModelsResponse struct {
 	Bots     []OpenClawBot     `json:"bots"`
 	Models   []OpenClawModel   `json:"models"`
@@ -302,7 +316,8 @@ func GetOpenClawSkills() (any, error) {
 	cleanOut = cleanOut[index:]
 
 	var skills interface{}
-	if err := json.Unmarshal([]byte(cleanOut), &skills); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(cleanOut))
+	if err := decoder.Decode(&skills); err != nil {
 		return nil, fmt.Errorf("failed to parse skills json: %v", err)
 	}
 	return skills, nil
@@ -324,4 +339,31 @@ func ReloadOpenClawSkills() error {
 		return fmt.Errorf("failed to reload skills: %v. Output: %s", err, string(out))
 	}
 	return nil
+}
+
+func GetOpenClawSessions() ([]OpenClawSession, error) {
+	cmd := exec.Command("openclaw", "sessions", "--all-agent", "--json")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sessions: %v. Output: %s", err, string(out))
+	}
+
+	// 清理 ANSI 颜色代码，防止 JSON 解析失败
+	cleanOut := StripANSI(string(out))
+
+	// 找到第一个 '{'，跳过前面的日志行
+	index := strings.Index(cleanOut, "{")
+	if index == -1 {
+		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
+	}
+	cleanOut = cleanOut[index:]
+
+	var data struct {
+		Sessions []OpenClawSession `json:"sessions"`
+	}
+	decoder := json.NewDecoder(strings.NewReader(cleanOut))
+	if err := decoder.Decode(&data); err != nil {
+		return nil, fmt.Errorf("failed to parse sessions json: %v", err)
+	}
+	return data.Sessions, nil
 }

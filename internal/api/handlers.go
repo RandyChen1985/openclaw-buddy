@@ -463,6 +463,28 @@ func (s *Server) chatProxy(c *gin.Context) {
 	}
 	body["user"] = "lobster" // 固定写这个用户
 
+	// 注入交互能力提示词 (UI Capability Hint)
+	hint := "\n\n系统提示：本终端支持交互式按钮。在回复中若需引导用户后续操作，请使用 `[按钮描述](action:发送指令)` 格式。注意：\n1. 请确保 Markdown 表格的 header、separator 和 body 的列数完全一致（如 `| a | b |` 对应的分隔符必须是 `|---|---|`）。\n2. 请确保所有的反引号 ` 或代码块都能闭合。\n3. 指令内若包含空格或 JSON 均可直接输入，系统会自动解析。"
+	if msgs, ok := body["messages"].([]interface{}); ok {
+		foundSystem := false
+		for i := range msgs {
+			if m, ok := msgs[i].(map[string]interface{}); ok && m["role"] == "system" {
+				content, _ := m["content"].(string)
+				m["content"] = content + hint
+				foundSystem = true
+				break
+			}
+		}
+		if !foundSystem {
+			// 在头部插入一条系统提示
+			newSystem := map[string]interface{}{
+				"role":    "system",
+				"content": "你目前在 OpenClaw 监控面板中。" + hint,
+			}
+			body["messages"] = append([]interface{}{newSystem}, msgs...)
+		}
+	}
+
 	jsonBody, _ := json.Marshal(body)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
@@ -659,4 +681,29 @@ func (s *Server) reloadSkills(c *gin.Context) {
 	process.SyncKeySingle("skills", s.cfg.OpenClawConfigDir)
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "规则与技能已重新加载"})
+}
+
+func (s *Server) getSessions(c *gin.Context) {
+	refresh := c.Query("refresh") == "true"
+	if refresh {
+		if err := process.SyncKeySingle("sessions", s.cfg.OpenClawConfigDir); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	data, updatedAt, err := process.GetCachedData("sessions")
+	if err != nil {
+		// 如果缓存没有，尝试同步一次
+		if err := process.SyncKeySingle("sessions", s.cfg.OpenClawConfigDir); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		data, updatedAt, _ = process.GetCachedData("sessions")
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":       data,
+		"updated_at": updatedAt,
+	})
 }

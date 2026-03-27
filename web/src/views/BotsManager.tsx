@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip } from 'antd';
-import { Boxes, RefreshCw, Cloud, Plus, Pencil, Trash2, Cpu } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table } from 'antd';
+import { Boxes, RefreshCw, Cloud, Plus, Pencil, Trash2, Cpu, History } from 'lucide-react';
 import dayjs from 'dayjs';
+import api from '../api';
 
 interface BotsManagerProps {
   botsModels: any; // 结构: { data: { bots: [], models: [] }, updated_at: string }
@@ -34,6 +35,33 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const [processing, setProcessing] = useState(false);
   const [editingBot, setEditingBot] = useState<{ id: string, name: string } | null>(null);
   const [deletingBotId, setDeletingBotId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+
+  useEffect(() => {
+    fetchSessions();
+  }, []);
+
+  const fetchSessions = async (force = false) => {
+    setLoadingSessions(true);
+    try {
+      const res = await api.get(`/v1/openclaw/sessions${force ? '?refresh=true' : ''}`);
+      setSessions(res.data.data || []);
+    } catch (err) {
+      // 错误静默或通过 message 处理
+    } finally {
+      setLoadingSessions(false);
+    }
+  };
+
+  const formatAgeMs = (ms: number) => {
+    if (ms < 60000) return '刚刚';
+    const minutes = Math.floor(ms / 60000);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  };
 
   const handleOk = async () => {
     try {
@@ -146,7 +174,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   onClick={() => setIsModalOpen(true)}
                   style={{ borderRadius: 10, fontWeight: 700, background: '#2563eb' }}
                 >
-                  添加{isMobile ? '' : '机器人'}
+                  添加{isMobile ? '' : 'Bot'}
                 </Button>
               </div>
             </div>
@@ -327,6 +355,105 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   </Col>
                 )}
               </Row>
+            </Card>
+          </Col>
+
+          <Col span={24}>
+            <Card
+              title={
+                <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', width: '100%', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <History size={isMobile ? 18 : 20} color="#f59e0b" /> 
+                    <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b' }}>最近活跃会话 (Sessions)</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
+                    <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
+                      实时同步中
+                    </span>
+                    <Button 
+                      type="text"
+                      size="small" 
+                      icon={<RefreshCw size={14} className={loadingSessions ? 'animate-spin' : ''} />} 
+                      onClick={() => fetchSessions(true)}
+                      loading={loadingSessions}
+                      style={{ color: '#64748b', display: 'flex', alignItems: 'center', padding: isMobile ? '0 4px' : '0 8px' }}
+                    >
+                      {isMobile ? '' : '刷新'}
+                    </Button>
+                  </div>
+                </div>
+              }
+              styles={{ body: { padding: isMobile ? '0' : '16px 20px' } }}
+              style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', width: '100%' }}
+            >
+              <Table 
+                dataSource={sessions} 
+                loading={loadingSessions}
+                rowKey="key"
+                pagination={false}
+                size={isMobile ? "small" : "middle"}
+                scroll={{ x: 'max-content' }}
+                columns={[
+                  {
+                    title: '会话 Key',
+                    dataIndex: 'key',
+                    key: 'key',
+                    render: (text: string) => (
+                      <Tooltip title={text}>
+                        <div style={{ maxWidth: isMobile ? 80 : 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 13 }}>
+                          {text}
+                        </div>
+                      </Tooltip>
+                    )
+                  },
+                  {
+                    title: 'Agent',
+                    dataIndex: 'agentId',
+                    key: 'agentId',
+                    render: (id: string) => <Tag color="blue" style={{ borderRadius: 6, margin: 0 }}>{id}</Tag>
+                  },
+                  {
+                    title: '活跃时间',
+                    dataIndex: 'ageMs',
+                    key: 'ageMs',
+                    render: (ms: number) => <span style={{ color: '#64748b', fontSize: 13 }}>{formatAgeMs(ms)}</span>
+                  },
+                  {
+                    title: '使用模型',
+                    dataIndex: 'model',
+                    key: 'model',
+                    render: (m: string) => <span style={{ fontWeight: 600, color: '#1e293b', fontSize: 13 }}>{m}</span>
+                  },
+                  {
+                    title: 'Token 消耗 (Ctx %)',
+                    key: 'tokens',
+                    render: (_, record: any) => {
+                      const percent = Math.round((record.totalTokens / record.contextTokens) * 100) || 0;
+                      let color = '#22c55e';
+                      if (percent > 80) color = '#ef4444';
+                      else if (percent > 50) color = '#f59e0b';
+                      
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: isMobile ? 80 : 120 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
+                            <span>{Math.round(record.totalTokens / 1000)}k / {Math.round(record.contextTokens / 1000)}k</span>
+                            {!isMobile && <span style={{ fontWeight: 700, color }}>{percent}%</span>}
+                          </div>
+                          <div style={{ width: '100%', height: 4, background: '#f1f5f9', borderRadius: 2, overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.min(percent, 100)}%`, height: '100%', background: color, transition: 'width 0.3s ease' }}></div>
+                          </div>
+                        </div>
+                      );
+                    }
+                  },
+                  ...(!isMobile ? [{
+                    title: '类型',
+                    dataIndex: 'kind',
+                    key: 'kind',
+                    render: (k: string) => <Tag style={{ borderRadius: 6, margin: 0 }}>{String(k).toUpperCase()}</Tag>
+                  }] : [])
+                ]}
+              />
             </Card>
           </Col>
         </Row>
