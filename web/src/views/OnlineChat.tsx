@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Select, Input, Button, Avatar, Spin, message, Modal } from 'antd';
-import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings } from 'lucide-react';
+import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form } from 'antd';
+import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import api from '../api';
@@ -10,6 +10,7 @@ const { Option } = Select;
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  timestamp?: string; // 新增时间戳
 }
 
 interface OnlineChatProps {
@@ -25,14 +26,22 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
-  const inputRef = useRef<any>(null); // 新增
+  const [isComposing, setIsComposing] = useState(false); // IME 输入状态
+  const inputRef = useRef<any>(null);
+  const abortControllerRef = useRef<AbortController | null>(null); // 中断控制器
   const [chatEnabled, setChatEnabled] = useState<boolean | null>(null);
   const [checkingEnabled, setCheckingEnabled] = useState(true);
   const [enabling, setEnabling] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // 快捷指令相关状态
+  const [quickCommands, setQuickCommands] = useState<any[]>([]);
+  const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+  const [form] = Form.useForm();
 
   useEffect(() => {
     checkChatStatus();
+    fetchQuickCommands();
     if (botsModels?.data?.bots?.length > 0 && !selectedBot) {
         setSelectedBot(`openclaw:${botsModels.data.bots[0].id}`);
     }
@@ -43,6 +52,49 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isTyping, chatEnabled]);
+
+  const fetchQuickCommands = async () => {
+    try {
+      const res = await fetch('/v1/openclaw/chat/quick-commands');
+      const data = await res.json();
+      setQuickCommands(data || []);
+    } catch (err) {
+      console.error('Failed to fetch quick commands:', err);
+    }
+  };
+
+  const handleAddQuickCommand = async (values: any) => {
+    try {
+      const res = await fetch('/v1/openclaw/chat/quick-commands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(values)
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        message.success('添加成功');
+        form.resetFields();
+        fetchQuickCommands();
+      }
+    } catch (err) {
+      message.error('添加失败');
+    }
+  };
+
+  const handleDeleteQuickCommand = async (id: number) => {
+    try {
+      const res = await fetch(`/v1/openclaw/chat/quick-commands/${id}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        message.success('已删除');
+        fetchQuickCommands();
+      }
+    } catch (err) {
+      message.error('删除失败');
+    }
+  };
 
   const checkChatStatus = async () => {
     try {
@@ -94,14 +146,19 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
     }
   }, [messages, isTyping]);
 
-  const handleSend = async () => {
-    if (!inputText.trim() || isTyping || !selectedBot) return;
+  const handleSend = async (textOverride?: string) => {
+    const text = textOverride || inputText;
+    if (!text.trim() || isTyping || !selectedBot) return;
 
-    const userMessage: Message = { role: 'user', content: inputText };
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
-    setInputText('');
+    if (!textOverride) setInputText('');
     setIsTyping(true);
+    
+    abortControllerRef.current = new AbortController();
+
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const newUserMessage: Message = { role: 'user', content: text, timestamp };
+    const newMessages = [...messages, newUserMessage];
+    setMessages(newMessages);
 
     try {
       const response = await fetch(`${api.defaults.baseURL || ''}/v1/openclaw/chat/completions`, {
@@ -114,7 +171,8 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           model: selectedBot,
           messages: newMessages,
           stream: true
-        })
+        }),
+        signal: abortControllerRef.current.signal
       });
 
       if (!response.ok) throw new Error('网络请求失败');
@@ -122,7 +180,8 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       const reader = response.body?.getReader();
       if (!reader) throw new Error('无法读取响应流');
 
-      const assistantMessage: Message = { role: 'assistant', content: '' };
+      const assistantTimestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const assistantMessage: Message = { role: 'assistant', content: '', timestamp: assistantTimestamp };
       setMessages(prev => [...prev, assistantMessage]);
 
       const decoder = new TextDecoder();
@@ -151,10 +210,43 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           }
         }
       }
-    } catch (err) {
-      message.error('发送失败，请检查网关连接');
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        message.info('回复已停止');
+      } else {
+        message.error('发送失败，请检查网关连接');
+      }
     } finally {
       setIsTyping(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleStopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      message.success('已复制到剪贴板');
+    });
+  };
+
+  const handleRegenerate = () => {
+    // 找到最后一条用户消息
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    if (lastUserMsg) {
+      // 移除最后一条 AI 消息（如果有）
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last && last.role === 'assistant') {
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
+      handleSend(lastUserMsg.content);
     }
   };
 
@@ -282,22 +374,22 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flex: isMobile ? 1 : 'none', justifyContent: 'flex-end', minWidth: 0 }}>
             <Select 
               placeholder="选择机器人" 
-              style={{ width: isMobile ? 'auto' : 240, flex: isMobile ? 1 : 'none', minWidth: isMobile ? 120 : 0 }} 
+              style={{ width: isMobile ? 'auto' : 240, flex: isMobile ? 1 : 'none', minWidth: isMobile ? 120 : 0, height: 48 }} 
               value={selectedBot}
               onChange={setSelectedBot}
               loading={loadingBots}
               dropdownStyle={{ borderRadius: 8, minWidth: 260 }}
               listHeight={400}
-              size={isMobile ? 'middle' : 'middle'}
+              size="large"
             >
               {botList.map((bot: any) => (
                 <Option key={bot.id} value={`openclaw:${bot.id}`}>
-                  <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.4', padding: '4px 0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>🦞</span>
-                      <span style={{ fontWeight: 600, color: '#1e293b' }}>{bot.name || bot.id}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2', padding: '2px 0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 20 }}>
+                      <span style={{ fontSize: 16 }}>🦞</span>
+                      <span style={{ fontWeight: 600, color: '#1e293b', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bot.name || bot.id}</span>
                     </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginLeft: 24, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginLeft: 22, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>
                       {bot.model || '未设定'}
                     </div>
                   </div>
@@ -360,27 +452,63 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                   icon={msg.role === 'user' ? <User size={18} /> : <Bot size={18} color="#2563eb" />}
                 />
                 <div style={{ 
-                  maxWidth: '75%',
-                  padding: '12px 16px',
-                  borderRadius: 16,
-                  borderTopRightRadius: msg.role === 'user' ? 4 : 16,
-                  borderTopLeftRadius: msg.role === 'assistant' ? 4 : 16,
-                  background: msg.role === 'user' ? '#2563eb' : '#fff',
-                  color: msg.role === 'user' ? '#fff' : '#1e293b',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-                  fontSize: 14,
-                  lineHeight: 1.6,
-                  whiteSpace: 'pre-wrap'
+                  maxWidth: '85%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                  gap: 4
                 }}>
-                  {msg.role === 'assistant' ? (
-                    <div className="markdown-body">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.content}
-                      </ReactMarkdown>
+                  <div style={{ 
+                    padding: '12px 16px',
+                    borderRadius: 16,
+                    borderTopRightRadius: msg.role === 'user' ? 4 : 16,
+                    borderTopLeftRadius: msg.role === 'assistant' ? 4 : 16,
+                    background: msg.role === 'user' ? '#2563eb' : '#fff',
+                    color: msg.role === 'user' ? '#fff' : '#1e293b',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+                    fontSize: 14,
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap',
+                    position: 'relative'
+                  }}>
+                    {msg.role === 'assistant' ? (
+                      <div className="markdown-body">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      msg.content
+                    )}
+                    {/* 消息气泡内的时间戳 */}
+                    <div style={{ 
+                      fontSize: 10, 
+                      color: msg.role === 'user' ? 'rgba(255,255,255,0.7)' : '#94a3b8', 
+                      marginTop: 4, 
+                      textAlign: 'right',
+                      // 如果用户消息，文字靠右，否则靠左
+                    }}>
+                      {msg.timestamp}
                     </div>
-                  ) : (
-                    msg.content
-                  )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                    <Button 
+                      type="text" 
+                      size="small" 
+                      icon={<Copy size={12} />} 
+                      style={{ color: '#94a3b8', height: 22, fontSize: 11, padding: '0 4px' }} 
+                      onClick={() => copyToClipboard(msg.content)}
+                    >复制</Button>
+                    {msg.role === 'assistant' && index === messages.length - 1 && !isTyping && (
+                      <Button 
+                        type="text" 
+                        size="small" 
+                        icon={<RotateCcw size={12} />} 
+                        style={{ color: '#94a3b8', height: 22, fontSize: 11, padding: '0 4px' }} 
+                        onClick={handleRegenerate}
+                      >重试</Button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))
@@ -398,36 +526,65 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
         {/* Input Area */}
         <div style={{ padding: isMobile ? '12px' : '16px 24px', background: '#fff', borderTop: '1px solid #f1f5f9' }}>
-          <div style={{ display: 'flex', gap: isMobile ? 8 : 12 }}>
+          {/* Quick Actions */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', flex: 1, paddingBottom: 4, scrollbarWidth: 'none' }}>
+              {quickCommands.map(item => (
+                <Button 
+                  key={item.id}
+                  size="small"
+                  style={{ borderRadius: 16, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, background: '#f8fafc', color: '#64748b', borderColor: '#e2e8f0', flexShrink: 0 }}
+                  onClick={() => handleSend(item.prompt)}
+                >
+                  {item.label}
+                </Button>
+              ))}
+            </div>
+            <Button 
+                type="text" 
+                size="small" 
+                icon={<Settings size={14} />} 
+                style={{ color: '#94a3b8', background: '#f1f5f9', borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onClick={() => setIsManageModalOpen(true)}
+                title="管理快捷指令"
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: isMobile ? 8 : 12, alignItems: 'flex-end' }}>
             <Input.TextArea 
               ref={inputRef}
               placeholder={selectedBot ? (isMobile ? "输入消息" : "输入消息，Shift + Enter 换行...") : "选机器人"}
               autoSize={{ minRows: 1, maxRows: 4 }}
               value={inputText}
               onChange={e => setInputText(e.target.value)}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={() => setIsComposing(false)}
               onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+                if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
                   e.preventDefault();
                   handleSend();
                 }
               }}
               style={{ borderRadius: 12, padding: isMobile ? '8px 12px' : '10px 16px', fontSize: isMobile ? 15 : 14 }}
-              disabled={!selectedBot || isTyping}
+              disabled={!selectedBot || (isTyping && !abortControllerRef.current)}
             />
-            <Button 
+            {isTyping ? (
+              <Button 
+                danger 
+                icon={<StopCircle size={18} />} 
+                style={{ borderRadius: 12, height: 40, width: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+                onClick={handleStopGeneration}
+                title="停止生成"
+              />
+            ) : (
+              <Button 
                 type="primary" 
                 icon={<Send size={18} />} 
-                onClick={handleSend}
-                disabled={!inputText.trim() || isTyping || !selectedBot}
-                style={{ 
-                    height: 'auto', 
-                    width: isMobile ? 44 : 50, 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    borderRadius: 12
-                }}
-            />
+                style={{ borderRadius: 12, height: 40, width: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+                onClick={() => handleSend()}
+                disabled={!selectedBot || !inputText.trim()}
+              />
+            )}
           </div>
           {!isMobile && (
             <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8', display: 'flex', gap: 16 }}>
@@ -437,9 +594,59 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
             </div>
           )}
         </div>
-      </div>
+      {/* Manage Quick Commands Modal */}
+      <Modal
+        title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ListRestart size={20} color="#2563eb" />
+                <span>管理快捷指令</span>
+            </div>
+        }
+        open={isManageModalOpen}
+        onCancel={() => setIsManageModalOpen(false)}
+        footer={null}
+        width={500}
+        bodyStyle={{ paddingTop: 16 }}
+      >
+        <div style={{ marginBottom: 24 }}>
+            <h4 style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>当前指令</h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {quickCommands.map(cmd => (
+                    <div key={cmd.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #f1f5f9' }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 14 }}>{cmd.label}</div>
+                            <div style={{ fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd.prompt}</div>
+                        </div>
+                        {!cmd.is_system && (
+                            <Button 
+                                type="text" 
+                                danger 
+                                icon={<Trash2 size={14} />} 
+                                size="small" 
+                                onClick={() => handleDeleteQuickCommand(cmd.id)}
+                            />
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+
+        <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 24 }}>
+            <h4 style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>新增指令</h4>
+            <Form form={form} layout="vertical" onFinish={handleAddQuickCommand}>
+                <Form.Item name="label" label="显示标签" rules={[{ required: true, message: '请输入标签名称' }]}>
+                    <Input placeholder="例如：我的背景" style={{ borderRadius: 8 }} />
+                </Form.Item>
+                <Form.Item name="prompt" label="指令内容" rules={[{ required: true, message: '请输入指令快捷话术' }]}>
+                    <Input.TextArea placeholder="填入点击按钮后自动发送的内容" autoSize={{ minRows: 2 }} style={{ borderRadius: 8 }} />
+                </Form.Item>
+                <Button type="primary" htmlType="submit" icon={<Plus size={16} />} block style={{ borderRadius: 8, height: 40 }}>添加指令</Button>
+            </Form>
+        </div>
+      </Modal>
     </div>
-  );
+  </div>
+);
 };
 
 export default OnlineChat;

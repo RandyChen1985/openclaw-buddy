@@ -237,6 +237,7 @@ func GetOpenClawGatewayConfig(configDir string) (*OpenClawGatewayConfig, error) 
 }
 
 func EnableChatCompletions(configDir string) error {
+    // ... (unchanged content if any, but I'll replace the end)
 	configPath := filepath.Join(configDir, "openclaw.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -281,4 +282,46 @@ func EnableChatCompletions(configDir string) error {
 	}
 
 	return os.WriteFile(configPath, newData, 0644)
+}
+
+func GetOpenClawSkills() (any, error) {
+	cmd := exec.Command("openclaw", "skills", "list", "--json")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list skills: %v. Output: %s", err, string(out))
+	}
+
+	// 清理 ANSI 颜色代码，防止 JSON 解析失败
+	cleanOut := StripANSI(string(out))
+
+	// 找到第一个 '{'，跳过前面的日志行 (例如: 16:15:18+08:00 [plugins] ...)
+	index := strings.Index(cleanOut, "{")
+	if index == -1 {
+		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
+	}
+	cleanOut = cleanOut[index:]
+
+	var skills interface{}
+	if err := json.Unmarshal([]byte(cleanOut), &skills); err != nil {
+		return nil, fmt.Errorf("failed to parse skills json: %v", err)
+	}
+	return skills, nil
+}
+
+func UninstallOpenClawSkill(name string) error {
+	cmd := exec.Command("openclaw", "skills", "uninstall", name)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to uninstall skill %s: %v. Output: %s", name, err, string(out))
+	}
+	return nil
+}
+
+func ReloadOpenClawSkills() error {
+	cmd := exec.Command("openclaw", "skills", "reload")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to reload skills: %v. Output: %s", err, string(out))
+	}
+	return nil
 }

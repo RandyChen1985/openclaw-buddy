@@ -28,6 +28,11 @@ func SyncAll(configDir string) {
 		return GetOpenClawDevices()
 	})
 
+	// 4. Skills
+	syncKey("skills", func() (any, error) {
+		return GetOpenClawSkills()
+	})
+
 	log.Printf("✅ [Cache] 全量同步完成，耗时 %v。", time.Since(start))
 }
 
@@ -41,6 +46,8 @@ func SyncKeySingle(key string, configDir string) error {
 		fetcher = func() (any, error) { return GetChatChannels() }
 	case "devices":
 		fetcher = func() (any, error) { return GetOpenClawDevices() }
+	case "skills":
+		fetcher = func() (any, error) { return GetOpenClawSkills() }
 	default:
 		return nil
 	}

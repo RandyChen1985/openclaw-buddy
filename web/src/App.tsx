@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode } from 'antd';
 import {
   LayoutDashboard, Boxes, ToyBrick, Smartphone, Terminal, Zap,
-  Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare
+  Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
+  Puzzle
 } from 'lucide-react';
 import api from './api';
 
@@ -16,6 +17,7 @@ import DeviceManager from './views/DeviceManager';
 import LogsViewer from './views/LogsViewer';
 import SelfHealing from './views/SelfHealing';
 import OnlineChat from './views/OnlineChat';
+import SkillManagement from './views/SkillManagement';
 import CrayfishLoading from './components/common/CrayfishLoading';
 
 // Hooks
@@ -356,6 +358,7 @@ const Dashboard = () => {
     { key: 'bots-models', label: '虾兵蟹将', icon: <Boxes size={14} /> },
     { key: 'components', label: '渠道绑定', icon: <ToyBrick size={14} /> },
     { key: 'devices', label: '设备绑定', icon: <Smartphone size={14} /> },
+    { key: 'skills', label: '技能管理', icon: <Puzzle size={14} /> },
     { key: 'logs', label: '实时日志', icon: <Terminal size={14} /> },
     { key: 'tools', label: '自愈管理', icon: <Zap size={14} /> },
     { key: 'lobster-panel', label: '龙虾面板', icon: <ExternalLink size={14} /> },
@@ -394,6 +397,7 @@ const Dashboard = () => {
       case 'logs': return <LogsViewer wsLogs={wsLogs} />;
       case 'tools': return <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} />;
       case 'chat': return <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} />;
+      case 'skills': return <SkillManagement isMobile={isMobile} />;
       default: return null;
     }
   };

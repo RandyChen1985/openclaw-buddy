@@ -539,3 +539,124 @@ func (s *Server) enableChat(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "聊天功能已在配置中开启，请重启网关以生效"})
 }
+
+func (s *Server) getQuickCommands(c *gin.Context) {
+	rows, err := utils.DB.Query("SELECT id, label, prompt, icon, is_system FROM quick_commands ORDER BY created_at ASC")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	commands := []gin.H{}
+	for rows.Next() {
+		var id, isSystem int
+		var label, prompt, icon string
+		if err := rows.Scan(&id, &label, &prompt, &icon, &isSystem); err != nil {
+			continue
+		}
+		commands = append(commands, gin.H{
+			"id":        id,
+			"label":     label,
+			"prompt":    prompt,
+			"icon":      icon,
+			"is_system": isSystem == 1,
+		})
+	}
+	c.JSON(http.StatusOK, commands)
+}
+
+func (s *Server) addQuickCommand(c *gin.Context) {
+	var req struct {
+		Label  string `json:"label" binding:"required"`
+		Prompt string `json:"prompt" binding:"required"`
+		Icon   string `json:"icon"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	res, err := utils.DB.Exec("INSERT INTO quick_commands (label, prompt, icon) VALUES (?, ?, ?)",
+		req.Label, req.Prompt, req.Icon)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	id, _ := res.LastInsertId()
+	c.JSON(http.StatusOK, gin.H{"id": id, "status": "success"})
+}
+
+func (s *Server) deleteQuickCommand(c *gin.Context) {
+	id := c.Param("id")
+	// 检查是否为系统内置
+	var isSystem int
+	err := utils.DB.QueryRow("SELECT is_system FROM quick_commands WHERE id = ?", id).Scan(&isSystem)
+	if err == nil && isSystem == 1 {
+		c.JSON(http.StatusForbidden, gin.H{"error": "内置指令不允许删除"})
+		return
+	}
+
+	_, err = utils.DB.Exec("DELETE FROM quick_commands WHERE id = ?", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}
+
+func (s *Server) getOpenClawSkills(c *gin.Context) {
+	refresh := c.Query("refresh") == "true"
+	if refresh {
+		if err := process.SyncKeySingle("skills", s.cfg.OpenClawConfigDir); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	data, updatedAt, err := process.GetCachedData("skills")
+	if err != nil {
+		// 如果缓存没有，尝试同步一次
+		if err := process.SyncKeySingle("skills", s.cfg.OpenClawConfigDir); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		data, updatedAt, _ = process.GetCachedData("skills")
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":       data,
+		"updated_at": updatedAt,
+	})
+}
+
+func (s *Server) uninstallSkill(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "skill name is required"})
+		return
+	}
+
+	if err := process.UninstallOpenClawSkill(name); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 自动清理缓存，让下一次获取触发同步
+	process.SyncKeySingle("skills", s.cfg.OpenClawConfigDir)
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "技能卸载成功"})
+}
+
+func (s *Server) reloadSkills(c *gin.Context) {
+	if err := process.ReloadOpenClawSkills(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 重新加载后清理缓存，确保列表是最新的
+	process.SyncKeySingle("skills", s.cfg.OpenClawConfigDir)
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "规则与技能已重新加载"})
+}

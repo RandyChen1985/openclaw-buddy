@@ -82,6 +82,12 @@ func (s *Server) setupRoutes() {
 			oc.POST("/chat/completions", s.chatProxy)
 			oc.GET("/chat/status", s.getChatStatus)
 			oc.POST("/chat/enable", s.enableChat)
+			oc.GET("/chat/quick-commands", s.getQuickCommands)
+			oc.POST("/chat/quick-commands", s.addQuickCommand)
+			oc.DELETE("/chat/quick-commands/:id", s.deleteQuickCommand)
+			oc.GET("/skills", s.getOpenClawSkills)
+			oc.DELETE("/skills/:name", s.uninstallSkill)
+			oc.POST("/skills/reload", s.reloadSkills)
 		}
 		
 		gateway := v1.Group("/gateway")

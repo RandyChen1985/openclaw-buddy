@@ -66,6 +66,14 @@ func createTables(existingToken string) (string, error) {
 			value TEXT,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);`,
+		`CREATE TABLE IF NOT EXISTS quick_commands (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			label TEXT NOT NULL,
+			prompt TEXT NOT NULL,
+			icon TEXT,
+			is_system INTEGER DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);`,
 	}
 
 	for _, query := range queries {
@@ -86,6 +94,20 @@ func createTables(existingToken string) (string, error) {
 		if existingToken == "" || strings.HasPrefix(existingToken, "sk-replace-me") {
 			activeToken = generateRandomToken(16)
 			_ = UpdateEnvToken(activeToken)
+		}
+	}
+
+	// 初始化默认快捷指令
+	var count int
+	_ = DB.QueryRow("SELECT COUNT(*) FROM quick_commands").Scan(&count)
+	if count == 0 {
+		defaults := []struct{ Label, Prompt, Icon string }{
+			{"我的 Soul", "告诉我关于 我的 Soul 的配置信息", "Sparkles"},
+			{"我的 Identity", "告诉我关于 我的 Identity 的配置信息", "UserCircle"},
+			{"我的 Memory", "我们今天都聊了啥，看看记忆的内容", "Brain"},
+		}
+		for _, d := range defaults {
+			_, _ = DB.Exec("INSERT INTO quick_commands (label, prompt, icon, is_system) VALUES (?, ?, ?, 1)", d.Label, d.Prompt, d.Icon)
 		}
 	}
 

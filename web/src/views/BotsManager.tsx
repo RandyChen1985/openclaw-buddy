@@ -95,6 +95,20 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       // 错误已处理
     }
   };
+
+  const handleSetDefaultModel = (model: any) => {
+    Modal.confirm({
+      title: '确认切换全局默认模型？',
+      content: `确认要将“${model.name}”设为系统全局默认模型吗？这可能会影响所有未独立配置模型的机器人行为。`,
+      okText: '确认切换',
+      cancelText: '取消',
+      centered: true,
+      onOk: async () => {
+        await onSetDefaultModel(model.id);
+      }
+    });
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fade-in-up 0.4s ease-out' }}>
 
@@ -294,7 +308,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                   type="text" 
                                   size="small" 
                                   icon={<RefreshCw size={12} />} 
-                                  onClick={() => onSetDefaultModel(m.id)}
+                                  onClick={() => handleSetDefaultModel(m)}
                                   style={{ color: '#94a3b8', padding: '0 4px', height: 20, fontSize: 10, display: 'flex', alignItems: 'center' }}
                                 >
                                   设为默认
