@@ -12,39 +12,7 @@ interface BotsManagerProps {
 
 const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMobile, onRefresh }) => {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 16 : 24, animation: 'fade-in-up 0.4s ease-out' }}>
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 8
-      }}>
-        <div>
-          <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800, color: '#1e293b', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
-            虾兵蟹将
-            {loadingBots && <Spin size="small" />}
-          </div>
-          <div style={{ color: '#64748b', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-            {isMobile ? '配置的机器人与模型资产' : '当前 OpenClaw 实例中配置的机器人与 AI 模型资产'}
-            {botsModels?.updated_at && (
-              <Tag bordered={false} style={{ margin: 0, fontSize: 10, background: '#f1f5f9', color: '#94a3b8' }}>
-                同步于: {dayjs(botsModels.updated_at).format('YYYY-MM-DD HH:mm:ss')}
-              </Tag>
-            )}
-          </div>
-        </div>
-        <Button 
-          type="primary" 
-          ghost 
-          icon={<RefreshCw size={14} className={loadingBots ? 'animate-spin' : ''} />} 
-          onClick={onRefresh}
-          loading={loadingBots}
-          style={{ borderRadius: 8, height: isMobile ? 32 : 36, padding: isMobile ? '0 12px' : '0 16px' }}
-        >
-          {!isMobile && '刷新'}
-        </Button>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fade-in-up 0.4s ease-out' }}>
 
       {loadingBots && !botsModels ? (
         <Card style={{ borderRadius: 16, border: '1px solid #e2e8f0' }}>
@@ -56,7 +24,30 @@ const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMo
         <Row gutter={[isMobile ? 16 : 24, isMobile ? 16 : 24]}>
           <Col span={24}>
             <Card
-              title={<span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: isMobile ? 14 : 16 }}><Boxes size={18} /> 小龙虾们 (Bots)</span>}
+              title={
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Boxes size={20} color="#2563eb" /> 小龙虾们 (Bots)
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    {botsModels?.updated_at && (
+                      <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
+                        同步于: {dayjs(botsModels.updated_at).format('YYYY-MM-DD HH:mm:ss')}
+                      </span>
+                    )}
+                    <Button 
+                      type="text" 
+                      size="small" 
+                      icon={<RefreshCw size={14} className={loadingBots ? 'animate-spin' : ''} />} 
+                      onClick={onRefresh}
+                      loading={loadingBots}
+                      style={{ color: '#64748b', display: 'flex', alignItems: 'center' }}
+                    >
+                      刷新
+                    </Button>
+                  </div>
+                </div>
+              }
               styles={{ body: { padding: isMobile ? '8px 16px' : '12px 24px' } }}
               style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
             >
@@ -118,7 +109,14 @@ const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMo
 
           <Col span={24}>
             <Card
-              title={<span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: isMobile ? 14 : 16 }}><Cpu size={18} /> 模型军团 (Models)</span>}
+              title={
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Cpu size={20} color="#6366f1" /> 模型军团 (Models)
+                  </span>
+                  {/* 第二个卡片通常不需要重复刷新和时间，但为了统一风格可以保留或简化 */}
+                </div>
+              }
               styles={{ body: { padding: isMobile ? '8px 16px' : '12px 24px' } }}
               style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
             >

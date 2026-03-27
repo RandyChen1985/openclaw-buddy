@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, Tag, Spin, Button } from 'antd';
 import { CheckCircle, Cloud, RefreshCw, Zap, AlertCircle, Smartphone } from 'lucide-react';
+import dayjs from 'dayjs';
 
 interface ChannelsManagerProps {
   chatChannels: any;
@@ -35,23 +36,30 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
       <Card
         title={
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#475569' }}>
-              <CheckCircle size={14} /> 已绑定渠道
+            <span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CheckCircle size={20} color="#10b981" /> 已绑定渠道
             </span>
-            <Button 
-              type="text" 
-              size="small" 
-              icon={<RefreshCw size={12} className={loadingChannels ? 'animate-spin' : ''} />} 
-              onClick={onRefreshChannels}
-              loading={loadingChannels}
-              style={{ fontSize: 11, color: '#64748b' }}
-            >
-              同步状态
-            </Button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {chatChannels?.updated_at && (
+                <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
+                  同步于: {dayjs(chatChannels.updated_at).format('YYYY-MM-DD HH:mm:ss')}
+                </span>
+              )}
+              <Button 
+                type="text" 
+                size="small" 
+                icon={<RefreshCw size={14} className={loadingChannels ? 'animate-spin' : ''} />} 
+                onClick={onRefreshChannels}
+                loading={loadingChannels}
+                style={{ color: '#64748b', display: 'flex', alignItems: 'center' }}
+              >
+                刷新
+              </Button>
+            </div>
           </div>
         }
-        styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 40 }, body: { padding: '16px 20px' } }}
-        style={{ borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 20 }}
+        styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 48 }, body: { padding: '16px 24px' } }}
+        style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
       >
         {loadingChannels && !chatChannels?.data ? (
           <div style={{ textAlign: 'center', padding: '12px 0' }}>
