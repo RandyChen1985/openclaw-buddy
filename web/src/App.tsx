@@ -673,7 +673,13 @@ export default function App() {
     if (urlToken) {
       localStorage.setItem('guardian_token', urlToken);
       setToken(urlToken);
-      window.history.replaceState({}, '', window.location.pathname);
+      
+      // 仅移除 token 参数，保留其他参数（如 embed, page 等）
+      params.delete('token');
+      const newSearch = params.toString();
+      const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
+      window.history.replaceState({}, '', newUrl);
+      
       message.success('已自动登录');
     }
   }, []);
