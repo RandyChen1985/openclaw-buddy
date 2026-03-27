@@ -127,9 +127,11 @@ func GetWeChatPluginStatus() (*WeChatPluginStatus, error) {
 	}
 	cacheMutex.Unlock()
 
-	// 执行 openclaw plugins list | grep weixin
+	// 执行 openclaw plugins list
 	log.Printf("🔍 Executing: openclaw plugins list (Detecting WeChat Plugin Status)")
-	res, _ := RunCommandWithTimeout(8*time.Second, "openclaw", "plugins", "list")
+	res, _ := RunCommandWithTimeout(15*time.Second, "openclaw", "plugins", "list")
+	
+	lines := strings.Split(res.Output, "\n")
 	
 	status := &WeChatPluginStatus{
 		Installed: false,
@@ -138,16 +140,29 @@ func GetWeChatPluginStatus() (*WeChatPluginStatus, error) {
 		LastCheck: time.Now(),
 	}
 
-	lines := strings.Split(res.Output, "\n")
+	// 处理换行问题：有些终端宽度受限，表格行会被截断/分行
+	// 我们尝试将所有包含 │ 的行合并成一个大字符串，移除换行后再解析
+	var combinedRows []string
 	for _, line := range lines {
-		if (strings.Contains(line, "weixin") || strings.Contains(line, "Weixin")) && strings.Contains(line, "│") {
-			status.Installed = true
-			parts := splitTableLine(StripANSI(line))
-			if len(parts) >= 6 {
-				status.Status = parts[3]  // e.g., loaded
-				status.Version = parts[5] // e.g., 2.0.0
-			}
-			break
+		if strings.Contains(line, "│") {
+			combinedRows = append(combinedRows, StripANSI(line))
+		}
+	}
+	
+	// 如果由于换行导致 "weixin" 被切分，简单的 strings.Contains(line, "weixin") 会失败
+	// 我们合并后再按起始标记 ┌ 或 ├ 重新切分（或者简单地看合集）
+	fullTable := strings.Join(combinedRows, "")
+	
+	// 更粗放但健壮的匹配：只要表格里出现了 weixin 且有 loaded 字样
+	if (strings.Contains(strings.ToLower(fullTable), "weixin")) {
+		status.Installed = true
+		if strings.Contains(strings.ToLower(fullTable), "loaded") {
+			status.Status = "loaded"
+		}
+		// 版本号匹配: 查找类似 2.0.0 的模式
+		versionRe := regexp.MustCompile(`\d+\.\d+\.\d+`)
+		if v := versionRe.FindString(fullTable); v != "" {
+			status.Version = v
 		}
 	}
 
@@ -168,7 +183,7 @@ type ChatChannel struct {
 
 func GetChatChannels() ([]ChatChannel, error) {
 	log.Printf("🔍 Executing: openclaw channels list (Detecting Configured Channels)")
-	res, _ := RunCommandWithTimeout(10*time.Second, "openclaw", "channels", "list")
+	res, _ := RunCommandWithTimeout(20*time.Second, "openclaw", "channels", "list")
 
 	var channels []ChatChannel
 	lines := strings.Split(res.Output, "\n")

@@ -110,7 +110,8 @@ const Dashboard = () => {
       const res = await api.get(`/v1/openclaw/chat-channels${force ? '?refresh=true' : ''}`);
       setChatChannels(res.data);
     } catch (e) {
-      message.error('同步渠道信息失败');
+      console.warn('同步渠道信息失败', e);
+      // message.error('同步渠道信息失败'); // 减少干扰，改用 console 或靜默处理
     } finally {
       setLoadingChannels(false);
     }
@@ -120,9 +121,11 @@ const Dashboard = () => {
     setCheckWeixinSeconds(0);
     const check = async () => {
       try {
-        const res = await api.get('/v1/openclaw/plugins/weixin/status');
+        const res = await api.get('/v1/wechat/plugin/status');
         setWeixinStatus(res.data);
-      } catch (e) {}
+      } catch (err) {
+        setWeixinStatus({ installed: false, status: 'Detection Failed', version: 'N/A' });
+      }
     };
     check();
     const timer = setInterval(() => {
