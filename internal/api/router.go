@@ -79,6 +79,9 @@ func (s *Server) setupRoutes() {
 			oc.POST("/bots/set-identity", s.setOpenClawBotIdentity)
 			oc.POST("/bots/delete", s.deleteOpenClawBot)
 			oc.POST("/models/set-default", s.setDefaultModel)
+			oc.POST("/chat/completions", s.chatProxy)
+			oc.GET("/chat/status", s.getChatStatus)
+			oc.POST("/chat/enable", s.enableChat)
 		}
 		
 		gateway := v1.Group("/gateway")

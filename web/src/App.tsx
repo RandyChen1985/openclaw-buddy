@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode } from 'antd';
 import {
   LayoutDashboard, Boxes, ToyBrick, Smartphone, Terminal, Zap,
-  Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink
+  Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare
 } from 'lucide-react';
 import api from './api';
 
@@ -15,6 +15,7 @@ import ChannelsManager from './views/ChannelsManager';
 import DeviceManager from './views/DeviceManager';
 import LogsViewer from './views/LogsViewer';
 import SelfHealing from './views/SelfHealing';
+import OnlineChat from './views/OnlineChat';
 import CrayfishLoading from './components/common/CrayfishLoading';
 
 // Hooks
@@ -81,7 +82,7 @@ const Dashboard = () => {
   }, [isGettingQR]);
 
   useEffect(() => {
-    if (activeTab === 'bots-models') fetchBotsModels();
+    if (activeTab === 'bots-models' || activeTab === 'chat') fetchBotsModels();
     if (activeTab === 'components') {
       fetchChatChannels();
       // 仅在状态未知时重置并触发检测
@@ -205,6 +206,18 @@ const Dashboard = () => {
       setTransitionSeconds(0);
     } catch (err: any) {
       message.error(err.response?.data?.error || '网关指令发送失败');
+    }
+  };
+
+  const restartGateway = async () => {
+    try {
+      await api.post('/v1/gateway/restart');
+      setIsTransitioning(true);
+      setTargetStatus('running');
+      setTransitionSeconds(0);
+    } catch (err: any) {
+      message.error(err.response?.data?.error || '重启网关失败');
+      throw err;
     }
   };
 
@@ -339,6 +352,7 @@ const Dashboard = () => {
 
   const navItems = [
     { key: 'dashboard', label: '运行状态', icon: <LayoutDashboard size={14} /> },
+    { key: 'chat', label: '在线聊天', icon: <MessageSquare size={14} /> },
     { key: 'bots-models', label: '虾兵蟹将', icon: <Boxes size={14} /> },
     { key: 'components', label: '渠道绑定', icon: <ToyBrick size={14} /> },
     { key: 'devices', label: '设备绑定', icon: <Smartphone size={14} /> },
@@ -379,6 +393,7 @@ const Dashboard = () => {
       );
       case 'logs': return <LogsViewer wsLogs={wsLogs} />;
       case 'tools': return <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} />;
+      case 'chat': return <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} />;
       default: return null;
     }
   };

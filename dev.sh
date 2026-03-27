@@ -101,7 +101,7 @@ echo "🚀 启动服务..."
 export PID_FILE="./lobster-guardian.pid"
 nohup ./lobster-monitor-dev >> ./logs/guardian.log 2>&1 &
 NEW_PID=$!
-echo $NEW_PID > "$PID_FILE"
+echo $NEW_PID > "/tmp/lobster-guardian-dev.pid"
 
 echo "✅ 服务已在隔离环境启动 (PID: $NEW_PID)"
 echo "🌐 访问地址: http://localhost:3000"

@@ -1,7 +1,10 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -439,4 +442,100 @@ func (s *Server) setDefaultModel(c *gin.Context) {
 	process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "全局默认模型已更新"})
+}
+
+func (s *Server) chatProxy(c *gin.Context) {
+	// 1. 获取网关配置
+	gw, err := process.GetOpenClawGatewayConfig(s.cfg.OpenClawConfigDir)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法读取 OpenClaw 网关配置: " + err.Error()})
+		return
+	}
+
+	// 2. 准备请求到本地网关
+	url := fmt.Sprintf("http://127.0.0.1:%d/v1/chat/completions", gw.Port)
+
+	// 读取原始请求体
+	var body map[string]interface{}
+	if err := c.BindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求体"})
+		return
+	}
+	body["user"] = "lobster" // 固定写这个用户
+
+	jsonBody, _ := json.Marshal(body)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建请求失败"})
+		return
+	}
+
+	// 3. 设置头部
+	req.Header.Set("Authorization", "Bearer "+gw.Auth.Token)
+	req.Header.Set("Content-Type", "application/json")
+	if stream, ok := body["stream"].(bool); ok && stream {
+		req.Header.Set("Accept", "text/event-stream")
+	}
+
+	// 4. 执行请求
+	startTime := time.Now()
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	duration := time.Since(startTime).Milliseconds()
+
+	// 准备日志基础数据
+	model, _ := body["model"].(string)
+	msgs, _ := body["messages"].([]interface{})
+	msgCount := len(msgs)
+	isStream, _ := body["stream"].(bool)
+	nowStr := time.Now().Format("2006/01/02 15:04:05")
+
+	if err != nil {
+		fmt.Printf("%s ❌ [Chat] Error: Model=%s, Duration=%dms, Error=%v\n", nowStr, model, duration, err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "无法连接到 OpenClaw 网关: " + err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	fmt.Printf("%s ✅ [Chat] Request: Model=%s, Msgs=%d, Stream=%v, Latency=%dms, Status=%d\n", 
+		nowStr, model, msgCount, isStream, duration, resp.StatusCode)
+	// 处理流式响应
+	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Header("Transfer-Encoding", "chunked")
+		c.Stream(func(w io.Writer) bool {
+			_, err := io.Copy(w, resp.Body)
+			return err == nil
+		})
+		return
+	}
+
+	// 非流式响应
+	for k, vv := range resp.Header {
+		for _, v := range vv {
+			c.Header(k, v)
+		}
+	}
+	c.Status(resp.StatusCode)
+	io.Copy(c.Writer, resp.Body)
+}
+
+func (s *Server) getChatStatus(c *gin.Context) {
+	gw, err := process.GetOpenClawGatewayConfig(s.cfg.OpenClawConfigDir)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"enabled": gw.HTTP.Endpoints.ChatCompletions.Enabled})
+}
+
+func (s *Server) enableChat(c *gin.Context) {
+	err := process.EnableChatCompletions(s.cfg.OpenClawConfigDir)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "聊天功能已在配置中开启，请重启网关以生效"})
 }

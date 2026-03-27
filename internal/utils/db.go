@@ -3,12 +3,12 @@ package utils
 import (
 	"database/sql"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
-	"math/rand"
 
 	_ "modernc.org/sqlite"
 )
@@ -111,7 +111,7 @@ func UpdateEnvToken(newToken string) error {
 
 	re := regexp.MustCompile(`(?m)^GUARDIAN_TOKEN\s*=.*$`)
 	newContent := re.ReplaceAllString(string(content), "GUARDIAN_TOKEN="+newToken)
-	
+
 	// 如果没找到，追加到末尾
 	if !strings.Contains(newContent, "GUARDIAN_TOKEN=") {
 		newContent += "\nGUARDIAN_TOKEN=" + newToken

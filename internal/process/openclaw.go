@@ -2,8 +2,11 @@ package process
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -26,8 +29,24 @@ type OpenClawModel struct {
 }
 
 type OpenClawBotsModelsResponse struct {
-	Bots   []OpenClawBot   `json:"bots"`
-	Models []OpenClawModel `json:"models"`
+	Bots     []OpenClawBot     `json:"bots"`
+	Models   []OpenClawModel   `json:"models"`
+	UpdateAt string            `json:"updated_at"`
+}
+
+type OpenClawGatewayConfig struct {
+	Port int    `json:"port"`
+	Mode string `json:"mode"`
+	Auth struct {
+		Token string `json:"token"`
+	} `json:"auth"`
+	HTTP struct {
+		Endpoints struct {
+			ChatCompletions struct {
+				Enabled bool `json:"enabled"`
+			} `json:"chatCompletions"`
+		} `json:"endpoints"`
+	} `json:"http"`
 }
 
 func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error) {
@@ -197,4 +216,69 @@ func SetOpenClawDefaultModel(modelID string) error {
 		return fmt.Errorf("failed to set default model: %v (%s)", err, string(out))
 	}
 	return nil
+}
+
+func GetOpenClawGatewayConfig(configDir string) (*OpenClawGatewayConfig, error) {
+	configPath := filepath.Join(configDir, "openclaw.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read openclaw.json: %v", err)
+	}
+
+	var cfg struct {
+		Gateway OpenClawGatewayConfig `json:"gateway"`
+	}
+
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal openclaw.json: %v", err)
+	}
+
+	return &cfg.Gateway, nil
+}
+
+func EnableChatCompletions(configDir string) error {
+	configPath := filepath.Join(configDir, "openclaw.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+
+	var fullCfg map[string]interface{}
+	if err := json.Unmarshal(data, &fullCfg); err != nil {
+		return err
+	}
+
+	gateway, ok := fullCfg["gateway"].(map[string]interface{})
+	if !ok {
+		gateway = make(map[string]interface{})
+		fullCfg["gateway"] = gateway
+	}
+
+	httpCfg, ok := gateway["http"].(map[string]interface{})
+	if !ok {
+		httpCfg = make(map[string]interface{})
+		gateway["http"] = httpCfg
+	}
+
+	endpoints, ok := httpCfg["endpoints"].(map[string]interface{})
+	if !ok {
+		endpoints = make(map[string]interface{})
+		httpCfg["endpoints"] = endpoints
+	}
+
+	chatCompletions, ok := endpoints["chatCompletions"].(map[string]interface{})
+	if !ok {
+		chatCompletions = make(map[string]interface{})
+		endpoints["chatCompletions"] = chatCompletions
+	}
+
+	chatCompletions["enabled"] = true
+
+	// 序列化回文件
+	newData, err := json.MarshalIndent(fullCfg, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(configPath, newData, 0644)
 }
