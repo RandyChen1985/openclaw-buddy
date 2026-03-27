@@ -188,29 +188,30 @@ func GetChatChannels() ([]ChatChannel, error) {
 	var channels []ChatChannel
 	lines := strings.Split(res.Output, "\n")
 	isChannelSection := false
+	// 使用正则匹配渠道行: - name: status, ... 或 - name id: status
+	channelRe := regexp.MustCompile(`^-\s+([\w\d\-_]+)(?:\s+[\w\d\-]+)?:\s+([\w\d\s,]+)`)
 
 	for _, line := range lines {
-		trimmedLine := strings.TrimSpace(StripANSI(line))
-		if strings.Contains(trimmedLine, "Chat channels:") {
+		trimmed := strings.TrimSpace(StripANSI(line))
+		if strings.Contains(trimmed, "Chat channels:") {
 			isChannelSection = true
 			continue
 		}
+		if isChannelSection && trimmed == "" && len(channels) > 0 {
+			// Section divider
+			isChannelSection = false
+			continue
+		}
 
-		if isChannelSection && strings.HasPrefix(trimmedLine, "- ") {
-			namePart := strings.TrimPrefix(trimmedLine, "- ")
-			// 格式通常为: - Name: configured, ... 或 - Name: not configured, ...
-			isConfigured := strings.Contains(namePart, ": configured")
-			
-			// 提取名称 (冒号之前的部分)
-			name := namePart
-			if idx := strings.Index(namePart, ":"); idx != -1 {
-				name = strings.TrimSpace(namePart[:idx])
+		if isChannelSection && strings.HasPrefix(trimmed, "- ") {
+			matches := channelRe.FindStringSubmatch(trimmed)
+			if len(matches) >= 3 {
+				channel := ChatChannel{
+					Name:       matches[1],
+					Configured: strings.Contains(matches[2], "configured"),
+				}
+				channels = append(channels, channel)
 			}
-
-			channels = append(channels, ChatChannel{
-				Name:       name,
-				Configured: isConfigured,
-			})
 		}
 	}
 

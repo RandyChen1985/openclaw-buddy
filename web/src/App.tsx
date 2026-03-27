@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Layout, ConfigProvider, message, Modal, Spin, QRCode, Button, Drawer, Badge } from 'antd';
-import { 
-  LayoutDashboard, Boxes, ToyBrick, Smartphone, Terminal, Zap, 
+import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge } from 'antd';
+import {
+  LayoutDashboard, Boxes, ToyBrick, Smartphone, Terminal, Zap,
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink
 } from 'lucide-react';
 import api from './api';
@@ -111,7 +111,6 @@ const Dashboard = () => {
       setChatChannels(res.data);
     } catch (e) {
       console.warn('同步渠道信息失败', e);
-      // message.error('同步渠道信息失败'); // 减少干扰，改用 console 或靜默处理
     } finally {
       setLoadingChannels(false);
     }
@@ -159,21 +158,25 @@ const Dashboard = () => {
   };
 
   const handleGetQRCode = async () => {
-    setIsGettingQR(true);
-    setQrSeconds(0);
-    try {
-      const res = await api.get('/v1/wechat/qrcode?force=true');
-      if (res.data.qrcode_url) {
-        setQrData(res.data);
-        setQrModalVisible(true);
-      } else {
-        message.warning('尚未生成二维码，请稍后重试');
+    Modal.confirm({
+      title: '获取微信登录二维码',
+      content: '获取二维码将启动微信登录流程，可能因网络环境需要 10-20 秒，请耐心等待。确实要继续吗？',
+      okText: '确定',
+      cancelText: '取消',
+      onOk: async () => {
+        setIsGettingQR(true);
+        setQrSeconds(0);
+        try {
+          const res = await api.get('/v1/wechat/qrcode?force=true');
+          setQrData(res.data);
+          setQrModalVisible(true);
+        } catch (err: any) {
+          message.error(err.response?.data?.error || '获取二维码失败');
+        } finally {
+          setIsGettingQR(false);
+        }
       }
-    } catch (err: any) {
-      message.error(err.response?.data?.error || '获取二维码失败');
-    } finally {
-      setIsGettingQR(false);
-    }
+    });
   };
 
   const handleControl = (action: string) => {
@@ -181,7 +184,6 @@ const Dashboard = () => {
       start: { title: '启动网关核心', color: '#22c55e' },
       stop: { title: '停止运行网关', color: '#ef4444' },
       restart: { title: '重启网关核心', color: '#3b82f6' },
-      wechat: { title: '请求微信登录码', color: '#16a34a' }
     };
     setConfirmModal({ open: true, action, ...config[action] });
   };
@@ -189,21 +191,6 @@ const Dashboard = () => {
   const executeControl = async () => {
     const { action } = confirmModal;
     setConfirmModal(prev => ({ ...prev, open: false }));
-
-    if (action === 'wechat') {
-      setIsGettingQR(true);
-      setQrSeconds(0);
-      try {
-        const res = await api.post('/v1/openclaw/plugins/weixin/login');
-        setQrData(res.data);
-        setQrModalVisible(true);
-      } catch (err: any) {
-        message.error(err.response?.data?.error || '获取二维码失败');
-      } finally {
-        setIsGettingQR(false);
-      }
-      return;
-    }
 
     try {
       await api.post(`/v1/gateway/${action}`);
@@ -292,6 +279,7 @@ const Dashboard = () => {
           chatChannels={chatChannels} weixinStatus={weixinStatus} loadingChannels={loadingChannels} 
           loadingWeixin={loadingWeixin} checkWeixinSeconds={checkWeixinSeconds}
           isGettingQR={isGettingQR} onInstallWeixin={handleInstallWeixin} onGetQRCode={handleGetQRCode}
+          onRefresh={() => fetchChatChannels(true)}
         />
       );
       case 'devices': return (
@@ -441,12 +429,10 @@ const Dashboard = () => {
             {confirmModal.action === 'start' && <Play size={24} color={confirmModal.color} />}
             {confirmModal.action === 'stop' && <Square size={24} color={confirmModal.color} />}
             {confirmModal.action === 'restart' && <RefreshCw size={24} color={confirmModal.color} />}
-            {confirmModal.action === 'wechat' && <Smartphone size={24} color={confirmModal.color} />}
           </div>
           <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>{confirmModal.title}</h3>
           <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
             {confirmModal.action === 'stop' && '确定要停止 OpenClaw 网关吗？这将导致所有渠道通信中断。'}
-            {confirmModal.action === 'wechat' && '请确认已安装并正确配置微信插件后继续。'}
             {['start', 'restart'].includes(confirmModal.action) && `您正在请求 ${confirmModal.title} 指令，系统将异步处理。`}
           </p>
           <div style={{ display: 'flex', gap: 12 }}>
@@ -466,8 +452,12 @@ const Dashboard = () => {
       </Modal>
 
       <Modal
-        title={null} open={qrModalVisible} footer={null}
-        onCancel={() => setQrModalVisible(false)} centered width={340}
+        title={null} 
+        open={qrModalVisible} 
+        footer={null}
+        onCancel={() => setQrModalVisible(false)} 
+        centered 
+        width={340}
         styles={{ body: { padding: 0 } }}
       >
         <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center', borderRadius: 16 }}>
@@ -475,9 +465,17 @@ const Dashboard = () => {
           <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b' }}>微信授权登录</h3>
           <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24 }}>使用手机微信扫码授权</p>
           <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #f1f5f9', marginBottom: 16 }}>
-            {qrData && <QRCode value={qrData.qrcode_url} size={180} />}
+            {qrData?.qrcode_url ? (
+              <img src={qrData.qrcode_url} alt="Scan to Login" style={{ width: '100%', maxWidth: 180, borderRadius: 8 }} />
+            ) : (
+              <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Spin tip="二维码加载中..." />
+              </div>
+            )}
           </div>
-          <Button block type="primary" size="large" onClick={() => setQrModalVisible(false)}>完成并同步状态</Button>
+          <Button block type="primary" size="large" onClick={() => setQrModalVisible(false)} style={{ borderRadius: 10 }}>
+            完成并同步状态
+          </Button>
         </div>
       </Modal>
     </>

@@ -12,6 +12,7 @@ interface ChannelsManagerProps {
   isGettingQR: boolean;
   onInstallWeixin: () => void;
   onGetQRCode: () => void;
+  onRefresh: () => void;
 }
 
 const ChannelsManager: React.FC<ChannelsManagerProps> = ({ 
@@ -22,7 +23,8 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   checkWeixinSeconds, 
   isGettingQR,
   onInstallWeixin,
-  onGetQRCode
+  onGetQRCode,
+  onRefresh
 }) => {
   const channelsList = chatChannels?.data || [];
   const configuredChannels = channelsList.filter((c: any) => c.configured);
@@ -37,11 +39,23 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
             <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#475569' }}>
               <CheckCircle size={14} /> 已绑定渠道
             </span>
-            {chatChannels?.updated_at && (
-              <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
-                同步于: {dayjs(chatChannels.updated_at).format('YYYY-MM-DD HH:mm:ss')}
-              </span>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {chatChannels?.updated_at && (
+                <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
+                  同步于: {dayjs(chatChannels.updated_at).format('YYYY-MM-DD HH:mm:ss')}
+                </span>
+              )}
+              <Button 
+                type="text" 
+                size="small" 
+                icon={<RefreshCw size={14} className={loadingChannels ? 'animate-spin' : ''} />} 
+                onClick={onRefresh}
+                loading={loadingChannels}
+                style={{ color: '#64748b', display: 'flex', alignItems: 'center' }}
+              >
+                刷新
+              </Button>
+            </div>
           </div>
         }
         styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 40 }, body: { padding: '16px 20px' } }}

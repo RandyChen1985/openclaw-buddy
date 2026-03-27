@@ -73,8 +73,8 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
               onClick={() => onToggle(!selfHealingEnabled)}
               style={{ 
                 borderRadius: 10, minWidth: 100, fontWeight: 700,
-                background: selfHealingEnabled ? '#eab308' : '#2563eb',
-                borderColor: selfHealingEnabled ? '#eab308' : '#2563eb',
+                background: selfHealingEnabled ? '#ef4444' : '#2563eb',
+                borderColor: selfHealingEnabled ? '#ef4444' : '#2563eb',
                 color: '#fff'
               }}
             >
