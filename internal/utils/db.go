@@ -15,7 +15,7 @@ import (
 
 var DB *sql.DB
 
-func InitDB(dbPath string) (string, error) {
+func InitDB(dbPath string, existingToken string) (string, error) {
 	// Ensure directory exists
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -32,7 +32,7 @@ func InitDB(dbPath string) (string, error) {
 		return "", fmt.Errorf("failed to ping database: %v", err)
 	}
 
-	activeToken, err := createTables()
+	activeToken, err := createTables(existingToken)
 	if err != nil {
 		return "", fmt.Errorf("failed to create tables: %v", err)
 	}
@@ -40,7 +40,7 @@ func InitDB(dbPath string) (string, error) {
 	return activeToken, nil
 }
 
-func createTables() (string, error) {
+func createTables(existingToken string) (string, error) {
 	queries := []string{
 		`CREATE TABLE IF NOT EXISTS health_checks (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,6 +61,11 @@ func createTables() (string, error) {
 			key TEXT PRIMARY KEY,
 			value TEXT
 		);`,
+		`CREATE TABLE IF NOT EXISTS data_caches (
+			key TEXT PRIMARY KEY,
+			value TEXT,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);`,
 	}
 
 	for _, query := range queries {
@@ -77,9 +82,11 @@ func createTables() (string, error) {
 		now := time.Now().Format("2006-01-02 15:04:05")
 		_ = SetSetting("first_run_at", now)
 
-		// 首次启动：生成随机 Token 并更新 env 文件
-		activeToken = generateRandomToken(16)
-		_ = UpdateEnvToken(activeToken)
+		// 首次启动：只有当传入 Token 为空或显式的占位符时，才重新生成随机 Token
+		if existingToken == "" || strings.HasPrefix(existingToken, "sk-replace-me") {
+			activeToken = generateRandomToken(16)
+			_ = UpdateEnvToken(activeToken)
+		}
 	}
 
 	return activeToken, nil
@@ -130,6 +137,27 @@ func SetSetting(key, value string) error {
 		return fmt.Errorf("database not initialized")
 	}
 	_, err := DB.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value)
+	return err
+}
+
+func GetCache(key string) (string, string, error) {
+	if DB == nil {
+		return "", "", fmt.Errorf("database not initialized")
+	}
+	var value string
+	var updatedAt string
+	err := DB.QueryRow("SELECT value, updated_at FROM data_caches WHERE key = ?", key).Scan(&value, &updatedAt)
+	if err != nil {
+		return "", "", err
+	}
+	return value, updatedAt, nil
+}
+
+func SetCache(key, value string) error {
+	if DB == nil {
+		return fmt.Errorf("database not initialized")
+	}
+	_, err := DB.Exec("INSERT OR REPLACE INTO data_caches (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", key, value)
 	return err
 }
 

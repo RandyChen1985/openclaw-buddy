@@ -62,7 +62,8 @@ echo "📝 生成隔离环境配置: $DEV_ROOT/env"
 cat <<EOF > "$DEV_ROOT/env"
 # 🦞 有孚小龙虾监控 (Lobster Guardian) 隔离开发配置
 WEB_PORT=3000
-GUARDIAN_TOKEN="sk-replace-me-on-first-run"
+GUARDIAN_TOKEN="lobster-guardian-2026"
+PID_FILE="./lobster-guardian.pid"
 
 # [存储与目录]
 # 隔离数据存储路径 (相对于执行路径)
@@ -96,13 +97,15 @@ EOF
 # 7. 切换到隔离目录启动服务
 cd "$DEV_ROOT"
 echo "🚀 启动服务..."
-# 启动时指定 PID 文件位置 (cmd/monitor/main.go 中使用了 /tmp/lobster-guardian.pid, 我们这里稍微做一下兼容，或者由启动命令管理)
+# 显式读取 env 中的变量并导出 (也可以由 Go 代码中的 godotenv.Load("env") 处理，但 PID 检查在 Load 之前)
+export PID_FILE="./lobster-guardian.pid"
 nohup ./lobster-monitor-dev >> ./logs/guardian.log 2>&1 &
 NEW_PID=$!
 echo $NEW_PID > "$PID_FILE"
 
 echo "✅ 服务已在隔离环境启动 (PID: $NEW_PID)"
 echo "🌐 访问地址: http://localhost:3000"
+echo "🔑 认证令牌 (Token): $(grep GUARDIAN_TOKEN env | cut -d'=' -f2 | tr -d '"')"
 echo "--------------------------------------------------"
 echo "💡 提示: "
 echo "   - 实时日志: tail -f $DEV_ROOT/logs/guardian.log"

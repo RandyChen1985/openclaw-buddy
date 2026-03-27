@@ -47,30 +47,71 @@ func (s *Server) proxyLobsterDashboard(c *gin.Context) {
 }
 
 func (s *Server) getWeChatConfigStatus(c *gin.Context) {
-	channels, err := process.GetChatChannels()
+	key := "chat_channels"
+	if c.Query("refresh") == "true" {
+		if err := process.SyncKeySingle(key, s.cfg.OpenClawConfigDir); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	data, updatedAt, err := process.GetCachedData(key)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// 如果缓存不存在且没要求强制刷新，则实时获取一次
+		channels, err := process.GetChatChannels()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": channels, "updated_at": "实时"})
 		return
 	}
-	c.JSON(http.StatusOK, channels)
+
+	c.JSON(http.StatusOK, gin.H{"data": data, "updated_at": updatedAt})
 }
 
 func (s *Server) getOpenClawBotsModels(c *gin.Context) {
-	res, err := process.GetOpenClawBotsModels(s.cfg.OpenClawConfigDir)
+	key := "bots_models"
+	if c.Query("refresh") == "true" {
+		if err := process.SyncKeySingle(key, s.cfg.OpenClawConfigDir); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	data, updatedAt, err := process.GetCachedData(key)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		res, err := process.GetOpenClawBotsModels(s.cfg.OpenClawConfigDir)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": res, "updated_at": "实时"})
 		return
 	}
-	c.JSON(http.StatusOK, res)
+	c.JSON(http.StatusOK, gin.H{"data": data, "updated_at": updatedAt})
 }
 
 func (s *Server) getOpenClawDevices(c *gin.Context) {
-	devices, err := process.GetOpenClawDevices()
+	key := "devices"
+	if c.Query("refresh") == "true" {
+		if err := process.SyncKeySingle(key, s.cfg.OpenClawConfigDir); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	data, updatedAt, err := process.GetCachedData(key)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		devices, err := process.GetOpenClawDevices()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": devices, "updated_at": "实时"})
 		return
 	}
-	c.JSON(http.StatusOK, devices)
+	c.JSON(http.StatusOK, gin.H{"data": data, "updated_at": updatedAt})
 }
 
 func (s *Server) approveDevice(c *gin.Context) {
@@ -114,35 +155,65 @@ func (s *Server) getWeChatQRCode(c *gin.Context) {
 	c.JSON(http.StatusOK, qrcode)
 }
 
+func (s *Server) runAsyncCommand(c *gin.Context, taskName string, args ...string) {
+	taskID := fmt.Sprintf("task-%d", time.Now().UnixNano())
+	process.RegisterTask(taskID, taskName)
+
+	go func() {
+		_, err := process.RunCommandWithTimeout(60*time.Second, "openclaw", args...)
+		if err != nil {
+			process.UpdateTaskStatus(taskID, process.TaskStatusFailed, err.Error())
+		} else {
+			process.UpdateTaskStatus(taskID, process.TaskStatusCompleted, "")
+		}
+	}()
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"message": "Command accepted and running in background",
+		"taskID":  taskID,
+		"command": "openclaw " + strings.Join(args, " "),
+	})
+}
+
 func (s *Server) startGateway(c *gin.Context) {
-	s.runAsyncCommand(c, "gateway", "start")
+	s.runAsyncCommand(c, "启动网关", "gateway", "start")
 }
 
 func (s *Server) stopGateway(c *gin.Context) {
+	taskID := fmt.Sprintf("task-%d", time.Now().UnixNano())
+	process.RegisterTask(taskID, "停止网关")
+
 	go func() {
-		_ = process.StopGateway(s.cfg.HealthPort)
+		err := process.StopGateway(s.cfg.HealthPort)
+		if err != nil {
+			process.UpdateTaskStatus(taskID, process.TaskStatusFailed, err.Error())
+		} else {
+			process.UpdateTaskStatus(taskID, process.TaskStatusCompleted, "")
+		}
 	}()
+
 	c.JSON(http.StatusAccepted, gin.H{
 		"message": "Stop command initiated with force fallback",
+		"taskID":  taskID,
 	})
 }
 
 func (s *Server) restartGateway(c *gin.Context) {
+	taskID := fmt.Sprintf("task-%d", time.Now().UnixNano())
+	process.RegisterTask(taskID, "重启网关")
+
 	go func() {
-		_ = process.RestartGateway(s.cfg.HealthPort)
+		err := process.RestartGateway(s.cfg.HealthPort)
+		if err != nil {
+			process.UpdateTaskStatus(taskID, process.TaskStatusFailed, err.Error())
+		} else {
+			process.UpdateTaskStatus(taskID, process.TaskStatusCompleted, "")
+		}
 	}()
+
 	c.JSON(http.StatusAccepted, gin.H{
 		"message": "Restart command initiated (Stop + Start)",
-	})
-}
-
-func (s *Server) runAsyncCommand(c *gin.Context, args ...string) {
-	go func() {
-		_, _ = process.RunCommandWithTimeout(30*time.Second, "openclaw", args...)
-	}()
-	c.JSON(http.StatusAccepted, gin.H{
-		"message": "Command accepted and running in background",
-		"command": "openclaw " + strings.Join(args, " "),
+		"taskID":  taskID,
 	})
 }
 
@@ -239,10 +310,26 @@ func (s *Server) getHealEvents(c *gin.Context) {
 }
 
 func (s *Server) installWeChatPlugin(c *gin.Context) {
+	taskID := fmt.Sprintf("task-%d", time.Now().UnixNano())
+	process.RegisterTask(taskID, "安装微信插件")
+
 	go func() {
-		_ = process.InstallWeChatPlugin()
+		err := process.InstallWeChatPlugin()
+		if err != nil {
+			process.UpdateTaskStatus(taskID, process.TaskStatusFailed, err.Error())
+		} else {
+			process.UpdateTaskStatus(taskID, process.TaskStatusCompleted, "")
+		}
 	}()
-	c.JSON(http.StatusAccepted, gin.H{"message": "Installation started"})
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"message": "Installation started",
+		"taskID":  taskID,
+	})
+}
+
+func (s *Server) getTasksStatus(c *gin.Context) {
+	c.JSON(http.StatusOK, process.GetAllTasks())
 }
 
 func (s *Server) checkWeChatPlugin(c *gin.Context) {

@@ -1,1410 +1,316 @@
-import { useState, useEffect, useRef } from 'react';
-import {
-  Layout, Card, Button, Input, Form,
-  Tooltip, Badge, Tag,
-  Row, Col, List, message,
-  ConfigProvider, Menu, Drawer, Spin, Modal, Progress,
-  QRCode,
-} from 'antd';
-import {
-  Activity, Boxes, Cloud, Cpu, KeyRound,
-  LayoutDashboard, LogOut, Menu as MenuIcon,
-  Play, RefreshCw, Server, Smartphone, Square,
-  Terminal, Zap, CheckCircle, AlertCircle, ExternalLink, Command
+import { useState, useEffect } from 'react';
+import { Layout, ConfigProvider, message, Modal, Spin, QRCode, Button, Drawer, Badge } from 'antd';
+import { 
+  LayoutDashboard, Boxes, ToyBrick, Smartphone, Terminal, Zap, 
+  Menu as MenuIcon, Play, Square, RefreshCw
 } from 'lucide-react';
-import axios from 'axios';
-import {
-  XAxis, YAxis, CartesianGrid,
-  Tooltip as ChartTooltip, ResponsiveContainer, AreaChart, Area,
-} from 'recharts';
-import dayjs from 'dayjs';
+import api from './api';
 
-const { Header, Content, Sider } = Layout;
+// Components
+import LoginView from './views/LoginView';
+import Sidebar from './components/layout/Sidebar';
+import DashboardOverview from './views/DashboardOverview';
+import BotsManager from './views/BotsManager';
+import ChannelsManager from './views/ChannelsManager';
+import DeviceManager from './views/DeviceManager';
+import LogsViewer from './views/LogsViewer';
+import SelfHealing from './views/SelfHealing';
+import CrayfishLoading from './components/common/CrayfishLoading';
 
-// ─── Styles & Animations ───────────────────────────────────────────────────────
-const globalStyles = `
-@keyframes crayfish-bounce {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(-10px) rotate(3deg); }
-}
-@keyframes crayfish-claws {
-  0%, 100% { transform: rotate(-5deg); }
-  50% { transform: rotate(5deg); }
-}
-@keyframes text-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-@keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-`;
+// Hooks
+import { useStatusPolling } from './hooks/useStatusPolling';
+import { useWebSocketLogs } from './hooks/useWebSocketLogs';
 
-// ─── Loading Component ─────────────────────────────────────────────────────────
-const CrayfishLoading = () => (
-  <div style={{
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    justifyContent: 'center', height: 400, gap: 24,
-  }}>
-    <div style={{
-      fontSize: 14, fontFamily: 'monospace', color: '#2563eb',
-      lineHeight: 1.2, whiteSpace: 'pre', textAlign: 'center',
-      animation: 'crayfish-bounce 2s ease-in-out infinite',
-    }}>
-{`      _   _
-     / \\_/ \\
-    (  o o  )
-     \\  ^  /
-      \\___/
-      /   \\
-     /     \\
-    (       )
-     \\_____/
-      | | |`}
-    </div>
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8
-    }}>
-      <div style={{
-        fontSize: 14, fontWeight: 700, color: '#1e293b',
-        animation: 'text-pulse 2s infinite'
-      }}>
-        OpenClaw 状态监测中
-      </div>
-      <div style={{ fontSize: 12, color: '#94a3b8' }}>
-        正在同步网关核心数据，请稍后...
-      </div>
-    </div>
-  </div>
-);
+const { Content, Sider, Header } = Layout;
 
-// ─── API ───────────────────────────────────────────────────────────────────────
-const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || '' });
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('guardian_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-// ─── Login ─────────────────────────────────────────────────────────────────────
-const LoginPage = ({ onLoginSuccess }: { onLoginSuccess: (token: string) => void }) => {
-  const [loading, setLoading] = useState(false);
-  const [isMobileLogin, setIsMobileLogin] = useState(window.innerWidth < 1024);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobileLogin(window.innerWidth < 1024);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const onFinish = async (values: { token: string }) => {
-    setLoading(true);
-    try {
-      const res = await api.post('/login', { token: values.token });
-      if (res.data.status === 'success') {
-        localStorage.setItem('guardian_token', values.token);
-        onLoginSuccess(values.token);
-        message.success('认证成功，欢迎回来');
-      }
-    } catch (err: any) {
-      message.error(err.response?.data?.error || '无效的访问凭据');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div style={{
-      display: 'flex', minHeight: '100vh', background: '#fff',
-      flexDirection: isMobileLogin ? 'column' : 'row'
-    }}>
-      {/* 左侧装饰区 (Dark, 3:2 比例中的 "3") - 移动端彻底移除 */}
-      {!isMobileLogin && (
-        <div style={{
-          flex: 3, background: '#0f172a', padding: '80px 64px',
-          display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-          position: 'relative', overflow: 'hidden'
-        }}>
-          <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0, height: '100%',
-            background: 'radial-gradient(circle at 10% 20%, rgba(37, 99, 235, 0.1) 0%, rgba(15, 23, 42, 0) 50%)',
-            pointerEvents: 'none'
-          }} />
-
-          <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ fontSize: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              🦞
-            </div>
-            <span style={{ color: '#fff', fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em' }}>Lobster Guardian</span>
-          </div>
-
-          <div style={{ position: 'relative', zIndex: 1, maxWidth: 480 }}>
-            <h1 style={{ color: '#fff', fontSize: 44, fontWeight: 900, lineHeight: 1.1, marginBottom: 28, letterSpacing: '-0.03em' }}>
-              有孚网络<br />
-              <span style={{ color: '#60a5fa' }}>监控枢纽中心</span>
-            </h1>
-            <p style={{ color: '#94a3b8', fontSize: 17, lineHeight: 1.6, marginBottom: 48 }}>
-              为您提供 OpenClaw 集群的实时拓扑视角、多维状态监测与快速自愈入口，守护核心数字资产安全。
-            </p>
-            <div style={{ display: 'flex', gap: 16 }}>
-              {['24/7 监测', '秒级告警', '一键闭环'].map(f => (
-                <div key={f} style={{
-                  background: 'rgba(255,255,255,0.05)', borderRadius: 20,
-                  padding: '8px 20px', color: '#cbd5e1', fontSize: 14,
-                  border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 8
-                }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6' }} />
-                  {f}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <p style={{ position: 'relative', zIndex: 1, color: '#475569', fontSize: 13, margin: 0 }}>
-            © {new Date().getFullYear()} Yovole Network · Infrastructure Reliability
-          </p>
-        </div>
-      )}
-
-      {/* 右侧面板 (White, 3:2 比例中的 "2") */}
-      <div style={{
-        flex: isMobileLogin ? 1 : 2, background: '#fff',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: isMobileLogin ? '40px 24px' : '64px 48px'
-      }}>
-        <div style={{ width: '100%', maxWidth: 400 }}>
-          {/* Mascot 图片 (与白色背景底衬融合) */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
-             <img
-               src="/openclaw.jpg"
-               alt="Mascot"
-               style={{ width: '100%', maxWidth: 280, height: 'auto', display: 'block' }}
-             />
-          </div>
-
-          <div style={{ marginBottom: 40, textAlign: 'center' }}>
-            <h2 style={{ fontSize: 32, fontWeight: 800, color: '#1e293b', margin: '0 0 10px', letterSpacing: '-0.02em' }}>欢迎回来</h2>
-            <p style={{ fontSize: 15, color: '#64748b', margin: 0 }}>请提供您的 Guaridan Token 凭据</p>
-          </div>
-
-          <Form layout="vertical" onFinish={onFinish} size="large">
-            <Form.Item
-              name="token"
-              label={<span style={{ fontSize: 12, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Access Token</span>}
-              rules={[{ required: true, message: '请输入访问令牌' }]}
-            >
-              <Input.Password
-                placeholder="请输入凭据密钥"
-                prefix={<KeyRound size={18} color="#94a3b8" style={{ marginRight: 8 }} />}
-                style={{ borderRadius: 12, padding: '12px 16px', background: '#f8fafc', border: '1px solid #e2e8f0' }}
-              />
-            </Form.Item>
-            <Button
-              type="primary"
-              htmlType="submit"
-              block
-              loading={loading}
-              size="large"
-              style={{
-                height: 56, borderRadius: 12, fontWeight: 800, fontSize: 16,
-                marginTop: 16, background: '#2563eb', border: 'none',
-                boxShadow: '0 10px 15px -3px rgba(37,99,235,0.3)'
-              }}
-            >
-              进入控制台
-            </Button>
-          </Form>
-
-          {isMobileLogin && (
-            <p style={{ color: '#94a3b8', fontSize: 12, textAlign: 'center', marginTop: 40 }}>
-              © {new Date().getFullYear()} Yovole Network · Operation
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ─── Dashboard ─────────────────────────────────────────────────────────────────
+// --- Dashboard Component (Internal Layout) ---------------------------------------
 const Dashboard = () => {
-  const [status, setStatus] = useState<any>(null);
-  const [history, setHistory] = useState<any[]>([]);
-  const [wsLogs, setWsLogs] = useState<string[]>([]);
-  const [botsModels, setBotsModels] = useState<any>(null);
-  const [devices, setDevices] = useState<any[]>([]);
-  const [activeTab, setActiveKey] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [collapsed, setCollapsed] = useState(window.innerWidth < 1200);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
-  const [fetching, setFetching] = useState(true);
-  const [loadingBots, setLoadingBots] = useState(false);
-  const [loadingDevices, setLoadingDevices] = useState(false);
-  const [loadingChannels, setLoadingChannels] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const isMobile = window.innerWidth < 1024;
+
+  // States
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [transitionSeconds, setTransitionSeconds] = useState(0);
   const [targetStatus, setTargetStatus] = useState<string | null>(null);
-  const [refreshCountdown, setRefreshCountdown] = useState(10);
-  const lastStatusRef = useRef<string | null>(null);
-  const [confirmModal, setConfirmModal] = useState<{ open: boolean, action: string, title: string, color: string }>({
-    open: false,
-    action: '',
-    title: '',
-    color: '#2563eb'
-  });
+  const [transitionSeconds, setTransitionSeconds] = useState(0);
   const [qrModalVisible, setQrModalVisible] = useState(false);
-  const [qrData, setQrData] = useState<{ qrcode_url: string, expires_at: string } | null>(null);
-  const [weixinStatus, setWeixinStatus] = useState<any>(null);
-  const [chatChannels, setChatChannels] = useState<any[]>([]);
-  const [loadingWeixin, setLoadingWeixin] = useState(false);
-  const [checkWeixinSeconds, setCheckWeixinSeconds] = useState(0);
+  const [qrData, setQrData] = useState<any>(null);
   const [isGettingQR, setIsGettingQR] = useState(false);
   const [qrSeconds, setQrSeconds] = useState(0);
-  const logsEndRef = useRef<HTMLDivElement>(null);
+  const [confirmModal, setConfirmModal] = useState({ open: false, title: '', action: '', color: '#2563eb' });
+  
+  const [chatChannels, setChatChannels] = useState<any>(null);
+  const [loadingChannels, setLoadingChannels] = useState(false);
+  const [weixinStatus, setWeixinStatus] = useState<any>(null);
+  const [loadingWeixin, setLoadingWeixin] = useState(false);
+  const [checkWeixinSeconds, setCheckWeixinSeconds] = useState(0);
+  const [botsModels, setBotsModels] = useState<any>(null);
+  const [loadingBots, setLoadingBots] = useState(false);
+  const [healEvents, setHealEvents] = useState<any[]>([]);
+  const [devices, setDevices] = useState<any>(null);
+  const [loadingDevices, setLoadingDevices] = useState(false);
+  const [selfHealingEnabled, setSelfHealingEnabled] = useState(false);
+  const [loadingSets, setLoadingSets] = useState(false);
 
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, []);
-
-  useEffect(() => {
-    let interval: any;
-    if (isTransitioning) {
+  // Hooks
+  const { status, history, fetching, refreshCountdown } = useStatusPolling(
+    isTransitioning, targetStatus, (status) => {
+      setIsTransitioning(false);
+      setTargetStatus(null);
       setTransitionSeconds(0);
-      interval = setInterval(() => {
-        setTransitionSeconds(s => s + 1);
-      }, 1000);
-    } else {
-      setTransitionSeconds(0);
+      message.success(`网关指令已成功生效 (当前状态: ${status})`);
     }
-    return () => clearInterval(interval);
+  );
+
+  const { wsLogs } = useWebSocketLogs(localStorage.getItem('guardian_token'));
+
+  // Side Effects
+  useEffect(() => {
+    if (isTransitioning) {
+      const timer = setInterval(() => setTransitionSeconds(s => s + 1), 1000);
+      return () => clearInterval(timer);
+    }
   }, [isTransitioning]);
 
   useEffect(() => {
-    let interval: any;
-    if (weixinStatus === null) {
-      interval = setInterval(() => {
-        setCheckWeixinSeconds(s => s + 1);
-      }, 1000);
-    } else {
-      setCheckWeixinSeconds(0);
+    if (isGettingQR) {
+      const timer = setInterval(() => setQrSeconds(s => s + 1), 1000);
+      return () => clearInterval(timer);
     }
-    return () => clearInterval(interval);
-  }, [weixinStatus]);
-
-  const fetchData = async () => {
-    try {
-      const [statusRes, historyRes] = await Promise.all([
-        api.get('/v1/openclaw/status'),
-        api.get('/v1/stats/health'),
-      ]);
-      const newStatus = statusRes.data;
-      const currentGatewayStatus = newStatus?.gateway?.status;
-
-      // 检测目标状态以解除遮罩
-      if (isTransitioning && targetStatus && currentGatewayStatus === targetStatus) {
-        setIsTransitioning(false);
-        setTargetStatus(null);
-        message.success(`网关已成功切换至 ${targetStatus === 'Running' ? '运行' : '停止'} 状态`);
-      }
-      lastStatusRef.current = currentGatewayStatus;
-
-      setStatus(newStatus);
-      setHistory(historyRes.data);
-    } catch (err) {
-      console.error('Fetch error', err);
-    } finally {
-      setFetching(false);
-    }
-  };
-
-  const fetchWeixinStatus = async () => {
-    try {
-      const res = await api.get('/v1/wechat/plugin/status');
-      setWeixinStatus(res.data);
-    } catch (err) {
-      console.error('Fetch weixin status error', err);
-    }
-  };
-
-  const handleInstallWeixin = async () => {
-    try {
-      setLoadingWeixin(true);
-      await api.post('/v1/wechat/install');
-      message.loading('微信插件安装指令已发出，请稍候约 30-60s...', 5);
-      // 延时刷新状态
-      setTimeout(fetchWeixinStatus, 30000);
-    } catch (err) {
-      message.error('安装指令发送失败');
-    } finally {
-      setLoadingWeixin(false);
-    }
-  };
+  }, [isGettingQR]);
 
   useEffect(() => {
-    let timer: any;
-    if (isTransitioning) {
-      // 转换期间：2秒快速轮询，不显示倒计时
-      timer = setInterval(fetchData, 2000);
-      setRefreshCountdown(0);
-    } else {
-      // 正常期间：10秒倒计时
-      setRefreshCountdown(10);
-      timer = setInterval(() => {
-        setRefreshCountdown(prev => {
-          if (prev <= 1) {
-            fetchData();
-            fetchWeixinStatus();
-            return 10;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    if (activeTab === 'bots-models') fetchBotsModels();
+    if (activeTab === 'components') {
+      fetchChatChannels();
+      checkWeixinPlugin();
     }
-    return () => clearInterval(timer);
-  }, [isTransitioning]);
+    if (activeTab === 'devices') fetchDevices();
+    if (activeTab === 'tools') fetchSelfHealing();
+  }, [activeTab]);
 
-  const fetchBotsModels = async () => {
+  // Methods
+  const fetchBotsModels = async (force = false) => {
+    setLoadingBots(true);
     try {
-      setLoadingBots(true);
-      const res = await api.get('/v1/openclaw/bots-models');
+      const res = await api.get(`/v1/openclaw/bots-models${force ? '?refresh=true' : ''}`);
       setBotsModels(res.data);
-    } catch (err) {
-      console.error('Fetch bots error', err);
+      if (force) message.success('资产清单已强制同步并更新');
+    } catch (e) {
+      message.error('同步 OpenClaw 资产失败');
     } finally {
       setLoadingBots(false);
     }
   };
 
-  const fetchDevices = async () => {
+  const fetchChatChannels = async (force = false) => {
+    setLoadingChannels(true);
     try {
-      setLoadingDevices(true);
-      const res = await api.get('/v1/openclaw/devices');
-      setDevices(res.data);
-    } catch (err) {
-      console.error('Fetch devices error', err);
-    } finally {
-      setLoadingDevices(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData(); // 初始加载
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === 'bots-models') {
-      fetchBotsModels();
-    } else if (activeTab === 'devices') {
-      fetchDevices();
-    }
-  }, [activeTab]);
-
-  useEffect(() => {
-    const tokenStr = localStorage.getItem('guardian_token');
-    if (!tokenStr) return;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const wsUrl = import.meta.env.DEV
-      ? `ws://localhost:3000/v1/ws/logs?token=${tokenStr}`
-      : `${protocol}//${host}/v1/ws/logs?token=${tokenStr}`;
-    const socket = new WebSocket(wsUrl);
-    socket.onmessage = (event) => setWsLogs((prev) => [...prev.slice(-200), event.data]);
-    return () => socket.close();
-  }, []);
-
-  useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [wsLogs]);
-
-  const handleControl = (action: string) => {
-    const config: Record<string, { title: string, color: string }> = {
-      'start': { title: '启动 OpenClaw 网关', color: '#2563eb' },
-      'stop': { title: '停止 OpenClaw 网关', color: '#ef4444' },
-      'restart': { title: '重启 OpenClaw 网关', color: '#6366f1' },
-      'wechat': { title: '获取微信登录码', color: '#16a34a' },
-    };
-    setConfirmModal({
-      open: true,
-      action,
-      title: config[action].title,
-      color: config[action].color
-    });
-  };
-
-  const [selfHealingEnabled, setSelfHealingEnabled] = useState(false);
-  const [healEvents, setHealEvents] = useState<any[]>([]);
-  const [loadingSets, setLoadingSets] = useState(false);
-
-  const fetchSelfHealingStatus = async () => {
-    try {
-      const res = await api.get('/v1/settings/self-healing');
-      setSelfHealingEnabled(res.data.enabled);
-    } catch (err) {
-      console.error('Failed to fetch self-healing status', err);
-    }
-  };
-
-  const fetchHealEvents = async () => {
-    try {
-      const res = await api.get('/v1/heal/events');
-      setHealEvents(res.data);
-    } catch (err) {
-      console.error('Failed to fetch heal events', err);
-    }
-  };
-
-  const toggleSelfHealing = async (checked: boolean) => {
-    setLoadingSets(true);
-    try {
-      await api.post('/v1/settings/self-healing', { enabled: checked });
-      setSelfHealingEnabled(checked);
-      message.success(`自愈服务已${checked ? '开启' : '禁用'}`);
-    } catch (err) {
-      message.error('操作失败，请重试');
-    } finally {
-      setLoadingSets(false);
-    }
-  };
-
-  const handleApproveDevice = async (requestId: string) => {
-    try {
-      setLoadingDevices(true);
-      await api.post('/v1/openclaw/devices/approve', { requestId });
-      message.success('设备已成功批准');
-      fetchDevices(); // 刷新列表
-    } catch (err: any) {
-      console.error('Approve device error', err);
-      message.error(`批准失败: ${err.response?.data?.error || err.message}`);
-    } finally {
-      setLoadingDevices(false);
-    }
-  };
-
-  const fetchChatChannels = async () => {
-    try {
-      setLoadingChannels(true);
-      const res = await api.get('/v1/wechat/config/status');
+      const res = await api.get(`/v1/openclaw/chat-channels${force ? '?refresh=true' : ''}`);
       setChatChannels(res.data);
-    } catch (err) {
-      console.error('Fetch channels error', err);
+    } catch (e) {
+      message.error('同步渠道信息失败');
     } finally {
       setLoadingChannels(false);
     }
   };
 
-  useEffect(() => {
-    if (activeTab === 'tools') {
-      fetchSelfHealingStatus();
-      fetchHealEvents();
-    }
-    if (activeTab === 'components') {
-      fetchWeixinStatus();
-      fetchChatChannels();
-    }
-    if (activeTab === 'bots-models') {
-      fetchBotsModels();
-    }
-    if (activeTab === 'devices') {
-      fetchDevices();
-    }
-  }, [activeTab]);
+  const checkWeixinPlugin = async () => {
+    setCheckWeixinSeconds(0);
+    const check = async () => {
+      try {
+        const res = await api.get('/v1/openclaw/plugins/weixin/status');
+        setWeixinStatus(res.data);
+      } catch (e) {}
+    };
+    check();
+    const timer = setInterval(() => {
+      setCheckWeixinSeconds(s => s + 1);
+      check();
+    }, 5000);
+    return () => clearInterval(timer);
+  };
 
-  const fetchWeChatQRCode = async () => {
-    if (isGettingQR) return;
-    
-    setIsGettingQR(true);
-    setQrSeconds(0);
-    const interval = setInterval(() => {
-      setQrSeconds(s => s + 1);
-    }, 1000);
-
+  const fetchDevices = async (force = false) => {
+    setLoadingDevices(true);
     try {
-      const res = await api.get('/v1/wechat/qrcode?force=true');
-      if (res.data && res.data.qrcode_url) {
-        setQrData(res.data);
-        setQrModalVisible(true);
-      } else {
-        message.warning('无法解析到二维码，请检查后端日志或确保微信插件已正确配置');
-      }
-    } catch (err: any) {
-      message.error('获取微信授权码失败: ' + (err.response?.data?.error || '网络连接超时'));
+      const res = await api.get(`/v1/openclaw/devices${force ? '?refresh=true' : ''}`);
+      setDevices(res.data);
+    } catch (err) {
+      message.error('同步设备清单失败');
     } finally {
-      clearInterval(interval);
-      setIsGettingQR(false);
+      setLoadingDevices(false);
     }
+  };
+
+  const fetchSelfHealing = async () => {
+    try {
+      const [historyRes, settingsRes] = await Promise.all([
+        api.get('/v1/openclaw/self-healing/history'),
+        api.get('/v1/openclaw/self-healing/settings')
+      ]);
+      setHealEvents(historyRes.data?.events || []);
+      setSelfHealingEnabled(settingsRes.data?.enabled || false);
+    } catch (err) {}
+  };
+
+  const handleControl = (action: string) => {
+    const config: any = {
+      start: { title: '启动网关核心', color: '#22c55e' },
+      stop: { title: '停止运行网关', color: '#ef4444' },
+      restart: { title: '重启网关核心', color: '#3b82f6' },
+      wechat: { title: '请求微信登录码', color: '#16a34a' }
+    };
+    setConfirmModal({ open: true, action, ...config[action] });
   };
 
   const executeControl = async () => {
     const { action } = confirmModal;
     setConfirmModal(prev => ({ ...prev, open: false }));
-    
+
     if (action === 'wechat') {
-      fetchWeChatQRCode();
+      setIsGettingQR(true);
+      setQrSeconds(0);
+      try {
+        const res = await api.post('/v1/openclaw/plugins/weixin/login');
+        setQrData(res.data);
+        setQrModalVisible(true);
+      } catch (err: any) {
+        message.error(err.response?.data?.error || '获取二维码失败');
+      } finally {
+        setIsGettingQR(false);
+      }
       return;
     }
 
-    // 根据动作预设目标状态
-    if (action === 'start' || action === 'restart') {
-      setTargetStatus('Running');
-    } else if (action === 'stop') {
-      setTargetStatus('Stopped');
-    }
-    
-    setIsTransitioning(true); // 开启遮罩
     try {
       await api.post(`/v1/gateway/${action}`);
-      message.loading(`正在执行 ${action} 指令...`, 2);
+      setIsTransitioning(true);
+      setTargetStatus(action === 'stop' ? 'stopped' : 'running');
+      setTransitionSeconds(0);
     } catch (err: any) {
-      setIsTransitioning(false);
-      message.error(`执行失败: ${err.response?.data?.error || '未知网络错误'}`);
+      message.error(err.response?.data?.error || '网关指令发送失败');
     }
   };
+
+  const handleInstallWeixin = async () => {
+    setLoadingWeixin(true);
+    try {
+      await api.post('/v1/openclaw/plugins/weixin/install');
+      message.loading('正在安装微信插件，请勿刷新...', 0);
+      setTimeout(() => {
+        message.destroy();
+        message.success('插件安装指令已发送');
+        checkWeixinPlugin();
+      }, 3000);
+    } catch (err: any) {
+      message.error(err.response?.data?.error || '安装失败');
+    } finally {
+      setLoadingWeixin(false);
+    }
+  };
+
+  const handleApproveDevice = async (requestId: string) => {
+    try {
+      await api.post(`/v1/openclaw/devices/approve/${requestId}`);
+      message.success('设备已批准接入');
+      fetchDevices();
+    } catch (err: any) {
+      message.error(err.response?.data?.error || '操作失败');
+    }
+  };
+
+  const toggleSelfHealing = async (enabled: boolean) => {
+    setLoadingSets(true);
+    try {
+      await api.post('/v1/openclaw/self-healing/settings', { enabled });
+      setSelfHealingEnabled(enabled);
+      message.success(enabled ? '自动自愈已开启' : '自愈服务已禁用');
+    } catch (err) {
+      message.error('设置更新失败');
+    } finally {
+      setLoadingSets(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('guardian_token');
+    window.location.reload();
+  };
+
+  const isRunning = status?.gateway?.status === 'running';
 
   const navItems = [
-    { key: 'dashboard', icon: <LayoutDashboard size={16} />, label: '系统概览' },
-    { key: 'bots-models', icon: <Command size={16} />, label: '虾兵蟹将' },
-    { key: 'components', icon: <Boxes size={16} />, label: '渠道绑定' },
-    { key: 'devices', icon: <Smartphone size={16} />, label: '设备绑定' },
-    { key: 'logs', icon: <Terminal size={16} />, label: '实时日志' },
-    { key: 'tools', icon: <Zap size={16} />, label: '自愈管理' },
-    { key: 'external', icon: <ExternalLink size={16} />, label: '龙虾面板' },
+    { key: 'dashboard', label: '运行状态', icon: <LayoutDashboard size={14} /> },
+    { key: 'bots-models', label: '虾兵蟹将', icon: <Boxes size={14} /> },
+    { key: 'components', label: '插件渠道', icon: <ToyBrick size={14} /> },
+    { key: 'devices', label: '设备资产', icon: <Smartphone size={14} /> },
+    { key: 'logs', label: '终端日志', icon: <Terminal size={14} /> },
+    { key: 'tools', label: '自动修复', icon: <Zap size={14} /> },
   ];
 
-  const isRunning = status?.gateway?.status === 'Running';
-
-  const handleOpenExternal = async () => {
-    const hide = message.loading('正在获取面板授权地址，请稍候...', 0);
-    try {
-      const res = await api.get('/v1/openclaw/dashboard-url');
-      hide();
-      if (res.data.url) {
-        window.open(res.data.url, '_blank');
-      }
-    } catch (err) {
-      hide();
-      message.error('获取面板地址失败，请确认网关是否在线');
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard': return <DashboardOverview status={status} history={history} isRunning={isRunning} onControl={handleControl} />;
+      case 'bots-models': return <BotsManager botsModels={botsModels} loadingBots={loadingBots} isMobile={isMobile} onRefresh={() => fetchBotsModels(true)} />;
+      case 'components': return (
+        <ChannelsManager 
+          chatChannels={chatChannels} weixinStatus={weixinStatus} loadingChannels={loadingChannels} 
+          loadingWeixin={loadingWeixin} checkWeixinSeconds={checkWeixinSeconds}
+          isGettingQR={isGettingQR} onInstallWeixin={handleInstallWeixin} onGetQRCode={() => handleControl('wechat')}
+        />
+      );
+      case 'devices': return <DeviceManager devices={devices} loadingDevices={loadingDevices} onApproveDevice={handleApproveDevice} />;
+      case 'logs': return <LogsViewer wsLogs={wsLogs} />;
+      case 'tools': return <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} />;
+      default: return null;
     }
   };
 
-  const sidebarContent = (onSelect?: () => void) => (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Logo */}
-      <div style={{
-        height: 56, display: 'flex', alignItems: 'center',
-        borderBottom: '1px solid rgba(51,65,85,0.6)',
-        padding: collapsed && !onSelect ? '0 18px' : '0 20px', gap: 10,
-        overflow: 'hidden', whiteSpace: 'nowrap',
-      }}>
-        <div style={{ fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          🦞
-        </div>
-        {(!collapsed || onSelect) && (
-          <span style={{ color: '#fff', fontWeight: 700, fontSize: 14, letterSpacing: '-0.01em' }}>
-            Lobster Guardian
-          </span>
-        )}
-      </div>
+  if (fetching && !status) return <CrayfishLoading />;
 
-      {/* Nav */}
-      <div style={{ padding: '12px 0', flex: 1, overflowY: 'auto' }}>
-        {(!collapsed || onSelect) && (
-          <div style={{ padding: '4px 20px 8px', fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.15em' }}>
-            Monitor
+  const transitionMask = isTransitioning && (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(8px)',
+      zIndex: 9999, display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', padding: 20
+    }}>
+      <div style={{
+        padding: isMobile ? '24px 20px' : '32px 40px', 
+        background: '#fff', borderRadius: 24,
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20,
+        width: isMobile ? '100%' : 'auto', maxWidth: 340, minWidth: isMobile ? 0 : 320
+      }}>
+        <Spin size="large" />
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>正在同步网关状态</div>
+          <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>指令已确认，正在等待网关反馈状态...</div>
+          <div style={{
+            marginTop: 16, padding: '6px 16px', background: '#eff6ff',
+            borderRadius: 20, fontSize: 13, color: '#2563eb',
+            fontWeight: 700, display: 'inline-block', border: '1px solid #dbeafe'
+          }}>
+            已等待 {transitionSeconds}s
+          </div>
+        </div>
+        {transitionSeconds > 60 && (
+          <div style={{ marginTop: 8, display: 'flex', gap: 12, width: '100%', paddingTop: 20, borderTop: '1px solid #f1f5f9' }}>
+            <Button block onClick={() => setIsTransitioning(false)}>关闭遮罩</Button>
+            <Button block type="primary" icon={<RefreshCw size={14} />} onClick={() => window.location.reload()}>强制刷新</Button>
           </div>
         )}
-        <Menu
-          mode="inline"
-          selectedKeys={[activeTab]}
-          onClick={({ key }) => { 
-            if (key === 'external') {
-              handleOpenExternal();
-              return;
-            }
-            setActiveKey(key); 
-            onSelect?.(); 
-          }}
-          items={navItems}
-          theme="dark"
-          className="border-none"
-          style={{ background: 'transparent', padding: '0 8px' }}
-        />
-      </div>
-
-      {/* Logout */}
-      <div style={{ padding: '0 8px 16px', borderTop: '1px solid rgba(51,65,85,0.3)' }}>
-        <Tooltip title={collapsed && !onSelect ? '退出登录' : ''} placement="right">
-          <Button
-            block
-            icon={<LogOut size={14} />}
-            onClick={() => { localStorage.removeItem('guardian_token'); window.location.reload(); }}
-            style={{
-              background: 'transparent', border: '1px solid #334155',
-              color: '#64748b', height: 38, borderRadius: 8,
-              display: 'flex', alignItems: 'center',
-              justifyContent: collapsed && !onSelect ? 'center' : 'flex-start',
-              paddingLeft: collapsed && !onSelect ? 0 : 12, gap: 8,
-            }}
-          >
-            {(!collapsed || onSelect) && <span style={{ fontSize: 12 }}>退出登录</span>}
-          </Button>
-        </Tooltip>
       </div>
     </div>
   );
 
-  const renderContent = () => {
-    if (fetching && !status) return <CrayfishLoading />;
-
-    switch (activeTab) {
-      case 'dashboard':
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <Row gutter={[20, 20]}>
-              <Col xs={24} lg={12}>
-                <Card styles={{ body: { padding: 24 } }} style={{ height: '100%', borderRadius: 12, border: '1px solid #e2e8f0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: 13, fontWeight: 500 }}>
-                      <Server size={15} color={isRunning ? '#22c55e' : '#ef4444'} />
-                      网关核心状态
-                    </div>
-                    <Tag color={isRunning ? 'success' : 'error'} style={{ borderRadius: 20, border: 'none', margin: 0, fontWeight: 600, padding: '0 10px' }}>
-                      {isRunning ? '运行中' : '已停止'}
-                    </Tag>
-                  </div>
-                  <div style={{ marginBottom: 20 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
-                      <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>运行时长</div>
-                      <div style={{ fontSize: 10, color: '#10b981', fontWeight: 600, fontFamily: 'monospace' }}>{status?.version}</div>
-                    </div>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: '#1e293b', fontFamily: 'monospace', wordBreak: 'break-all', lineHeight: 1.3 }}>
-                      {status?.gateway?.runtime || '—'}
-                    </div>
-                  </div>
-                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16, display: 'grid', gridTemplateColumns: '0.8fr 1fr 1.2fr', gap: 12 }}>
-                    <div>
-                      <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>PID</div>
-                      <div style={{ fontFamily: 'monospace', color: '#334155', fontWeight: 600, fontSize: 13 }}>{status?.gateway?.pid || '—'}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>最近更新</div>
-                      <div style={{ fontFamily: 'monospace', color: '#64748b', fontSize: 13 }}>{dayjs().format('HH:mm:ss')}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>系统安装于</div>
-                      <div style={{ 
-                        fontFamily: 'monospace', 
-                        color: '#64748b', 
-                        fontSize: window.innerWidth < 768 ? 10 : 12,
-                        whiteSpace: 'nowrap' 
-                      }}>
-                        {window.innerWidth < 768 ? (status?.installed_at?.split(' ')[0] || '—') : (status?.installed_at || '—')}
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              </Col>
-              <Col xs={24} lg={12}>
-                <Card
-                  title={<span style={{ fontSize: 13, fontWeight: 500, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}><Activity size={15} color="#3b82f6" />响应延迟统计（近 24 小时）</span>}
-                  styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 52 }, body: { padding: '12px 20px 16px' } }}
-                  style={{ height: '100%', borderRadius: 12, border: '1px solid #e2e8f0' }}
-                >
-                  <div style={{ height: 160 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={history}>
-                        <defs>
-                          <linearGradient id="colorL" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
-                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="timestamp" hide />
-                        <YAxis hide />
-                        <ChartTooltip
-                          contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: 12 }}
-                          labelFormatter={(v) => dayjs(v).format('HH:mm:ss')}
-                          formatter={(v: any) => [v + ' ms', '响应时间']}
-                        />
-                        <Area type="monotone" dataKey="response_time_ms" stroke="#3b82f6" strokeWidth={2} fill="url(#colorL)" dot={false} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Card>
-              </Col>
-            </Row>
-            
-            <Row style={{ marginTop: 20 }}>
-              <Col span={24}>
-                <Card
-                  title={<span style={{ fontSize: 13, fontWeight: 500, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}><Cpu size={15} color="#8b5cf6" /> 服务器负载监控</span>}
-                  styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 48 }, body: { padding: '24px 20px' } }}
-                  style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
-                >
-                  <Row gutter={24} justify="space-around">
-                    <Col span={8} style={{ textAlign: 'center' }}>
-                      <Progress type="dashboard" percent={Math.round(status?.metrics?.cpu_usage || 0)} size={window.innerWidth < 768 ? 60 : 80} strokeColor="#ef4444" />
-                      <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500, marginTop: 8 }}>CPU 使用率</div>
-                    </Col>
-                    <Col span={8} style={{ textAlign: 'center' }}>
-                      <Progress type="dashboard" percent={Math.round(status?.metrics?.memory_usage || 0)} size={window.innerWidth < 768 ? 60 : 80} strokeColor="#3b82f6" />
-                      <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500, marginTop: 8 }}>内存占用率</div>
-                    </Col>
-                    <Col span={8} style={{ textAlign: 'center' }}>
-                      <Progress type="dashboard" percent={Math.round(status?.metrics?.disk_usage || 0)} size={window.innerWidth < 768 ? 60 : 80} strokeColor="#d946ef" />
-                      <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500, marginTop: 8 }}>磁盘利用率</div>
-                    </Col>
-                  </Row>
-                </Card>
-              </Col>
-            </Row>
-
-            <Card
-              style={{ marginTop: 20, borderRadius: 12, border: '1px solid #e2e8f0' }}
-              title={<span style={{ fontSize: 13, fontWeight: 500, color: '#475569' }}>快捷操作</span>}
-              styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 52 }, body: { padding: '16px 24px' } }}
-            >
-              <div style={{ 
-                display: 'flex', 
-                flexWrap: 'wrap', 
-                gap: 12,
-                width: '100%'
-              }}>
-                <Button
-                  type="primary"
-                  size="large"
-                  icon={<Play size={14} />}
-                  onClick={() => handleControl('start')}
-                  disabled={isRunning}
-                  style={{ 
-                    fontWeight: 500, 
-                    flex: window.innerWidth < 768 ? '1 1 calc(50% - 6px)' : 'none',
-                    minWidth: window.innerWidth < 768 ? 0 : 120
-                  }}
-                >
-                  启动网关
-                </Button>
-                <Button
-                  danger
-                  size="large"
-                  icon={<Square size={14} />}
-                  onClick={() => handleControl('stop')}
-                  disabled={!isRunning}
-                  style={{ 
-                    fontWeight: 500, 
-                    flex: window.innerWidth < 768 ? '1 1 calc(50% - 6px)' : 'none',
-                    minWidth: window.innerWidth < 768 ? 0 : 120
-                  }}
-                >
-                  停止网关
-                </Button>
-                <Button
-                  size="large"
-                  icon={<RefreshCw size={14} />}
-                  onClick={() => handleControl('restart')}
-                  style={{ 
-                    fontWeight: 500, 
-                    flex: window.innerWidth < 768 ? '1 1 100%' : 'none',
-                    minWidth: window.innerWidth < 768 ? 0 : 120
-                  }}
-                >
-                  重启网关
-                </Button>
-              </div>
-            </Card>
-            {/* 自定义确认弹窗已迁移至全局，此处移除 */}
-          </div>
-        );
-
-      case 'bots-models':
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 16 : 24, animation: 'fade-in-up 0.4s ease-out' }}>
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: 8
-            }}>
-              <div>
-                <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800, color: '#1e293b', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
-                  虾兵蟹将
-                  {loadingBots && <Spin size="small" />}
-                </div>
-                <div style={{ color: '#64748b', fontSize: 12 }}>{isMobile ? '当前配置的机器人与模型资产' : '当前 OpenClaw 实例中配置的机器人与 AI 模型资产'}</div>
-              </div>
-              <Button 
-                type="primary" 
-                ghost 
-                icon={<RefreshCw size={14} className={loadingBots ? 'animate-spin' : ''} />} 
-                onClick={fetchBotsModels}
-                loading={loadingBots}
-                style={{ borderRadius: 8, height: isMobile ? 32 : 36, padding: isMobile ? '0 12px' : '0 16px' }}
-              >
-                {!isMobile && '刷新'}
-              </Button>
-            </div>
-
-            {loadingBots && !botsModels ? (
-              <Card style={{ borderRadius: 16, border: '1px solid #e2e8f0' }}>
-                <div style={{ padding: isMobile ? '60px 0' : '80px 0', textAlign: 'center' }}>
-                  <Spin tip="正在同步 OpenClaw 资产清单..." />
-                </div>
-              </Card>
-            ) : (
-              <Row gutter={[isMobile ? 16 : 24, isMobile ? 16 : 24]}>
-                <Col span={24}>
-                  <Card
-                    title={<span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: isMobile ? 14 : 16 }}><Boxes size={18} /> 小龙虾们 (Bots)</span>}
-                    styles={{ body: { padding: isMobile ? '8px 16px' : '12px 24px' } }}
-                    style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
-                  >
-                    <List
-                      dataSource={botsModels?.bots || []}
-                      renderItem={(bot: any) => (
-                        <List.Item style={{ padding: isMobile ? '16px 0' : '24px 0', borderBottom: '1px solid #f1f5f9' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 16 }}>
-                              <div style={{ fontSize: isMobile ? 24 : 32 }}>{bot.emoji || '🤖'}</div>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-                                  <span style={{ fontWeight: 800, color: '#1e293b', fontSize: isMobile ? 14 : 16 }}>{bot.id}</span>
-                                  {bot.name && <Tag color="default" style={{ borderRadius: 6, fontSize: 10, margin: 0 }}>{bot.name}</Tag>}
-                                </div>
-                                <div style={{ color: '#64748b', fontSize: 11, marginTop: 4 }}>
-                                  <span style={{ display: isMobile ? 'none' : 'inline' }}>关联模型: </span>
-                                  <Tag color="blue" style={{ borderRadius: 4, margin: 0, scale: '0.8', transformOrigin: 'left' }}>{bot.model}</Tag>
-                                </div>
-                              </div>
-                              <div style={{ textAlign: 'right' }}>
-                                <Tag color="success" style={{ borderRadius: 12, padding: isMobile ? '0 8px' : '0 12px', fontSize: 10 }}>运行中</Tag>
-                                {!isMobile && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{bot.routingRules || 0} 条规则</div>}
-                              </div>
-                            </div>
-                            
-                            <div style={{ 
-                              display: 'grid', 
-                              gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(240px, 1fr))', 
-                              gap: isMobile ? 8 : 12, 
-                              background: '#f8fafc', 
-                              padding: 12, 
-                              borderRadius: 12,
-                              fontSize: 11
-                            }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b' }}>
-                                <Server size={12} style={{ opacity: 0.6 }} />
-                                <span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>工作区:</span>
-                                <code style={{ color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bot.workspace || '-'}</code>
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b' }}>
-                                <Boxes size={12} style={{ opacity: 0.6 }} />
-                                <span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>实例目录:</span>
-                                <code style={{ color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bot.agentDir || '-'}</code>
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b' }}>
-                                <Activity size={12} style={{ opacity: 0.6 }} />
-                                <span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>路由策略:</span>
-                                <span style={{ color: '#0f172a' }}>{bot.routing || 'default'}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </List.Item>
-                      )}
-                      locale={{ emptyText: <div style={{ padding: '32px 0', color: '#94a3b8' }}>暂未配置机器人</div> }}
-                    />
-                  </Card>
-                </Col>
-
-                <Col span={24}>
-                  <Card
-                    title={<span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: isMobile ? 14 : 16 }}><Cpu size={18} /> 模型军团 (Models)</span>}
-                    styles={{ body: { padding: isMobile ? '8px 16px' : '12px 24px' } }}
-                    style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
-                  >
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '12px 0' }}>
-                      {botsModels?.models && botsModels.models.length > 0 ? botsModels.models.map((m: any) => (
-                        <div key={m.id} style={{
-                          background: '#f8fafc', padding: isMobile ? '8px 12px' : '12px 16px', borderRadius: 12, border: '1px solid #f1f5f9',
-                          flex: isMobile ? '1 1 calc(50% - 8px)' : '0 0 auto', minWidth: isMobile ? 140 : 200, display: 'flex', flexDirection: 'column', gap: 4
-                        }}>
-                          <div style={{ fontWeight: 600, color: '#334155', fontSize: isMobile ? 12 : 14, overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name}</div>
-                          <div style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, color: '#94a3b8' }}>
-                            <Cloud size={10} /> {m.provider}
-                          </div>
-                        </div>
-                      )) : (
-                        <div style={{ textAlign: 'center', width: '100%', padding: '32px 0', color: '#94a3b8' }}>暂未配置模型</div>
-                      )}
-                      </div>
-                      </Card>
-                      </Col>
-                      </Row>
-                      )}
-                      </div>
-                      );
-      case 'components':
-        const configuredChannels = chatChannels.filter(c => c.configured);
-        const hasWeixinConfig = configuredChannels.some(c => c.name.toLowerCase().includes('weixin'));
-
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {/* 已绑定渠道概览 */}
-            <Card
-              title={<span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#475569' }}><CheckCircle size={14} /> 已绑定渠道</span>}
-              styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 40 }, body: { padding: '16px 20px' } }}
-              style={{ 
-                borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 20, 
-                background: '#f8fafc', animation: 'fade-in-up 0.5s ease-out 0.1s forwards', 
-                opacity: 0 // 开始时透明
-              }}
-            >
-              {loadingChannels && chatChannels.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '12px 0' }}>
-                  <Spin size="small" tip="正在同步渠道信息..." />
-                </div>
-              ) : configuredChannels.length === 0 ? (
-                <div style={{ color: '#94a3b8', fontSize: 12, textAlign: 'center', padding: '12px 0' }}>
-                  暂无已绑定渠道，请在下方选择插件进行配置
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {configuredChannels.map(c => (
-                    <Tag key={c.name} color="blue" icon={<CheckCircle size={10} />} style={{ borderRadius: 4, padding: '2px 8px' }}>
-                      {c.name}
-                    </Tag>
-                  ))}
-                </div>
-              )}
-            </Card>
-
-            {/* 微信插件状态卡片 */}
-            <Card
-              styles={{ body: { padding: 20 } }}
-              style={{ 
-                borderRadius: 12, border: '1px solid #e2e8f0',
-                animation: 'fade-in-up 0.5s ease-out 0.2s forwards',
-                opacity: 0
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <div style={{ padding: 12, background: '#eef2ff', borderRadius: 12, flexShrink: 0 }}><Cloud size={24} color="#4f46e5" /></div>
-                  <div>
-                    <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 15, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      微信官方插件 (openclaw-weixin)
-                      {weixinStatus === null ? (
-                        <Tag color="processing" icon={<RefreshCw size={10} style={{ animation: 'spin 2s linear infinite' }} />} style={{ borderRadius: 4, fontSize: 11 }}>监测中 ({checkWeixinSeconds}s)</Tag>
-                      ) : weixinStatus.installed ? (
-                        <Tag color="success" style={{ borderRadius: 4, fontSize: 11 }}>已安装 v{weixinStatus.version}</Tag>
-                      ) : (
-                        <Tag color="error" style={{ borderRadius: 4, fontSize: 11 }}>未安装</Tag>
-                      )}
-                    </div>
-                    <div style={{ color: '#64748b', fontSize: 12 }}>
-                      {weixinStatus === null 
-                        ? '正在连接插件系统并检索状态...'
-                        : weixinStatus.installed 
-                          ? (
-                            <span>
-                              运行状态: {weixinStatus.status} (已托管至配置中心)
-                              {weixinStatus.last_check && (
-                                <span style={{ marginLeft: 8, opacity: 0.6 }}>
-                                  [上次检测: {dayjs(weixinStatus.last_check).format('HH:mm:ss')}]
-                                </span>
-                              )}
-                            </span>
-                          )
-                          : '核心组件缺失，需完成安装后方可获取登录码'}
-                    </div>
-                  </div>
-                </div>
-                {weixinStatus !== null && !weixinStatus.installed && (
-                  <Button 
-                    type="primary" 
-                    icon={<Zap size={14} />} 
-                    loading={loadingWeixin}
-                    onClick={handleInstallWeixin}
-                    style={{ borderRadius: 8, height: 36 }}
-                  >
-                    一键安装插件
-                  </Button>
-                )}
-              </div>
-            </Card>
-
-            {/* 微信登录卡片优化 */}
-            <div style={{ 
-              animation: 'fade-in-up 0.5s ease-out 0.3s forwards',
-              opacity: 0 
-            }}>
-              {hasWeixinConfig && (
-                <div style={{ 
-                  background: '#fffbeb', color: '#b45309', fontSize: 11, 
-                  padding: '8px 20px', borderRadius: '12px 12px 0 0', 
-                  border: '1px solid #fef3c7', borderBottom: 'none',
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  fontWeight: 600, width: '100%'
-                }}>
-                  <AlertCircle size={14} /> 已经绑定过微信，重复绑定则覆盖之前的配置
-                </div>
-              )}
-              <Card
-                onClick={() => {
-                  if (isGettingQR) return;
-                  if (!weixinStatus?.installed) {
-                    message.warning('请先完成微信插件安装');
-                    return;
-                  }
-                  handleControl('wechat');
-                }}
-                styles={{ body: { padding: 20 } }}
-                style={{ 
-                  borderRadius: hasWeixinConfig ? '0 0 12px 12px' : 12, border: '1px solid #e2e8f0', 
-                  cursor: (weixinStatus?.installed && !isGettingQR) ? 'pointer' : 'not-allowed', 
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  background: weixinStatus?.installed ? 'white' : '#f8fafc',
-                  opacity: (weixinStatus?.installed && !isGettingQR) ? 1 : 0.6,
-                  transform: (weixinStatus?.installed && !isGettingQR) ? 'none' : 'scale(0.995)',
-                  boxShadow: (weixinStatus?.installed && !isGettingQR) ? '0 1px 2px rgba(0,0,0,0.03)' : 'none'
-                }}
-                hoverable={weixinStatus?.installed && !isGettingQR}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <div style={{ 
-                      padding: 12, 
-                      background: weixinStatus?.installed ? '#f0fdf4' : '#f1f5f9', 
-                      borderRadius: 12, 
-                      flexShrink: 0,
-                      transition: 'all 0.3s'
-                    }}>
-                      <Smartphone size={24} color={weixinStatus?.installed ? '#16a34a' : '#94a3b8'} />
-                    </div>
-                    <div>
-                      <div style={{ 
-                        fontWeight: 700, 
-                        color: weixinStatus?.installed ? '#1e293b' : '#64748b', 
-                        fontSize: 15, 
-                        marginBottom: 4,
-                        transition: 'all 0.3s'
-                      }}>
-                        获取微信登录码
-                      </div>
-                      <div style={{ color: '#64748b', fontSize: 12 }}>生成用于身份授权的微信二维码，用于绑定个人微信，有效期 5 分钟</div>
-                    </div>
-                  </div>
-                  {weixinStatus?.installed && (
-                    <div style={{ 
-                      color: '#16a34a', 
-                      fontSize: 12, 
-                      fontWeight: 500, 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: 4 
-                    }}>
-                      立即获取 <RefreshCw size={12} />
-                    </div>
-                  )}
-                </div>
-              </Card>
-            </div>
-          </div>
-        );
-
-      case 'logs':
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', background: '#0d1117', borderRadius: 12, overflow: 'hidden', border: '1px solid #21262d', height: 'calc(100vh - 160px)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: '#161b22', borderBottom: '1px solid #21262d', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(255,95,86,0.7)' }} />
-                  <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(255,189,46,0.7)' }} />
-                  <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(39,201,63,0.7)' }} />
-                </div>
-                <span style={{ color: '#8b949e', fontSize: 12, fontFamily: 'monospace' }}>guardian.log</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', animation: 'pulse 2s infinite' }} />
-                <span style={{ color: '#22c55e', fontSize: 10, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Live</span>
-              </div>
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: 16, fontFamily: 'monospace', fontSize: 12, color: '#c9d1d9', lineHeight: 1.6 }}>
-              {wsLogs.length === 0 ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#484f58', height: '100%', justifyContent: 'center' }}>
-                  <Spin size="small" />正在连接日志流...
-                </div>
-              ) : wsLogs.map((log, i) => (
-                <div key={i} style={{ display: 'flex', gap: 12 }}>
-                  <span style={{ color: '#30363d', width: 28, textAlign: 'right', flexShrink: 0, userSelect: 'none' }}>
-                    {(i + 1).toString().padStart(3, '0')}
-                  </span>
-                  <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{log}</span>
-                </div>
-              ))}
-              <div ref={logsEndRef} />
-            </div>
-          </div>
-        );
-
-      case 'devices':
-        const pendingDevices = devices.filter(d => d.status === 'pending');
-        const pairedDevices = devices.filter(d => d.status === 'paired');
-
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {/* 1. 待批准设备请求 */}
-            <Card
-              title={<span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={20} color="#f59e0b" /> 待处理连接请求</span>}
-              styles={{ body: { padding: '0 24px' } }}
-              style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
-            >
-              <div style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9', marginBottom: 0, color: '#64748b', fontSize: 13 }}>
-                以下设备正在请求接入 OpenClaw，请审核并决定是否批准授权。
-              </div>
-              {loadingDevices && pendingDevices.length === 0 ? (
-                <div style={{ padding: '40px 0', textAlign: 'center' }}>
-                  <Spin tip="同步中..." size="small" />
-                </div>
-              ) : pendingDevices.length === 0 ? (
-                <div style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8' }}>
-                  <div style={{ fontSize: 13 }}>暂无待处理的设备请求</div>
-                </div>
-              ) : (
-                <List
-                  dataSource={pendingDevices}
-                  renderItem={(item: any) => (
-                    <List.Item 
-                      style={{ padding: '20px 0', borderBottom: '1px solid #f8fafc' }}
-                      actions={[
-                        <Button 
-                          key="approve"
-                          type="primary" 
-                          icon={<CheckCircle size={14} />} 
-                          size="small"
-                          onClick={() => handleApproveDevice(item.requestId)}
-                          style={{ borderRadius: 6, fontSize: 12 }}
-                        >
-                          批准授权
-                        </Button>
-                      ]}
-                    >
-                      <List.Item.Meta
-                        avatar={
-                          <div style={{ 
-                            width: 40, height: 40, borderRadius: 10, background: '#fffbeb',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b'
-                          }}>
-                            <Smartphone size={20} />
-                          </div>
-                        }
-                        title={
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 15 }}>{item.displayName || '未知设备'}</span>
-                            <Tag color="orange" style={{ borderRadius: 4, margin: 0, fontSize: 11 }}>待批准</Tag>
-                          </div>
-                        }
-                        description={
-                          <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '80px 1fr', gap: '4px 12px', fontSize: 12 }}>
-                            <span style={{ color: '#94a3b8' }}>请求 ID:</span>
-                            <Tooltip title={item.requestId}>
-                              <span style={{ fontFamily: 'monospace', color: '#2563eb', background: '#eff6ff', padding: '1px 6px', borderRadius: 4, cursor: 'help' }}>
-                                {item.requestId?.substring(0, 12)}...
-                              </span>
-                            </Tooltip>
-                            <span style={{ color: '#94a3b8' }}>操作系统:</span>
-                            <span style={{ color: '#475569' }}>{item.platform || '—'}</span>
-                          </div>
-                        }
-                      />
-                    </List.Item>
-                  )}
-                />
-              )}
-            </Card>
-
-            {/* 2. 已成功配对设备 */}
-            <Card
-              title={<span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={20} color="#10b981" /> 已配对合规设备</span>}
-              styles={{ body: { padding: '0 24px' } }}
-              style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
-            >
-              <div style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9', marginBottom: 0, color: '#64748b', fontSize: 13 }}>
-                当前已成功配对并获准通过 OpenClaw 终端的合法设备及应用列表。
-              </div>
-              {loadingDevices && pairedDevices.length === 0 ? (
-                <div style={{ padding: '40px 0', textAlign: 'center' }}>
-                  <Spin tip="同步中..." size="small" />
-                </div>
-              ) : pairedDevices.length === 0 ? (
-                <div style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8' }}>
-                  <div style={{ fontSize: 13 }}>暂无已配对的设备信息</div>
-                </div>
-              ) : (
-                <List
-                  dataSource={pairedDevices}
-                  renderItem={(item: any) => (
-                    <List.Item style={{ padding: '20px 0', borderBottom: '1px solid #f8fafc' }}>
-                      <List.Item.Meta
-                        avatar={
-                          <div style={{ 
-                            width: 40, height: 40, borderRadius: 10, background: '#f0fdf4',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981'
-                          }}>
-                            <Smartphone size={20} />
-                          </div>
-                        }
-                        title={
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 15 }}>{item.displayName || '未知设备'}</span>
-                            <Tag color="success" style={{ borderRadius: 4, margin: 0, fontSize: 11 }}>已加固</Tag>
-                          </div>
-                        }
-                        description={
-                          <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '80px 1fr', gap: '4px 12px', fontSize: 12 }}>
-                            <span style={{ color: '#94a3b8' }}>设备 ID:</span>
-                            <Tooltip title={item.deviceId}>
-                              <span style={{ fontFamily: 'monospace', color: '#2563eb', background: '#eff6ff', padding: '1px 6px', borderRadius: 4, cursor: 'help' }}>
-                                {item.deviceId?.substring(0, 12)}...
-                              </span>
-                            </Tooltip>
-                            <span style={{ color: '#94a3b8' }}>操作系统:</span>
-                            <span style={{ color: '#475569' }}>{item.platform || '—'}</span>
-                            <span style={{ color: '#94a3b8' }}>运行模式:</span>
-                            <span><Tag color="blue" style={{ margin: 0, fontSize: 10 }}>{item.clientMode || '—'}</Tag></span>
-                          </div>
-                        }
-                      />
-                    </List.Item>
-                  )}
-                />
-              )}
-            </Card>
-          </div>
-        );
-
-      case 'tools':
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {/* 软开关卡片 */}
-            <Card
-              styles={{ body: { padding: window.innerWidth < 768 ? '20px' : '24px 28px' } }}
-              style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
-            >
-              <div style={{ 
-                display: 'flex', 
-                flexDirection: window.innerWidth < 768 ? 'column' : 'row',
-                alignItems: window.innerWidth < 768 ? 'flex-start' : 'center', 
-                justifyContent: 'space-between',
-                gap: 20
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: window.innerWidth < 768 ? 16 : 20 }}>
-                  <div style={{ 
-                    width: window.innerWidth < 768 ? 44 : 52, 
-                    height: window.innerWidth < 768 ? 44 : 52, 
-                    borderRadius: 12, 
-                    background: selfHealingEnabled ? '#f0f9ff' : '#f8fafc',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <Zap size={window.innerWidth < 768 ? 22 : 26} color={selfHealingEnabled ? '#3b82f6' : '#94a3b8'} fill={selfHealingEnabled ? '#3b82f6' : 'none'} style={{ opacity: selfHealingEnabled ? 1 : 0.5 }} />
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 800, color: '#1e293b', fontSize: window.innerWidth < 768 ? 16 : 17, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      自动自愈服务
-                      <Badge status={selfHealingEnabled ? 'processing' : 'default'} />
-                    </div>
-                    <div style={{ color: '#64748b', fontSize: 13, maxWidth: 500, lineHeight: 1.5 }}>
-                      开启后，当巡检发现网关宕机或响应超时，系统将自动尝试执行修复、配置回滚并重启服务。
-                    </div>
-                  </div>
-                </div>
-                <div style={{ 
-                  textAlign: window.innerWidth < 768 ? 'left' : 'right',
-                  width: window.innerWidth < 768 ? '100%' : 'auto',
-                  borderTop: window.innerWidth < 768 ? '1px solid #f1f5f9' : 'none',
-                  paddingTop: window.innerWidth < 768 ? 16 : 0,
-                  display: 'flex',
-                  flexDirection: window.innerWidth < 768 ? 'row' : 'column',
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
-                }}>
-                  <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: window.innerWidth < 768 ? 0 : 8, fontWeight: 600 }}>
-                    当前状态: <span style={{ color: selfHealingEnabled ? '#16a34a' : '#ef4444' }}>{selfHealingEnabled ? '运行中' : '已禁用'}</span>
-                  </div>
-                  <Button 
-                    type={selfHealingEnabled ? "default" : "primary"}
-                    size="large"
-                    loading={loadingSets}
-                    onClick={() => toggleSelfHealing(!selfHealingEnabled)}
-                    style={{ 
-                      borderRadius: 10, minWidth: 100, fontWeight: 700,
-                      background: selfHealingEnabled ? 'transparent' : '#2563eb',
-                      borderColor: selfHealingEnabled ? '#e2e8f0' : '#2563eb',
-                      color: selfHealingEnabled ? '#475569' : '#fff'
-                    }}
-                  >
-                    {selfHealingEnabled ? '禁用服务' : '立即开启'}
-                  </Button>
-                </div>
-              </div>
-            </Card>
-
-
-            {/* 自愈日志列表 */}
-            <Card
-              title={<span style={{ fontSize: 14, fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: 8 }}><Terminal size={16} /> 历史自愈事件</span>}
-              styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 48 }, body: { padding: '0 24px' } }}
-              style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
-            >
-              {healEvents.length === 0 ? (
-                <div style={{ padding: '60px 0', textAlign: 'center', color: '#94a3b8' }}>
-                  <div style={{ fontSize: 40, marginBottom: 16 }}>☕</div>
-                  <div style={{ fontSize: 13 }}>暂无自愈事件记录，系统运行平稳</div>
-                </div>
-              ) : (
-                <List
-                  dataSource={healEvents}
-                  renderItem={(item: any) => (
-                    <List.Item style={{ padding: '20px 0', borderBottom: '1px solid #f8fafc' }}>
-                      <div style={{ width: '100%' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                          <Tag color="warning" style={{ borderRadius: 4, fontWeight: 600 }}>{item.reason}</Tag>
-                          <span style={{ fontSize: 12, color: '#94a3b8', fontFamily: 'monospace' }}>{dayjs(item.timestamp).format('YYYY-MM-DD HH:mm:ss')}</span>
-                        </div>
-                        <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: 8, border: '1px solid #f1f5f9' }}>
-                          <div style={{ display: 'flex', gap: 12, fontSize: 13 }}>
-                            <span style={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>恢复方法:</span>
-                            <span style={{ color: '#1e293b' }}>{item.method}</span>
-                          </div>
-                          <div style={{ display: 'flex', gap: 12, fontSize: 13, marginTop: 4 }}>
-                            <span style={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>处置结果:</span>
-                            <span style={{ color: item.result === 'Success' ? '#16a34a' : '#ef4444', fontWeight: 600 }}>{item.result === 'Success' ? '✅ 已恢复' : '❌ 失败'}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </List.Item>
-                  )}
-                />
-              )}
-            </Card>
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
-
   const headerEl = (onMenuClick?: () => void) => (
     <Header style={{
-      background: '#fff', height: 56, padding: '0 24px',
-      borderBottom: '1px solid #e2e8f0',
+      background: '#fff', height: 56, padding: '0 24px', borderBottom: '1px solid #e2e8f0',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      position: 'sticky', top: 0, zIndex: 20, flexShrink: 0,
-      lineHeight: 'normal',
+      position: 'sticky', top: 0, zIndex: 20, flexShrink: 0, lineHeight: 'normal',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {onMenuClick && <Button type="text" icon={<MenuIcon size={20} />} onClick={onMenuClick} style={{ marginLeft: -8 }} />}
@@ -1430,72 +336,8 @@ const Dashboard = () => {
     </Header>
   );
 
-  const transitionMask = isTransitioning && (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(8px)',
-      zIndex: 9999, display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', padding: 20
-    }}>
-      <div style={{
-        padding: isMobile ? '24px 20px' : '32px 40px', 
-        background: '#fff', 
-        borderRadius: 24,
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20,
-        width: isMobile ? '100%' : 'auto',
-        maxWidth: 340,
-        minWidth: isMobile ? 0 : 320
-      }}>
-        <div style={{ position: 'relative' }}>
-          <Spin size="large" />
-        </div>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>正在同步网关状态</div>
-          <div style={{ color: '#64748b', fontSize: 13, marginTop: 6, padding: '0 10px' }}>
-            指令已确认，正在等待网关反馈状态...
-          </div>
-          <div style={{
-            marginTop: 16, padding: '6px 16px', background: '#eff6ff',
-            borderRadius: 20, fontSize: 13, color: '#2563eb',
-            fontWeight: 700, display: 'inline-block', border: '1px solid #dbeafe',
-            boxShadow: '0 2px 4px rgba(37,99,235,0.1)'
-          }}>
-            已等待 {transitionSeconds}s
-          </div>
-        </div>
-
-        {transitionSeconds > 60 && (
-          <div style={{ 
-            marginTop: 8, display: 'flex', gap: 12, width: '100%',
-            paddingTop: 20, borderTop: '1px solid #f1f5f9'
-          }}>
-            <Button 
-              block 
-              onClick={() => setIsTransitioning(false)}
-              style={{ borderRadius: 8 }}
-            >
-              关闭遮罩
-            </Button>
-            <Button 
-              block 
-              type="primary" 
-              icon={<RefreshCw size={14} />}
-              onClick={() => window.location.reload()}
-              style={{ borderRadius: 8, background: '#2563eb' }}
-            >
-              强制刷新
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  // 渲染逻辑整合
   return (
     <>
-      <style>{globalStyles}</style>
       {transitionMask}
       
       {isMobile ? (
@@ -1505,28 +347,28 @@ const Dashboard = () => {
             {renderContent()}
           </Content>
           <Drawer
-            placement="left"
-            closable={false}
-            onClose={() => setMobileMenuOpen(false)}
-            open={mobileMenuOpen}
+            placement="left" closable={false} width={240}
+            onClose={() => setMobileMenuOpen(false)} open={mobileMenuOpen}
             styles={{ body: { padding: 0, background: '#0f172a', display: 'flex', flexDirection: 'column', height: '100%' } }}
-            width={240}
           >
-            {sidebarContent(() => setMobileMenuOpen(false))}
+            <Sidebar 
+              activeTab={activeTab} collapsed={false} onSelect={(k) => { setActiveTab(k); setMobileMenuOpen(false); }} 
+              onLogout={handleLogout} navItems={navItems} 
+            />
           </Drawer>
         </Layout>
       ) : (
         <Layout style={{ minHeight: '100vh', background: '#f8fafc' }}>
           <Sider
-            width={220}
-            collapsedWidth={64}
-            collapsed={collapsed}
-            onCollapse={setCollapsed}
-            style={{ background: '#0f172a', position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 30, display: 'flex', flexDirection: 'column' }}
+            width={220} collapsedWidth={64} collapsed={collapsed} onCollapse={setCollapsed}
+            style={{ background: '#0f172a', position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 30 }}
           >
-            {sidebarContent()}
+            <Sidebar 
+              activeTab={activeTab} collapsed={collapsed} onSelect={setActiveTab} 
+              onLogout={handleLogout} navItems={navItems} 
+            />
           </Sider>
-          <Layout style={{ marginLeft: collapsed ? 64 : 220, transition: 'margin-left 0.2s', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+          <Layout style={{ marginLeft: collapsed ? 64 : 220, transition: 'margin-left 0.2s', minHeight: '100vh' }}>
             {headerEl()}
             <Content style={{ padding: 24, background: '#f8fafc', flex: 1 }}>
               <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -1537,23 +379,18 @@ const Dashboard = () => {
         </Layout>
       )}
 
-      {/* 全局业务模态框 */}
-      
-      {/* 指令确认 */}
+      {/* Confirm Modal */}
       <Modal
-        title={null}
-        open={confirmModal.open}
-        footer={null}
+        title={null} open={confirmModal.open} footer={null}
         onCancel={() => setConfirmModal(prev => ({ ...prev, open: false }))}
-        centered
-        width={isMobile ? '92%' : 400}
-        styles={{ body: { padding: 0, overflow: 'hidden', borderRadius: 16 } }}
-      >        <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center' }}>
+        centered width={isMobile ? '92%' : 400}
+        styles={{ body: { padding: 0 } }}
+        style={{ borderRadius: 16 }}
+      >
+        <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center', borderRadius: 16 }}>
           <div style={{ 
-            width: 56, height: 56, borderRadius: '50%',
-            background: `${confirmModal.color}15`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginBottom: 16, margin: '0 auto 16px'
+            width: 56, height: 56, borderRadius: '50%', background: `${confirmModal.color}15`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px'
           }}>
             {confirmModal.action === 'start' && <Play size={24} color={confirmModal.color} />}
             {confirmModal.action === 'stop' && <Square size={24} color={confirmModal.color} />}
@@ -1563,113 +400,71 @@ const Dashboard = () => {
           <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>{confirmModal.title}</h3>
           <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
             {confirmModal.action === 'stop' && '确定要停止 OpenClaw 网关吗？这将导致所有渠道通信中断。'}
-            {confirmModal.action === 'wechat' && (
-              <span style={{ textAlign: 'left', display: 'inline-block' }}>
-                请确认：<br />
-                1. 您的微信已升级到<b>最新版本</b><br />
-                2. 系统设置中的插件模块已支持<b>小龙虾</b>
-              </span>
-            )}
+            {confirmModal.action === 'wechat' && '请确认已安装并正确配置微信插件后继续。'}
             {['start', 'restart'].includes(confirmModal.action) && `您正在请求 ${confirmModal.title} 指令，系统将异步处理。`}
           </p>
-          <div style={{ display: 'flex', gap: 12, width: '100%' }}>
-            <Button block size="large" onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))} style={{ borderRadius: 8 }}>取消</Button>
-            <Button block type="primary" size="large" onClick={executeControl} style={{ borderRadius: 8, background: confirmModal.color, borderColor: confirmModal.color, fontWeight: 600 }}>确认指令</Button>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <Button block onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}>取消</Button>
+            <Button block type="primary" onClick={executeControl} style={{ background: confirmModal.color, borderColor: confirmModal.color }}>确认指令</Button>
           </div>
         </div>
       </Modal>
 
-      {/* 微信二维码获取遮罩 */}
-      <Modal
-        open={isGettingQR}
-        footer={null}
-        closable={false}
-        centered
-        styles={{ body: { padding: '40px 24px', textAlign: 'center' } }}
-        width={isMobile ? '80%' : 320}
-      >
-        <Spin size="large" />
-        <div style={{ marginTop: 24, fontWeight: 600, color: '#1e293b' }}>正在请求微信登录指令...</div>
-        <div style={{ marginTop: 8, color: '#64748b', fontSize: 13 }}>后端处理中 ({qrSeconds}s)</div>
-        <div style={{ marginTop: 16, fontSize: 12, color: '#94a3b8' }}>初始化微信连接可能需要 10-20 秒</div>
+      {/* QR Code Modals */}
+      <Modal open={isGettingQR} footer={null} closable={false} centered width={320}>
+        <div style={{ textAlign: 'center', padding: 20 }}>
+          <Spin size="large" />
+          <div style={{ marginTop: 24, fontWeight: 600 }}>正在请求微信登录指令...</div>
+          <div style={{ marginTop: 8, color: '#64748b' }}>后端处理中 ({qrSeconds}s)</div>
+        </div>
       </Modal>
 
-      {/* 微信二维码弹窗 (移动至顶层以保证稳定性) */}
       <Modal
-        title={null}
-        open={qrModalVisible}
-        footer={null}
-        onCancel={() => setQrModalVisible(false)}
-        centered
-        width={isMobile ? '90%' : 340}
-        styles={{ body: { padding: 0, overflow: 'hidden', borderRadius: 16 } }}
+        title={null} open={qrModalVisible} footer={null}
+        onCancel={() => setQrModalVisible(false)} centered width={340}
+        styles={{ body: { padding: 0 } }}
       >
-        <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center' }}>
+        <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center', borderRadius: 16 }}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>🦞</div>
-          <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>微信授权登录</h3>
-          <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
-            请使用需要绑定的微信扫码<br />授权后 OpenClaw 将自动完成同步
-          </p>
-          <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #f1f5f9', display: 'inline-block', marginBottom: 12 }}>
-            {qrData && <QRCode value={qrData.qrcode_url} size={isMobile ? 160 : 180} bordered={false} color="#1e293b" />}
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b' }}>微信授权登录</h3>
+          <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24 }}>使用手机微信扫码授权</p>
+          <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #f1f5f9', marginBottom: 16 }}>
+            {qrData && <QRCode value={qrData.qrcode_url} size={180} />}
           </div>
-          <div style={{ marginBottom: 20 }}>
-              <Button type="link" size="small" onClick={() => window.open(qrData?.qrcode_url, '_blank')}>在浏览器中打开授权链接</Button>
-          </div>
-          <Button 
-            block 
-            type="primary" 
-            size="large" 
-            onClick={() => {
-              setQrModalVisible(false);
-              fetchChatChannels();
-            }} 
-            style={{ borderRadius: 10, fontWeight: 700 }}
-          >
-            已完成扫码
-          </Button>
+          <Button block type="primary" size="large" onClick={() => setQrModalVisible(false)}>完成并同步状态</Button>
         </div>
       </Modal>
     </>
   );
 };
 
-// ─── App Root ──────────────────────────────────────────────────────────────────
+// --- App Root ---------------------------------------------------------------------
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('guardian_token'));
 
   useEffect(() => {
-    // 注册 401 拦截器，处理会话过期或令牌失效
     const interceptor = api.interceptors.response.use(
       (response) => response,
       (error) => {
-        if (error.response && error.response.status === 401) {
+        if (error.response?.status === 401) {
           localStorage.removeItem('guardian_token');
           setToken(null);
-          // 仅在当前确实有 token 的情况下提示，避免初次加载时拦截器重复报错覆盖登录界面逻辑
-          if (token) {
-            message.error('会话已过期或凭据失效，请重新登录');
-          }
+          if (token) message.error('会话已过期，请重新登录');
         }
         return Promise.reject(error);
       }
     );
-
     return () => api.interceptors.response.eject(interceptor);
   }, [token]);
 
   useEffect(() => {
-    // 处理 URL 中的 token 自动登录
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get('token');
-    
     if (urlToken) {
       localStorage.setItem('guardian_token', urlToken);
       setToken(urlToken);
-      // 清理 URL 中的 token 参数，保持地址栏干净且安全
-      const newUrl = window.location.pathname + window.location.hash;
-      window.history.replaceState({}, '', newUrl);
-      message.success('已通过 URL Token 自动登录');
+      window.history.replaceState({}, '', window.location.pathname);
+      message.success('已自动登录');
     }
   }, []);
 
@@ -1678,10 +473,9 @@ export default function App() {
       token: {
         colorPrimary: '#2563eb',
         borderRadius: 8,
-        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        fontFamily: "'Inter', sans-serif",
         colorBgContainer: '#ffffff',
         colorText: '#334155',
-        fontSize: 14,
       },
       components: {
         Menu: {
@@ -1690,11 +484,10 @@ export default function App() {
           darkItemHoverBg: '#1e293b',
           darkItemColor: '#94a3b8',
           darkItemSelectedColor: '#fff',
-          itemHeight: 40,
         },
       },
     }}>
-      {token ? <Dashboard /> : <LoginPage onLoginSuccess={setToken} />}
+      {token ? <Dashboard /> : <LoginView onLoginSuccess={setToken} />}
     </ConfigProvider>
   );
 }

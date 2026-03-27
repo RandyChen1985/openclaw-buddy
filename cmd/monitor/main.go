@@ -16,13 +16,15 @@ import (
 	"github.com/natefinch/lumberjack"
 )
 
-const pidFilePath = "/tmp/lobster-guardian.pid"
-
 func main() {
 	// 1. Singleton Check
-	lock := utils.NewFileLock(pidFilePath)
+	pidPath := os.Getenv("PID_FILE")
+	if pidPath == "" {
+		pidPath = "/tmp/lobster-guardian.pid"
+	}
+	lock := utils.NewFileLock(pidPath)
 	if err := lock.Lock(); err != nil {
-		log.Fatalf("❌ Error: %v", err)
+		log.Fatalf("❌ Error: guardian is already running (locked by %s)", pidPath)
 	}
 	defer lock.Unlock()
 
@@ -44,7 +46,7 @@ func main() {
 	log.SetOutput(mw)
 
 	// 4. Initialize SQLite DB
-	newToken, err := utils.InitDB(cfg.DBFile)
+	newToken, err := utils.InitDB(cfg.DBFile, cfg.Token)
 	if err != nil {
 		log.Fatalf("❌ Failed to initialize database: %v", err)
 	}
