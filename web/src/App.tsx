@@ -84,11 +84,31 @@ const Dashboard = () => {
     if (activeTab === 'bots-models') fetchBotsModels();
     if (activeTab === 'components') {
       fetchChatChannels();
-      checkWeixinPlugin();
+      // 仅在状态未知时重置并触发检测
+      if (!weixinStatus) {
+        setCheckWeixinSeconds(0);
+        checkWeixinPlugin();
+      }
     }
     if (activeTab === 'devices') fetchDevices();
     if (activeTab === 'tools') fetchSelfHealing();
   }, [activeTab]);
+
+  // 微信插件检测定时器逻辑 (1s UI计数, 5s 接口轮询)
+  useEffect(() => {
+    let counter: any;
+    let poller: any;
+    
+    if (activeTab === 'components' && weixinStatus === null) {
+      counter = setInterval(() => setCheckWeixinSeconds(s => s + 1), 1000);
+      poller = setInterval(() => checkWeixinPlugin(), 5000);
+    }
+
+    return () => {
+      if (counter) clearInterval(counter);
+      if (poller) clearInterval(poller);
+    };
+  }, [activeTab, weixinStatus]);
 
   // Methods
   const fetchBotsModels = async (force = false) => {
@@ -117,21 +137,12 @@ const Dashboard = () => {
   };
 
   const checkWeixinPlugin = async () => {
-    setCheckWeixinSeconds(0);
-    const check = async () => {
-      try {
-        const res = await api.get('/v1/wechat/plugin/status');
-        setWeixinStatus(res.data);
-      } catch (err) {
-        setWeixinStatus({ installed: false, status: 'Detection Failed', version: 'N/A' });
-      }
-    };
-    check();
-    const timer = setInterval(() => {
-      setCheckWeixinSeconds(s => s + 1);
-      check();
-    }, 5000);
-    return () => clearInterval(timer);
+    try {
+      const res = await api.get('/v1/wechat/plugin/status');
+      setWeixinStatus(res.data);
+    } catch (err) {
+      setWeixinStatus({ installed: false, status: 'Detection Failed', version: 'N/A' });
+    }
   };
 
   const fetchDevices = async (force = false) => {
