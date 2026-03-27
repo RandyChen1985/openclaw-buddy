@@ -20,7 +20,7 @@ func main() {
 	// 1. Singleton Check
 	pidPath := os.Getenv("PID_FILE")
 	if pidPath == "" {
-		pidPath = "/tmp/lobster-guardian.pid"
+		pidPath = "/tmp/openclaw-buddy.pid"
 	}
 	lock := utils.NewFileLock(pidPath)
 	if err := lock.Lock(); err != nil {
@@ -82,5 +82,5 @@ func main() {
 	}()
 
 	<-ctx.Done()
-	log.Printf("👋 有孚小龙虾监控服务正在退出...")
+	log.Printf("👋 OpenClaw Buddy 正在退出...")
 }

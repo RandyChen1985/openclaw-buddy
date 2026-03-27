@@ -10,6 +10,40 @@ interface LoginViewProps {
 const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [isMobileLogin, setIsMobileLogin] = useState(window.innerWidth < 1024);
+  const [displayText, setDisplayText] = useState('');
+  const [index, setIndex] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [speed, setSpeed] = useState(100);
+
+  const typewriterText = "“我听人说，如果连咖啡都没有伴侣，那它就不叫咖啡，叫苦水。在这个习惯了礼貌拒绝的时代，连空气中都带着独身的湿气。但我始终觉得，即使是代码堆砌的小龙虾，也该有个依靠。OpenClaw Buddy，它就在离你 0.01 公分的地方。它不说话，只是陪你守着那些虾宝宝。希望有一天，你也能找到那个让你不再需要‘监控哨兵’的人。”";
+
+  useEffect(() => {
+    const handleType = () => {
+      if (!isDeleting) {
+        if (index < typewriterText.length) {
+          setDisplayText(prev => prev + typewriterText[index]);
+          setIndex(prev => prev + 1);
+          setSpeed(120); // 慢一点的打印速度
+        } else {
+          // 打印完停顿 4 秒
+          setSpeed(4000);
+          setIsDeleting(true);
+        }
+      } else {
+        if (displayText.length > 0) {
+          setDisplayText(prev => prev.slice(0, -1));
+          setSpeed(40); // 快速退格
+        } else {
+          setIsDeleting(false);
+          setIndex(0);
+          setSpeed(1000); // 重新开始前的停顿
+        }
+      }
+    };
+
+    const timeout = setTimeout(handleType, speed);
+    return () => clearTimeout(timeout);
+  }, [displayText, isDeleting, index, speed]);
 
   useEffect(() => {
     const handleResize = () => setIsMobileLogin(window.innerWidth < 1024);
@@ -55,16 +89,31 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             <div style={{ fontSize: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               🦞
             </div>
-            <span style={{ color: '#fff', fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em' }}>Lobster Guardian</span>
+            <span style={{ color: '#fff', fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em' }}>OpenClaw Buddy</span>
           </div>
 
-          <div style={{ position: 'relative', zIndex: 1, maxWidth: 480 }}>
+          <div style={{ position: 'relative', zIndex: 1, maxWidth: 800 }}>
             <h1 style={{ color: '#fff', fontSize: 44, fontWeight: 900, lineHeight: 1.1, marginBottom: 28, letterSpacing: '-0.03em' }}>
-              OpenClaw Buddy<br />
-              <span style={{ color: '#60a5fa' }}>监控枢纽中心</span>
+              0.01 公分的距离<br />
+              <span style={{ color: '#60a5fa', display: 'block', paddingLeft: 230, marginTop: 8, whiteSpace: 'nowrap' }}>来自带外的重连契约</span>
             </h1>
-            <p style={{ color: '#94a3b8', fontSize: 17, lineHeight: 1.6, marginBottom: 48 }}>
-              为您提供 OpenClaw 集群的实时拓扑视角、多维状态监测与快速自愈入口，守护核心数字资产安全。
+            <p style={{ 
+              color: '#94a3b8', 
+              fontSize: 17, 
+              lineHeight: 1.8, 
+              marginBottom: 48, 
+              minHeight: '120px',
+              fontStyle: 'italic',
+              fontFamily: 'serif' 
+            }}>
+              {displayText}
+              <span style={{ display: 'inline-block', width: 2, height: 18, background: '#60a5fa', marginLeft: 4, verticalAlign: 'middle', animation: 'blink 1s step-end infinite' }} />
+              <style>{`
+                @keyframes blink {
+                  from, to { opacity: 1; }
+                  50% { opacity: 0; }
+                }
+              `}</style>
             </p>
             <div style={{ display: 'flex', gap: 16 }}>
               {['24/7 监测', '秒级告警', '一键闭环'].map(f => (
@@ -80,9 +129,9 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             </div>
           </div>
 
-          <p style={{ position: 'relative', zIndex: 1, color: '#475569', fontSize: 13, margin: 0 }}>
-            © {new Date().getFullYear()} Yovole Network · Infrastructure Reliability
-          </p>
+          <p style={{ color: '#475569', fontSize: 14, fontWeight: 500 }}>
+              randy chen · cexlong@gmail.com
+            </p>
         </div>
       )}
 
@@ -104,7 +153,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
           <div style={{ marginBottom: 40, textAlign: 'center' }}>
             <h2 style={{ fontSize: 32, fontWeight: 800, color: '#1e293b', margin: '0 0 10px', letterSpacing: '-0.02em' }}>欢迎回来</h2>
-            <p style={{ fontSize: 15, color: '#64748b', margin: 0 }}>请提供您的 Guaridan Token 凭据</p>
+            <p style={{ fontSize: 15, color: '#64748b', margin: 0 }}>请提供您的 Buddy Token 凭据</p>
           </div>
 
           <Form layout="vertical" onFinish={onFinish} size="large">
@@ -114,7 +163,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               rules={[{ required: true, message: '请输入访问令牌' }]}
             >
               <Input.Password
-                placeholder="请输入凭据密钥"
+                placeholder="输入您的 Buddy Token"
                 prefix={<KeyRound size={18} color="#94a3b8" style={{ marginRight: 8 }} />}
                 style={{ borderRadius: 12, padding: '12px 16px', background: '#f8fafc', border: '1px solid #e2e8f0' }}
               />
@@ -137,7 +186,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
           {isMobileLogin && (
             <p style={{ color: '#94a3b8', fontSize: 12, textAlign: 'center', marginTop: 40 }}>
-              © {new Date().getFullYear()} Yovole Network · Operation
+              © {new Date().getFullYear()} OpenClaw Buddy · Randy Chen
             </p>
           )}
         </div>

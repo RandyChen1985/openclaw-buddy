@@ -61,7 +61,7 @@ func LoadConfig() (*Config, error) {
 		FeishuAppSecret:      getEnv("FEISHU_APP_SECRET", ""),
 		FeishuChatID:         getEnv("FEISHU_CHAT_ID", ""),
 		DBFile:               getEnv("DB_FILE", "./data/guardian.db"),
-		Token:                getEnv("GUARDIAN_TOKEN", "sk-replace-me-on-first-run"),
+		Token:                getEnv("BUDDY_TOKEN", "sk-replace-me-on-first-run"),
 		WebPort:              webPort,
 		ExternalDashboardURL: getEnv("EXTERNAL_DASHBOARD_URL", ""),
 	}, nil

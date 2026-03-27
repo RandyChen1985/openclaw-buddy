@@ -1,5 +1,10 @@
 # 🦞 OpenClaw Buddy
 
+> [!NOTE]
+> “我听人说，如果连咖啡都没有伴侣，那它就不叫咖啡，叫苦水。在这个习惯了礼貌拒绝的时代，连空气中都带着独身的湿气。但我始终觉得，即使是代码堆砌的小龙虾，也该有个依靠。
+> 
+> **OpenClaw Buddy**，它就在离你 0.01 公分的地方。它不说话，只是陪你守着那些虾宝宝。希望有一天，你也能找到那个让你不再需要‘监控哨兵’的人。”
+
 [![Go Report Card](https://goreportcard.com/badge/github.com/yovole/openclaw-monitor)](https://goreportcard.com/report/github.com/yovole/openclaw-monitor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -78,7 +83,7 @@
 ### 生产部署 (Release)
 1.  **执行构建**: `./build_linux.sh` (交叉编译为 Linux)
 2.  **获取产物**: 产物位于 `release/` 目录下，解压后上传至服务器。
-3.  **参数配置**: 修改 `env` 文件（首次启动会自动生成 16 位随机 `GUARDIAN_TOKEN`）。
+3.  **参数配置**: 修改 `env` 文件（首次启动会自动生成 16 位随机 `BUDDY_TOKEN`）。
 4.  **启动服务**: `./start.sh`
 
 ## 🔌 API 接口说明
@@ -88,7 +93,7 @@ OpenClaw Buddy 提供了一套标准的 RESTful API 供外部系统集成或移�
 ### 认证方式
 所有 V1 接口均需通过 HTTP Header 进行认证：
 - **Header**: `Authorization`
-- **Value**: `Bearer <YOUR_GUARDIAN_TOKEN>`
+- **Value**: `Bearer <YOUR_BUDDY_TOKEN>`
 
 ### 核心接口预览
 | 路径 | 方法 | 功能说明 |
@@ -110,7 +115,7 @@ OpenClaw Buddy 提供了一套标准的 RESTful API 供外部系统集成或移�
 
 ```env
 WEB_PORT=3000                 # Guardian 面板端口
-GUARDIAN_TOKEN="sk-xxx"       # 访问面板所需的令牌
+BUDDY_TOKEN="sk-xxx"       # 访问面板所需的令牌
 HEALTH_PORT=18789             # 小龙虾 (OpenClaw) 监听的地址
 OPENCLAW_CONFIG_DIR="~/.openclaw" # 配置目录
 CHECK_INTERVAL_SECONDS=30     # 监控扫描频率 (秒)

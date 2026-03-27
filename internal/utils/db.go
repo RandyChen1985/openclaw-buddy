@@ -133,12 +133,12 @@ func UpdateEnvToken(newToken string) error {
 		return err
 	}
 
-	re := regexp.MustCompile(`(?m)^GUARDIAN_TOKEN\s*=.*$`)
-	newContent := re.ReplaceAllString(string(content), "GUARDIAN_TOKEN="+newToken)
+	re := regexp.MustCompile(`(?m)^BUDDY_TOKEN\s*=.*$`)
+	newContent := re.ReplaceAllString(string(content), "BUDDY_TOKEN="+newToken)
 
 	// 如果没找到，追加到末尾
-	if !strings.Contains(newContent, "GUARDIAN_TOKEN=") {
-		newContent += "\nGUARDIAN_TOKEN=" + newToken
+	if !strings.Contains(newContent, "BUDDY_TOKEN=") {
+		newContent += "\nBUDDY_TOKEN=" + newToken
 	}
 
 	return os.WriteFile(envPath, []byte(newContent), 0644)

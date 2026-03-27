@@ -62,7 +62,7 @@ echo "📝 生成隔离环境配置: $DEV_ROOT/env"
 cat <<EOF > "$DEV_ROOT/env"
 # 🦞 OpenClaw Buddy (OpenClaw Buddy) 隔离开发配置
 WEB_PORT=3000
-GUARDIAN_TOKEN="openclaw-buddy-2026"
+BUDDY_TOKEN="openclaw-buddy-2026"
 PID_FILE="./openclaw-buddy.pid"
 
 # [存储与目录]
@@ -105,7 +105,7 @@ echo $NEW_PID > "/tmp/openclaw-buddy-dev.pid"
 
 echo "✅ 服务已在隔离环境启动 (PID: $NEW_PID)"
 echo "🌐 访问地址: http://localhost:3000"
-echo "🔑 认证令牌 (Token): $(grep GUARDIAN_TOKEN env | cut -d'=' -f2 | tr -d '"')"
+echo "🔑 认证令牌 (Token): $(grep BUDDY_TOKEN env | cut -d'=' -f2 | tr -d '"')"
 echo "--------------------------------------------------"
 echo "💡 提示: "
 echo "   - 实时日志: tail -f $DEV_ROOT/logs/guardian.log"

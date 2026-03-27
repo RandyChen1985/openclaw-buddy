@@ -38,7 +38,7 @@ cat <<EOF > "${PKG_DIR}/env"
 # Guardian 面板监听端口
 WEB_PORT=3000
 # 访问面板所需的认证令牌 (sk- 开头)
-GUARDIAN_TOKEN="sk-replace-me-on-first-run"
+BUDDY_TOKEN="sk-replace-me-on-first-run"
 
 # [存储与目录]
 # SQLite 数据库文件路径 (存储记录与自愈开关)

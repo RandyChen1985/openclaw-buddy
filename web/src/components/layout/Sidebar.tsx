@@ -24,8 +24,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
           🦞
         </div>
         {!collapsed && (
-          <span style={{ color: '#fff', fontWeight: 700, fontSize: 14, letterSpacing: '-0.01em' }}>
-            Lobster Guardian
+          <span style={{ fontSize: 15, fontWeight: 700, color: '#fff', letterSpacing: '0.02em', marginLeft: 8 }}>
+            OpenClaw Buddy
           </span>
         )}
       </div>
