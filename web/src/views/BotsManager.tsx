@@ -60,7 +60,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMo
                       onClick={() => setIsModalOpen(true)}
                       style={{ color: '#2563eb', fontWeight: 600, display: 'flex', alignItems: 'center' }}
                     >
-                      添加机器人
+                      {isMobile ? '' : '添加机器人'}
                     </Button>
                     <div style={{ width: 1, height: 14, background: '#e2e8f0' }} />
                     <Button 
@@ -71,7 +71,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMo
                       loading={loadingBots}
                       style={{ color: '#64748b', display: 'flex', alignItems: 'center', padding: isMobile ? '0 4px' : '0 8px' }}
                     >
-                      刷新
+                      {isMobile ? '' : '刷新'}
                     </Button>
                   </div>
                 </div>

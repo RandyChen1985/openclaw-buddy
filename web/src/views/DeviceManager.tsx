@@ -45,7 +45,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
                 loading={loadingDevices}
                 style={{ color: '#64748b', display: 'flex', alignItems: 'center', padding: isMobile ? '0 4px' : '0 8px' }}
               >
-                刷新
+                {isMobile ? '' : '刷新'}
               </Button>
             </div>
           </div>

@@ -55,7 +55,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                 loading={loadingChannels}
                 style={{ color: '#64748b', display: 'flex', alignItems: 'center', padding: isMobile ? '0 4px' : '0 8px' }}
               >
-                刷新
+                {isMobile ? '' : '刷新'}
               </Button>
             </div>
           </div>
