@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table } from 'antd';
-import { Boxes, RefreshCw, Cloud, Plus, Pencil, Trash2, Cpu, History } from 'lucide-react';
+import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox } from 'antd';
+import { Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, Settings, ShieldCheck, Zap, MessageSquare } from 'lucide-react';
 import dayjs from 'dayjs';
 import api from '../api';
+import { message } from 'antd';
 
 interface BotsManagerProps {
   botsModels: any; // 结构: { data: { bots: [], models: [] }, updated_at: string }
@@ -37,10 +38,32 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const [deletingBotId, setDeletingBotId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  
+  // 模型管理相关状态
+  const [modelsConfig, setModelsConfig] = useState<any>(null);
+  const [loadingConfig, setLoadingConfig] = useState(false);
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [configActiveTab, setConfigActiveTab] = useState('providers');
+  const [configForm] = Form.useForm();
+  const [modelForm] = Form.useForm();
+  const [submittingConfig, setSubmittingConfig] = useState(false);
 
   useEffect(() => {
     fetchSessions();
+    fetchModelsConfig();
   }, []);
+
+  const fetchModelsConfig = async () => {
+    setLoadingConfig(true);
+    try {
+      const res = await api.get('/v1/openclaw/models/config');
+      setModelsConfig(res.data);
+    } catch (err) {
+      console.error('Failed to fetch models config:', err);
+    } finally {
+      setLoadingConfig(false);
+    }
+  };
 
   const fetchSessions = async (force = false) => {
     setLoadingSessions(true);
@@ -61,6 +84,71 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     const hours = Math.floor(minutes / 60);
     if (hours < 24) return `${hours}h ago`;
     return `${Math.floor(hours / 24)}d ago`;
+  };
+
+  const handleAddProvider = async () => {
+    try {
+      const values = await configForm.validateFields();
+      setSubmittingConfig(true);
+      await api.post('/v1/openclaw/models/provider', {
+        name: values.name,
+        config: {
+          baseUrl: values.baseUrl,
+          apiKey: values.apiKey,
+          auth: values.auth || 'api-key',
+          api: values.api || 'openai-completions'
+        }
+      });
+      message.success('提供商添加成功');
+      configForm.resetFields();
+      await fetchModelsConfig();
+    } catch (err: any) {
+      message.error('添加失败: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setSubmittingConfig(false);
+    }
+  };
+
+  const handleAddModelToProvider = async () => {
+    try {
+      // 1. 先进行表单校验（会自动触发 rules 提示）
+      await modelForm.validateFields();
+      
+      // 2. 显式从 form 实例中拉取所有字段（包含 preserve 的字段）
+      const values = modelForm.getFieldsValue(true);
+      console.log('📦 Form Instance Data:', values);
+      
+      setSubmittingConfig(true);
+      
+      // 3. 构建结构化提交数据
+      const submitData = {
+        provider_name: values.provider_name,
+        model_config: {
+          id: values.id,
+          name: values.name || values.id,
+          api: values.api || 'openai-chat',
+          reasoning: !!values.reasoning,
+          input: values.input || ['text']
+        }
+      };
+
+      console.log('🚀 Final Submit Data:', submitData);
+      await api.post('/v1/openclaw/models/provider/model', submitData);
+      
+      message.success('模型已成功追加');
+      modelForm.resetFields(['id', 'name', 'reasoning']); // 仅重置模型部分，保留 provider 方便连续添加
+      await Promise.all([fetchModelsConfig(), onRefresh()]);
+    } catch (err: any) {
+      if (err.errorFields) {
+        // 这是 Form 校验失败的情况
+        console.warn('⚠️ Form Validation Failed:', err.errorFields);
+        return;
+      }
+      console.error('❌ Model Add Failed:', err);
+      message.error('添加失败: ' + (err.response?.data?.error || err.message || '未知错误'));
+    } finally {
+      setSubmittingConfig(false);
+    }
   };
 
   const handleOk = async () => {
@@ -280,81 +368,112 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           <Col span={24}>
             <Card
               title={
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Cpu size={isMobile ? 18 : 20} color="#6366f1" /> 模型军团 (Models)
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Cpu size={isMobile ? 18 : 20} color="#6366f1" /> 模型军团 (Models)
+                  </div>
+                  <Button 
+                    type="primary" 
+                    ghost 
+                    size="small" 
+                    icon={<Settings size={14} />} 
+                    onClick={() => setIsConfigModalOpen(true)}
+                    style={{ borderRadius: 8, fontSize: 12 }}
+                  >
+                    管理模型配置
+                  </Button>
                 </div>
               }
-              styles={{ body: { padding: '16px 20px' } }}
+              styles={{ body: { padding: '20px' } }}
               style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', width: '100%' }}
             >
-              <Row gutter={[12, 12]}>
-                {botsModels?.data?.models && botsModels.data.models.length > 0 ? botsModels.data.models.map((m: any) => {
-                  const isDefault = m.isDefault;
+              {loadingConfig && !modelsConfig ? (
+                <div style={{ textAlign: 'center', padding: '20px 0' }}><Spin size="small" /></div>
+              ) : modelsConfig ? (
+                Object.entries(modelsConfig).map(([providerName, providerData]: [string, any]) => {
+                  const providerModels = providerData.models || [];
+                  if (providerModels.length === 0) return null;
+
                   return (
-                    <Col xs={24} sm={12} md={8} lg={6} xl={4} key={m.id}>
-                      <div style={{
-                        background: isDefault ? '#f5f3ff' : '#f8fafc',
-                        padding: '16px',
-                        borderRadius: 14,
-                        border: isDefault ? '2px solid #a78bfa' : '1px solid #f1f5f9',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 8,
-                        position: 'relative',
-                        transition: 'all 0.2s ease',
-                        boxShadow: isDefault ? '0 4px 12px rgba(139, 92, 246, 0.15)' : 'none'
-                      }}>
-                        {isDefault && (
-                          <div style={{
-                            position: 'absolute', top: -10, right: 12,
-                            background: '#7c3aed', color: '#fff', fontSize: 10,
-                            padding: '2px 8px', borderRadius: 20, fontWeight: 800,
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: 4
-                          }}>
-                            <Tag style={{ border: 'none', background: 'transparent', color: '#fff', margin: 0, padding: 0, fontSize: 10 }}>DEFAULT</Tag>
-                          </div>
-                        )}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ 
-                            width: 32, height: 32, borderRadius: 8, background: isDefault ? '#ede9fe' : '#f1f5f9',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center'
-                          }}>
-                            <Cpu size={16} color={isDefault ? '#7c3aed' : '#94a3b8'} />
-                          </div>
-                          <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {m.name}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                          <div style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, color: '#64748b' }}>
-                             <Cloud size={11} /> {m.provider || 'AI Provider'}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            {!isDefault && (
-                              <Tooltip title="设为全局默认模型">
-                                <Button 
-                                  type="text" 
-                                  size="small" 
-                                  icon={<RefreshCw size={12} />} 
-                                  onClick={() => handleSetDefaultModel(m)}
-                                  style={{ color: '#94a3b8', padding: '0 4px', height: 20, fontSize: 10, display: 'flex', alignItems: 'center' }}
-                                >
-                                  设为默认
-                                </Button>
-                              </Tooltip>
-                            )}
-                            <Tag style={{ margin: 0, borderRadius: 6, fontSize: 9, background: isDefault ? '#ddd6fe' : '#e2e8f0', color: isDefault ? '#5b21b6' : '#64748b', border: 'none' }}>ACTIVE</Tag>
-                          </div>
-                        </div>
+                    <div key={providerName} style={{ marginBottom: 20 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, paddingLeft: 4 }}>
+                        <ShieldCheck size={14} color="#6366f1" />
+                        <span style={{ fontWeight: 700, color: '#475569', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          {providerName}
+                        </span>
+                        <div style={{ height: 1, flex: 1, background: '#f1f5f9', marginLeft: 8 }}></div>
                       </div>
-                    </Col>
+                      <Row gutter={[12, 12]}>
+                        {providerModels.map((m: any) => {
+                          // 检查是否为默认模型 (从 botsModels.data.models 中匹配)
+                          const isDefault = botsModels?.data?.models?.find((dm: any) => dm.id === m.id)?.isDefault;
+                          
+                          return (
+                            <Col xs={24} sm={12} md={8} lg={6} xl={4} key={m.id}>
+                              <div style={{
+                                background: isDefault ? '#f5f3ff' : '#f8fafc',
+                                padding: '16px',
+                                borderRadius: 14,
+                                border: isDefault ? '2px solid #a78bfa' : '1px solid #f1f5f9',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 8,
+                                position: 'relative',
+                                transition: 'all 0.2s ease',
+                                boxShadow: isDefault ? '0 4px 12px rgba(139, 92, 246, 0.15)' : 'none'
+                              }}>
+                                {isDefault && (
+                                  <div style={{
+                                    position: 'absolute', top: -10, right: 12,
+                                    background: '#7c3aed', color: '#fff', fontSize: 10,
+                                    padding: '2px 8px', borderRadius: 20, fontWeight: 800,
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: 4
+                                  }}>
+                                    <Tag style={{ border: 'none', background: 'transparent', color: '#fff', margin: 0, padding: 0, fontSize: 10 }}>DEFAULT</Tag>
+                                  </div>
+                                )}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                  <div style={{ 
+                                    width: 32, height: 32, borderRadius: 8, background: isDefault ? '#ede9fe' : '#f1f5f9',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                  }}>
+                                    <Cpu size={16} color={isDefault ? '#7c3aed' : '#94a3b8'} />
+                                  </div>
+                                  <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {m.name || m.id}
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                                  <div style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, color: '#94a3b8' }}>
+                                     {m.reasoning ? <Zap size={10} color="#f59e0b" /> : <MessageSquare size={10} />} 
+                                     {m.reasoning ? '推理模型' : '通用模型'}
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    {!isDefault && (
+                                      <Tooltip title="设为全局默认模型">
+                                        <Button 
+                                          type="text" 
+                                          size="small" 
+                                          icon={<RefreshCw size={12} />} 
+                                          onClick={() => handleSetDefaultModel(m)}
+                                          style={{ color: '#94a3b8', padding: '0 4px', height: 20, fontSize: 10, display: 'flex', alignItems: 'center' }}
+                                        />
+                                      </Tooltip>
+                                    )}
+                                    <Tag style={{ margin: 0, borderRadius: 6, fontSize: 9, background: isDefault ? '#ddd6fe' : '#e2e8f0', color: isDefault ? '#5b21b6' : '#64748b', border: 'none' }}>ACTIVE</Tag>
+                                  </div>
+                                </div>
+                              </div>
+                            </Col>
+                          );
+                        })}
+                      </Row>
+                    </div>
                   );
-                }) : (
-                  <Col span={24}>
-                    <div style={{ textAlign: 'center', width: '100%', padding: '32px 0', color: '#94a3b8' }}>暂未配置模型</div>
-                  </Col>
-                )}
-              </Row>
+                })
+              ) : (
+                <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8' }}>暂未配置模型分组信息</div>
+              )}
             </Card>
           </Col>
 
@@ -503,6 +622,138 @@ const BotsManager: React.FC<BotsManagerProps> = ({
               </Select>
             </Form.Item>
           </Form>
+        </div>
+      </Modal>
+
+      {/* 模型与提供商管理对话框 */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ padding: 6, background: '#f5f3ff', borderRadius: 8 }}><Cpu size={18} color="#7c3aed" /></div>
+            <span>开放架构模型管理 (OpenClaw Models)</span>
+          </div>
+        }
+        open={isConfigModalOpen}
+        onCancel={() => setIsConfigModalOpen(false)}
+        footer={null}
+        width={600}
+        centered
+        style={{ borderRadius: 16 }}
+      >
+        <div style={{ padding: '8px 0' }}>
+          <Select 
+            value={configActiveTab} 
+            onChange={setConfigActiveTab}
+            style={{ width: '100%', marginBottom: 20, borderRadius: 8 }}
+            options={[
+              { label: 'API 提供商配置 (Providers)', value: 'providers' },
+              { label: '添加新模型 (Add Model)', value: 'add-model' },
+            ]}
+          />
+
+          {configActiveTab === 'providers' ? (
+            <Form form={configForm} layout="vertical">
+              <Row gutter={16}>
+                <Col span={24}>
+                  <Form.Item label="提供商标识 (ID)" name="name" rules={[{ required: true, message: '必填' }]} extra="例如: deepseek, yovole, openai">
+                    <Input placeholder="输入提供商 ID" />
+                  </Form.Item>
+                </Col>
+                <Col span={24}>
+                  <Form.Item label="API 基准地址 (Base URL)" name="baseUrl" rules={[{ required: true, message: '必填' }]}>
+                    <Input placeholder="https://api.example.com/v1" />
+                  </Form.Item>
+                </Col>
+                <Col span={24}>
+                  <Form.Item label="API 密钥 (API Key)" name="apiKey" rules={[{ required: true, message: '必填' }]}>
+                    <Input.Password placeholder="sk-..." />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="认证类型" name="auth" initialValue="api-key">
+                    <Select options={[{ label: 'API Key', value: 'api-key' }]} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="API 协议" name="api" initialValue="openai-completions">
+                    <Select options={[{ label: 'OpenAI Completions', value: 'openai-completions' }]} />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Button type="primary" block onClick={handleAddProvider} loading={submittingConfig} icon={<Plus size={16} />} style={{ marginTop: 8, height: 40, borderRadius: 10 }}>
+                保存并生效提供商配置
+              </Button>
+            </Form>
+          ) : (
+            <Form 
+              form={modelForm} 
+              layout="vertical"
+              preserve={true}
+              initialValues={{ 
+                reasoning: false, 
+                api: 'openai-chat',
+                input: ['text']
+              }}
+            >
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item label="所属提供商" name="provider_name" rules={[{ required: true, message: '请选择提供商' }]}>
+                    <Select placeholder="选择一个提供商" allowClear>
+                      {modelsConfig && Object.keys(modelsConfig).map(name => (
+                        <Select.Option key={name} value={name}>{name}</Select.Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="模型标识 (ID)" name="id" rules={[{ required: true, message: '必填' }]}>
+                    <Input placeholder="例如: deepseek-chat" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="显示名称 (Name)" name="name">
+                    <Input placeholder="例如: DeepSeek-V3" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="API 协议" name="api">
+                    <Select options={[
+                      { label: 'OpenAI Chat', value: 'openai-chat' },
+                      { label: 'OpenAI Completions', value: 'openai-completions' }
+                    ]} />
+                  </Form.Item>
+                </Col>
+                <Col span={24}>
+                  <Form.Item label="支持的能力 (Input)" name="input">
+                    <Select mode="multiple" placeholder="支持的输入类型" options={[
+                      { label: 'Text (文本)', value: 'text' },
+                      { label: 'Image (图片)', value: 'image' },
+                      { label: 'Audio (音频)', value: 'audio' }
+                    ]} />
+                  </Form.Item>
+                </Col>
+                <Col span={24}>
+                  <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: 12, border: '1px solid #f1f5f9', marginBottom: 20 }}>
+                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <Zap size={18} color="#f59e0b" />
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 13 }}>开启推理模式 (Reasoning)</div>
+                            <div style={{ fontSize: 11, color: '#94a3b8' }}>针对 DeepSeek-R1 或 O1 等思考型模型</div>
+                          </div>
+                        </div>
+                        <Form.Item name="reasoning" valuePropName="checked" noStyle>
+                           <Checkbox />
+                        </Form.Item>
+                      </div>
+                  </div>
+                </Col>
+              </Row>
+              <Button type="primary" block onClick={handleAddModelToProvider} loading={submittingConfig} icon={<Plus size={16} />} style={{ marginTop: 8, height: 40, borderRadius: 10 }}>
+                将模型追加至该提供商
+              </Button>
+            </Form>
+          )}
         </div>
       </Modal>
 

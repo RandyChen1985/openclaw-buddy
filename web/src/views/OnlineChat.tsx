@@ -3,12 +3,16 @@ import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form } from 
 import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ExternalLink, Share2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
+import rehypeSanitize from 'rehype-sanitize';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import api from '../api';
 
 const { Option } = Select;
 
 interface Message {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp?: string; // 新增时间戳
 }
@@ -306,57 +310,58 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   const markdownStyles = (
     <style>{`
       .markdown-body {
-        font-size: 14px;
-        line-height: 1.6;
+        font-size: 13.5px;
+        line-height: 1.5;
         word-wrap: break-word;
-      }
-      .markdown-body h1, .markdown-body h2, .markdown-body h3 {
-        margin-top: 16px;
-        margin-bottom: 8px;
-        font-weight: 600;
         color: inherit;
       }
-      .markdown-body p { margin-bottom: 8px; }
-      .markdown-body code {
-        padding: 0.2em 0.4em;
-        margin: 0;
-        font-size: 85%;
-        background-color: rgba(175, 184, 193, 0.2);
-        border-radius: 6px;
-        font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+      .markdown-body > *:first-child { margin-top: 0 !important; }
+      .markdown-body > *:last-child { margin-bottom: 0 !important; }
+      
+      .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+        margin-top: 12px;
+        margin-bottom: 6px;
+        font-weight: 700;
+        color: #1e293b;
       }
-      .markdown-body pre {
-        padding: 12px;
-        overflow: auto;
-        font-size: 85%;
-        line-height: 1.45;
-        background-color: #f6f8fa;
-        border-radius: 6px;
-        border: 1px solid #e2e8f0;
-        margin-bottom: 12px;
-      }
-      .markdown-body pre code {
-        padding: 0;
-        margin: 0;
-        background-color: transparent;
-        border: 0;
-      }
+      .markdown-body p { margin-bottom: 6px; }
       .markdown-body ul, .markdown-body ol {
-        margin-bottom: 8px;
+        margin-bottom: 6px;
         padding-left: 20px;
+      }
+      .markdown-body li {
+        margin-bottom: 2px;
       }
       .markdown-body table {
         border-spacing: 0;
         border-collapse: collapse;
-        margin-bottom: 16px;
-        width: 100%;
+        margin-bottom: 10px;
+        width: auto;
+        max-width: 100%;
+        overflow: auto;
+        display: block;
       }
       .markdown-body table th, .markdown-body table td {
-        padding: 6px 13px;
-        border: 1px solid #d0d7de;
+        padding: 4px 10px;
+        border: 1px solid #e2e8f0;
+        font-size: 13px;
+      }
+      .markdown-body table th {
+        background-color: #f8fafc;
+        font-weight: 600;
+        text-align: left;
       }
       .markdown-body table tr:nth-child(2n) {
-        background-color: #f6f8fa;
+        background-color: #fcfcfc;
+      }
+      .markdown-body blockquote {
+        margin: 0 0 10px 0;
+        padding: 0 12px;
+        color: #64748b;
+        border-left: 4px solid #e2e8f0;
+      }
+      .markdown-body pre {
+        margin-bottom: 10px !important;
       }
     `}</style>
   );
@@ -588,48 +593,63 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                     position: 'relative'
                   }}>
                     {msg.role === 'assistant' ? (
-                      <div className="markdown-body">
+                      <div className="markdown-body" style={{ whiteSpace: 'normal' }}>
                         <ReactMarkdown 
-                          remarkPlugins={[remarkGfm]}
+                          remarkPlugins={[remarkGfm, remarkBreaks]}
+                          rehypePlugins={[rehypeSanitize]}
                           components={{
-                            a: ({ node, ...props }) => {
-                              const href = props.href || '';
-                              const isAction = href.startsWith('action:');
-                              if (isAction) {
-                                // 解码，因为预处理时编码了
-                                const actionText = decodeURIComponent(href.replace('action:', ''));
+                            code: ({ node, inline, className, children, ...props }: any) => {
+                              const match = /language-(\w+)/.exec(className || '');
+                              const language = match ? match[1] : '';
+                              
+                              if (!inline && language) {
                                 return (
-                                  <Button 
-                                    size="small" 
-                                    type="link"
-                                    onClick={() => handleSend(actionText)}
-                                    style={{ 
-                                      padding: '0 8px', 
-                                      height: 24, 
-                                      fontSize: 12, 
-                                      background: '#f0f9ff', 
-                                      borderRadius: 12, 
-                                      border: '1px solid #bae6fd',
-                                      color: '#0369a1',
-                                      margin: '2px 4px',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
+                                  <div style={{ position: 'relative', margin: '12px 0' }}>
+                                    <div style={{ 
+                                      position: 'absolute', 
+                                      right: 8, 
+                                      top: 8, 
+                                      zIndex: 1, 
+                                      fontSize: 10, 
+                                      color: '#94a3b8',
+                                      textTransform: 'uppercase',
                                       fontWeight: 600,
-                                      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
-                                    }}
-                                  >
-                                    <Zap size={10} style={{ marginRight: 4 }} />
-                                    {props.children}
-                                  </Button>
+                                      pointerEvents: 'none'
+                                    }}>
+                                      {language}
+                                    </div>
+                                    <SyntaxHighlighter
+                                      {...props}
+                                      style={vscDarkPlus}
+                                      language={language}
+                                      PreTag="div"
+                                      customStyle={{
+                                        margin: 0,
+                                        borderRadius: '8px',
+                                        fontSize: '13px',
+                                        padding: '16px 12px'
+                                      }}
+                                    >
+                                      {String(children).replace(/\n$/, '')}
+                                    </SyntaxHighlighter>
+                                  </div>
                                 );
                               }
-                              return <a {...props} target="_blank" rel="noopener noreferrer" />;
+                              
+                              return (
+                                <code className={className} {...props} style={{
+                                  padding: '0.2em 0.4em',
+                                  backgroundColor: 'rgba(175, 184, 193, 0.2)',
+                                  borderRadius: '6px',
+                                  fontSize: '85%'
+                                }}>
+                                  {children}
+                                </code>
+                              );
                             }
                           }}
                         >
-                          {msg.content.replace(/\[([^\]]+)\]\(action:([^\)]+)\)/g, (_, label, action) => {
-                            return `[${label}](action:${encodeURIComponent(action.trim())})`;
-                          })}
+                          {msg.content}
                         </ReactMarkdown>
                       </div>
                     ) : (

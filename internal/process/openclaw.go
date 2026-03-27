@@ -367,3 +367,163 @@ func GetOpenClawSessions() ([]OpenClawSession, error) {
 	}
 	return data.Sessions, nil
 }
+
+func GetOpenClawModelsConfig(configDir string) (map[string]interface{}, error) {
+	configPath := filepath.Join(configDir, "openclaw.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var fullCfg map[string]interface{}
+	if err := json.Unmarshal(data, &fullCfg); err != nil {
+		return nil, err
+	}
+
+	models, ok := fullCfg["models"].(map[string]interface{})
+	if !ok {
+		return make(map[string]interface{}), nil
+	}
+
+	providers, ok := models["providers"].(map[string]interface{})
+	if !ok {
+		return make(map[string]interface{}), nil
+	}
+
+	return providers, nil
+}
+
+func AddOpenClawProvider(configDir, name string, config map[string]interface{}) error {
+	configPath := filepath.Join(configDir, "openclaw.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+
+	var fullCfg map[string]interface{}
+	if err := json.Unmarshal(data, &fullCfg); err != nil {
+		return err
+	}
+
+	models, ok := fullCfg["models"].(map[string]interface{})
+	if !ok {
+		models = make(map[string]interface{})
+		fullCfg["models"] = models
+	}
+
+	providers, ok := models["providers"].(map[string]interface{})
+	if !ok {
+		providers = make(map[string]interface{})
+		models["providers"] = providers
+	}
+
+	// 如果 Provider 已存在，保留原有的 models 列表
+	if existing, ok := providers[name].(map[string]interface{}); ok {
+		if existingModels, ok := existing["models"]; ok {
+			config["models"] = existingModels
+		}
+	} else if _, ok := config["models"]; !ok {
+		config["models"] = []interface{}{}
+	}
+
+	providers[name] = config
+
+	newData, err := json.MarshalIndent(fullCfg, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(configPath, newData, 0644)
+}
+
+func AddOpenClawModelToProvider(configDir, providerName string, modelConfig map[string]interface{}) error {
+	configPath := filepath.Join(configDir, "openclaw.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+
+	var fullCfg map[string]interface{}
+	if err := json.Unmarshal(data, &fullCfg); err != nil {
+		return err
+	}
+
+	// --- 1. 处理 models.providers 部分 ---
+	models, ok := fullCfg["models"].(map[string]interface{})
+	if !ok {
+		models = make(map[string]interface{})
+		fullCfg["models"] = models
+	}
+
+	providers, ok := models["providers"].(map[string]interface{})
+	if !ok {
+		providers = make(map[string]interface{})
+		models["providers"] = providers
+	}
+
+	provider, ok := providers[providerName].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("provider %s not found", providerName)
+	}
+
+	providerModels, ok := provider["models"].([]interface{})
+	if !ok {
+		providerModels = []interface{}{}
+	}
+
+	// 补齐模型配置默认值
+	if _, ok := modelConfig["cost"]; !ok {
+		modelConfig["cost"] = map[string]interface{}{
+			"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0,
+		}
+	}
+	if _, ok := modelConfig["contextWindow"]; !ok {
+		modelConfig["contextWindow"] = 128000
+	}
+	if _, ok := modelConfig["maxTokens"]; !ok {
+		modelConfig["maxTokens"] = 4096
+	}
+	if _, ok := modelConfig["compat"]; !ok {
+		modelConfig["compat"] = map[string]interface{}{
+			"supportsStore": false, "supportsDeveloperRole": false,
+		}
+	}
+
+	provider["models"] = append(providerModels, modelConfig)
+
+	// --- 2. 处理 agents.defaults.models 注册部分 ---
+	agents, ok := fullCfg["agents"].(map[string]interface{})
+	if !ok {
+		agents = make(map[string]interface{})
+		fullCfg["agents"] = agents
+	}
+
+	defaults, ok := agents["defaults"].(map[string]interface{})
+	if !ok {
+		defaults = make(map[string]interface{})
+		agents["defaults"] = defaults
+	}
+
+	registeredModels, ok := defaults["models"].(map[string]interface{})
+	if !ok {
+		registeredModels = make(map[string]interface{})
+		defaults["models"] = registeredModels
+	}
+
+	// 注册格式: "provider/id": {}
+	modelID, _ := modelConfig["id"].(string)
+	if modelID != "" {
+		registrationKey := fmt.Sprintf("%s/%s", providerName, modelID)
+		if _, exists := registeredModels[registrationKey]; !exists {
+			registeredModels[registrationKey] = make(map[string]interface{})
+		}
+	}
+
+	// 序列化回文件
+	newData, err := json.MarshalIndent(fullCfg, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(configPath, newData, 0644)
+}

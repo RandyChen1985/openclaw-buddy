@@ -707,3 +707,65 @@ func (s *Server) getSessions(c *gin.Context) {
 		"updated_at": updatedAt,
 	})
 }
+
+func (s *Server) getOpenClawModelsConfig(c *gin.Context) {
+	providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, providers)
+}
+
+func (s *Server) addOpenClawProvider(c *gin.Context) {
+	var req struct {
+		Name   string                 `json:"name" binding:"required"`
+		Config map[string]interface{} `json:"config" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误，请提供名称和配置信息"})
+		return
+	}
+
+	if err := process.AddOpenClawProvider(s.cfg.OpenClawConfigDir, req.Name, req.Config); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "提供商已成功添加/更新"})
+}
+
+func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
+	// 读取原始 body 用于调试
+	bodyBytes, _ := io.ReadAll(c.Request.Body)
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // 写回 body 供后续绑定使用
+
+	var req struct {
+		ProviderName string                 `json:"provider_name"`
+		ModelConfig  map[string]interface{} `json:"model_config"`
+	}
+	
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fmt.Printf("❌ [ModelAdd] JSON Bind Error: %v | Body: %s\n", err, string(bodyBytes))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "JSON 格式错误: " + err.Error()})
+		return
+	}
+
+	// 手动校验
+	if req.ProviderName == "" || req.ModelConfig == nil {
+		fmt.Printf("❌ [ModelAdd] Missing Fields | Provider: '%s', ConfigExist: %v | Body: %s\n", 
+			req.ProviderName, req.ModelConfig != nil, string(bodyBytes))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数缺失：请确保选择了提供商并填写了模型配置"})
+		return
+	}
+
+	if err := process.AddOpenClawModelToProvider(s.cfg.OpenClawConfigDir, req.ProviderName, req.ModelConfig); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 成功后强制同步 bots_models 缓存，让前端能刷出新模型
+	process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "模型已成功添加至提供商"})
+}
