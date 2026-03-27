@@ -348,7 +348,12 @@ const Dashboard = () => {
       position: 'sticky', top: 0, zIndex: 20, flexShrink: 0, lineHeight: 'normal',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {onMenuClick && <Button type="text" icon={<MenuIcon size={20} />} onClick={onMenuClick} style={{ marginLeft: -8 }} />}
+        <Button 
+          type="text" 
+          icon={<MenuIcon size={20} />} 
+          onClick={onMenuClick} 
+          style={{ marginLeft: -8, color: '#64748b' }} 
+        />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: '#64748b' }}>
           <span style={{ fontWeight: 600, color: '#1e293b' }}>控制台</span>
           <span>/</span>
@@ -411,7 +416,7 @@ const Dashboard = () => {
             />
           </Sider>
           <Layout style={{ marginLeft: collapsed ? 64 : 220, transition: 'margin-left 0.2s', minHeight: '100vh' }}>
-            {headerEl()}
+            {headerEl(() => setCollapsed(!collapsed))}
             <Content style={{ padding: activeTab === 'logs' ? 0 : 24, background: '#f8fafc', flex: 1 }}>
               <div style={{ maxWidth: 'none', margin: '0 auto', height: activeTab === 'logs' ? '100%' : 'auto' }}>
                 {renderContent()}
