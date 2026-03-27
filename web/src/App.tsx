@@ -552,10 +552,23 @@ const Dashboard = () => {
               onLogout={handleLogout} navItems={navItems} 
             />
           </Sider>
-          <Layout style={{ marginLeft: collapsed ? 64 : 220, transition: 'margin-left 0.2s', minHeight: '100vh' }}>
+          <Layout style={{ marginLeft: collapsed ? 64 : 220, transition: 'margin-left 0.2s', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
             {headerEl(() => setCollapsed(!collapsed))}
-            <Content style={{ padding: activeTab === 'logs' || activeTab === 'chat' ? 0 : 24, background: '#f8fafc', flex: 1 }}>
-              <div style={{ maxWidth: 'none', margin: '0 auto', height: activeTab === 'logs' || activeTab === 'chat' ? '100%' : 'auto' }}>
+            <Content style={{ 
+              padding: activeTab === 'logs' || activeTab === 'chat' ? 0 : 24, 
+              background: '#f8fafc', 
+              flex: 1,
+              display: 'flex', 
+              flexDirection: 'column' 
+            }}>
+              <div style={{ 
+                maxWidth: 'none', 
+                margin: '0 auto', 
+                flex: 1,
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
                 {renderContent()}
               </div>
             </Content>

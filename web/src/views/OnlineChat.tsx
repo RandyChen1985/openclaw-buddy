@@ -363,11 +363,13 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
   return (
     <div style={{ 
-      height: isEmbedMode ? '100vh' : 'calc(100vh - 56px)', 
+      flex: 1,
       display: 'flex', 
       flexDirection: 'column', 
       gap: isEmbedMode ? 0 : 16,
-      background: '#f8fafc'
+      background: '#f8fafc',
+      width: '100%',
+      height: '100%'
     }}>
       {markdownStyles}
       {/* Top Bar */}
