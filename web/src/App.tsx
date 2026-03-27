@@ -514,7 +514,13 @@ const Dashboard = () => {
       {transitionMask}
       
       {isEmbed ? (
-        <div style={{ minHeight: '100vh', background: '#f8fafc', padding: activeTab === 'chat' || activeTab === 'logs' ? 0 : 24 }}>
+        <div style={{ 
+          minHeight: '100vh', 
+          background: '#f8fafc', 
+          display: 'flex', 
+          flexDirection: 'column',
+          padding: activeTab === 'chat' || activeTab === 'logs' ? 0 : 24 
+        }}>
           {renderContent()}
         </div>
       ) : isMobile ? (
