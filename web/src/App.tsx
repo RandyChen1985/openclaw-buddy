@@ -340,6 +340,7 @@ const Dashboard = () => {
   };
   
   const handleOpenDashboard = async () => {
+    const hide = message.loading('正在计算龙虾面板访问地址...', 0);
     try {
       const res = await api.get('/v1/openclaw/dashboard-url');
       if (res.data.url) {
@@ -347,6 +348,8 @@ const Dashboard = () => {
       }
     } catch (e) {
       message.error('无法获取龙虾面板地址');
+    } finally {
+      hide();
     }
   };
 
