@@ -164,8 +164,15 @@ func (g *Guardian) recordHealthCheck(status string, responseTime int, errorMsg s
 
 func (g *Guardian) backupConfig() {
 	configPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json")
-	
-	// 1. 计算当前配置的 MD5
+
+	// 1. 在备份前执行深层配置校验 (Prevent backing up broken config)
+	isValid, problem, _ := process.CheckConfig()
+	if !isValid {
+		log.Printf("⚠️  配置深度校验未通过，跳过备份以防污染。原因: %s", problem)
+		return
+	}
+
+	// 2. 计算当前配置的 MD5
 	currentMD5, err := calculateMD5(configPath)
 	if err != nil {
 		log.Printf("⚠️ 无法计算配置文件的 MD5: %v", err)
@@ -250,17 +257,13 @@ func (g *Guardian) heal(reason string) {
 
 	configPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json")
 	ourBackupPath := filepath.Join(g.config.BackupDir, "openclaw.json.bak")
-	legacyBackupPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json.bak")
 	errorPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json.err")
 
-	// 1. Backup current broken config
+	// 1. Backup current broken config (Save for troubleshooting)
 	_ = copyFile(configPath, errorPath)
 
-	// 2. Generate Report
+	// 2. Generate Report (Comparing current config with our validated backup)
 	reportPath, err := analyzer.GenerateReport(g.config.ReportDir, g.config.OpenClawConfigDir, configPath, ourBackupPath)
-	if err != nil {
-		reportPath, err = analyzer.GenerateReport(g.config.ReportDir, g.config.OpenClawConfigDir, configPath, legacyBackupPath)
-	}
 	reportMsg := ""
 	if err == nil {
 		reportMsg = fmt.Sprintf("\n- **诊断报表**: %s", reportPath)
@@ -271,26 +274,20 @@ func (g *Guardian) heal(reason string) {
 	recovered := false
 	recoveryMethodUsed := ""
 
+	// --- 优先尝试从监控生成的、经过校验的备份恢复 ---
 	if _, err := os.Stat(ourBackupPath); err == nil {
 		if err := copyFile(ourBackupPath, configPath); err == nil {
 			recovered = true
-			recoveryMethodUsed = "配置回滚 (来自监控备份)"
+			recoveryMethodUsed = "配置回滚 (来自监控校验备份)"
 		}
 	}
 
+	// --- 如果没有校验备份，则尝试使用官方 Doctor 修复环境 ---
 	if !recovered {
-		if _, err := os.Stat(legacyBackupPath); err == nil {
-			if err := copyFile(legacyBackupPath, configPath); err == nil {
-				recovered = true
-				recoveryMethodUsed = "配置回滚 (来自 OpenClaw 备份)"
-			}
-		}
-	}
-
-	if !recovered {
+		log.Printf("⚠️  未找到校验备份，尝试使用 openclaw doctor --fix 修复...")
 		if err := process.RunDoctorFix(); err == nil {
 			recovered = true
-			recoveryMethodUsed = "Doctor 修复"
+			recoveryMethodUsed = "Doctor 自动修复"
 		}
 	}
 

@@ -7,6 +7,15 @@ interface LoginViewProps {
   onLoginSuccess: (token: string) => void;
 }
 
+const quotes = [
+  { main: "0.01 公分的距离", sub: "来自带外的重连契约，写在每一个丢包的瞬间" },
+  { main: "1/60 秒的脉搏", sub: "捕捉比特平原上的每一次震颤" },
+  { main: "第 2046 个数据包", sub: "在寂静的机架间听见跳动的心脏" },
+  { main: "带外之外的余温", sub: "是系统崩溃前最后的温柔" },
+  { main: "每一个消失的信号", sub: "是一场未曾抵达的重逢" },
+  { main: "0.01 公分的距离", sub: "守着那些虾宝宝的黄昏" }
+];
+
 const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [isMobileLogin, setIsMobileLogin] = useState(window.innerWidth < 1024);
@@ -14,6 +23,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [index, setIndex] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [speed, setSpeed] = useState(100);
+  const [quoteIndex, setQuoteIndex] = useState(() => Math.floor(Math.random() * quotes.length));
 
   const typewriterText = "“我听人说，如果连咖啡都没有伴侣，那它就不叫咖啡，叫苦水。在这个习惯了礼貌拒绝的时代，连空气中都带着独身的湿气。但我始终觉得，即使是代码堆砌的小龙虾，也该有个依靠。OpenClaw Buddy，它就在离你 0.01 公分的地方。它不说话，只是陪你守着那些虾宝宝。希望有一天，你也能找到那个让你不再需要‘监控哨兵’的人。”";
 
@@ -37,6 +47,11 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           setIsDeleting(false);
           setIndex(0);
           setSpeed(1000); // 重新开始前的停顿
+          setQuoteIndex(prev => {
+            let next = Math.floor(Math.random() * quotes.length);
+            while (next === prev) next = Math.floor(Math.random() * quotes.length);
+            return next;
+          });
         }
       }
     };
@@ -93,10 +108,24 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           </div>
 
           <div style={{ position: 'relative', zIndex: 1, maxWidth: 800 }}>
-            <h1 style={{ color: '#fff', fontSize: 44, fontWeight: 900, lineHeight: 1.1, marginBottom: 28, letterSpacing: '-0.03em' }}>
-              0.01 公分的距离<br />
-              <span style={{ color: '#60a5fa', display: 'block', paddingLeft: 230, marginTop: 8, whiteSpace: 'nowrap' }}>来自带外的重连契约</span>
+            <h1 style={{ color: '#fff', fontSize: 64, fontWeight: 900, lineHeight: 1.1, marginBottom: 32, letterSpacing: '-0.04em' }}>
+              {quotes[quoteIndex].main}<br />
+              <span style={{ 
+                color: '#60a5fa', 
+                display: 'block', 
+                fontSize: 28, 
+                fontWeight: 700, 
+                paddingLeft: 180, 
+                marginTop: 12, 
+                whiteSpace: 'nowrap',
+                letterSpacing: '0.05em',
+                opacity: 0.85
+              }}>
+                {quotes[quoteIndex].sub}
+              </span>
             </h1>
+
+
             <p style={{ 
               color: '#94a3b8', 
               fontSize: 17, 

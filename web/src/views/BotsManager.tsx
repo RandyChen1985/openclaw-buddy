@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox } from 'antd';
-import { Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, Settings, ShieldCheck, Zap, MessageSquare } from 'lucide-react';
+import { Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, MessageSquare, Star } from 'lucide-react';
 import dayjs from 'dayjs';
 import api from '../api';
 import { message } from 'antd';
@@ -42,8 +42,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   // 模型管理相关状态
   const [modelsConfig, setModelsConfig] = useState<any>(null);
   const [loadingConfig, setLoadingConfig] = useState(false);
-  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-  const [configActiveTab, setConfigActiveTab] = useState('providers');
+  const [isProviderModalOpen, setIsProviderModalOpen] = useState(false);
+  const [isModelModalOpen, setIsModelModalOpen] = useState(false);
   const [configForm] = Form.useForm();
   const [modelForm] = Form.useForm();
   const [submittingConfig, setSubmittingConfig] = useState(false);
@@ -372,16 +372,28 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Cpu size={isMobile ? 18 : 20} color="#6366f1" /> 模型军团 (Models)
                   </div>
-                  <Button 
-                    type="primary" 
-                    ghost 
-                    size="small" 
-                    icon={<Settings size={14} />} 
-                    onClick={() => setIsConfigModalOpen(true)}
-                    style={{ borderRadius: 8, fontSize: 12 }}
-                  >
-                    管理模型配置
-                  </Button>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <Button 
+                      type="primary" 
+                      ghost 
+                      size="small" 
+                      icon={<ShieldCheck size={14} />} 
+                      onClick={() => setIsProviderModalOpen(true)}
+                      style={{ borderRadius: 8, fontSize: 12 }}
+                    >
+                      添加渠道
+                    </Button>
+                    <Button 
+                      type="primary" 
+                      ghost 
+                      size="small" 
+                      icon={<Plus size={14} />} 
+                      onClick={() => setIsModelModalOpen(true)}
+                      style={{ borderRadius: 8, fontSize: 12 }}
+                    >
+                      添加模型
+                    </Button>
+                  </div>
                 </div>
               }
               styles={{ body: { padding: '20px' } }}
@@ -454,7 +466,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                         <Button 
                                           type="text" 
                                           size="small" 
-                                          icon={<RefreshCw size={12} />} 
+                                          icon={<Star size={12} />} 
                                           onClick={() => handleSetDefaultModel(m)}
                                           style={{ color: '#94a3b8', padding: '0 4px', height: 20, fontSize: 10, display: 'flex', alignItems: 'center' }}
                                         />
@@ -613,11 +625,32 @@ const BotsManager: React.FC<BotsManagerProps> = ({
               name="model"
               rules={[{ required: true, message: '请选择关联的模型' }]}
             >
-              <Select placeholder="请选择 AI 模型">
-                {botsModels?.data?.models?.map((m: any) => (
-                  <Select.Option key={m.id} value={m.id}>
-                    {m.name} ({m.provider})
-                  </Select.Option>
+              <Select 
+                placeholder="请选择 AI 模型" 
+                dropdownStyle={{ borderRadius: 12 }}
+                showSearch
+                optionFilterProp="label"
+              >
+                {/* 按 Provider 分组展示 */}
+                {Object.entries(
+                  (botsModels?.data?.models || []).reduce((acc: any, m: any) => {
+                    // 如果 ID 是 provider/model 格式，则取 / 前面的
+                    const p = m.id.includes('/') ? m.id.split('/')[0] : (m.provider || 'Others');
+                    if (!acc[p]) acc[p] = [];
+                    acc[p].push(m);
+                    return acc;
+                  }, {})
+                ).map(([provider, models]: [string, any]) => (
+                  <Select.OptGroup key={provider} label={provider.toUpperCase()}>
+                    {models.map((m: any) => (
+                      <Select.Option key={m.id} value={m.id} label={m.name}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span>{m.name || m.id}</span>
+                          <span style={{ fontSize: 10, color: '#94a3b8' }}>{m.id}</span>
+                        </div>
+                      </Select.Option>
+                    ))}
+                  </Select.OptGroup>
                 ))}
               </Select>
             </Form.Item>
@@ -625,33 +658,22 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         </div>
       </Modal>
 
-      {/* 模型与提供商管理对话框 */}
+      {/* 渠道管理对话框 */}
       <Modal
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ padding: 6, background: '#f5f3ff', borderRadius: 8 }}><Cpu size={18} color="#7c3aed" /></div>
-            <span>开放架构模型管理 (OpenClaw Models)</span>
+            <div style={{ padding: 6, background: '#f5f3ff', borderRadius: 8 }}><ShieldCheck size={18} color="#7c3aed" /></div>
+            <span>添加 API 提供商配置 (Add Provider)</span>
           </div>
         }
-        open={isConfigModalOpen}
-        onCancel={() => setIsConfigModalOpen(false)}
+        open={isProviderModalOpen}
+        onCancel={() => setIsProviderModalOpen(false)}
         footer={null}
-        width={600}
+        width={550}
         centered
         style={{ borderRadius: 16 }}
       >
         <div style={{ padding: '8px 0' }}>
-          <Select 
-            value={configActiveTab} 
-            onChange={setConfigActiveTab}
-            style={{ width: '100%', marginBottom: 20, borderRadius: 8 }}
-            options={[
-              { label: 'API 提供商配置 (Providers)', value: 'providers' },
-              { label: '添加新模型 (Add Model)', value: 'add-model' },
-            ]}
-          />
-
-          {configActiveTab === 'providers' ? (
             <Form form={configForm} layout="vertical">
               <Row gutter={16}>
                 <Col span={24}>
@@ -681,17 +703,35 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 </Col>
               </Row>
               <Button type="primary" block onClick={handleAddProvider} loading={submittingConfig} icon={<Plus size={16} />} style={{ marginTop: 8, height: 40, borderRadius: 10 }}>
-                保存并生效提供商配置
+                保存并生效渠道配置
               </Button>
             </Form>
-          ) : (
+        </div>
+      </Modal>
+
+      {/* 模型追加对话框 */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ padding: 6, background: '#f5f3ff', borderRadius: 8 }}><Cpu size={18} color="#7c3aed" /></div>
+            <span>添加新模型 (Add Model to Provider)</span>
+          </div>
+        }
+        open={isModelModalOpen}
+        onCancel={() => setIsModelModalOpen(false)}
+        footer={null}
+        width={550}
+        centered
+        style={{ borderRadius: 16 }}
+      >
+        <div style={{ padding: '8px 0' }}>
             <Form 
               form={modelForm} 
               layout="vertical"
               preserve={true}
               initialValues={{ 
                 reasoning: false, 
-                api: 'openai-chat',
+                api: 'openai-completions',
                 input: ['text']
               }}
             >
@@ -718,8 +758,14 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 <Col span={12}>
                   <Form.Item label="API 协议" name="api">
                     <Select options={[
-                      { label: 'OpenAI Chat', value: 'openai-chat' },
-                      { label: 'OpenAI Completions', value: 'openai-completions' }
+                      { label: 'OpenAI Completions', value: 'openai-completions' },
+                      { label: 'OpenAI Responses', value: 'openai-responses' },
+                      { label: 'OpenAI Codex Responses', value: 'openai-codex-responses' },
+                      { label: 'Anthropic Messages', value: 'anthropic-messages' },
+                      { label: 'Google Generative AI', value: 'google-generative-ai' },
+                      { label: 'GitHub Copilot', value: 'github-copilot' },
+                      { label: 'Bedrock Converse Stream', value: 'bedrock-converse-stream' },
+                      { label: 'Ollama', value: 'ollama' }
                     ]} />
                   </Form.Item>
                 </Col>
@@ -750,10 +796,9 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 </Col>
               </Row>
               <Button type="primary" block onClick={handleAddModelToProvider} loading={submittingConfig} icon={<Plus size={16} />} style={{ marginTop: 8, height: 40, borderRadius: 10 }}>
-                将模型追加至该提供商
+                将模型追加至该渠道
               </Button>
             </Form>
-          )}
         </div>
       </Modal>
 

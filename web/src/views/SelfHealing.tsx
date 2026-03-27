@@ -1,7 +1,14 @@
-import React from 'react';
-import { Card, Badge, Button, List, Tag } from 'antd';
-import { Zap, Terminal } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Card, Badge, Button, List, Tag, Modal, Spin, message } from 'antd';
+import { Zap, Terminal, FileText, ChevronRight, RefreshCw, Clock, HardDrive } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
+import rehypeSanitize from 'rehype-sanitize';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import dayjs from 'dayjs';
+import api from '../api';
 
 interface SelfHealingProps {
   selfHealingEnabled: boolean;
@@ -17,9 +24,105 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
   onToggle 
 }) => {
   const isMobile = window.innerWidth < 768;
+  const [reports, setReports] = useState<any[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<any>(null);
+  const [reportContent, setReportContent] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loadingContent, setLoadingContent] = useState(false);
+
+  useEffect(() => {
+    fetchReports();
+  }, []);
+
+  const fetchReports = async () => {
+    setLoadingReports(true);
+    try {
+      const res = await api.get('/v1/heal/reports');
+      setReports(res.data || []);
+    } catch (err) {
+      console.error('Failed to fetch reports:', err);
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
+  const viewReport = async (report: any) => {
+    setSelectedReport(report);
+    setIsModalOpen(true);
+    setLoadingContent(true);
+    setReportContent('');
+    try {
+      const res = await api.get(`/v1/heal/reports/${report.name}`);
+      setReportContent(res.data.content);
+    } catch (err) {
+      message.error('读取报表内容失败');
+      setIsModalOpen(false);
+    } finally {
+      setLoadingContent(false);
+    }
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  // --- Styles for Markdown Content (Copied from OnlineChat for consistency) ---
+  const markdownStyles = (
+    <style>{`
+      .markdown-body {
+        font-size: 13.5px;
+        line-height: 1.5;
+        word-wrap: break-word;
+        color: #334155;
+      }
+      .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+        margin-top: 16px;
+        margin-bottom: 8px;
+        font-weight: 700;
+        color: #1e293b;
+        border-bottom: 1px solid #f1f5f9;
+        padding-bottom: 4px;
+      }
+      .markdown-body p { margin-bottom: 8px; }
+      .markdown-body table {
+        border-spacing: 0;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+        width: 100%;
+        overflow-x: auto;
+        display: block;
+      }
+      .markdown-body table th, .markdown-body table td {
+        padding: 6px 12px;
+        border: 1px solid #e2e8f0;
+        font-size: 13px;
+      }
+      .markdown-body table th {
+        background-color: #f8fafc;
+        font-weight: 600;
+      }
+      .markdown-body pre {
+        margin-bottom: 10px !important;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .markdown-body blockquote {
+        margin: 0 0 10px 0;
+        padding: 0 12px;
+        color: #64748b;
+        border-left: 4px solid #e2e8f0;
+      }
+    `}</style>
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {markdownStyles}
       {/* 软开关卡片 */}
       <Card
         styles={{ body: { padding: isMobile ? '20px' : '24px 28px' } }}
@@ -122,6 +225,106 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
           />
         )}
       </Card>
+
+      {/* 诊断报表列表 */}
+      <Card
+        title={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FileText size={16} /> 故障诊断报表 (Reports)
+            </span>
+            <Button size="small" type="text" icon={<RefreshCw size={12} />} onClick={fetchReports} loading={loadingReports}>
+              刷新
+            </Button>
+          </div>
+        }
+        styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 48 }, body: { padding: isMobile ? '8px 16px' : '12px 24px' } }}
+        style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
+      >
+        {reports.length === 0 ? (
+          <div style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8' }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>📄</div>
+            <div style={{ fontSize: 12 }}>暂无生成的诊断报表</div>
+          </div>
+        ) : (
+          <List
+            dataSource={reports}
+            renderItem={(item: any) => (
+              <List.Item 
+                style={{ padding: '12px 0', borderBottom: '1px solid #f8fafc', cursor: 'pointer' }}
+                onClick={() => viewReport(item)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <FileText size={16} color="#64748b" />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 13 }}>{item.name}</div>
+                      <div style={{ display: 'flex', gap: 12, marginTop: 2 }}>
+                        <span style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={10} /> {item.time}</span>
+                        <span style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}><HardDrive size={10} /> {formatSize(item.size)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronRight size={16} color="#cbd5e1" />
+                </div>
+              </List.Item>
+            )}
+          />
+        )}
+      </Card>
+
+      {/* 报表内容弹窗 */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FileText size={18} color="#3b82f6" />
+            <span>诊断报表详情: {selectedReport?.name}</span>
+          </div>
+        }
+        open={isModalOpen}
+        onCancel={() => setIsModalOpen(false)}
+        footer={[
+          <Button key="close" type="primary" onClick={() => setIsModalOpen(false)}>关闭</Button>
+        ]}
+        width={isMobile ? '95%' : 800}
+        centered
+        styles={{ body: { maxHeight: '70vh', overflowY: 'auto', padding: '20px 24px' } }}
+      >
+        {loadingContent ? (
+          <div style={{ padding: '60px 0', textAlign: 'center' }}><Spin tip="正在加载报表内容..." /></div>
+        ) : (
+          <div className="markdown-body">
+            <ReactMarkdown 
+              remarkPlugins={[remarkGfm, remarkBreaks]}
+              rehypePlugins={[rehypeSanitize]}
+              components={{
+                code: ({ node, inline, className, children, ...props }: any) => {
+                  const match = /language-(\w+)/.exec(className || '');
+                  const language = match ? match[1] : '';
+                  return !inline && language ? (
+                    <SyntaxHighlighter
+                      {...props}
+                      style={vscDarkPlus}
+                      language={language}
+                      PreTag="div"
+                    >
+                      {String(children).replace(/\n$/, '')}
+                    </SyntaxHighlighter>
+                  ) : (
+                    <code className={className} {...props}>
+                      {children}
+                    </code>
+                  );
+                }
+              }}
+            >
+              {reportContent}
+            </ReactMarkdown>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

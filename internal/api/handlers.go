@@ -8,7 +8,10 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"yovole-openclaw-monitor/internal/process"
@@ -311,6 +314,53 @@ func (s *Server) getHealEvents(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, events)
+}
+
+func (s *Server) getHealReports(c *gin.Context) {
+	files, err := os.ReadDir(s.cfg.ReportDir)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法读取报表目录: " + err.Error()})
+		return
+	}
+
+	reports := []map[string]interface{}{}
+	for _, f := range files {
+		if !f.IsDir() && strings.HasSuffix(f.Name(), ".md") {
+			info, _ := f.Info()
+			reports = append(reports, map[string]interface{}{
+				"name": f.Name(),
+				"size": info.Size(),
+				"time": info.ModTime().Format("2006-01-02 15:04:05"),
+			})
+		}
+	}
+
+	// 按时间倒序
+	sort.Slice(reports, func(i, j int) bool {
+		return reports[i]["time"].(string) > reports[j]["time"].(string)
+	})
+
+	c.JSON(http.StatusOK, reports)
+}
+
+func (s *Server) getHealReportDetail(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" || strings.Contains(name, "..") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的报表名称"})
+		return
+	}
+
+	path := filepath.Join(s.cfg.ReportDir, name)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "未找到该报表"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"name":    name,
+		"content": string(content),
+	})
 }
 
 func (s *Server) installWeChatPlugin(c *gin.Context) {

@@ -365,15 +365,16 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         border-spacing: 0;
         border-collapse: collapse;
         margin-bottom: 10px;
-        width: auto;
-        max-width: 100%;
-        overflow: auto;
+        width: 100%;
+        overflow-x: auto;
         display: block;
+        -webkit-overflow-scrolling: touch;
       }
       .markdown-body table th, .markdown-body table td {
-        padding: 4px 10px;
+        padding: ${isMobile ? '4px 8px' : '4px 10px'};
         border: 1px solid #e2e8f0;
-        font-size: 13px;
+        font-size: ${isMobile ? '12px' : '13px'};
+        min-width: ${isMobile ? '60px' : 'auto'};
       }
       .markdown-body table th {
         background-color: #f8fafc;
@@ -391,6 +392,8 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       }
       .markdown-body pre {
         margin-bottom: 10px !important;
+        max-width: 100%;
+        overflow-x: auto;
       }
     `}</style>
   );
@@ -604,7 +607,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                   icon={msg.role === 'user' ? <User size={18} /> : <Bot size={18} color="#2563eb" />}
                 />
                 <div style={{ 
-                  maxWidth: '85%',
+                  maxWidth: isMobile ? '92%' : '85%',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',

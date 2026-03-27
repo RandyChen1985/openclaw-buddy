@@ -59,6 +59,46 @@ func CheckHealth() (time.Duration, error) {
 	return elapsed, nil
 }
 
+// CheckConfig 执行 openclaw health 并检查配置内容是否有效
+func CheckConfig() (bool, string, error) {
+	cmd := exec.Command("openclaw", "health")
+	out, err := cmd.CombinedOutput()
+	output := string(out)
+
+	// 如果输出包含 "Problem:" 或 "Config invalid"，则认为配置无效
+	if strings.Contains(output, "Problem:") || strings.Contains(output, "Config invalid") {
+		// 提取 Problem 之后的内容
+		lines := strings.Split(output, "\n")
+		var problemDetails []string
+		foundProblem := false
+		for _, line := range lines {
+			trimmedLine := strings.TrimSpace(line)
+			if trimmedLine == "" {
+				continue
+			}
+			if strings.Contains(line, "Problem:") {
+				foundProblem = true
+			}
+			if foundProblem {
+				problemDetails = append(problemDetails, trimmedLine)
+			}
+		}
+
+		detail := "配置校验失败"
+		if len(problemDetails) > 0 {
+			detail = strings.Join(problemDetails, " | ")
+		}
+		return false, detail, nil
+	}
+
+	// 如果有错误但没捕获到 Problem，可能是命令本身执行失败
+	if err != nil {
+		return false, fmt.Sprintf("命令执行异常: %v", err), nil
+	}
+
+	return true, "", nil
+}
+
 func GetDashboardURL(externalPrefix string) (string, error) {
 	// 使用 context 增加超时控制，将超时增加到 30 秒
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

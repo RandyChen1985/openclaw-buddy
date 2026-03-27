@@ -112,6 +112,8 @@ func (s *Server) setupRoutes() {
 		v1.GET("/settings/self-healing", s.getSelfHealingSetting)
 		v1.POST("/settings/self-healing", s.updateSelfHealingSetting)
 		v1.GET("/heal/events", s.getHealEvents)
+		v1.GET("/heal/reports", s.getHealReports)
+		v1.GET("/heal/reports/:name", s.getHealReportDetail)
 		v1.GET("/tasks/status", s.getTasksStatus)
 
 		// Proxy for external dashboard
