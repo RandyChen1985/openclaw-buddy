@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 	"yovole-openclaw-monitor/internal/process"
@@ -339,4 +340,35 @@ func (s *Server) checkWeChatPlugin(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, status)
+}
+
+func (s *Server) addOpenClawBot(c *gin.Context) {
+	var req struct {
+		ID        string `json:"id" binding:"required"`
+		Model     string `json:"model" binding:"required"`
+		Workspace string `json:"workspace"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误，请检查 ID 和模型是否选填"})
+		return
+	}
+
+	// 校验 ID: 必须是数字、字母或下划线 (建议 xxx_bot)
+	if matched, _ := regexp.MatchString(`^[a-zA-Z0-9_]+$`, req.ID); !matched {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "机器人 ID 只能包含数字、英文或下划线"})
+		return
+	}
+
+	// 执行添加
+	if err := process.AddOpenClawBot(req.ID, req.Model, req.Workspace); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 成功后强制同步缓存
+	if err := process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir); err != nil {
+		fmt.Printf("Warning: Failed to sync cache after adding bot: %v\n", err)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "小龙虾机器人创建成功"})
 }

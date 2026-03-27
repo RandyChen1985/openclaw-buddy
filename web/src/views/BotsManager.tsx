@@ -1,6 +1,6 @@
-import React from 'react';
-import { Row, Col, Card, Tag, Spin, List, Button } from 'antd';
-import { Boxes, Server, Activity, Cpu, RefreshCw, Cloud } from 'lucide-react';
+import React, { useState } from 'react';
+import { Row, Col, Card, Tag, Spin, List, Button, Modal, Form, Input, Select } from 'antd';
+import { Boxes, Server, Activity, Cpu, RefreshCw, Cloud, Plus } from 'lucide-react';
 import dayjs from 'dayjs';
 
 interface BotsManagerProps {
@@ -8,9 +8,27 @@ interface BotsManagerProps {
   loadingBots: boolean;
   isMobile: boolean;
   onRefresh: () => void;
+  onAddBot: (id: string, model: string) => Promise<void>;
 }
 
-const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMobile, onRefresh }) => {
+const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMobile, onRefresh, onAddBot }) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [form] = Form.useForm();
+  const [adding, setAdding] = useState(false);
+
+  const handleOk = async () => {
+    try {
+      const values = await form.validateFields();
+      setAdding(true);
+      await onAddBot(values.id, values.model);
+      setIsModalOpen(false);
+      form.resetFields();
+    } catch (err) {
+      // 报错逻辑由上层 App.tsx 统一处理
+    } finally {
+      setAdding(false);
+    }
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fade-in-up 0.4s ease-out' }}>
 
@@ -35,6 +53,16 @@ const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMo
                         同步于: {dayjs(botsModels.updated_at).format('YYYY-MM-DD HH:mm:ss')}
                       </span>
                     )}
+                    <Button 
+                      type="text" 
+                      size="small" 
+                      icon={<Plus size={14} />} 
+                      onClick={() => setIsModalOpen(true)}
+                      style={{ color: '#2563eb', fontWeight: 600, display: 'flex', alignItems: 'center' }}
+                    >
+                      添加机器人
+                    </Button>
+                    <div style={{ width: 1, height: 14, background: '#e2e8f0' }} />
                     <Button 
                       type="text" 
                       size="small" 
@@ -138,6 +166,53 @@ const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMo
           </Col>
         </Row>
       )}
+      {/* 添加机器人对话框 */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ padding: 6, background: '#eff6ff', borderRadius: 8 }}><Boxes size={18} color="#2563eb" /></div>
+            <span>添加小龙虾机器人</span>
+          </div>
+        }
+        open={isModalOpen}
+        onOk={handleOk}
+        onCancel={() => setIsModalOpen(false)}
+        confirmLoading={adding}
+        okText="确认创建"
+        cancelText="取消"
+        centered
+        style={{ borderRadius: 16 }}
+      >
+        <div style={{ padding: '8px 0' }}>
+          <Form form={form} layout="vertical" initialValues={{ id: '', model: '' }}>
+            <Form.Item
+              label="机器人 ID"
+              name="id"
+              rules={[
+                { required: true, message: '请输入由字母、数字或下划线组成的 ID' },
+                { pattern: /^[a-zA-Z0-9_]+$/, message: '仅支持字母、数字和下划线' }
+              ]}
+              extra={<span style={{ fontSize: 11, color: '#94a3b8' }}>建议格式如: <code style={{ background: '#f1f5f9', padding: '1px 4px' }}>dev_bot</code>。添加后工作区将自动设为 <code style={{ background: '#f1f5f9', padding: '1px 4px' }}>~/.openclaw/workspace_[id]</code></span>}
+            >
+              <Input placeholder="输入机器人 ID" />
+            </Form.Item>
+            
+            <Form.Item
+              label="选择模型"
+              name="model"
+              rules={[{ required: true, message: '请选择关联的模型' }]}
+            >
+              <Select placeholder="请选择 AI 模型">
+                {botsModels?.data?.models?.map((m: any) => (
+                  <Select.Option key={m.id} value={m.id}>
+                    {m.name} ({m.provider})
+                  </Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+          </Form>
+        </div>
+      </Modal>
     </div>
   );
 };

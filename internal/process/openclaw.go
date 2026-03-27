@@ -2,6 +2,7 @@ package process
 
 import (
 	"bufio"
+	"fmt"
 	"os/exec"
 	"strings"
 )
@@ -123,4 +124,17 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 	return res, nil
 }
 
+func AddOpenClawBot(id, model, workspace string) error {
+	// 如果 workspace 为空，则根据 id 自动生成
+	if workspace == "" {
+		workspace = fmt.Sprintf("~/.openclaw/workspace_%s", id)
+	}
 
+	// 执行 openclaw agents add [id] --model [model] --workspace [workspace]
+	cmd := exec.Command("openclaw", "agents", "add", id, "--model", model, "--workspace", workspace)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to add agent: %v. Output: %s", err, string(out))
+	}
+	return nil
+}

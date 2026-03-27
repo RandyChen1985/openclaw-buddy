@@ -248,6 +248,18 @@ const Dashboard = () => {
     }
   };
 
+  const handleAddBot = async (id: string, model: string) => {
+    try {
+      await api.post('/v1/openclaw/bots/add', { id, model });
+      message.success(`机器人 ${id} 创建成功`);
+      fetchBotsModels(true); // 立即刷新列表以显示新机器人
+    } catch (err: any) {
+      const msg = err.response?.data?.error || '创建机器人失败';
+      message.error(msg);
+      throw err; // 继续抛出以阻止 Modal 关闭
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('guardian_token');
     window.location.reload();
@@ -279,7 +291,13 @@ const Dashboard = () => {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return <DashboardOverview status={status} history={history} isRunning={isRunning} onControl={handleControl} />;
-      case 'bots-models': return <BotsManager botsModels={botsModels} loadingBots={loadingBots} isMobile={isMobile} onRefresh={() => fetchBotsModels(true)} />;
+      case 'bots-models': return (
+        <BotsManager 
+          botsModels={botsModels} loadingBots={loadingBots} isMobile={isMobile} 
+          onRefresh={() => fetchBotsModels(true)}
+          onAddBot={handleAddBot}
+        />
+      );
       case 'components': return (
         <ChannelsManager 
           chatChannels={chatChannels} weixinStatus={weixinStatus} loadingChannels={loadingChannels} 
