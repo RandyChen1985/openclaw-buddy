@@ -362,10 +362,24 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   );
 
   return (
-    <div style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ 
+      height: isEmbedMode ? '100vh' : 'calc(100vh - 56px)', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      gap: isEmbedMode ? 0 : 16,
+      background: '#f8fafc'
+    }}>
       {markdownStyles}
       {/* Top Bar */}
-      <Card bodyStyle={{ padding: isMobile ? '8px 12px' : '12px 20px' }} style={{ borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+      <Card 
+        bodyStyle={{ padding: isMobile ? '8px 12px' : '12px 20px' }} 
+        style={{ 
+          borderRadius: isEmbedMode ? 0 : 12, 
+          boxShadow: isEmbedMode ? 'none' : '0 1px 2px rgba(0,0,0,0.03)',
+          border: isEmbedMode ? 'none' : '1px solid #e2e8f0',
+          borderBottom: isEmbedMode ? '1px solid #f1f5f9' : 'none'
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'nowrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12 }}>
             <div style={{ padding: isMobile ? 6 : 8, background: '#eff6ff', borderRadius: 10, color: '#2563eb', flexShrink: 0 }}>
@@ -479,8 +493,8 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       <div style={{ 
         flex: 1, 
         background: '#fff', 
-        borderRadius: 12, 
-        border: '1px solid #e2e8f0',
+        borderRadius: isEmbedMode ? 0 : 12, 
+        border: isEmbedMode ? 'none' : '1px solid #e2e8f0',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',

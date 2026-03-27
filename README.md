@@ -17,11 +17,11 @@
 
 ## 📸 功能预览
 
-|        **系统概览 (Dashboard)**        |       **流式登录 (Get QR)**       |
-| :------------------------------------: | :-------------------------------: |
+|    **系统概览 (Dashboard)**    |   **流式登录 (Get QR)**   |
+| :----------------------------------: | :-----------------------------: |
 | ![Dashboard](docs/images/overview.png) |  ![GetQR](docs/images/getqr.png)  |
-|          **安全登录 (Auth)**           |      **扫码登录 (Show QR)**       |
-|    ![Login](docs/images/login.png)     | ![ShowQR](docs/images/showqr.png) |
+|      **安全登录 (Auth)**      |  **扫码登录 (Show QR)**  |
+|    ![Login](docs/images/login.png)    | ![ShowQR](docs/images/showqr.png) |
 
 ---
 
@@ -104,20 +104,20 @@ OpenClaw Buddy 提供了一套标准的 RESTful API 供外部系统集成或移�
 
 ### 核心接口预览
 
-| 路径                               | 方法     | 功能说明                                                |
-| :--------------------------------- | :------- | :------------------------------------------------------ |
-| `/v1/openclaw/status`              | GET      | 获取网关核心运行状态、版本及运行时长                    |
-| `/v1/gateway/start`                | POST     | 启动小龙虾网关进程                                      |
-| `/v1/gateway/stop`                 | POST     | 停止小龙虾网关进程                                      |
+| 路径                                 | 方法     | 功能说明                                                        |
+| :----------------------------------- | :------- | :-------------------------------------------------------------- |
+| `/v1/openclaw/status`              | GET      | 获取网关核心运行状态、版本及运行时长                            |
+| `/v1/gateway/start`                | POST     | 启动小龙虾网关进程                                              |
+| `/v1/gateway/stop`                 | POST     | 停止小龙虾网关进程                                              |
 | `/v1/gateway/restart`              | POST     | 重启网关 (**异步接口**，返回 `{"taskId": "..."}`)       |
-| `/v1/tasks/status`                 | GET      | 查询异步任务状态 (Query:`?taskId=...`)                  |
-| `/v1/openclaw/devices`             | GET      | 获取设备列表 (包含待处理与已配对)                       |
-| `/v1/openclaw/devices/approve`     | POST     | 批准设备接入 (Body:`{"requestId": "..."}`)              |
+| `/v1/tasks/status`                 | GET      | 查询异步任务状态 (Query:`?taskId=...`)                        |
+| `/v1/openclaw/devices`             | GET      | 获取设备列表 (包含待处理与已配对)                               |
+| `/v1/openclaw/devices/approve`     | POST     | 批准设备接入 (Body:`{"requestId": "..."}`)                    |
 | `/v1/openclaw/bots-models`         | GET      | 获取机器人信息 (**支持缓存**，`?refresh=true` 强制刷新) |
-| `/v1/openclaw/chat/completions`    | POST     | **流式对话服务** (支持 OpenAI 协议格式)                 |
-| `/v1/openclaw/chat/quick-commands` | GET/POST | 获取或添加聊天快捷指令                                  |
-| `/v1/wechat/qrcode`                | GET      | 获取微信插件登录二维码 (流式解析)                       |
-| `/v1/stats/health`                 | GET      | 获取近 24 小时或历史心跳延迟统计数据                    |
+| `/v1/openclaw/chat/completions`    | POST     | **流式对话服务** (支持 OpenAI 协议格式)                   |
+| `/v1/openclaw/chat/quick-commands` | GET/POST | 获取或添加聊天快捷指令                                          |
+| `/v1/wechat/qrcode`                | GET      | 获取微信插件登录二维码 (流式解析)                               |
+| `/v1/stats/health`                 | GET      | 获取近 24 小时或历史心跳延迟统计数据                            |
 
 ## ⚙️ 配置文件说明 (env)
 
@@ -138,13 +138,13 @@ EXTERNAL_DASHBOARD_URL="https://claw.yourdomain.com" # 外部访问前缀 (用�
 
 通过 URL 参数，您可以精确控制嵌入页面的行为，而无需手动登录或导航：
 
-| 参数    | 必填  | 功能说明                                                              | 示例                      |
-| :------ | :---: | :-------------------------------------------------------------------- | :------------------------ |
-| `embed` |  是   | 设为 `true` 开启**纯净模式**，隐藏侧边栏与页头，仅保留核心业务区      | `?embed=true`             |
-| `page`  |  否   | 指定进入的页面，目前支持 `chat` (在线聊天)                            | `?page=chat`              |
-| `token` | 是/否 | **URL 自动鉴权**。传入后系统自动记录并登录，解决跨域/嵌入后的鉴权问题 | `?token=YOUR_BUDDY_TOKEN` |
-| `bot`   |  否   | 在聊天页自动选择指定的**Bot ID**                                      | `?bot=my_gpt4_bot`        |
-| `user`  |  否   | 在界面上标识当前对话用户的身份，用于辅助上下文追踪                    | `?user=Randy`             |
+| 参数      | 必填 | 功能说明                                                                                                                                            | 示例                        |
+| :-------- | :---: | :-------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------- |
+| `embed` |  是  | 设为 `true` 开启**纯净模式**，隐藏侧边栏与页头，仅保留核心业务区                                                                            | `?embed=true`             |
+| `page`  |  否  | 指定进入的页面，目前支持 `chat` (在线聊天)                                                                                                        | `?page=chat`              |
+| `token` | 是/否 | **URL 自动鉴权**。传入后系统自动记录并登录，解决跨域/嵌入后的鉴权问题                                                                         | `?token=YOUR_BUDDY_TOKEN` |
+| `bot`   |  否  | 在聊天页自动选择指定的**Bot ID**                                                                                                              | `?bot=my_gpt4_bot`        |
+| `user`  |  否  | 在界面上标识当前对话用户的身份，用于辅助上下文追踪，<br />如果你要一个用户不同的会话，你可以设计为 user-sessionid 格式，<br />比如： randy-sidxxxxx | `?user=Randy`             |
 
 ### 嵌入示例 (Iframe)
 
