@@ -25,11 +25,11 @@ const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMo
           <Col span={24}>
             <Card
               title={
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                  <span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Boxes size={20} color="#2563eb" /> 小龙虾们 (Bots)
+                <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', width: '100%', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 12 }}>
+                  <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Boxes size={isMobile ? 18 : 20} color="#2563eb" /> 小龙虾们 (Bots)
                   </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
                     {botsModels?.updated_at && (
                       <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
                         同步于: {dayjs(botsModels.updated_at).format('YYYY-MM-DD HH:mm:ss')}
@@ -41,7 +41,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMo
                       icon={<RefreshCw size={14} className={loadingBots ? 'animate-spin' : ''} />} 
                       onClick={onRefresh}
                       loading={loadingBots}
-                      style={{ color: '#64748b', display: 'flex', alignItems: 'center' }}
+                      style={{ color: '#64748b', display: 'flex', alignItems: 'center', padding: isMobile ? '0 4px' : '0 8px' }}
                     >
                       刷新
                     </Button>
@@ -110,11 +110,10 @@ const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMo
           <Col span={24}>
             <Card
               title={
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                  <span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Cpu size={20} color="#6366f1" /> 模型军团 (Models)
+                <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', width: '100%', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 12 }}>
+                  <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Cpu size={isMobile ? 18 : 20} color="#6366f1" /> 模型军团 (Models)
                   </span>
-                  {/* 第二个卡片通常不需要重复刷新和时间，但为了统一风格可以保留或简化 */}
                 </div>
               }
               styles={{ body: { padding: isMobile ? '8px 16px' : '12px 24px' } }}

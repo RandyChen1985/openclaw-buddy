@@ -275,6 +275,7 @@ const Dashboard = () => {
           loadingWeixin={loadingWeixin} checkWeixinSeconds={checkWeixinSeconds}
           isGettingQR={isGettingQR} onInstallWeixin={handleInstallWeixin} onGetQRCode={() => handleControl('wechat')}
           onRefreshChannels={() => fetchChatChannels(true)}
+          isMobile={isMobile}
         />
       );
       case 'devices': return (
@@ -282,6 +283,7 @@ const Dashboard = () => {
           devices={devices} loadingDevices={loadingDevices} 
           onApproveDevice={handleApproveDevice} 
           onRefresh={() => fetchDevices(true)}
+          isMobile={isMobile}
         />
       );
       case 'logs': return <LogsViewer wsLogs={wsLogs} />;

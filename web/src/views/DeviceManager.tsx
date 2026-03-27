@@ -8,13 +8,15 @@ interface DeviceManagerProps {
   loadingDevices: boolean;
   onApproveDevice: (requestId: string) => void;
   onRefresh: () => void;
+  isMobile?: boolean; // 新增移动端标记
 }
 
 const DeviceManager: React.FC<DeviceManagerProps> = ({ 
   devices, 
   loadingDevices, 
   onApproveDevice,
-  onRefresh
+  onRefresh,
+  isMobile
 }) => {
   const deviceList = devices?.data || [];
   const pendingDevices = deviceList.filter((d: any) => d.status === 'pending');
@@ -25,11 +27,11 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
       {/* 1. 待批准设备请求 */}
       <Card
         title={
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-            <span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Smartphone size={20} color="#f59e0b" /> 待处理连接请求
+          <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', width: '100%', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 12 }}>
+            <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Smartphone size={isMobile ? 18 : 20} color="#f59e0b" /> 待处理连接请求
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
               {devices?.updated_at && (
                 <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
                   同步于: {dayjs(devices.updated_at).format('YYYY-MM-DD HH:mm:ss')}
@@ -41,7 +43,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
                 icon={<RefreshCw size={14} className={loadingDevices ? 'animate-spin' : ''} />} 
                 onClick={onRefresh}
                 loading={loadingDevices}
-                style={{ color: '#64748b', display: 'flex', alignItems: 'center' }}
+                style={{ color: '#64748b', display: 'flex', alignItems: 'center', padding: isMobile ? '0 4px' : '0 8px' }}
               >
                 刷新
               </Button>
@@ -117,8 +119,8 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
 
       {/* 2. 已成功配对设备 */}
       <Card
-        title={<span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={20} color="#10b981" /> 已配对合规设备</span>}
-        styles={{ body: { padding: '0 24px' } }}
+        title={<span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={isMobile ? 18 : 20} color="#10b981" /> 已配对合规设备</span>}
+        styles={{ body: { padding: isMobile ? '0 16px' : '0 24px' } }}
         style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
       >
         <div style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9', marginBottom: 0, color: '#64748b', fontSize: 13 }}>

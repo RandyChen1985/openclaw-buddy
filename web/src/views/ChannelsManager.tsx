@@ -13,6 +13,7 @@ interface ChannelsManagerProps {
   onInstallWeixin: () => void;
   onGetQRCode: () => void;
   onRefreshChannels: () => void;
+  isMobile?: boolean; // 新增
 }
 
 const ChannelsManager: React.FC<ChannelsManagerProps> = ({ 
@@ -24,7 +25,8 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   isGettingQR,
   onInstallWeixin,
   onGetQRCode,
-  onRefreshChannels
+  onRefreshChannels,
+  isMobile
 }) => {
   const channelsList = chatChannels?.data || [];
   const configuredChannels = channelsList.filter((c: any) => c.configured);
@@ -35,11 +37,11 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
       {/* 已绑定渠道概览 */}
       <Card
         title={
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-            <span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <CheckCircle size={20} color="#10b981" /> 已绑定渠道
+          <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', width: '100%', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 12 }}>
+            <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CheckCircle size={isMobile ? 18 : 20} color="#10b981" /> 已绑定渠道
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
               {chatChannels?.updated_at && (
                 <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
                   同步于: {dayjs(chatChannels.updated_at).format('YYYY-MM-DD HH:mm:ss')}
@@ -51,14 +53,14 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                 icon={<RefreshCw size={14} className={loadingChannels ? 'animate-spin' : ''} />} 
                 onClick={onRefreshChannels}
                 loading={loadingChannels}
-                style={{ color: '#64748b', display: 'flex', alignItems: 'center' }}
+                style={{ color: '#64748b', display: 'flex', alignItems: 'center', padding: isMobile ? '0 4px' : '0 8px' }}
               >
                 刷新
               </Button>
             </div>
           </div>
         }
-        styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 48 }, body: { padding: '16px 24px' } }}
+        styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: isMobile ? 40 : 48 }, body: { padding: isMobile ? '16px 16px' : '16px 24px' } }}
         style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
       >
         {loadingChannels && !chatChannels?.data ? (
