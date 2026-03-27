@@ -1,10 +1,9 @@
 import React from 'react';
-import { Card, Tag, Spin, Button, message } from 'antd';
+import { Card, Tag, Spin, Button } from 'antd';
 import { CheckCircle, Cloud, RefreshCw, Zap, AlertCircle, Smartphone } from 'lucide-react';
-import dayjs from 'dayjs';
 
 interface ChannelsManagerProps {
-  chatChannels: any; // 结构: { data: [], updated_at: string }
+  chatChannels: any;
   weixinStatus: any;
   loadingChannels: boolean;
   loadingWeixin: boolean;
@@ -12,7 +11,6 @@ interface ChannelsManagerProps {
   isGettingQR: boolean;
   onInstallWeixin: () => void;
   onGetQRCode: () => void;
-  onRefresh: () => void;
 }
 
 const ChannelsManager: React.FC<ChannelsManagerProps> = ({ 
@@ -23,8 +21,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   checkWeixinSeconds, 
   isGettingQR,
   onInstallWeixin,
-  onGetQRCode,
-  onRefresh
+  onGetQRCode
 }) => {
   const channelsList = chatChannels?.data || [];
   const configuredChannels = channelsList.filter((c: any) => c.configured);
@@ -35,34 +32,12 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
       {/* 已绑定渠道概览 */}
       <Card
         title={
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#475569' }}>
-              <CheckCircle size={14} /> 已绑定渠道
-            </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {chatChannels?.updated_at && (
-                <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
-                  同步于: {dayjs(chatChannels.updated_at).format('YYYY-MM-DD HH:mm:ss')}
-                </span>
-              )}
-              <Button 
-                type="text" 
-                size="small" 
-                icon={<RefreshCw size={14} className={loadingChannels ? 'animate-spin' : ''} />} 
-                onClick={onRefresh}
-                loading={loadingChannels}
-                style={{ color: '#64748b', display: 'flex', alignItems: 'center' }}
-              >
-                刷新
-              </Button>
-            </div>
-          </div>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#475569' }}>
+            <CheckCircle size={14} /> 已绑定渠道
+          </span>
         }
         styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 40 }, body: { padding: '16px 20px' } }}
-        style={{ 
-          borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 20, 
-          background: '#f8fafc', animation: 'fade-in-up 0.5s ease-out 0.1s forwards'
-        }}
+        style={{ borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 20 }}
       >
         {loadingChannels && !chatChannels?.data ? (
           <div style={{ textAlign: 'center', padding: '12px 0' }}>
@@ -86,10 +61,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
       {/* 微信插件状态卡片 */}
       <Card
         styles={{ body: { padding: 20 } }}
-        style={{ 
-          borderRadius: 12, border: '1px solid #e2e8f0',
-          animation: 'fade-in-up 0.5s ease-out 0.2s forwards'
-        }}
+        style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -109,16 +81,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                 {weixinStatus === null 
                   ? '正在连接插件系统并检索状态...'
                   : weixinStatus.installed 
-                    ? (
-                      <span>
-                        运行状态: {weixinStatus.status} (已托管至配置中心)
-                        {weixinStatus.last_check && (
-                          <span style={{ marginLeft: 8, opacity: 0.6 }}>
-                            [上次检测: {dayjs(weixinStatus.last_check).format('HH:mm:ss')}]
-                          </span>
-                        )}
-                      </span>
-                    )
+                    ? `运行状态: ${weixinStatus.status} (已托管至配置中心)`
                     : '核心组件缺失，需完成安装后方可获取登录码'}
               </div>
             </div>
@@ -138,7 +101,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
       </Card>
 
       {/* 微信登录卡片 */}
-      <div style={{ animation: 'fade-in-up 0.5s ease-out 0.3s forwards' }}>
+      <div style={{ marginTop: 20 }}>
         {hasWeixinConfig && (
           <div style={{ 
             background: '#fffbeb', color: '#b45309', fontSize: 11, 
@@ -153,23 +116,15 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
         <Card
           onClick={() => {
             if (isGettingQR) return;
-            if (!weixinStatus?.installed) {
-              message.warning('请先完成微信插件安装');
-              return;
-            }
-            onGetQRCode();
+            if (weixinStatus?.installed) onGetQRCode();
           }}
           styles={{ body: { padding: 20 } }}
           style={{ 
             borderRadius: hasWeixinConfig ? '0 0 12px 12px' : 12, border: '1px solid #e2e8f0', 
-            cursor: (weixinStatus?.installed && !isGettingQR) ? 'pointer' : 'not-allowed', 
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            background: weixinStatus?.installed ? 'white' : '#f8fafc',
-            opacity: (weixinStatus?.installed && !isGettingQR) ? 1 : 0.6,
-            transform: (weixinStatus?.installed && !isGettingQR) ? 'none' : 'scale(0.995)',
-            boxShadow: (weixinStatus?.installed && !isGettingQR) ? '0 1px 2px rgba(0,0,0,0.03)' : 'none'
+            cursor: weixinStatus?.installed ? 'pointer' : 'not-allowed', 
+            transition: 'all 0.3s'
           }}
-          hoverable={weixinStatus?.installed && !isGettingQR}
+          hoverable={weixinStatus?.installed}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
