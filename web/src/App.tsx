@@ -373,7 +373,14 @@ const Dashboard = () => {
           style={{ marginLeft: -8, color: '#64748b' }} 
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: '#64748b' }}>
-          <span style={{ fontWeight: 600, color: '#1e293b' }}>控制台</span>
+          <span 
+            style={{ fontWeight: 600, color: '#1e293b', cursor: 'pointer', transition: 'color 0.2s' }} 
+            onClick={() => setActiveTab('dashboard')}
+            onMouseEnter={(e) => (e.currentTarget.style.color = '#2563eb')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = '#1e293b')}
+          >
+            控制台
+          </span>
           <span>/</span>
           <span style={{ color: '#2563eb', fontWeight: 500 }}>
             {navItems.find(i => i.key === activeTab)?.label}
