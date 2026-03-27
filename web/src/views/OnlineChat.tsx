@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Select, Input, Button, Avatar, Spin, message, Modal } from 'antd';
 import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import api from '../api';
 
 const { Option } = Select;
@@ -200,8 +202,68 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
     );
   }
 
+  // --- Styles for Markdown Content ---
+  const markdownStyles = (
+    <style>{`
+      .markdown-body {
+        font-size: 14px;
+        line-height: 1.6;
+        word-wrap: break-word;
+      }
+      .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+        margin-top: 16px;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: inherit;
+      }
+      .markdown-body p { margin-bottom: 8px; }
+      .markdown-body code {
+        padding: 0.2em 0.4em;
+        margin: 0;
+        font-size: 85%;
+        background-color: rgba(175, 184, 193, 0.2);
+        border-radius: 6px;
+        font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+      }
+      .markdown-body pre {
+        padding: 12px;
+        overflow: auto;
+        font-size: 85%;
+        line-height: 1.45;
+        background-color: #f6f8fa;
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+        margin-bottom: 12px;
+      }
+      .markdown-body pre code {
+        padding: 0;
+        margin: 0;
+        background-color: transparent;
+        border: 0;
+      }
+      .markdown-body ul, .markdown-body ol {
+        margin-bottom: 8px;
+        padding-left: 20px;
+      }
+      .markdown-body table {
+        border-spacing: 0;
+        border-collapse: collapse;
+        margin-bottom: 16px;
+        width: 100%;
+      }
+      .markdown-body table th, .markdown-body table td {
+        padding: 6px 13px;
+        border: 1px solid #d0d7de;
+      }
+      .markdown-body table tr:nth-child(2n) {
+        background-color: #f6f8fa;
+      }
+    `}</style>
+  );
+
   return (
     <div style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {markdownStyles}
       {/* Top Bar */}
       <Card bodyStyle={{ padding: isMobile ? '8px 12px' : '12px 20px' }} style={{ borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'nowrap', gap: 8 }}>
@@ -310,7 +372,15 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                   lineHeight: 1.6,
                   whiteSpace: 'pre-wrap'
                 }}>
-                  {msg.content}
+                  {msg.role === 'assistant' ? (
+                    <div className="markdown-body">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    msg.content
+                  )}
                 </div>
               </div>
             ))

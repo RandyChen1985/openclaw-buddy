@@ -1,4 +1,6 @@
-# Binaries
+# Dependencies
+node_modules/
+/node_modules/
 /temp/
 /lobster-guardian
 /lobster-monitor-dev
