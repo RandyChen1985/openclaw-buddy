@@ -255,7 +255,7 @@ const Dashboard = () => {
     try {
       await api.post('/v1/openclaw/bots/add', { id, model });
       message.success(`机器人 ${id} 创建成功`);
-      fetchBotsModels(true); // 立即刷新列表以显示新机器人
+      await fetchBotsModels(true); // 补全 await
     } catch (err: any) {
       const msg = err.response?.data?.error || '创建机器人失败';
       message.error(msg);
@@ -273,7 +273,7 @@ const Dashboard = () => {
     try {
       await api.post('/v1/openclaw/bots/set-identity', { id, name });
       message.success(`机器人 ${id} 的名称已更新为 ${name}`);
-      fetchBotsModels(true);
+      await fetchBotsModels(true); // 补全 await
     } catch (err: any) {
       const msg = err.response?.data?.error || '修改名称失败';
       message.error(msg);
@@ -291,11 +291,28 @@ const Dashboard = () => {
     try {
       await api.post('/v1/openclaw/bots/delete', { id });
       message.success(`机器人 ${id} 已被移除`);
-      fetchBotsModels(true);
+      await fetchBotsModels(true); // 补全 await
     } catch (err: any) {
       const msg = err.response?.data?.error || '删除机器人失败';
       message.error(msg);
       throw err;
+    } finally {
+      setIsTransitioning(false);
+      setTargetStatus(null);
+    }
+  };
+
+  const handleSetDefaultModel = async (modelId: string) => {
+    setTargetStatus('setting_default_model');
+    setIsTransitioning(true);
+    setTransitionSeconds(0);
+    try {
+      await api.post('/v1/openclaw/models/set-default', { modelId });
+      message.success(`已将 ${modelId} 设为全局默认模型`);
+      await fetchBotsModels(true);
+    } catch (err: any) {
+      const msg = err.response?.data?.error || '设置默认模型失败';
+      message.error(msg);
     } finally {
       setIsTransitioning(false);
       setTargetStatus(null);
@@ -340,6 +357,7 @@ const Dashboard = () => {
           onAddBot={handleAddBot}
           onSetIdentity={handleSetBotIdentity}
           onDeleteBot={handleDeleteBot}
+          onSetDefaultModel={handleSetDefaultModel}
         />
       );
       case 'components': return (
@@ -387,13 +405,15 @@ const Dashboard = () => {
             {targetStatus === 'adding_bot' && '正在创建机器人'}
             {targetStatus === 'setting_identity' && '正在修改身份'}
             {targetStatus === 'deleting_bot' && '正在移除机器人'}
-            {!['adding_bot', 'setting_identity', 'deleting_bot'].includes(targetStatus as string) && '正在同步网关状态'}
+            {targetStatus === 'setting_default_model' && '正在切换默认模型'}
+            {!['adding_bot', 'setting_identity', 'deleting_bot', 'setting_default_model'].includes(targetStatus as string) && '正在同步网关状态'}
           </div>
           <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>
             {targetStatus === 'adding_bot' && '小龙虾正在加紧孵化中，请稍后...'}
             {targetStatus === 'setting_identity' && '正在同步身份信息，请稍后...'}
             {targetStatus === 'deleting_bot' && '正在彻底清理相关数据，请稍后...'}
-            {!['adding_bot', 'setting_identity', 'deleting_bot'].includes(targetStatus as string) && '指令已确认，正在等待网关反馈状态...'}
+            {targetStatus === 'setting_default_model' && '正在更新全局 AI 核心，请稍后...'}
+            {!['adding_bot', 'setting_identity', 'deleting_bot', 'setting_default_model'].includes(targetStatus as string) && '指令已确认，正在等待网关反馈状态...'}
           </div>
           <div style={{
             marginTop: 16, padding: '6px 16px', background: '#eff6ff',

@@ -420,3 +420,23 @@ func (s *Server) deleteOpenClawBot(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "机器人已彻底移除"})
 }
+
+func (s *Server) setDefaultModel(c *gin.Context) {
+	var req struct {
+		ModelID string `json:"modelId" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的模型 ID"})
+		return
+	}
+
+	if err := process.SetOpenClawDefaultModel(req.ModelID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 同步缓存
+	process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "全局默认模型已更新"})
+}

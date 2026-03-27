@@ -19,9 +19,10 @@ type OpenClawBot struct {
 }
 
 type OpenClawModel struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Provider string `json:"provider"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Provider  string `json:"provider"`
+	IsDefault bool   `json:"isDefault"`
 }
 
 type OpenClawBotsModelsResponse struct {
@@ -58,14 +59,42 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 			currentBot = &OpenClawBot{ID: id}
 		} else if currentBot != nil {
 			if strings.Contains(line, "Identity:") {
-				// Identity: 🤖 云枢智维 (IDENTITY.md)
-				content := strings.TrimSpace(strings.Split(line, "Identity:")[1])
-				parts := strings.Fields(content)
-				if len(parts) > 0 {
-					currentBot.Emoji = parts[0]
-					if len(parts) > 1 {
-						currentBot.Name = parts[1]
+				// 格式示例 1: Identity: 🤖 云枢智维 (IDENTITY.md)
+				// 格式示例 2: Identity: 测试 002 号 (config)
+				lineContent := strings.Split(line, "Identity:")[1]
+				lineContent = strings.TrimSpace(lineContent)
+
+				// 1. 去掉末尾的 (xxx) 标识
+				lastIdx := strings.LastIndex(lineContent, "(")
+				namePart := lineContent
+				if lastIdx > 0 {
+					namePart = strings.TrimSpace(lineContent[:lastIdx])
+				}
+
+				// 2. 尝试提取 Emoji (这里采用简单策略：如果有空格且第一部分长度较短，认为是 Emoji)
+				parts := strings.SplitN(namePart, " ", 2)
+				if len(parts) == 2 {
+					// 常见的 Emoji 或者是图标，长度通常在 1-4 字节(UTF-8)
+					// 如果第一部分包含非 ASCII 字符或长度极短，我们把它当 Emoji
+					first := parts[0]
+					isEmoji := false
+					for _, r := range first {
+						if r > 127 { // 包含非 ASCII，大概率是 Emoji 或中文
+							// 如果长度很短(1个字符)，认为是 Emoji
+							if len([]rune(first)) == 1 {
+								isEmoji = true
+							}
+							break
+						}
 					}
+					if isEmoji {
+						currentBot.Emoji = first
+						currentBot.Name = strings.TrimSpace(parts[1])
+					} else {
+						currentBot.Name = namePart
+					}
+				} else {
+					currentBot.Name = namePart
 				}
 			} else if strings.Contains(line, "Workspace:") {
 				currentBot.Workspace = strings.TrimSpace(strings.Split(line, "Workspace:")[1])
@@ -108,14 +137,16 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 			// 模型列表至少应包含 Model, Input, Ctx 3个核心字段
 			if len(fields) >= 3 {
 				modelID := fields[0]
+				isDefault := strings.Contains(strings.ToLower(line), "default")
 				tags := ""
 				if len(fields) >= 5 {
 					tags = fields[len(fields)-1]
 				}
 				res.Models = append(res.Models, OpenClawModel{
-					ID:       modelID,
-					Name:     modelID, // 命令行不直接提供友好名称，用 ID 代替
-					Provider: tags,    // 将 Tags 作为 Provider 展示或辅助信息
+					ID:        modelID,
+					Name:      modelID,
+					Provider:  tags,
+					IsDefault: isDefault,
 				})
 			}
 		}
@@ -155,6 +186,15 @@ func DeleteOpenClawBot(id string) error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to delete agent: %v. Output: %s", err, string(out))
+	}
+	return nil
+}
+
+func SetOpenClawDefaultModel(modelID string) error {
+	cmd := exec.Command("openclaw", "models", "set", modelID)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to set default model: %v (%s)", err, string(out))
 	}
 	return nil
 }

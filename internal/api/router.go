@@ -67,14 +67,19 @@ func (s *Server) setupRoutes() {
 	v1 := s.engine.Group("/v1")
 	v1.Use(AuthMiddleware(s.cfg.Token))
 	{
-		v1.GET("/openclaw/status", s.getOpenClawStatus)
-		v1.GET("/openclaw/dashboard-url", s.getDashboardURL)
-		v1.GET("/openclaw/bots-models", s.getOpenClawBotsModels)
-		v1.GET("/openclaw/devices", s.getOpenClawDevices)
-		v1.POST("/openclaw/devices/approve", s.approveDevice)
-		v1.POST("/openclaw/bots/add", s.addOpenClawBot)
-		v1.POST("/openclaw/bots/set-identity", s.setOpenClawBotIdentity)
-		v1.POST("/openclaw/bots/delete", s.deleteOpenClawBot)
+		// OpenClaw related routes
+		oc := v1.Group("/openclaw")
+		{
+			oc.GET("/status", s.getOpenClawStatus)
+			oc.GET("/dashboard-url", s.getDashboardURL)
+			oc.GET("/bots-models", s.getOpenClawBotsModels)
+			oc.GET("/devices", s.getOpenClawDevices)
+			oc.POST("/devices/approve", s.approveDevice)
+			oc.POST("/bots/add", s.addOpenClawBot)
+			oc.POST("/bots/set-identity", s.setOpenClawBotIdentity)
+			oc.POST("/bots/delete", s.deleteOpenClawBot)
+			oc.POST("/models/set-default", s.setDefaultModel)
+		}
 		
 		gateway := v1.Group("/gateway")
 		{
