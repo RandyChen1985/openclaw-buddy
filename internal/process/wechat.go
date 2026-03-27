@@ -138,23 +138,26 @@ func GetWeChatPluginStatus() (*WeChatPluginStatus, error) {
 		LastCheck: time.Now(),
 	}
 
-	// 1. 先按表格分隔符切分（如果是单行表格，则整个就是一块）
-	blocks := regexp.MustCompile(`(?i)[┌├]`).Split(res.Output, -1)
+	// 1. 按行处理输出
+	lines := strings.Split(res.Output, "\n")
 	
-	for _, block := range blocks {
-		cleanBlock := StripANSI(block)
-		// 2. 只有包含 weixin 的块才进行解析
-		if strings.Contains(strings.ToLower(cleanBlock), "weixin") {
+	for _, line := range lines {
+		cleanLine := strings.ToLower(StripANSI(line))
+		// 2. 只有包含 weixin 的行才进行解析
+		if strings.Contains(cleanLine, "weixin") {
 			status.Installed = true
-			if strings.Contains(strings.ToLower(cleanBlock), "loaded") {
+			if strings.Contains(cleanLine, "loaded") {
 				status.Status = "loaded"
 			}
-			// 3. 在这个特定块内提取版本号
+			// 3. 在这一行内提取版本号
 			versionRe := regexp.MustCompile(`\d+\.\d+\.\d+`)
-			if v := versionRe.FindString(cleanBlock); v != "" {
+			if v := versionRe.FindString(line); v != "" {
 				status.Version = v
 			}
-			break // 找到就退出
+			// 如果已经找到了加载状态和版本号，就可以退出了
+			if status.Status == "loaded" && status.Version != "Unknown" {
+				break
+			}
 		}
 	}
 
