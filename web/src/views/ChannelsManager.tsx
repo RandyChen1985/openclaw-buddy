@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, Tag, Spin, Button } from 'antd';
-import { CheckCircle, Cloud, RefreshCw, Zap, AlertCircle, Smartphone } from 'lucide-react';
+import { CheckCircle, Cloud, RefreshCw, Zap, AlertCircle, Smartphone, Radar } from 'lucide-react';
 import dayjs from 'dayjs';
 
 interface ChannelsManagerProps {
@@ -83,23 +83,39 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
       </Card>
 
       {/* 微信插件状态卡片 */}
+      <style>{`
+        @keyframes radar-scan {
+          0% { transform: scale(0.9); opacity: 0.8; }
+          50% { transform: scale(1.4); opacity: 0.3; }
+          100% { transform: scale(1.8); opacity: 0; }
+        }
+        .radar-pulse-container {
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .radar-ring {
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          border-radius: 50%;
+          border: 2px solid #3b82f6;
+          animation: radar-scan 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+      `}</style>
       <Card
         styles={{ body: { padding: 20 } }}
-        style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
+        style={{ borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{ padding: 12, background: '#eef2ff', borderRadius: 12, flexShrink: 0 }}><Cloud size={24} color="#4f46e5" /></div>
-            <div>
-              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 15, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1 }}>
+            <div style={{ padding: 12, background: '#eef2ff', borderRadius: 12, flexShrink: 0 }}>
+              <Cloud size={24} color="#4f46e5" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 15, marginBottom: 4 }}>
                 微信官方插件 (openclaw-weixin)
-                {weixinStatus === null ? (
-                  <Tag color="processing" icon={<RefreshCw size={10} style={{ animation: 'spin 2s linear infinite' }} />} style={{ borderRadius: 4, fontSize: 11 }}>监测中 ({checkWeixinSeconds}s)</Tag>
-                ) : weixinStatus.installed ? (
-                  <Tag color="success" style={{ borderRadius: 4, fontSize: 11 }}>已安装 v{weixinStatus.version}</Tag>
-                ) : (
-                  <Tag color="error" style={{ borderRadius: 4, fontSize: 11 }}>未安装</Tag>
-                )}
               </div>
               <div style={{ color: '#64748b', fontSize: 12 }}>
                 {weixinStatus === null 
@@ -110,17 +126,36 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
               </div>
             </div>
           </div>
-          {weixinStatus !== null && !weixinStatus.installed && (
-            <Button 
-              type="primary" 
-              icon={<Zap size={14} />} 
-              loading={loadingWeixin}
-              onClick={onInstallWeixin}
-              style={{ borderRadius: 8, height: 36 }}
-            >
-              一键安装插件
-            </Button>
-          )}
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+            {weixinStatus === null ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <span style={{ fontSize: 13, color: '#3b82f6', fontWeight: 600 }}>监测中 ({checkWeixinSeconds}s)</span>
+                <div className="radar-pulse-container" style={{ width: 32, height: 32 }}>
+                  <div className="radar-ring"></div>
+                  <div className="radar-ring" style={{ animationDelay: '0.5s' }}></div>
+                  <Radar size={24} color="#3b82f6" style={{ position: 'relative', zIndex: 1 }} />
+                </div>
+              </div>
+            ) : weixinStatus.installed ? (
+              <Tag color="success" style={{ borderRadius: 6, fontSize: 12, padding: '4px 12px', border: 'none', background: '#f0fdf4', color: '#16a34a', fontWeight: 600 }}>
+                已安装 v{weixinStatus.version}
+              </Tag>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <Tag color="error" style={{ borderRadius: 4, fontSize: 11 }}>未安装</Tag>
+                <Button 
+                  type="primary" 
+                  icon={<Zap size={14} />} 
+                  loading={loadingWeixin}
+                  onClick={onInstallWeixin}
+                  style={{ borderRadius: 8, height: 36 }}
+                >
+                  一键安装插件
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </Card>
 

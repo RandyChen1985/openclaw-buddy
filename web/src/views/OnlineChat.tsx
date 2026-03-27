@@ -370,7 +370,8 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       background: '#f8fafc',
       width: '100%',
       height: '100%',
-      overflow: 'hidden'
+      minHeight: 0,
+      minWidth: 0
     }}>
       {markdownStyles}
       {/* Top Bar */}
