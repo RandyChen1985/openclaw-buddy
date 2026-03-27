@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge } from 'antd';
+import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode } from 'antd';
 import {
   LayoutDashboard, Boxes, ToyBrick, Smartphone, Terminal, Zap,
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink
@@ -428,7 +428,13 @@ const Dashboard = () => {
           <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>{confirmModal.title}</h3>
           <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
             {confirmModal.action === 'stop' && '确定要停止 OpenClaw 网关吗？这将导致所有渠道通信中断。'}
-            {confirmModal.action === 'wechat' && '请确认已安装并正确配置微信插件后继续。'}
+            {confirmModal.action === 'wechat' && (
+              <span style={{ textAlign: 'left', display: 'inline-block' }}>
+                请确认：<br />
+                1. 您的微信已升级到<b>最新版本</b><br />
+                2. 系统设置中的插件模块已支持<b>小龙虾</b>
+              </span>
+            )}
             {['start', 'restart'].includes(confirmModal.action) && `您正在请求 ${confirmModal.title} 指令，系统将异步处理。`}
           </p>
           <div style={{ display: 'flex', gap: 12 }}>
@@ -448,29 +454,37 @@ const Dashboard = () => {
       </Modal>
 
       <Modal
-        title={null} 
-        open={qrModalVisible} 
+        title={null}
+        open={qrModalVisible}
         footer={null}
-        onCancel={() => setQrModalVisible(false)} 
-        centered 
-        width={340}
-        styles={{ body: { padding: 0 } }}
+        onCancel={() => setQrModalVisible(false)}
+        centered
+        width={isMobile ? '90%' : 340}
+        styles={{ body: { padding: 0, overflow: 'hidden', borderRadius: 16 } }}
       >
-        <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center', borderRadius: 16 }}>
+        <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center' }}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>🦞</div>
-          <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b' }}>微信授权登录</h3>
-          <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24 }}>使用手机微信扫码授权</p>
-          <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #f1f5f9', marginBottom: 16 }}>
-            {qrData?.qrcode_url ? (
-              <img src={qrData.qrcode_url} alt="Scan to Login" style={{ width: '100%', maxWidth: 180, borderRadius: 8 }} />
-            ) : (
-              <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Spin tip="二维码加载中..." />
-              </div>
-            )}
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>微信授权登录</h3>
+          <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
+            请使用需要绑定的微信扫码<br />授权后 OpenClaw 将自动完成同步
+          </p>
+          <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #f1f5f9', display: 'inline-block', marginBottom: 12 }}>
+            {qrData && <QRCode value={qrData.qrcode_url} size={isMobile ? 160 : 180} bordered={false} color="#1e293b" />}
           </div>
-          <Button block type="primary" size="large" onClick={() => setQrModalVisible(false)} style={{ borderRadius: 10 }}>
-            完成并同步状态
+          <div style={{ marginBottom: 20 }}>
+              <Button type="link" size="small" onClick={() => window.open(qrData?.qrcode_url, '_blank')}>在浏览器中打开授权链接</Button>
+          </div>
+          <Button 
+            block 
+            type="primary" 
+            size="large" 
+            onClick={() => {
+              setQrModalVisible(false);
+              fetchChatChannels(true);
+            }} 
+            style={{ borderRadius: 10, fontWeight: 700 }}
+          >
+            已完成扫码
           </Button>
         </div>
       </Modal>
