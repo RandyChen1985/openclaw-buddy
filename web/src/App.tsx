@@ -274,6 +274,7 @@ const Dashboard = () => {
           chatChannels={chatChannels} weixinStatus={weixinStatus} loadingChannels={loadingChannels} 
           loadingWeixin={loadingWeixin} checkWeixinSeconds={checkWeixinSeconds}
           isGettingQR={isGettingQR} onInstallWeixin={handleInstallWeixin} onGetQRCode={() => handleControl('wechat')}
+          onRefreshChannels={() => fetchChatChannels(true)}
         />
       );
       case 'devices': return (

@@ -11,6 +11,7 @@ interface ChannelsManagerProps {
   isGettingQR: boolean;
   onInstallWeixin: () => void;
   onGetQRCode: () => void;
+  onRefreshChannels: () => void;
 }
 
 const ChannelsManager: React.FC<ChannelsManagerProps> = ({ 
@@ -21,7 +22,8 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   checkWeixinSeconds, 
   isGettingQR,
   onInstallWeixin,
-  onGetQRCode
+  onGetQRCode,
+  onRefreshChannels
 }) => {
   const channelsList = chatChannels?.data || [];
   const configuredChannels = channelsList.filter((c: any) => c.configured);
@@ -32,9 +34,21 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
       {/* 已绑定渠道概览 */}
       <Card
         title={
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#475569' }}>
-            <CheckCircle size={14} /> 已绑定渠道
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#475569' }}>
+              <CheckCircle size={14} /> 已绑定渠道
+            </span>
+            <Button 
+              type="text" 
+              size="small" 
+              icon={<RefreshCw size={12} className={loadingChannels ? 'animate-spin' : ''} />} 
+              onClick={onRefreshChannels}
+              loading={loadingChannels}
+              style={{ fontSize: 11, color: '#64748b' }}
+            >
+              同步状态
+            </Button>
+          </div>
         }
         styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 40 }, body: { padding: '16px 20px' } }}
         style={{ borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 20 }}
