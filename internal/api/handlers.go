@@ -372,3 +372,44 @@ func (s *Server) addOpenClawBot(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "小龙虾机器人创建成功"})
 }
+
+func (s *Server) setOpenClawBotIdentity(c *gin.Context) {
+	var req struct {
+		ID   string `json:"id" binding:"required"`
+		Name string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误，请检查 ID 和名称是否正确"})
+		return
+	}
+
+	if err := process.SetOpenClawBotIdentity(req.ID, req.Name); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 成功后强制同步缓存
+	process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "名称修改成功"})
+}
+
+func (s *Server) deleteOpenClawBot(c *gin.Context) {
+	var req struct {
+		ID string `json:"id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的机器人 ID"})
+		return
+	}
+
+	if err := process.DeleteOpenClawBot(req.ID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 成功后强制同步缓存
+	process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "机器人已彻底移除"})
+}

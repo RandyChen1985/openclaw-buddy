@@ -138,3 +138,23 @@ func AddOpenClawBot(id, model, workspace string) error {
 	}
 	return nil
 }
+
+func SetOpenClawBotIdentity(id, name string) error {
+	// 执行 openclaw agents set-identity --agent [id] --name "[name]"
+	cmd := exec.Command("openclaw", "agents", "set-identity", "--agent", id, "--name", name)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to set identity: %v. Output: %s", err, string(out))
+	}
+	return nil
+}
+
+func DeleteOpenClawBot(id string) error {
+	// 执行 openclaw agents delete [id] --force
+	cmd := exec.Command("openclaw", "agents", "delete", id, "--force")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to delete agent: %v. Output: %s", err, string(out))
+	}
+	return nil
+}

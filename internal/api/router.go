@@ -73,6 +73,8 @@ func (s *Server) setupRoutes() {
 		v1.GET("/openclaw/devices", s.getOpenClawDevices)
 		v1.POST("/openclaw/devices/approve", s.approveDevice)
 		v1.POST("/openclaw/bots/add", s.addOpenClawBot)
+		v1.POST("/openclaw/bots/set-identity", s.setOpenClawBotIdentity)
+		v1.POST("/openclaw/bots/delete", s.deleteOpenClawBot)
 		
 		gateway := v1.Group("/gateway")
 		{

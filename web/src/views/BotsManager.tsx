@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Row, Col, Card, Tag, Spin, List, Button, Modal, Form, Input, Select } from 'antd';
-import { Boxes, Server, Activity, Cpu, RefreshCw, Cloud, Plus } from 'lucide-react';
+import { Row, Col, Card, Tag, Spin, List, Button, Modal, Form, Input, Select, Tooltip, message } from 'antd';
+import { Boxes, Server, Activity, Cpu, RefreshCw, Cloud, Plus, Pencil, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
 
 interface BotsManagerProps {
@@ -9,12 +9,20 @@ interface BotsManagerProps {
   isMobile: boolean;
   onRefresh: () => void;
   onAddBot: (id: string, model: string) => Promise<void>;
+  onSetIdentity: (id: string, name: string) => Promise<void>;
+  onDeleteBot: (id: string) => Promise<void>;
 }
 
-const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMobile, onRefresh, onAddBot }) => {
+const BotsManager: React.FC<BotsManagerProps> = ({ 
+  botsModels, loadingBots, isMobile, onRefresh, onAddBot, onSetIdentity, onDeleteBot 
+}) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [form] = Form.useForm();
+  const [editForm] = Form.useForm();
   const [adding, setAdding] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [editingBot, setEditingBot] = useState<{ id: string, name: string } | null>(null);
 
   const handleOk = async () => {
     try {
@@ -28,6 +36,41 @@ const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMo
     } finally {
       setAdding(false);
     }
+  };
+
+  const handleEdit = (bot: any) => {
+    // 假设 bot 对象中有 ID 和目前的 Name
+    // 注意: bot 结构里当前解析的是 id (OpenClaw ID) 和 name (Identity 中的名称)
+    setEditingBot({ id: bot.id, name: bot.name });
+    editForm.setFieldsValue({ name: bot.name });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditOk = async () => {
+    if (!editingBot) return;
+    try {
+      const values = await editForm.validateFields();
+      setProcessing(true);
+      await onSetIdentity(editingBot.id, values.name);
+      setIsEditModalOpen(false);
+    } catch (err) {
+      // 错误已在 App.tsx 处理
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleDelete = (id: string) => {
+    Modal.confirm({
+      title: '确认要移除该机器人吗？',
+      content: `将会执行 openclaw agents delete ${id} --force，该操作不可逆！`,
+      okText: '确认移除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        await onDeleteBot(id);
+      }
+    });
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fade-in-up 0.4s ease-out' }}>
@@ -60,7 +103,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMo
                       onClick={() => setIsModalOpen(true)}
                       style={{ color: '#2563eb', fontWeight: 600, display: 'flex', alignItems: 'center' }}
                     >
-                      {isMobile ? '' : '添加机器人'}
+                      添加机器人
                     </Button>
                     <div style={{ width: 1, height: 14, background: '#e2e8f0' }} />
                     <Button 
@@ -84,23 +127,47 @@ const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMo
                 renderItem={(bot: any) => (
                   <List.Item style={{ padding: isMobile ? '16px 0' : '24px 0', borderBottom: '1px solid #f1f5f9' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 16 }}>
-                        <div style={{ fontSize: isMobile ? 24 : 32 }}>{bot.emoji || '🤖'}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                        <div style={{ 
+                          width: 48, height: 48, borderRadius: 12, background: '#f8fafc',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          border: '1px solid #f1f5f9'
+                        }}>
+                          <Server size={24} color="#6366f1" />
+                        </div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-                            <span style={{ fontWeight: 800, color: '#1e293b', fontSize: isMobile ? 14 : 16 }}>{bot.id}</span>
-                            {bot.name && <Tag color="default" style={{ borderRadius: 6, fontSize: 10, margin: 0 }}>{bot.name}</Tag>}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: '#1e293b' }}>{bot.name}</div>
+                            <Tooltip title="修改名称">
+                              <Button 
+                                type="text" 
+                                size="small" 
+                                icon={<Pencil size={12} />} 
+                                onClick={() => handleEdit(bot)}
+                                style={{ color: '#94a3b8', padding: 0, height: 18 }}
+                              />
+                            </Tooltip>
                           </div>
-                          <div style={{ color: '#64748b', fontSize: 11, marginTop: 4 }}>
-                            <span style={{ display: isMobile ? 'none' : 'inline' }}>关联模型: </span>
-                            <Tag color="blue" style={{ borderRadius: 4, margin: 0, scale: '0.8', transformOrigin: 'left' }}>{bot.model}</Tag>
+                          <div style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Tag style={{ margin: 0, fontSize: 10, padding: '0 4px' }}>ID: {bot.id}</Tag>
+                            <span style={{ fontSize: 10 }}>•</span>
+                            <span style={{ fontSize: 11 }}>{bot.provider || 'Local'}</span>
                           </div>
                         </div>
-                        <div style={{ textAlign: 'right' }}>
+                        <Tooltip title="彻底移除">
+                          <Button 
+                            danger 
+                            type="text" 
+                            icon={<Trash2 size={16} />} 
+                            onClick={() => handleDelete(bot.id)}
+                            style={{ opacity: 0.6 }}
+                          />
+                        </Tooltip>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
                           <Tag color="success" style={{ borderRadius: 12, padding: isMobile ? '0 8px' : '0 12px', fontSize: 10 }}>运行中</Tag>
                           {!isMobile && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{bot.routingRules || 0} 条规则</div>}
                         </div>
-                      </div>
                       
                       <div style={{ 
                         display: 'grid', 
@@ -209,6 +276,38 @@ const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMo
                   </Select.Option>
                 ))}
               </Select>
+            </Form.Item>
+          </Form>
+        </div>
+      </Modal>
+
+      {/* 修改名称对话框 */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ padding: 6, background: '#fef2f2', borderRadius: 8 }}><Pencil size={18} color="#ef4444" /></div>
+            <span>修改机器人显示名称</span>
+          </div>
+        }
+        open={isEditModalOpen}
+        onOk={handleEditOk}
+        onCancel={() => setIsEditModalOpen(false)}
+        confirmLoading={processing}
+        okText="确认修改"
+        cancelText="取消"
+        centered
+      >
+        <div style={{ padding: '8px 0' }}>
+          <Form form={editForm} layout="vertical">
+            <Form.Item label="当前 ID">
+              <Input value={editingBot?.id} disabled />
+            </Form.Item>
+            <Form.Item
+              label="新的显示名称"
+              name="name"
+              rules={[{ required: true, message: '请输出新的显示名称' }]}
+            >
+              <Input placeholder="输入新的显示名称" autoFocus />
             </Form.Item>
           </Form>
         </div>
