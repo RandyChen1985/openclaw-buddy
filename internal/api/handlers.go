@@ -403,6 +403,13 @@ func (s *Server) deleteOpenClawBot(c *gin.Context) {
 		return
 	}
 
+	// 安全校验：至少保留一个机器人
+	botsData, err := process.GetOpenClawBotsModels(s.cfg.OpenClawConfigDir)
+	if err == nil && len(botsData.Bots) <= 1 {
+		c.JSON(http.StatusForbidden, gin.H{"error": "系统要求至少保留一个机器人，无法移除最后一只小龙虾"})
+		return
+	}
+
 	if err := process.DeleteOpenClawBot(req.ID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

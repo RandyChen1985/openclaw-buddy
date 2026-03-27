@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Row, Col, Card, Tag, Spin, List, Button, Modal, Form, Input, Select, Tooltip, message } from 'antd';
+import { Row, Col, Card, Tag, Spin, List, Button, Modal, Form, Input, Select, Tooltip } from 'antd';
 import { Boxes, Server, Activity, Cpu, RefreshCw, Cloud, Plus, Pencil, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
 
@@ -61,6 +61,16 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   };
 
   const handleDelete = (id: string) => {
+    if (botsModels?.data?.bots?.length <= 1) {
+      Modal.warning({
+        title: '无法移除最后一只小龙虾',
+        content: '系统要求至少保留一个机器人以维持基础服务运行。',
+        okText: '知道了',
+        centered: true
+      });
+      return;
+    }
+
     Modal.confirm({
       title: '确认要移除该机器人吗？',
       content: `将会执行 openclaw agents delete ${id} --force，该操作不可逆！`,
