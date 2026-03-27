@@ -122,6 +122,38 @@ CHECK_INTERVAL_SECONDS=30     # 监控扫描频率 (秒)
 EXTERNAL_DASHBOARD_URL="https://claw.yourdomain.com" # 外部访问前缀 (用于透传 UI)
 ```
 
+## 🔌 外部集成与嵌入 (Embed Support)
+
+**OpenClaw Buddy** 支持高度灵活的外部系统集成，您可以将特定的功能模块（如在线聊天）以 **Standalone (独立模式)** 嵌入到您的业务系统、大屏或其他 Iframe 容器中。
+
+### 核心参数 (Query Parameters)
+
+通过 URL 参数，您可以精确控制嵌入页面的行为，而无需手动登录或导航：
+
+| 参数 | 必填 | 功能说明 | 示例 |
+| :--- | :---: | :--- | :--- |
+| `embed` | 是 | 设为 `true` 开启**纯净模式**，隐藏侧边栏与页头，仅保留核心业务区 | `?embed=true` |
+| `page` | 否 | 指定进入的页面，目前支持 `chat` (在线聊天) | `?page=chat` |
+| `token` | 是/否 | **URL 自动鉴权**。传入后系统自动记录并登录，解决跨域/嵌入后的鉴权问题 | `?token=YOUR_BUDDY_TOKEN` |
+| `bot` | 否 | 在聊天页自动选择指定的 **Bot ID** | `?bot=my_gpt4_bot` |
+| `user` | 否 | 在界面上标识当前对话用户的身份，用于辅助上下文追踪 | `?user=Randy` |
+
+### 嵌入示例 (Iframe)
+
+要在您的网页中嵌入一个“预设了机器人、自动登录且隐藏侧边栏”的聊天窗口，可以使用如下代码：
+
+```html
+<iframe 
+  src="http://your-buddy-ip:3000/?page=chat&embed=true&token=sk-xxx&bot=my-bot-id" 
+  width="100%" 
+  height="600" 
+  frameborder="0"
+></iframe>
+```
+
+> [!TIP]
+> 您也可以直接在 **在线聊天** 页面的右上角点击 **“获取嵌入代码”** 按钮，系统会自动为您生成包含当前 Token 与已选 Bot 的完整 `<iframe>` 代码。
+
 ## 📄 开源协议
 
 本项目基于 **MIT License** 开源，由 randychen 维护。联系我：[cexlong@gmail.com](mailto:cexlong@gmail.com)

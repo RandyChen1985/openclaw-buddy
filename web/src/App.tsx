@@ -28,8 +28,12 @@ const { Content, Sider, Header } = Layout;
 
 // --- Dashboard Component (Internal Layout) ---------------------------------------
 const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [collapsed, setCollapsed] = useState(window.innerWidth < 1200);
+  const queryParams = new URLSearchParams(window.location.search);
+  const isEmbed = queryParams.get('embed') === 'true';
+  const initialPage = queryParams.get('page');
+
+  const [activeTab, setActiveTab] = useState(initialPage || 'dashboard');
+  const [collapsed, setCollapsed] = useState(window.innerWidth < 1200 || isEmbed);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isMobile = window.innerWidth < 1024;
 
@@ -509,7 +513,11 @@ const Dashboard = () => {
     <>
       {transitionMask}
       
-      {isMobile ? (
+      {isEmbed ? (
+        <div style={{ minHeight: '100vh', background: '#f8fafc', padding: activeTab === 'chat' || activeTab === 'logs' ? 0 : 24 }}>
+          {renderContent()}
+        </div>
+      ) : isMobile ? (
         <Layout style={{ minHeight: '100vh', background: '#f8fafc' }}>
           {headerEl(() => setMobileMenuOpen(true))}
           <Content style={{ padding: 16, background: '#f8fafc' }}>
@@ -546,8 +554,8 @@ const Dashboard = () => {
           </Sider>
           <Layout style={{ marginLeft: collapsed ? 64 : 220, transition: 'margin-left 0.2s', minHeight: '100vh' }}>
             {headerEl(() => setCollapsed(!collapsed))}
-            <Content style={{ padding: activeTab === 'logs' ? 0 : 24, background: '#f8fafc', flex: 1 }}>
-              <div style={{ maxWidth: 'none', margin: '0 auto', height: activeTab === 'logs' ? '100%' : 'auto' }}>
+            <Content style={{ padding: activeTab === 'logs' || activeTab === 'chat' ? 0 : 24, background: '#f8fafc', flex: 1 }}>
+              <div style={{ maxWidth: 'none', margin: '0 auto', height: activeTab === 'logs' || activeTab === 'chat' ? '100%' : 'auto' }}>
                 {renderContent()}
               </div>
             </Content>
