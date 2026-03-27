@@ -55,9 +55,8 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
   const fetchQuickCommands = async () => {
     try {
-      const res = await fetch('/v1/openclaw/chat/quick-commands');
-      const data = await res.json();
-      setQuickCommands(data || []);
+      const res = await api.get('/v1/openclaw/chat/quick-commands');
+      setQuickCommands(res.data || []);
     } catch (err) {
       console.error('Failed to fetch quick commands:', err);
     }
@@ -65,13 +64,8 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
   const handleAddQuickCommand = async (values: any) => {
     try {
-      const res = await fetch('/v1/openclaw/chat/quick-commands', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values)
-      });
-      const data = await res.json();
-      if (data.status === 'success') {
+      const res = await api.post('/v1/openclaw/chat/quick-commands', values);
+      if (res.data.status === 'success') {
         message.success('添加成功');
         form.resetFields();
         fetchQuickCommands();
@@ -83,11 +77,8 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
   const handleDeleteQuickCommand = async (id: number) => {
     try {
-      const res = await fetch(`/v1/openclaw/chat/quick-commands/${id}`, {
-        method: 'DELETE'
-      });
-      const data = await res.json();
-      if (data.status === 'success') {
+      const res = await api.delete(`/v1/openclaw/chat/quick-commands/${id}`);
+      if (res.data.status === 'success') {
         message.success('已删除');
         fetchQuickCommands();
       }
@@ -98,9 +89,8 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
   const checkChatStatus = async () => {
     try {
-      const res = await fetch('/v1/openclaw/chat/status');
-      const data = await res.json();
-      setChatEnabled(data.enabled);
+      const res = await api.get('/v1/openclaw/chat/status');
+      setChatEnabled(res.data.enabled);
     } catch (err) {
       console.error('Failed to check chat status:', err);
     } finally {
@@ -118,9 +108,8 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         setEnabling(true);
         try {
           // 1. 开启配置
-          const res = await fetch('/v1/openclaw/chat/enable', { method: 'POST' });
-          const data = await res.json();
-          if (data.status === 'success') {
+          const res = await api.post('/v1/openclaw/chat/enable');
+          if (res.data.status === 'success') {
             message.loading('配置已更新，正在重启网关...', 2);
             // 2. 触发重启
             if (onRestartGateway) {
@@ -129,7 +118,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
             message.success('对话功能已成功开启');
             setChatEnabled(true);
           } else {
-            message.error(data.error || '开启失败');
+            message.error(res.data.error || '开启失败');
           }
         } catch (err) {
           message.error('请求失败: ' + err);
