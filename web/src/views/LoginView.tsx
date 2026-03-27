@@ -13,7 +13,8 @@ const quotes = [
   { main: "第 2046 个数据包", sub: "在寂静的机架间听见跳动的心脏" },
   { main: "带外之外的余温", sub: "是系统崩溃前最后的温柔" },
   { main: "每一个消失的信号", sub: "是一场未曾抵达的重逢" },
-  { main: "0.01 公分的距离", sub: "守着那些虾宝宝的黄昏" }
+  { main: "0.01 公分的距离", sub: "守着那些虾宝宝的黄昏，不问归期" }
+
 ];
 
 const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
