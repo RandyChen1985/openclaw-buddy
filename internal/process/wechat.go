@@ -131,8 +131,6 @@ func GetWeChatPluginStatus() (*WeChatPluginStatus, error) {
 	log.Printf("🔍 Executing: openclaw plugins list (Detecting WeChat Plugin Status)")
 	res, _ := RunCommandWithTimeout(15*time.Second, "openclaw", "plugins", "list")
 	
-	lines := strings.Split(res.Output, "\n")
-	
 	status := &WeChatPluginStatus{
 		Installed: false,
 		Status:    "Not Installed",
@@ -140,29 +138,23 @@ func GetWeChatPluginStatus() (*WeChatPluginStatus, error) {
 		LastCheck: time.Now(),
 	}
 
-	// 处理换行问题：有些终端宽度受限，表格行会被截断/分行
-	// 我们尝试将所有包含 │ 的行合并成一个大字符串，移除换行后再解析
-	var combinedRows []string
-	for _, line := range lines {
-		if strings.Contains(line, "│") {
-			combinedRows = append(combinedRows, StripANSI(line))
-		}
-	}
+	// 1. 先按表格分隔符切分（如果是单行表格，则整个就是一块）
+	blocks := regexp.MustCompile(`(?i)[┌├]`).Split(res.Output, -1)
 	
-	// 如果由于换行导致 "weixin" 被切分，简单的 strings.Contains(line, "weixin") 会失败
-	// 我们合并后再按起始标记 ┌ 或 ├ 重新切分（或者简单地看合集）
-	fullTable := strings.Join(combinedRows, "")
-	
-	// 更粗放但健壮的匹配：只要表格里出现了 weixin 且有 loaded 字样
-	if (strings.Contains(strings.ToLower(fullTable), "weixin")) {
-		status.Installed = true
-		if strings.Contains(strings.ToLower(fullTable), "loaded") {
-			status.Status = "loaded"
-		}
-		// 版本号匹配: 查找类似 2.0.0 的模式
-		versionRe := regexp.MustCompile(`\d+\.\d+\.\d+`)
-		if v := versionRe.FindString(fullTable); v != "" {
-			status.Version = v
+	for _, block := range blocks {
+		cleanBlock := StripANSI(block)
+		// 2. 只有包含 weixin 的块才进行解析
+		if strings.Contains(strings.ToLower(cleanBlock), "weixin") {
+			status.Installed = true
+			if strings.Contains(strings.ToLower(cleanBlock), "loaded") {
+				status.Status = "loaded"
+			}
+			// 3. 在这个特定块内提取版本号
+			versionRe := regexp.MustCompile(`\d+\.\d+\.\d+`)
+			if v := versionRe.FindString(cleanBlock); v != "" {
+				status.Version = v
+			}
+			break // 找到就退出
 		}
 	}
 
