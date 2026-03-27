@@ -1,6 +1,7 @@
 import React from 'react';
 import { Row, Col, Card, Tag, Spin, List, Button } from 'antd';
 import { Boxes, Server, Activity, Cpu, RefreshCw, Cloud } from 'lucide-react';
+import dayjs from 'dayjs';
 
 interface BotsManagerProps {
   botsModels: any; // 结构: { data: { bots: [], models: [] }, updated_at: string }
@@ -28,7 +29,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({ botsModels, loadingBots, isMo
             {isMobile ? '配置的机器人与模型资产' : '当前 OpenClaw 实例中配置的机器人与 AI 模型资产'}
             {botsModels?.updated_at && (
               <Tag bordered={false} style={{ margin: 0, fontSize: 10, background: '#f1f5f9', color: '#94a3b8' }}>
-                同步于: {botsModels.updated_at}
+                同步于: {dayjs(botsModels.updated_at).format('YYYY-MM-DD HH:mm:ss')}
               </Tag>
             )}
           </div>

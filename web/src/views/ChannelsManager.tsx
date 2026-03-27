@@ -38,7 +38,9 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
               <CheckCircle size={14} /> 已绑定渠道
             </span>
             {chatChannels?.updated_at && (
-              <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>同步于: {chatChannels.updated_at}</span>
+              <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
+                同步于: {dayjs(chatChannels.updated_at).format('YYYY-MM-DD HH:mm:ss')}
+              </span>
             )}
           </div>
         }

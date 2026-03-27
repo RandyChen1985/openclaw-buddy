@@ -155,6 +155,24 @@ const Dashboard = () => {
     } catch (err) {}
   };
 
+  const handleGetQRCode = async () => {
+    setIsGettingQR(true);
+    setQrSeconds(0);
+    try {
+      const res = await api.get('/v1/wechat/qrcode?force=true');
+      if (res.data.qrcode_url) {
+        setQrData(res.data);
+        setQrModalVisible(true);
+      } else {
+        message.warning('尚未生成二维码，请稍后重试');
+      }
+    } catch (err: any) {
+      message.error(err.response?.data?.error || '获取二维码失败');
+    } finally {
+      setIsGettingQR(false);
+    }
+  };
+
   const handleControl = (action: string) => {
     const config: any = {
       start: { title: '启动网关核心', color: '#22c55e' },
@@ -224,7 +242,7 @@ const Dashboard = () => {
   const toggleSelfHealing = async (enabled: boolean) => {
     setLoadingSets(true);
     try {
-      await api.post('/v1/openclaw/self-healing/settings', { enabled });
+      await api.post('/v1/settings/self-healing', { enabled });
       setSelfHealingEnabled(enabled);
       message.success(enabled ? '自动自愈已开启' : '自愈服务已禁用');
     } catch (err) {
@@ -254,12 +272,12 @@ const Dashboard = () => {
 
   const navItems = [
     { key: 'dashboard', label: '运行状态', icon: <LayoutDashboard size={14} /> },
-    { key: 'lobster-panel', label: '龙虾面板', icon: <ExternalLink size={14} /> },
     { key: 'bots-models', label: '虾兵蟹将', icon: <Boxes size={14} /> },
     { key: 'components', label: '渠道绑定', icon: <ToyBrick size={14} /> },
     { key: 'devices', label: '设备绑定', icon: <Smartphone size={14} /> },
     { key: 'logs', label: '实时日志', icon: <Terminal size={14} /> },
     { key: 'tools', label: '自愈管理', icon: <Zap size={14} /> },
+    { key: 'lobster-panel', label: '龙虾面板', icon: <ExternalLink size={14} /> },
   ];
 
   const renderContent = () => {
@@ -270,10 +288,16 @@ const Dashboard = () => {
         <ChannelsManager 
           chatChannels={chatChannels} weixinStatus={weixinStatus} loadingChannels={loadingChannels} 
           loadingWeixin={loadingWeixin} checkWeixinSeconds={checkWeixinSeconds}
-          isGettingQR={isGettingQR} onInstallWeixin={handleInstallWeixin} onGetQRCode={() => handleControl('wechat')}
+          isGettingQR={isGettingQR} onInstallWeixin={handleInstallWeixin} onGetQRCode={handleGetQRCode}
         />
       );
-      case 'devices': return <DeviceManager devices={devices} loadingDevices={loadingDevices} onApproveDevice={handleApproveDevice} />;
+      case 'devices': return (
+        <DeviceManager 
+          devices={devices} loadingDevices={loadingDevices} 
+          onApproveDevice={handleApproveDevice} 
+          onRefresh={() => fetchDevices(true)}
+        />
+      );
       case 'logs': return <LogsViewer wsLogs={wsLogs} />;
       case 'tools': return <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} />;
       default: return null;
@@ -389,8 +413,8 @@ const Dashboard = () => {
           </Sider>
           <Layout style={{ marginLeft: collapsed ? 64 : 220, transition: 'margin-left 0.2s', minHeight: '100vh' }}>
             {headerEl()}
-            <Content style={{ padding: 24, background: '#f8fafc', flex: 1 }}>
-              <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+            <Content style={{ padding: activeTab === 'logs' ? 0 : 24, background: '#f8fafc', flex: 1 }}>
+              <div style={{ maxWidth: activeTab === 'logs' ? 'none' : 1100, margin: '0 auto', height: activeTab === 'logs' ? '100%' : 'auto' }}>
                 {renderContent()}
               </div>
             </Content>

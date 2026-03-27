@@ -1,14 +1,21 @@
 import React from 'react';
 import { Card, Tag, Spin, List, Button, Tooltip } from 'antd';
-import { Smartphone, CheckCircle } from 'lucide-react';
+import { Smartphone, CheckCircle, RefreshCw } from 'lucide-react';
+import dayjs from 'dayjs';
 
 interface DeviceManagerProps {
   devices: any; // 结构: { data: [], updated_at: string }
   loadingDevices: boolean;
   onApproveDevice: (requestId: string) => void;
+  onRefresh: () => void;
 }
 
-const DeviceManager: React.FC<DeviceManagerProps> = ({ devices, loadingDevices, onApproveDevice }) => {
+const DeviceManager: React.FC<DeviceManagerProps> = ({ 
+  devices, 
+  loadingDevices, 
+  onApproveDevice,
+  onRefresh
+}) => {
   const deviceList = devices?.data || [];
   const pendingDevices = deviceList.filter((d: any) => d.status === 'pending');
   const pairedDevices = deviceList.filter((d: any) => d.status === 'paired');
@@ -22,9 +29,23 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ devices, loadingDevices, 
             <span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Smartphone size={20} color="#f59e0b" /> 待处理连接请求
             </span>
-            {devices?.updated_at && (
-              <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>同步于: {devices.updated_at}</span>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {devices?.updated_at && (
+                <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
+                  同步于: {dayjs(devices.updated_at).format('YYYY-MM-DD HH:mm:ss')}
+                </span>
+              )}
+              <Button 
+                type="text" 
+                size="small" 
+                icon={<RefreshCw size={14} className={loadingDevices ? 'animate-spin' : ''} />} 
+                onClick={onRefresh}
+                loading={loadingDevices}
+                style={{ color: '#64748b', display: 'flex', alignItems: 'center' }}
+              >
+                刷新
+              </Button>
+            </div>
           </div>
         }
         styles={{ body: { padding: '0 24px' } }}
