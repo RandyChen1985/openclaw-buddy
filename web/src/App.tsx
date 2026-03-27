@@ -405,7 +405,7 @@ const Dashboard = () => {
           <Layout style={{ marginLeft: collapsed ? 64 : 220, transition: 'margin-left 0.2s', minHeight: '100vh' }}>
             {headerEl()}
             <Content style={{ padding: activeTab === 'logs' ? 0 : 24, background: '#f8fafc', flex: 1 }}>
-              <div style={{ maxWidth: activeTab === 'logs' ? 'none' : 1100, margin: '0 auto', height: activeTab === 'logs' ? '100%' : 'auto' }}>
+              <div style={{ maxWidth: 'none', margin: '0 auto', height: activeTab === 'logs' ? '100%' : 'auto' }}>
                 {renderContent()}
               </div>
             </Content>

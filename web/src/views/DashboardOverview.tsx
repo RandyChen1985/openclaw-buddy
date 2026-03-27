@@ -1,6 +1,6 @@
 import React from 'react';
 import { Row, Col, Card, Tag, Progress, Button } from 'antd';
-import { Server, Activity, Cpu, Play, Square, RefreshCw, Command } from 'lucide-react';
+import { Server, Activity, Cpu, Play, Square, RefreshCw } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
 import dayjs from 'dayjs';
 
@@ -147,14 +147,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ status, history, 
             style={{ fontWeight: 500, flex: window.innerWidth < 768 ? '1 1 calc(50% - 6px)' : 'none', minWidth: 120 }}
           >
             重启网关
-          </Button>
-          <Button
-            size="large"
-            icon={<Command size={14} />}
-            onClick={() => onControl('wechat')}
-            style={{ fontWeight: 500, flex: window.innerWidth < 768 ? '1 1 100%' : 'none', minWidth: 120 }}
-          >
-            微信登录码
           </Button>
         </div>
       </Card>
