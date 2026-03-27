@@ -107,7 +107,7 @@ const Dashboard = () => {
   const fetchChatChannels = async (force = false) => {
     setLoadingChannels(true);
     try {
-      const res = await api.get(`/v1/openclaw/chat-channels${force ? '?refresh=true' : ''}`);
+      const res = await api.get(`/v1/wechat/config/status${force ? '?refresh=true' : ''}`);
       setChatChannels(res.data);
     } catch (e) {
       console.warn('同步渠道信息失败', e);
@@ -149,10 +149,10 @@ const Dashboard = () => {
   const fetchSelfHealing = async () => {
     try {
       const [historyRes, settingsRes] = await Promise.all([
-        api.get('/v1/openclaw/self-healing/history'),
-        api.get('/v1/openclaw/self-healing/settings')
+        api.get('/v1/heal/events'),
+        api.get('/v1/settings/self-healing')
       ]);
-      setHealEvents(historyRes.data?.events || []);
+      setHealEvents(Array.isArray(historyRes.data) ? historyRes.data : historyRes.data?.events || []);
       setSelfHealingEnabled(settingsRes.data?.enabled || false);
     } catch (err) {}
   };
@@ -200,7 +200,7 @@ const Dashboard = () => {
   const handleInstallWeixin = async () => {
     setLoadingWeixin(true);
     try {
-      await api.post('/v1/openclaw/plugins/weixin/install');
+      await api.post('/v1/wechat/install');
       message.loading('正在安装微信插件，请勿刷新...', 0);
       setTimeout(() => {
         message.destroy();
@@ -216,7 +216,7 @@ const Dashboard = () => {
 
   const handleApproveDevice = async (requestId: string) => {
     try {
-      await api.post(`/v1/openclaw/devices/approve/${requestId}`);
+      await api.post('/v1/openclaw/devices/approve', { requestId });
       message.success('设备已批准接入');
       fetchDevices();
     } catch (err: any) {
