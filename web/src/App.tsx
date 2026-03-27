@@ -515,16 +515,17 @@ const Dashboard = () => {
       
       {isEmbed ? (
         <div style={{ 
-          minHeight: '100vh', 
+          height: '100vh', 
           background: '#f8fafc', 
           display: 'flex', 
           flexDirection: 'column',
-          padding: activeTab === 'chat' || activeTab === 'logs' ? 0 : 24 
+          padding: activeTab === 'chat' || activeTab === 'logs' ? 0 : 24,
+          overflow: 'hidden'
         }}>
           {renderContent()}
         </div>
       ) : isMobile ? (
-        <Layout style={{ minHeight: '100vh', background: '#f8fafc' }}>
+        <Layout style={{ height: '100vh', background: '#f8fafc', overflow: 'hidden' }}>
           {headerEl(() => setMobileMenuOpen(true))}
           <Content style={{ padding: 16, background: '#f8fafc' }}>
             {renderContent()}
@@ -545,7 +546,7 @@ const Dashboard = () => {
           </Drawer>
         </Layout>
       ) : (
-        <Layout style={{ minHeight: '100vh', background: '#f8fafc' }}>
+        <Layout style={{ height: '100vh', background: '#f8fafc', overflow: 'hidden' }}>
           <Sider
             width={220} collapsedWidth={64} collapsed={collapsed} onCollapse={setCollapsed}
             style={{ background: '#0f172a', position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 30 }}
@@ -558,7 +559,7 @@ const Dashboard = () => {
               onLogout={handleLogout} navItems={navItems} 
             />
           </Sider>
-          <Layout style={{ marginLeft: collapsed ? 64 : 220, transition: 'margin-left 0.2s', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+          <Layout style={{ marginLeft: collapsed ? 64 : 220, transition: 'margin-left 0.2s', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {headerEl(() => setCollapsed(!collapsed))}
             <Content style={{ 
               padding: activeTab === 'logs' || activeTab === 'chat' ? 0 : 24, 
