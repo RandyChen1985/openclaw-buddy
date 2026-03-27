@@ -20,6 +20,9 @@
 - [ ] **聊天配置检查**: `GET /v1/openclaw/chat/status` 应返回当前 `chatCompletions` 是否启用。
 - [ ] **对话一键开启**: `POST /v1/openclaw/chat/enable` 应自动更新 `openclaw.json` 并触发异步重启任务。
 - [ ] **流式对话服务**: `POST /v1/openclaw/chat/completions` 应兼容 OpenAI 协议，且在 `stream: true` 时返回标准 SSE 流。
+- [ ] **`chat/completions` 用户标识**: `POST /v1/openclaw/chat/completions` 请求应能接收并透传来自上游的 `user` 参数，且不再硬编码为 `lobster`。
+- [ ] **`chat/completions` 系统提示注入**: `POST /v1/openclaw/chat/completions` 请求应不再自动注入系统提示到 `messages` 数组中。
+- [ ] **前端用户标识生成**: 聊天界面应能根据 `urlUser` 或 `localStorage` 中的 `session_id`（格式为 `lobster-{session_id}`）生成 `user` 标识并发送，并在清空会话时更新 `session_id`。
 - [ ] **快捷指令管理**: `GET/POST /v1/openclaw/chat/quick-commands` 应能存取用户自定义的对话话术。
 - [ ] **模型提供商配置**: `GET /v1/openclaw/models/config` 应返回按提供商分组的模型配置。
 - [ ] **新增提供商**: `POST /v1/openclaw/models/provider` 后，`openclaw.json` 应包含新提供商及其 API 密钥。
@@ -37,6 +40,7 @@
 - [ ] **页面动画**: 切换页面时，区块应有明显的淡入（Fade-in）过渡。
 - [ ] **模型分组展示**: “虾兵蟹将”页面的模型列表应按提供商（如 yovole, deepseek）划分为不同区块。
 - [ ] **可视化管理弹窗**: 点击“管理模型配置”应弹出含 Tab 切换的对话框，支持实时录入提供商和模型。
+- [ ] **聊天分享按钮移动端适配**: “在新窗口打开”和“获取嵌入代码”按钮在移动端应隐藏。
 - [ ] **联通性验证**: 新增模型后，创建机器人的下拉菜单应能即时刷新并包含新模型。
 - [ ] **对话实验室**: 点击“对话实验室”菜单应能正常进入聊天界面，并自动加载机器人列表（需校验 API 调用携带 Bearer Token）。
 - [ ] **输入框锁死**: 回复生成期间，发送按钮应变为“停止”图标，且输入框应短暂禁用以防重复提交。

@@ -37,6 +37,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   const [checkingEnabled, setCheckingEnabled] = useState(true);
   const [enabling, setEnabling] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [generatedSessionId, setGeneratedSessionId] = useState<string | null>(null); // 新增
   
   // 快捷指令相关状态
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
@@ -53,6 +54,19 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
     checkChatStatus();
     fetchQuickCommands();
   }, []);
+
+  useEffect(() => {
+    if (!urlUser) { // 只有当 urlUser 不存在时，才启用内部 session_id 逻辑
+      let storedSessionId = localStorage.getItem('chat_session_id');
+      if (!storedSessionId) {
+        storedSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`; // 生成一个简单的唯一ID
+        localStorage.setItem('chat_session_id', storedSessionId);
+      }
+      setGeneratedSessionId(storedSessionId);
+    } else {
+      setGeneratedSessionId(null); // 如果 urlUser 存在，则不需要内部生成的 session ID
+    }
+  }, [urlUser]); // 依赖 urlUser，当其变化时重新评估
 
   useEffect(() => {
     if (botsModels?.data?.bots?.length > 0) {
@@ -172,6 +186,21 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
     const newMessages = [...messages, newUserMessage];
     setMessages(newMessages);
 
+    const requestBody: any = {
+      model: selectedBot,
+      messages: newMessages,
+      stream: true
+    };
+
+    let userIdToSend = urlUser; // 默认使用 urlUser
+    if (!userIdToSend && generatedSessionId) { // 如果 urlUser 不存在，且内部 session ID 已生成
+      userIdToSend = `lobster-${generatedSessionId}`;
+    }
+
+    if (userIdToSend) { // 只有当 userIdToSend 有值时才添加到 requestBody
+      requestBody.user = userIdToSend;
+    }
+
     try {
       const response = await fetch(`${api.defaults.baseURL || ''}/v1/openclaw/chat/completions`, {
         method: 'POST',
@@ -179,11 +208,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('guardian_token')}`
         },
-        body: JSON.stringify({
-          model: selectedBot,
-          messages: newMessages,
-          stream: true
-        }),
+        body: JSON.stringify(requestBody),
         signal: abortControllerRef.current.signal
       });
 
@@ -264,6 +289,10 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
   const clearHistory = () => {
     setMessages([]);
+    // 生成一个新的 session ID 并存储
+    const newSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    localStorage.setItem('chat_session_id', newSessionId);
+    setGeneratedSessionId(newSessionId); // 更新状态以确保下次发送使用新的 ID
     message.success('对话记录已清空');
   };
 
@@ -443,7 +472,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
               ))}
             </Select>
             <Button icon={<RefreshCw size={14} />} onClick={onRefreshBots} loading={loadingBots} title="刷新列表" />
-            {!isEmbedMode && (
+            {!isEmbedMode && !isMobile && (
               <Button 
                 icon={<ExternalLink size={14} />} 
                 title="在新窗口打开独立聊天"
@@ -455,44 +484,46 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                 }}
               />
             )}
-            <Button 
-                icon={<Share2 size={14} />} 
-                title="获取嵌入代码"
-                onClick={() => {
-                  const token = localStorage.getItem('guardian_token');
-                  const botId = selectedBot.replace('openclaw:', '');
-                  const url = `${window.location.origin}/?page=chat&token=${token}&bot=${botId}&embed=true`;
-                  const iframeCode = `<iframe src="${url}" width="100%" height="600" frameborder="0"></iframe>`;
-                  Modal.info({
-                    title: '获取嵌入代码',
-                    width: 500,
-                    content: (
-                      <div style={{ marginTop: 16 }}>
-                        <p style={{ fontSize: 13, color: '#64748b' }}>您可以将以下代码复制到其他系统中以嵌入此聊天窗口：</p>
-                        <Input.TextArea 
-                          readOnly 
-                          value={iframeCode} 
-                          autoSize={{ minRows: 3 }} 
-                          style={{ fontFamily: 'monospace', fontSize: 12, background: '#f8fafc' }}
-                        />
-                        <Button 
-                          type="primary" 
-                          size="small" 
-                          icon={<Copy size={12} />} 
-                          style={{ marginTop: 12 }}
-                          onClick={() => {
-                            navigator.clipboard.writeText(iframeCode);
-                            message.success('代码已复制');
-                          }}
-                        >
-                          复制 Iframe 代码
-                        </Button>
-                      </div>
-                    ),
-                    okText: '关闭'
-                  });
-                }}
-            />
+            {!isEmbedMode && !isMobile && (
+              <Button 
+                  icon={<Share2 size={14} />} 
+                  title="获取嵌入代码"
+                  onClick={() => {
+                    const token = localStorage.getItem('guardian_token');
+                    const botId = selectedBot.replace('openclaw:', '');
+                    const url = `${window.location.origin}/?page=chat&token=${token}&bot=${botId}&embed=true`;
+                    const iframeCode = `<iframe src="${url}" width="100%" height="600" frameborder="0"></iframe>`;
+                    Modal.info({
+                      title: '获取嵌入代码',
+                      width: 500,
+                      content: (
+                        <div style={{ marginTop: 16 }}>
+                          <p style={{ fontSize: 13, color: '#64748b' }}>您可以将以下代码复制到其他系统中以嵌入此聊天窗口：</p>
+                          <Input.TextArea 
+                            readOnly 
+                            value={iframeCode} 
+                            autoSize={{ minRows: 3 }} 
+                            style={{ fontFamily: 'monospace', fontSize: 12, background: '#f8fafc' }}
+                          />
+                          <Button 
+                            type="primary" 
+                            size="small" 
+                            icon={<Copy size={12} />} 
+                            style={{ marginTop: 12 }}
+                            onClick={() => {
+                              navigator.clipboard.writeText(iframeCode);
+                              message.success('代码已复制');
+                            }}
+                          >
+                            复制 Iframe 代码
+                          </Button>
+                        </div>
+                      ),
+                      okText: '关闭'
+                    });
+                  }}
+              />
+            )}
             <Button danger icon={<Trash2 size={14} />} onClick={clearHistory} disabled={messages.length === 0}>{isMobile ? '' : '清空'}</Button>
           </div>
         </div>
@@ -757,7 +788,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           {!isMobile && (
             <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8', display: 'flex', gap: 16 }}>
               <span>⚡️ 支持流式响应</span>
-              <span>🤖 User: lobster</span>
+              <span>🤖 User: {urlUser || (generatedSessionId ? `lobster-${generatedSessionId}` : '匿名')}</span>
               <span>🔒 Gateway Token 已隐藏</span>
             </div>
           )}
