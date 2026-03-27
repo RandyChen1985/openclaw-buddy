@@ -1,4 +1,4 @@
-# Lobster Guardian 开发规范与技巧 (Development Skills)
+# OpenClaw Buddy 开发规范与技巧 (Development Skills)
 
 ## 1. 快速启动与隔离测试
 

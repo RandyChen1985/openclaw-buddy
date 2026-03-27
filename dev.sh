@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# 🦞 Lobster Guardian 快速开发/测试脚本 (隔离模式)
+# 🦞 OpenClaw Buddy 快速开发/测试脚本 (隔离模式)
 DEV_ROOT="temp-dev-test"
-PID_FILE="/tmp/lobster-guardian-dev.pid"
+PID_FILE="/tmp/openclaw-buddy-dev.pid"
 
 stop_and_clean() {
     if [ -f "$PID_FILE" ]; then
@@ -51,7 +51,7 @@ fi
 
 # 4. 编译后端到隔离目录
 echo "🏗️  正在编译后端..."
-go build -o "$DEV_ROOT/lobster-monitor-dev" ./cmd/monitor/main.go
+go build -o "$DEV_ROOT/openclaw-buddy-dev" ./cmd/monitor/main.go
 if [ $? -ne 0 ]; then
     echo "❌ 编译失败！"
     exit 1
@@ -60,10 +60,10 @@ fi
 # 6. 生成隔离环境配置: $DEV_ROOT/env
 echo "📝 生成隔离环境配置: $DEV_ROOT/env"
 cat <<EOF > "$DEV_ROOT/env"
-# 🦞 有孚小龙虾监控 (Lobster Guardian) 隔离开发配置
+# 🦞 OpenClaw Buddy (OpenClaw Buddy) 隔离开发配置
 WEB_PORT=3000
-GUARDIAN_TOKEN="lobster-guardian-2026"
-PID_FILE="./lobster-guardian.pid"
+GUARDIAN_TOKEN="openclaw-buddy-2026"
+PID_FILE="./openclaw-buddy.pid"
 
 # [存储与目录]
 # 隔离数据存储路径 (相对于执行路径)
@@ -98,10 +98,10 @@ EOF
 cd "$DEV_ROOT"
 echo "🚀 启动服务..."
 # 显式读取 env 中的变量并导出 (也可以由 Go 代码中的 godotenv.Load("env") 处理，但 PID 检查在 Load 之前)
-export PID_FILE="./lobster-guardian.pid"
-nohup ./lobster-monitor-dev >> ./logs/guardian.log 2>&1 &
+export PID_FILE="./openclaw-buddy.pid"
+nohup ./openclaw-buddy-dev >> ./logs/guardian.log 2>&1 &
 NEW_PID=$!
-echo $NEW_PID > "/tmp/lobster-guardian-dev.pid"
+echo $NEW_PID > "/tmp/openclaw-buddy-dev.pid"
 
 echo "✅ 服务已在隔离环境启动 (PID: $NEW_PID)"
 echo "🌐 访问地址: http://localhost:3000"

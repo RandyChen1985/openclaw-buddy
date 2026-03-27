@@ -60,7 +60,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
           <div style={{ position: 'relative', zIndex: 1, maxWidth: 480 }}>
             <h1 style={{ color: '#fff', fontSize: 44, fontWeight: 900, lineHeight: 1.1, marginBottom: 28, letterSpacing: '-0.03em' }}>
-              有孚网络<br />
+              OpenClaw Buddy<br />
               <span style={{ color: '#60a5fa' }}>监控枢纽中心</span>
             </h1>
             <p style={{ color: '#94a3b8', fontSize: 17, lineHeight: 1.6, marginBottom: 48 }}>

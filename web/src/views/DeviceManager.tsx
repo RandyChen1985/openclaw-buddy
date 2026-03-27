@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Tag, Spin, List, Button, Tooltip } from 'antd';
+import { Card, Tag, Spin, List, Button, Tooltip, Modal } from 'antd';
 import { Smartphone, CheckCircle, RefreshCw } from 'lucide-react';
 import dayjs from 'dayjs';
 
@@ -76,7 +76,16 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
                     type="primary" 
                     icon={<CheckCircle size={14} />} 
                     size="small"
-                    onClick={() => onApproveDevice(item.requestId)}
+                    onClick={() => {
+                      Modal.confirm({
+                        title: '确认批准设备接入？',
+                        content: `您正在批准设备 "${item.displayName || '未知设备'}" 接入 OpenClaw，确认后其将获得访问权限。`,
+                        okText: '确认批准',
+                        cancelText: '取消',
+                        centered: true,
+                        onOk: () => onApproveDevice(item.requestId)
+                      });
+                    }}
                     style={{ borderRadius: 6, fontSize: 12 }}
                   >
                     批准授权

@@ -241,12 +241,18 @@ const Dashboard = () => {
   };
 
   const handleApproveDevice = async (requestId: string) => {
+    setTargetStatus('approving_device');
+    setIsTransitioning(true);
+    setTransitionSeconds(0);
     try {
       await api.post('/v1/openclaw/devices/approve', { requestId });
       message.success('设备已批准接入');
-      fetchDevices();
+      await fetchDevices();
     } catch (err: any) {
       message.error(err.response?.data?.error || '操作失败');
+    } finally {
+      setIsTransitioning(false);
+      setTargetStatus(null);
     }
   };
 
@@ -428,14 +434,16 @@ const Dashboard = () => {
             {targetStatus === 'setting_identity' && '正在修改身份'}
             {targetStatus === 'deleting_bot' && '正在移除机器人'}
             {targetStatus === 'setting_default_model' && '正在切换默认模型'}
-            {!['adding_bot', 'setting_identity', 'deleting_bot', 'setting_default_model'].includes(targetStatus as string) && '正在同步网关状态'}
+            {targetStatus === 'approving_device' && '正在批准设备接入'}
+            {!['adding_bot', 'setting_identity', 'deleting_bot', 'setting_default_model', 'approving_device'].includes(targetStatus as string) && '正在同步网关状态'}
           </div>
           <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>
             {targetStatus === 'adding_bot' && '小龙虾正在加紧孵化中，请稍后...'}
             {targetStatus === 'setting_identity' && '正在同步身份信息，请稍后...'}
             {targetStatus === 'deleting_bot' && '正在彻底清理相关数据，请稍后...'}
             {targetStatus === 'setting_default_model' && '正在更新全局 AI 核心，请稍后...'}
-            {!['adding_bot', 'setting_identity', 'deleting_bot', 'setting_default_model'].includes(targetStatus as string) && '指令已确认，正在等待网关反馈状态...'}
+            {targetStatus === 'approving_device' && '正在授权设备访问权限，请稍后...'}
+            {!['adding_bot', 'setting_identity', 'deleting_bot', 'setting_default_model', 'approving_device'].includes(targetStatus as string) && '指令已确认，正在等待网关反馈状态...'}
           </div>
           <div style={{
             marginTop: 16, padding: '6px 16px', background: '#eff6ff',

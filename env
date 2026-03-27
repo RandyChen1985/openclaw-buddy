@@ -1,4 +1,4 @@
-# 🦞 有孚小龙虾管理监控 (Lobster Guardian) 核心配置
+# 🦞 OpenClaw Buddy (Lobster Guardian) 核心配置
 
 # [服务基础]
 # Guardian 面板监听端口 (用于浏览器访问及 API 交互)

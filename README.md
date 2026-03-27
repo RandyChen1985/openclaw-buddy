@@ -1,9 +1,11 @@
-# 🦞 有孚小龙虾带外监控服务 (Lobster Guardian)
+# 🦞 OpenClaw Buddy
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/yovole/openclaw-monitor)](https://goreportcard.com/report/github.com/yovole/openclaw-monitor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**有孚小龙虾带外监控服务 (Lobster Guardian)** 是一个专为 **OpenClaw (小龙虾 AI Agent)** 设计的企业级、全功能带外管理 (Out-of-band Management) 与自愈系统。
+**OpenClaw Buddy** 是一款专为 **OpenClaw (小龙虾 AI Agent)** 打造的专业级带外管理 (Out-of-band Management) 与自愈伴侣系统。
+
+面对 AI 代理由于配置误改、插件冲突导致的“失联”风险，Buddy 作为独立运行的“监控哨兵”，提供了极佳的实时监控、流式登录捕获及自动化故障恢复能力，是每一位 OpenClaw 深度用户的必备运维利器。
 
 ---
 
@@ -11,17 +13,20 @@
 
 | **系统概览 (Dashboard)** | **流式登录 (Get QR)** |
 | :---: | :---: |
-| ![Dashboard](docs/overview.png) | ![GetQR](docs/getqr.png) |
+| ![Dashboard](docs/images/overview.png) | ![GetQR](docs/images/getqr.png) |
 | **安全登录 (Auth)** | **扫码登录 (Show QR)** |
-| ![Login](docs/login.png) | ![ShowQR](docs/showqr.png) |
+| ![Login](docs/images/login.png) | ![ShowQR](docs/images/showqr.png) |
 
 ---
 
-## 📖 项目背景
+## ✨ 核心亮点
 
-OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口（Web UI & Channels）深度集成在网关进程中，一旦用户误修改 `openclaw.json` 配置或插件冲突导致网关崩溃，用户将失联。
-
-**Lobster Guardian** 作为“带外哨兵”独立运行，提供实时监控、一键部署、流式登录捕获及自动故障恢复，确保 AI 代理始终在线。
+- **🛡️ 独立哨兵 (OOB)**：独立进程运行，即使 OpenClaw 网关崩溃，也能通过 Buddy 远程重启、回滚并救回系统。
+- **⚡ 极速登录**：深度集成微信插件，流式响应登录二维码，扫码授权“秒级”完成。
+- **🤖 虾兵蟹将管理**：可视化管理所有 Bot 及模型映射，支持资产强制刷新与实时同步。
+- **🩺 智能自愈**：内置心跳探针与多阶段自愈机制，检测到异常自动执行配置回滚与备份快照。
+- **📊 运维看板**：实时追踪 CPU、内存负载、API 延迟与系统日志，掌握 AI 代理的每一滴跳动。
+- **🔔 飞书全能报警**：实时推送故障、自愈及登录交互式卡片消息。
 
 ## ✨ 核心特性
 
@@ -33,16 +38,11 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
 - **📱 设备中心与授权**：
     - **双态管理**：清晰区分“待处理连接请求”与“已配对合规设备”。
     - **在线批准**：直接通过 Web 界面批准新设备的接入请求。
-- **🤖 虾兵蟹将 (Bots/Models)**：
-    - **智能发现**：自动解析 `openclaw.json`，直观展示机器人架构。
-    - **性能优化**：引入 **后端数据缓存** 机制，支持手动强制刷新同步。
-- **📺 微信插件深度管理**：
-    - **一键安装/配置**：自动化执行插件下载与启用配置。
-    - **流式登录捕获**：实时监听 `openclaw` 输出，实现二维码秒出。
+- **🤖 虾兵蟹将 (Bots/Models)**：自动解析 `openclaw.json`，直观展示机器人架构，支持手动强制刷新同步。
+- **📺 微信插件深度管理**：自动化执行插件下载与启用配置，监听 `openclaw` 输出并实时捕获登录二维码。
 - **📊 运行指标可视化**：实时查看 CPU、内存、磁盘负载及响应延迟趋势图。
-- **🔄 异步任务管理**：关键操作（如重启）采用异步任务模式，支持任务状态追踪（Task ID）。
+- **🔄 异步任务管理**：关键操作（如重启）采用异步任务模式，支持任务状态追踪 (Task ID)。
 - **🔗 龙虾面板透传**：集成 Reverse Proxy，支持通过 `EXTERNAL_DASHBOARD_URL` 在公网安全访问原生 UI。
-- **🔔 飞书全能报警**：实时推送故障、自愈及登录交互式卡片消息。
 
 ## 🏗️ 系统架构
 
@@ -83,7 +83,7 @@ OpenClaw 是一款强大的个人 AI 代理操作系统。由于其管理接口�
 
 ## 🔌 API 接口说明
 
-Lobster Guardian 提供了一套标准的 RESTful API 供外部系统集成或移动端调用。
+OpenClaw Buddy 提供了一套标准的 RESTful API 供外部系统集成或移动端调用。
 
 ### 认证方式
 所有 V1 接口均需通过 HTTP Header 进行认证：
@@ -119,4 +119,4 @@ EXTERNAL_DASHBOARD_URL="https://claw.yourdomain.com" # 外部访问前缀 (用�
 
 ## 📄 开源协议
 
-本项目基于 **MIT License** 开源，由有孚网络云枢中台团队维护。
+本项目基于 **MIT License** 开源，由 randychen 维护。联系我：[cexlong@gmail.com](mailto:cexlong@gmail.com)

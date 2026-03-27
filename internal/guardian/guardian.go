@@ -57,10 +57,10 @@ func (g *Guardian) Run(ctx context.Context) {
 		g.feishu.StartLongConnection(ctx)
 		hostname, _ := os.Hostname()
 		status := process.GetGatewayStatus()
-		g.notifyFeishu(context.Background(), "🛡️ 有孚小龙虾监控服务已启动", fmt.Sprintf("节点: %s\n状态: ✅ 监控运行中\n版本: 🦞 OpenClaw Monitor\n\n---\n**OpenClaw 状态详情:**\n%s", hostname, status))
+		g.notifyFeishu(context.Background(), "🛡️ OpenClaw Buddy 监控服务已启动", fmt.Sprintf("节点: %s\n状态: ✅ 监控运行中\n版本: 🦞 OpenClaw Buddy\n\n---\n**OpenClaw 状态详情:**\n%s", hostname, status))
 	}
 
-	log.Printf("🛡️ 有孚小龙虾监控服务巡检循环已启动. Every %d seconds.", g.config.CheckIntervalSeconds)
+	log.Printf("🛡️ OpenClaw Buddy 监控服务巡检循环已启动. Every %d seconds.", g.config.CheckIntervalSeconds)
 
 	// 启动时检查：如果服务正常，根据开关状态决定是否备份
 	isSelfHealingEnabled := utils.GetSetting("self_healing_enabled", "false") == "true"
@@ -88,7 +88,7 @@ func (g *Guardian) Run(ctx context.Context) {
 			process.SyncAll(g.config.OpenClawConfigDir)
 		case <-ctx.Done():
 			hostname, _ := os.Hostname()
-			g.notifyFeishu(context.Background(), "👋 有孚小龙虾监控服务已停止", fmt.Sprintf("节点: %s\n状态: ⏹️ 服务已正常退出", hostname))
+			g.notifyFeishu(context.Background(), "👋 OpenClaw Buddy 监控服务已停止", fmt.Sprintf("节点: %s\n状态: ⏹️ 服务已正常退出", hostname))
 			return
 		}
 	}
