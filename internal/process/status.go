@@ -68,12 +68,12 @@ func GetStructuredStatus(port int) (OpenClawStatus, error) {
 
 	// 1. 解析网关状态：仅使用端口监听判断，确保最快响应速度
 	if IsPortListening(port) {
-		status.Gateway.Status = "Running"
+		status.Gateway.Status = "running"
 		pid, _ := GetPIDByPort(port)
 		status.Gateway.PID = pid
 		status.Gateway.Runtime = "Active (Port Monitored)"
 	} else {
-		status.Gateway.Status = "Stopped"
+		status.Gateway.Status = "stopped"
 		status.Gateway.Runtime = "Inactive"
 	}
 

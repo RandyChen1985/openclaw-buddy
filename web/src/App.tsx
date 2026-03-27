@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Layout, ConfigProvider, message, Modal, Spin, QRCode, Button, Drawer, Badge } from 'antd';
 import { 
   LayoutDashboard, Boxes, ToyBrick, Smartphone, Terminal, Zap, 
-  Menu as MenuIcon, Play, Square, RefreshCw
+  Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink
 } from 'lucide-react';
 import api from './api';
 
@@ -238,16 +238,28 @@ const Dashboard = () => {
     localStorage.removeItem('guardian_token');
     window.location.reload();
   };
+  
+  const handleOpenDashboard = async () => {
+    try {
+      const res = await api.get('/v1/openclaw/dashboard-url');
+      if (res.data.url) {
+        window.open(res.data.url, '_blank');
+      }
+    } catch (e) {
+      message.error('无法获取龙虾面板地址');
+    }
+  };
 
-  const isRunning = status?.gateway?.status === 'running';
+  const isRunning = status?.gateway?.status?.toLowerCase() === 'running';
 
   const navItems = [
     { key: 'dashboard', label: '运行状态', icon: <LayoutDashboard size={14} /> },
+    { key: 'lobster-panel', label: '龙虾面板', icon: <ExternalLink size={14} /> },
     { key: 'bots-models', label: '虾兵蟹将', icon: <Boxes size={14} /> },
-    { key: 'components', label: '插件渠道', icon: <ToyBrick size={14} /> },
-    { key: 'devices', label: '设备资产', icon: <Smartphone size={14} /> },
-    { key: 'logs', label: '终端日志', icon: <Terminal size={14} /> },
-    { key: 'tools', label: '自动修复', icon: <Zap size={14} /> },
+    { key: 'components', label: '渠道绑定', icon: <ToyBrick size={14} /> },
+    { key: 'devices', label: '设备绑定', icon: <Smartphone size={14} /> },
+    { key: 'logs', label: '实时日志', icon: <Terminal size={14} /> },
+    { key: 'tools', label: '自愈管理', icon: <Zap size={14} /> },
   ];
 
   const renderContent = () => {
@@ -352,7 +364,11 @@ const Dashboard = () => {
             styles={{ body: { padding: 0, background: '#0f172a', display: 'flex', flexDirection: 'column', height: '100%' } }}
           >
             <Sidebar 
-              activeTab={activeTab} collapsed={false} onSelect={(k) => { setActiveTab(k); setMobileMenuOpen(false); }} 
+              activeTab={activeTab} collapsed={false} onSelect={(k) => { 
+                if (k === 'lobster-panel') { handleOpenDashboard(); return; }
+                setActiveTab(k); 
+                setMobileMenuOpen(false); 
+              }} 
               onLogout={handleLogout} navItems={navItems} 
             />
           </Drawer>
@@ -364,7 +380,10 @@ const Dashboard = () => {
             style={{ background: '#0f172a', position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 30 }}
           >
             <Sidebar 
-              activeTab={activeTab} collapsed={collapsed} onSelect={setActiveTab} 
+              activeTab={activeTab} collapsed={collapsed} onSelect={(k) => {
+                if (k === 'lobster-panel') { handleOpenDashboard(); return; }
+                setActiveTab(k);
+              }} 
               onLogout={handleLogout} navItems={navItems} 
             />
           </Sider>
