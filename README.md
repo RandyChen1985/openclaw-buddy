@@ -115,6 +115,7 @@ OpenClaw Buddy 采用标准的模块化设计，确保监控与被监控逻辑�
 ├── release/                 # [发布层]   生产环境的最终部署包所在地（包含二进制、静态资源、管理脚本及文档）
 ├── dev.sh                   # [开发脚本] 一键式全栈开发脚本（隔离运行、自动编译、日志追踪）
 ├── Makefile                 # [构建脚本] 用于交叉编译、清理产物及快速执行发布流程
+├── Embedding.md             # [文档]     对话实验室 (Online Chat) 嵌入集成开发指南
 ├── API.md                   # [文档]     详尽的 RESTful 接口定义说明
 └── README.md                # [文档]     本自愈伴侣系统的核心宣言指南
 ```
@@ -122,6 +123,9 @@ OpenClaw Buddy 采用标准的模块化设计，确保监控与被监控逻辑�
 ## 🔌 API 接口说明
 
 OpenClaw Buddy 提供了一套标准的 RESTful API 供外部系统集成或移动端调用。
+
+> [!TIP]
+> 完整的 API 接口定义、请求参数及响应示例，请参考项目的 [API.md](file:///Users/chenxiaolong/资料/有孚网络/1云枢中台/yovole-openclaw-monitor/API.md) 文档。
 
 ### 认证方式
 
