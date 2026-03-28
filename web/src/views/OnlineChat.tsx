@@ -29,6 +29,21 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   const [selectedBot, setSelectedBot] = useState<string>('');
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
+  
+  // --- Markdown 预处理逻辑，修复模型输出不规范导致的渲染问题 ---
+  const preprocessMarkdown = (content: string) => {
+    if (!content) return '';
+    return content
+      // 1. 确保标题 (#) 前有空行
+      .replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2')
+      // 2. 确保表格 (|) 前有空行，且排除表格内部行
+      .replace(/([^\n])\n(\|)/g, (match, p1, p2) => {
+        return p1.trim().endsWith('|') ? match : p1 + '\n\n' + p2;
+      })
+      // 3. 确保代码块 (```) 前有空行
+      .replace(/([^\n])\n(```)/g, '$1\n\n$2');
+  };
+
   const [isTyping, setIsTyping] = useState(false);
   const [isComposing, setIsComposing] = useState(false); // IME 输入状态
   const inputRef = useRef<any>(null);
@@ -370,12 +385,6 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         display: block;
         -webkit-overflow-scrolling: touch;
       }
-      .markdown-body table th, .markdown-body table td {
-        padding: ${isMobile ? '4px 8px' : '4px 10px'};
-        border: 1px solid #e2e8f0;
-        font-size: ${isMobile ? '12px' : '13px'};
-        min-width: ${isMobile ? '60px' : 'auto'};
-      }
       .markdown-body table th {
         background-color: #f8fafc;
         font-weight: 600;
@@ -632,13 +641,47 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                           remarkPlugins={[remarkGfm, remarkBreaks]}
                           rehypePlugins={[rehypeSanitize]}
                           components={{
+                            table: ({ node, ...props }: any) => (
+                              <div style={{ 
+                                width: '100%', 
+                                overflowX: 'auto', 
+                                marginBottom: 12, 
+                                borderRadius: 8,
+                                border: '1px solid #e2e8f0',
+                                background: '#fff'
+                              }}>
+                                <table {...props} style={{ 
+                                  width: '100%', 
+                                  borderCollapse: 'collapse',
+                                  fontSize: isMobile ? '12px' : '13px',
+                                  minWidth: isMobile ? '500px' : 'auto'
+                                }} />
+                              </div>
+                            ),
+                            th: ({ node, ...props }: any) => (
+                              <th {...props} style={{ 
+                                padding: '8px 12px', 
+                                background: '#f8fafc', 
+                                borderBottom: '1px solid #e2e8f0', 
+                                borderRight: '1px solid #e2e8f0',
+                                textAlign: 'left',
+                                fontWeight: 600
+                              }} />
+                            ),
+                            td: ({ node, ...props }: any) => (
+                              <td {...props} style={{ 
+                                padding: '8px 12px', 
+                                borderBottom: '1px solid #e2e8f0', 
+                                borderRight: '1px solid #e2e8f0'
+                              }} />
+                            ),
                             code: ({ node, inline, className, children, ...props }: any) => {
                               const match = /language-(\w+)/.exec(className || '');
                               const language = match ? match[1] : '';
                               
                               if (!inline && language) {
                                 return (
-                                  <div style={{ position: 'relative', margin: '12px 0' }}>
+                                  <div style={{ position: 'relative', margin: '12px 0', border: 'none' }}>
                                     <div style={{ 
                                       position: 'absolute', 
                                       right: 8, 
@@ -683,7 +726,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                             }
                           }}
                         >
-                          {msg.content}
+                          {preprocessMarkdown(msg.content)}
                         </ReactMarkdown>
                       </div>
                     ) : (

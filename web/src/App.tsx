@@ -54,7 +54,9 @@ const Dashboard = () => {
   const [checkWeixinSeconds, setCheckWeixinSeconds] = useState(0);
   const [botsModels, setBotsModels] = useState<any>(null);
   const [loadingBots, setLoadingBots] = useState(false);
-  const [healEvents, setHealEvents] = useState<any[]>([]);
+  const [healEvents, setHealEvents] = useState<any[]>([]);// Global loading for custom messages
+  const [globalLoadingMessage, setGlobalLoadingMessage] = useState<string | null>(null);
+  const [globalLoadingCountdown, setGlobalLoadingCountdown] = useState<number>(0);
   const [devices, setDevices] = useState<any>(null);
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [selfHealingEnabled, setSelfHealingEnabled] = useState(false);
@@ -174,6 +176,28 @@ const Dashboard = () => {
       setSelfHealingEnabled(settingsRes.data?.enabled || false);
     } catch (err) {}
   };
+
+  const onShowGlobalLoading = (message: string, duration: number = 3000) => {
+    setGlobalLoadingMessage(message);
+    setGlobalLoadingCountdown(Math.ceil(duration / 1000)); // 初始化倒计时秒数
+  };
+
+  // 管理全局加载倒计时
+  useEffect(() => {
+    if (globalLoadingMessage && globalLoadingCountdown > 0) {
+      const timer = setInterval(() => {
+        setGlobalLoadingCountdown(prev => {
+          if (prev <= 1) { // 倒计时结束
+            clearInterval(timer);
+            setGlobalLoadingMessage(null);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [globalLoadingMessage, globalLoadingCountdown]);
 
 
   const handleControl = (action: string) => {
@@ -388,6 +412,7 @@ const Dashboard = () => {
           onSetIdentity={handleSetBotIdentity}
           onDeleteBot={handleDeleteBot}
           onSetDefaultModel={handleSetDefaultModel}
+          onShowGlobalLoading={onShowGlobalLoading}
         />
       );
       case 'components': return (
@@ -417,7 +442,7 @@ const Dashboard = () => {
 
   if (fetching && !status) return <CrayfishLoading />;
 
-  const transitionMask = isTransitioning && (
+  const globalLoadingMask = (isTransitioning || globalLoadingMessage) && (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
       background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(8px)',
@@ -433,31 +458,48 @@ const Dashboard = () => {
       }}>
         <Spin size="large" />
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>
-            {targetStatus === 'adding_bot' && '正在创建机器人'}
-            {targetStatus === 'setting_identity' && '正在修改身份'}
-            {targetStatus === 'deleting_bot' && '正在移除机器人'}
-            {targetStatus === 'setting_default_model' && '正在切换默认模型'}
-            {targetStatus === 'approving_device' && '正在批准设备接入'}
-            {!['adding_bot', 'setting_identity', 'deleting_bot', 'setting_default_model', 'approving_device'].includes(targetStatus as string) && '正在同步网关状态'}
-          </div>
-          <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>
-            {targetStatus === 'adding_bot' && '小龙虾正在加紧孵化中，请稍后...'}
-            {targetStatus === 'setting_identity' && '正在同步身份信息，请稍后...'}
-            {targetStatus === 'deleting_bot' && '正在彻底清理相关数据，请稍后...'}
-            {targetStatus === 'setting_default_model' && '正在更新全局 AI 核心，请稍后...'}
-            {targetStatus === 'approving_device' && '正在授权设备访问权限，请稍后...'}
-            {!['adding_bot', 'setting_identity', 'deleting_bot', 'setting_default_model', 'approving_device'].includes(targetStatus as string) && '指令已确认，正在等待网关反馈状态...'}
-          </div>
-          <div style={{
-            marginTop: 16, padding: '6px 16px', background: '#eff6ff',
-            borderRadius: 20, fontSize: 13, color: '#2563eb',
-            fontWeight: 700, display: 'inline-block', border: '1px solid #dbeafe'
-          }}>
-            已等待 {transitionSeconds}s
-          </div>
+          {isTransitioning ? (
+            <>
+              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>
+                {targetStatus === 'adding_bot' && '正在创建机器人'}
+                {targetStatus === 'setting_identity' && '正在修改身份'}
+                {targetStatus === 'deleting_bot' && '正在移除机器人'}
+                {targetStatus === 'setting_default_model' && '正在切换默认模型'}
+                {targetStatus === 'approving_device' && '正在批准设备接入'}
+                {!['adding_bot', 'setting_identity', 'deleting_bot', 'setting_default_model', 'approving_device'].includes(targetStatus as string) && '正在同步网关状态'}
+              </div>
+              <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>
+                {targetStatus === 'adding_bot' && '小龙虾正在加紧孵化中，请稍后...'}
+                {targetStatus === 'setting_identity' && '正在同步身份信息，请稍后...'}
+                {targetStatus === 'deleting_bot' && '正在彻底清理相关数据，请稍后...'}
+                {targetStatus === 'setting_default_model' && '正在更新全局 AI 核心，请稍后...'}
+                {targetStatus === 'approving_device' && '正在授权设备访问权限，请稍后...'}
+                {!['adding_bot', 'setting_identity', 'deleting_bot', 'setting_default_model', 'approving_device'].includes(targetStatus as string) && '指令已确认，正在等待网关反馈状态...'}
+              </div>
+              <div style={{
+                marginTop: 16, padding: '6px 16px', background: '#eff6ff',
+                borderRadius: 20, fontSize: 13, color: '#2563eb',
+                fontWeight: 700, display: 'inline-block', border: '1px solid #dbeafe'
+              }}>
+                已等待 {transitionSeconds}s
+              </div>
+            </>
+          ) : globalLoadingMessage ? (
+            <>
+              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>{globalLoadingMessage}</div>
+              <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>后台正在处理中，请稍候...</div>
+              <div style={{
+                marginTop: 16, padding: '6px 16px', background: '#eff6ff',
+                borderRadius: 20, fontSize: 13, color: '#2563eb',
+                fontWeight: 700, display: 'inline-block', border: '1px solid #dbeafe'
+              }}>
+                自动关闭倒计时 {globalLoadingCountdown}s
+              </div>
+            </>
+          ) : null}
         </div>
-        {transitionSeconds > 60 && (
+        {/* 在 isTransitioning 超过 60 秒时才显示手动关闭/刷新的按钮 */}
+        {isTransitioning && transitionSeconds > 60 && (
           <div style={{ marginTop: 8, display: 'flex', gap: 12, width: '100%', paddingTop: 20, borderTop: '1px solid #f1f5f9' }}>
             <Button block onClick={() => setIsTransitioning(false)}>关闭遮罩</Button>
             <Button block type="primary" icon={<RefreshCw size={14} />} onClick={() => window.location.reload()}>强制刷新</Button>
@@ -511,7 +553,7 @@ const Dashboard = () => {
 
   return (
     <>
-      {transitionMask}
+      {globalLoadingMask}
       
       {isEmbed ? (
         <div style={{ 

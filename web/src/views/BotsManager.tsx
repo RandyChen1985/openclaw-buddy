@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox } from 'antd';
-import { Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, MessageSquare, Star } from 'lucide-react';
+import { Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star } from 'lucide-react';
 import dayjs from 'dayjs';
 import api from '../api';
 import { message } from 'antd';
@@ -14,10 +14,11 @@ interface BotsManagerProps {
   onSetIdentity: (id: string, name: string) => Promise<void>;
   onDeleteBot: (id: string) => Promise<void>;
   onSetDefaultModel: (id: string) => Promise<void>;
+  onShowGlobalLoading: (message: string, duration?: number) => void; // 新增
 }
 
 const BotsManager: React.FC<BotsManagerProps> = ({ 
-  botsModels, loadingBots, isMobile, onRefresh, onAddBot, onSetIdentity, onDeleteBot, onSetDefaultModel 
+  botsModels, loadingBots, isMobile, onRefresh, onAddBot, onSetIdentity, onDeleteBot, onSetDefaultModel, onShowGlobalLoading
 }) => {
   const cardColors = [
     { bg: '#eff6ff', border: '#dbeafe', iconBg: '#dbeafe', theme: '#2563eb' }, // Blue
@@ -87,29 +88,34 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   };
 
   const handleAddProvider = async () => {
-    try {
-      const values = await configForm.validateFields();
-      setSubmittingConfig(true);
-      await api.post('/v1/openclaw/models/provider', {
-        name: values.name,
-        config: {
-          baseUrl: values.baseUrl,
-          apiKey: values.apiKey,
-          auth: values.auth || 'api-key',
-          api: values.api || 'openai-completions'
-        }
-      });
-      message.success('提供商添加成功');
-      configForm.resetFields();
-      await fetchModelsConfig();
-    } catch (err: any) {
-      message.error('添加失败: ' + (err.response?.data?.error || err.message));
-    } finally {
-      setSubmittingConfig(false);
-    }
+      const hide = message.loading('正在保存提供商配置...', 0); // 添加加载遮罩
+      try {
+          const values = await configForm.validateFields();
+          setSubmittingConfig(true);
+          await api.post('/v1/openclaw/models/provider', {
+              name: values.name,
+              config: {
+                  baseUrl: values.baseUrl,
+                  apiKey: values.apiKey,
+                  auth: values.auth || 'api-key',
+                  api: values.api || 'openai-completions'
+              }
+          });
+          hide(); // 隐藏加载遮罩
+          message.success('提供商添加成功');
+          configForm.resetFields();
+          await fetchModelsConfig();
+          setIsProviderModalOpen(false); // 添加成功后关闭弹窗
+          onShowGlobalLoading('提供商配置已更新，后台正在处理中...', 3000); // 触发全局遮罩
+      } catch (err: any) {
+          hide(); // 隐藏加载遮罩
+          message.error('添加失败: ' + ((err as any).response?.data?.error || (err as any).message));
+      } finally {
+          setSubmittingConfig(false);
+      }
   };
-
   const handleAddModelToProvider = async () => {
+    const hide = message.loading('正在追加模型配置...', 0); // 添加加载遮罩
     try {
       // 1. 先进行表单校验（会自动触发 rules 提示）
       await modelForm.validateFields();
@@ -126,26 +132,32 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         model_config: {
           id: values.id,
           name: values.name || values.id,
-          api: values.api || 'openai-chat',
+          api: values.api,
           reasoning: !!values.reasoning,
-          input: values.input || ['text']
+          input: values.input,
+          maxTokens: values.maxTokens || 2000000,
+          contextWindow: values.contextWindow || 2000000,
         }
       };
 
       console.log('🚀 Final Submit Data:', submitData);
       await api.post('/v1/openclaw/models/provider/model', submitData);
       
+      hide(); // 隐藏加载遮罩
       message.success('模型已成功追加');
       modelForm.resetFields(['id', 'name', 'reasoning']); // 仅重置模型部分，保留 provider 方便连续添加
       await Promise.all([fetchModelsConfig(), onRefresh()]);
+      setIsModelModalOpen(false); // 关闭弹窗
+      onShowGlobalLoading('模型配置已更新，后台正在处理中...', 3000); // 触发全局遮罩
     } catch (err: any) {
+      hide(); // 隐藏加载遮罩
       if (err.errorFields) {
         // 这是 Form 校验失败的情况
         console.warn('⚠️ Form Validation Failed:', err.errorFields);
         return;
       }
       console.error('❌ Model Add Failed:', err);
-      message.error('添加失败: ' + (err.response?.data?.error || err.message || '未知错误'));
+      message.error('添加失败: ' + ((err as any).response?.data?.error || (err as any).message || '未知错误'));
     } finally {
       setSubmittingConfig(false);
     }
@@ -221,6 +233,30 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       centered: true,
       onOk: async () => {
         await onSetDefaultModel(model.id);
+      }
+    });
+  };
+
+  const handleDeleteModel = (providerName: string, modelID: string) => {
+    Modal.confirm({
+      title: '确认删除此模型?',
+      content: `您确定要从提供商 [${providerName}] 中删除模型 [${modelID}] 吗？`,
+      okText: '删除',
+      cancelText: '取消',
+      onOk: async () => {
+        const hide = message.loading('正在删除模型...', 0); // 添加加载遮罩
+        try {
+          await api.delete('/v1/openclaw/models/provider/model', {
+            data: { provider_name: providerName, model_id: modelID }
+          });
+          hide(); // 隐藏加载遮罩
+          message.success('模型已成功删除');
+          await Promise.all([fetchModelsConfig(), onRefresh()]);
+          onShowGlobalLoading('模型配置已更新，后台正在处理中...', 3000); // 触发全局遮罩
+        } catch (err: any) {
+          hide(); // 隐藏加载遮罩
+          message.error('删除失败: ' + ((err as any).response?.data?.error || (err as any).message));
+        }
       }
     });
   };
@@ -407,72 +443,94 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   if (providerModels.length === 0) return null;
 
                   return (
-                    <div key={providerName} style={{ marginBottom: 20 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, paddingLeft: 4 }}>
-                        <ShieldCheck size={14} color="#6366f1" />
-                        <span style={{ fontWeight: 700, color: '#475569', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <div key={providerName} style={{ marginBottom: 28 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, paddingLeft: 4 }}>
+                        <div style={{ width: 4, height: 16, background: '#6366f1', borderRadius: 2 }}></div>
+                        <span style={{ fontWeight: 800, color: '#475569', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                           {providerName}
                         </span>
                         <div style={{ height: 1, flex: 1, background: '#f1f5f9', marginLeft: 8 }}></div>
                       </div>
-                      <Row gutter={[12, 12]}>
+                      <Row gutter={[16, 16]}>
                         {providerModels.map((m: any) => {
-                          // 检查是否为默认模型 (从 botsModels.data.models 中匹配)
-                          const isDefault = botsModels?.data?.models?.find((dm: any) => dm.id === m.id)?.isDefault;
+                          const isDefault = botsModels?.data?.models?.find((dm: any) => dm.id === `${providerName}/${m.id}`)?.isDefault;
                           
                           return (
-                            <Col xs={24} sm={12} md={8} lg={6} xl={4} key={m.id}>
+                            <Col xs={24} sm={12} md={12} lg={8} xl={6} key={m.id}>
                               <div style={{
-                                background: isDefault ? '#f5f3ff' : '#f8fafc',
-                                padding: '16px',
-                                borderRadius: 14,
-                                border: isDefault ? '2px solid #a78bfa' : '1px solid #f1f5f9',
+                                background: isDefault ? '#f5f3ff' : '#fff',
+                                padding: '18px',
+                                borderRadius: 18,
+                                border: isDefault ? '2px solid #a78bfa' : '1px solid #e2e8f0',
                                 display: 'flex',
                                 flexDirection: 'column',
-                                gap: 8,
+                                gap: 12,
                                 position: 'relative',
-                                transition: 'all 0.2s ease',
-                                boxShadow: isDefault ? '0 4px 12px rgba(139, 92, 246, 0.15)' : 'none'
-                              }}>
+                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                boxShadow: isDefault ? '0 10px 15px -3px rgba(139, 92, 246, 0.12), 0 4px 6px -4px rgba(139, 92, 246, 0.1)' : '0 1px 3px rgba(0,0,0,0.02)',
+                                cursor: 'default'
+                              }} className="model-card">
                                 {isDefault && (
                                   <div style={{
                                     position: 'absolute', top: -10, right: 12,
-                                    background: '#7c3aed', color: '#fff', fontSize: 10,
-                                    padding: '2px 8px', borderRadius: 20, fontWeight: 800,
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: 4
+                                    background: '#7c3aed', color: '#fff', fontSize: 9,
+                                    padding: '2px 10px', borderRadius: 20, fontWeight: 800,
+                                    boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)', 
+                                    display: 'flex', alignItems: 'center', gap: 4,
+                                    zIndex: 2, letterSpacing: '0.02em'
                                   }}>
-                                    <Tag style={{ border: 'none', background: 'transparent', color: '#fff', margin: 0, padding: 0, fontSize: 10 }}>DEFAULT</Tag>
+                                    DEFAULT
                                   </div>
                                 )}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                   <div style={{ 
-                                    width: 32, height: 32, borderRadius: 8, background: isDefault ? '#ede9fe' : '#f1f5f9',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                    width: 38, height: 38, borderRadius: 10, background: isDefault ? '#ede9fe' : '#f8fafc',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)',
+                                    flexShrink: 0
                                   }}>
-                                    <Cpu size={16} color={isDefault ? '#7c3aed' : '#94a3b8'} />
+                                    <Cpu size={18} color={isDefault ? '#7c3aed' : '#94a3b8'} />
                                   </div>
-                                  <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {m.name || m.id}
+                                  <div style={{ minWidth: 0, flex: 1 }}>
+                                    <Tooltip title={m.name || m.id}>
+                                      <div style={{ fontWeight: 800, color: '#1e293b', fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {m.name || m.id}
+                                      </div>
+                                    </Tooltip>
+                                    <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', opacity: 0.8 }}>ID: {m.id}</div>
                                   </div>
                                 </div>
+
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                                  <div style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, color: '#94a3b8' }}>
-                                     {m.reasoning ? <Zap size={10} color="#f59e0b" /> : <MessageSquare size={10} />} 
-                                     {m.reasoning ? '推理模型' : '通用模型'}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                     {m.reasoning && (
+                                       <Tag color="orange" style={{ margin: 0, borderRadius: 6, fontSize: 10, border: 'none', background: '#fff7ed', color: '#f59e0b', fontWeight: 700, padding: '0 6px' }}>
+                                         <Zap size={10} style={{ marginRight: 2, display: 'inline-block', verticalAlign: 'middle' }} /> 推理型
+                                       </Tag>
+                                     )} 
                                   </div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                     {!isDefault && (
-                                      <Tooltip title="设为全局默认模型">
+                                      <Tooltip title="设为全局默认">
                                         <Button 
                                           type="text" 
                                           size="small" 
-                                          icon={<Star size={12} />} 
+                                          icon={<Star size={14} />} 
                                           onClick={() => handleSetDefaultModel(m)}
-                                          style={{ color: '#94a3b8', padding: '0 4px', height: 20, fontSize: 10, display: 'flex', alignItems: 'center' }}
+                                          style={{ color: '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                         />
                                       </Tooltip>
                                     )}
-                                    <Tag style={{ margin: 0, borderRadius: 6, fontSize: 9, background: isDefault ? '#ddd6fe' : '#e2e8f0', color: isDefault ? '#5b21b6' : '#64748b', border: 'none' }}>ACTIVE</Tag>
+                                    <Tooltip title="移除模型">
+                                        <Button
+                                            type="text"
+                                            size="small"
+                                            icon={<Trash2 size={14} />}
+                                            onClick={() => handleDeleteModel(providerName, m.id)}
+                                            style={{ color: '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            className="delete-hover"
+                                        />
+                                    </Tooltip>
                                   </div>
                                 </div>
                               </div>
@@ -732,7 +790,9 @@ const BotsManager: React.FC<BotsManagerProps> = ({
               initialValues={{ 
                 reasoning: false, 
                 api: 'openai-completions',
-                input: ['text']
+                input: ['text'],
+                maxTokens: 2000000,
+                contextWindow: 2000000
               }}
             >
               <Row gutter={16}>
@@ -769,13 +829,23 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                     ]} />
                   </Form.Item>
                 </Col>
-                <Col span={24}>
+                 <Col span={24}>
                   <Form.Item label="支持的能力 (Input)" name="input">
                     <Select mode="multiple" placeholder="支持的输入类型" options={[
                       { label: 'Text (文本)', value: 'text' },
                       { label: 'Image (图片)', value: 'image' },
                       { label: 'Audio (音频)', value: 'audio' }
                     ]} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="上下文窗口 (Context Window)" name="contextWindow" rules={[{ required: true, message: '必填' }]}>
+                    <Input type="number" placeholder="2000000" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="最大输出 (Max Tokens)" name="maxTokens" rules={[{ required: true, message: '必填' }]}>
+                    <Input type="number" placeholder="2000000" />
                   </Form.Item>
                 </Col>
                 <Col span={24}>

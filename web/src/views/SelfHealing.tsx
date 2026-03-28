@@ -31,6 +31,20 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loadingContent, setLoadingContent] = useState(false);
 
+  // --- Markdown 预处理逻辑，修复模型输出不规范导致的渲染问题 ---
+  const preprocessMarkdown = (content: string) => {
+    if (!content) return '';
+    return content
+      // 1. 确保标题 (#) 前有空行
+      .replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2')
+      // 2. 确保表格 (|) 前有空行，且排除表格内部行
+      .replace(/([^\n])\n(\|)/g, (match, p1, p2) => {
+        return p1.trim().endsWith('|') ? match : p1 + '\n\n' + p2;
+      })
+      // 3. 确保代码块 (```) 前有空行
+      .replace(/([^\n])\n(```)/g, '$1\n\n$2');
+  };
+
   useEffect(() => {
     fetchReports();
   }, []);
@@ -89,22 +103,10 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
         padding-bottom: 4px;
       }
       .markdown-body p { margin-bottom: 8px; }
-      .markdown-body table {
-        border-spacing: 0;
-        border-collapse: collapse;
-        margin-bottom: 10px;
-        width: 100%;
-        overflow-x: auto;
-        display: block;
-      }
-      .markdown-body table th, .markdown-body table td {
-        padding: 6px 12px;
-        border: 1px solid #e2e8f0;
-        font-size: 13px;
-      }
       .markdown-body table th {
         background-color: #f8fafc;
         font-weight: 600;
+        text-align: left;
       }
       .markdown-body pre {
         margin-bottom: 10px !important;
@@ -300,6 +302,40 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
               remarkPlugins={[remarkGfm, remarkBreaks]}
               rehypePlugins={[rehypeSanitize]}
               components={{
+                table: ({ node, ...props }: any) => (
+                  <div style={{ 
+                    width: '100%', 
+                    overflowX: 'auto', 
+                    marginBottom: 12, 
+                    borderRadius: 8,
+                    border: '1px solid #e2e8f0',
+                    background: '#fff'
+                  }}>
+                    <table {...props} style={{ 
+                      width: '100%', 
+                      borderCollapse: 'collapse',
+                      fontSize: '13px',
+                      minWidth: isMobile ? '500px' : 'auto'
+                    }} />
+                  </div>
+                ),
+                th: ({ node, ...props }: any) => (
+                  <th {...props} style={{ 
+                    padding: '8px 12px', 
+                    background: '#f8fafc', 
+                    borderBottom: '1px solid #e2e8f0', 
+                    borderRight: '1px solid #e2e8f0',
+                    textAlign: 'left',
+                    fontWeight: 600
+                  }} />
+                ),
+                td: ({ node, ...props }: any) => (
+                  <td {...props} style={{ 
+                    padding: '8px 12px', 
+                    borderBottom: '1px solid #e2e8f0', 
+                    borderRight: '1px solid #e2e8f0'
+                  }} />
+                ),
                 code: ({ node, inline, className, children, ...props }: any) => {
                   const match = /language-(\w+)/.exec(className || '');
                   const language = match ? match[1] : '';
@@ -320,7 +356,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
                 }
               }}
             >
-              {reportContent}
+              {preprocessMarkdown(reportContent)}
             </ReactMarkdown>
           </div>
         )}

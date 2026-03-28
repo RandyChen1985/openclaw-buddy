@@ -799,3 +799,24 @@ func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "模型已成功添加至提供商"})
 }
+
+func (s *Server) deleteOpenClawModelFromProvider(c *gin.Context) {
+	var req struct {
+		ProviderName string `json:"provider_name" binding:"required"`
+		ModelID      string `json:"model_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误，请提供提供商名称和模型ID"})
+		return
+	}
+
+	if err := process.DeleteOpenClawModelFromProvider(s.cfg.OpenClawConfigDir, req.ProviderName, req.ModelID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 成功后强制同步 bots_models 缓存
+	process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "模型已成功从提供商移除"})
+}

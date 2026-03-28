@@ -527,3 +527,81 @@ func AddOpenClawModelToProvider(configDir, providerName string, modelConfig map[
 
 	return os.WriteFile(configPath, newData, 0644)
 }
+
+func DeleteOpenClawModelFromProvider(configDir, providerName, modelID string) error {
+	configPath := filepath.Join(configDir, "openclaw.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+
+	var fullCfg map[string]interface{}
+	if err := json.Unmarshal(data, &fullCfg); err != nil {
+		return err
+	}
+
+	// --- 1. 处理 models.providers 部分 ---
+	models, ok := fullCfg["models"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("models section not found")
+	}
+
+	providers, ok := models["providers"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("providers section not found")
+	}
+
+	provider, ok := providers[providerName].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("provider %s not found", providerName)
+	}
+
+	providerModels, ok := provider["models"].([]interface{})
+	if !ok {
+		return fmt.Errorf("models list not found for provider %s", providerName)
+	}
+
+	newProviderModels := []interface{}{}
+	found := false
+	for _, m := range providerModels {
+		if model, isMap := m.(map[string]interface{}); isMap {
+			if id, idOk := model["id"].(string); idOk && id == modelID {
+				found = true
+				continue
+			}
+		}
+		newProviderModels = append(newProviderModels, m)
+	}
+
+	if !found {
+		return fmt.Errorf("model %s not found in provider %s", modelID, providerName)
+	}
+
+	provider["models"] = newProviderModels
+	providers[providerName] = provider // 更新 provider
+
+	// --- 2. 处理 agents.defaults.models 注册部分 ---
+	// 同样需要从 defaults.models 中移除
+	agents, ok := fullCfg["agents"].(map[string]interface{})
+	if ok { // 只有 agents 存在才处理
+		defaults, ok := agents["defaults"].(map[string]interface{})
+		if ok { // 只有 defaults 存在才处理
+			registeredModels, ok := defaults["models"].(map[string]interface{})
+			if ok { // 只有 registeredModels 存在才处理
+				registrationKey := fmt.Sprintf("%s/%s", providerName, modelID)
+				delete(registeredModels, registrationKey)
+				defaults["models"] = registeredModels
+			}
+			agents["defaults"] = defaults
+		}
+		fullCfg["agents"] = agents
+	}
+
+	// 序列化回文件
+	newData, err := json.MarshalIndent(fullCfg, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(configPath, newData, 0644)
+}
