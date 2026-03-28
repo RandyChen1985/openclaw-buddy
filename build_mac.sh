@@ -30,7 +30,7 @@ go build -ldflags="-s -w" -o "${BINARY_NAME}" cmd/monitor/main.go
 # 3. 组织发布包
 mkdir -p "${PKG_DIR}/lib" "${PKG_DIR}/logs" "${PKG_DIR}/reports" "${PKG_DIR}/backups" "${PKG_DIR}/data"
 mv "${BINARY_NAME}" "${PKG_DIR}/lib/openclaw-buddy"
-[ -f "README.md" ] && cp README.md "${PKG_DIR}/"
+[ -f "release/README.md" ] && cp "release/README.md" "${PKG_DIR}/README.md"
 
 # 4. 生成配置文件与脚本
 cat <<EOF > "${PKG_DIR}/env"

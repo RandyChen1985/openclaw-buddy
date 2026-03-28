@@ -407,22 +407,78 @@ const Dashboard = () => {
 
   const isRunning = status?.gateway?.status?.toLowerCase() === 'running';
 
-  const navItems = [
-    { key: 'dashboard', label: '运行状态', icon: <LayoutDashboard size={14} /> },
-    { key: 'chat', label: '在线聊天', icon: <MessageSquare size={14} /> },
-    { key: 'bots-models', label: '虾兵蟹将', icon: <Boxes size={14} /> },
-    { key: 'components', label: '渠道绑定', icon: <ToyBrick size={14} /> },
-    { key: 'devices', label: '设备绑定', icon: <Smartphone size={14} /> },
-    { key: 'skills', label: '技能管理', icon: <Puzzle size={14} /> },
-    { key: 'logs', label: '实时日志', icon: <Terminal size={14} /> },
-    { key: 'tools', label: '自愈管理', icon: <Zap size={14} /> },
-    { key: 'lobster-panel', label: '龙虾面板', icon: <ExternalLink size={14} /> },
+  // --- Menu Configuration ---
+  const menuItems = [
+    {
+      key: 'grp-monitor',
+      label: '监控中心',
+      type: 'group',
+      children: [
+        { key: 'dashboard', label: '运行状态', icon: <LayoutDashboard size={14} /> },
+        { 
+          key: 'logs', 
+          label: (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              <span>实时日志</span>
+              {wsLogs.length > 0 && <Badge status="processing" size="small" style={{ marginLeft: 8 }} />}
+            </div>
+          ), 
+          icon: <Terminal size={14} /> 
+        },
+        { 
+          key: 'tools', 
+          label: (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: 4 }}>
+              <span>自愈管理</span>
+              {healEvents.length > 0 && <Badge count={healEvents.length} size="small" styles={{ indicator: { backgroundColor: '#3b82f6' } }} />}
+            </div>
+          ), 
+          icon: <Zap size={14} /> 
+        },
+      ]
+    },
+    {
+      key: 'grp-assets',
+      label: '资产管理',
+      type: 'group',
+      children: [
+        { key: 'chat', label: '在线聊天', icon: <MessageSquare size={14} /> },
+        { key: 'bots-models', label: '虾兵蟹将', icon: <Boxes size={14} /> },
+        { key: 'skills', label: '技能管理', icon: <Puzzle size={14} /> },
+      ]
+    },
+    {
+      key: 'grp-binding',
+      label: '绑定中心',
+      type: 'group',
+      children: [
+        { key: 'components', label: '渠道绑定', icon: <ToyBrick size={14} /> },
+        { key: 'devices', label: '设备绑定', icon: <Smartphone size={14} /> },
+      ]
+    },
+    {
+      key: 'grp-external',
+      label: '外部工具',
+      type: 'group',
+      children: [
+        { key: 'lobster-panel', label: '龙虾面板', icon: <ExternalLink size={14} /> },
+      ]
+    }
   ];
 
+  // Helper to find label for breadcrumb
+  const getActiveLabel = (key: string) => {
+    for (const group of menuItems) {
+      const item = group.children?.find(i => i.key === key);
+      if (item) return typeof item.label === 'string' ? item.label : (item.label as any).props.children[0].props.children;
+    }
+    return '';
+  };
+
   const renderContent = () => {
-    switch (activeTab) {
-      case 'dashboard': return <DashboardOverview status={status} history={history} isRunning={isRunning} onControl={handleControl} />;
-      case 'bots-models': return (
+    const viewMap: Record<string, React.ReactNode> = {
+      'dashboard': <DashboardOverview status={status} history={history} isRunning={isRunning} onControl={handleControl} onNavigate={setActiveTab} />,
+      'bots-models': (
         <BotsManager 
           botsModels={botsModels} loadingBots={loadingBots} isMobile={isMobile} 
           onRefresh={() => fetchBotsModels(true)}
@@ -433,8 +489,8 @@ const Dashboard = () => {
           onSetDefaultModel={handleSetDefaultModel}
           onShowGlobalLoading={onShowGlobalLoading}
         />
-      );
-      case 'components': return (
+      ),
+      'components': (
         <ChannelsManager 
           chatChannels={chatChannels} weixinStatus={weixinStatus} loadingChannels={loadingChannels} 
           loadingWeixin={loadingWeixin} checkWeixinSeconds={checkWeixinSeconds}
@@ -442,21 +498,22 @@ const Dashboard = () => {
           onRefreshChannels={() => fetchChatChannels(true)}
           isMobile={isMobile}
         />
-      );
-      case 'devices': return (
+      ),
+      'devices': (
         <DeviceManager 
           devices={devices} loadingDevices={loadingDevices} 
           onApproveDevice={handleApproveDevice} 
           onRefresh={() => fetchDevices(true)}
           isMobile={isMobile}
         />
-      );
-      case 'logs': return <LogsViewer wsLogs={wsLogs} />;
-      case 'tools': return <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} />;
-      case 'chat': return <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} />;
-      case 'skills': return <SkillManagement isMobile={isMobile} />;
-      default: return null;
-    }
+      ),
+      'logs': <LogsViewer wsLogs={wsLogs} />,
+      'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} />,
+      'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} />,
+      'skills': <SkillManagement isMobile={isMobile} />
+    };
+
+    return viewMap[activeTab] || <div style={{ padding: 40, textAlign: 'center' }}><Spin size="large" tip="加载中..." /></div>;
   };
 
   if (fetching && !status) return <CrayfishLoading />;
@@ -554,7 +611,7 @@ const Dashboard = () => {
           </span>
           <span>/</span>
           <span style={{ color: '#2563eb', fontWeight: 500 }}>
-            {navItems.find(i => i.key === activeTab)?.label}
+            {getActiveLabel(activeTab)}
           </span>
         </div>
       </div>
@@ -609,7 +666,7 @@ const Dashboard = () => {
                 setActiveTab(k); 
                 setMobileMenuOpen(false); 
               }} 
-              onLogout={handleLogout} navItems={navItems} 
+              onLogout={handleLogout} navItems={menuItems} 
             />
           </Drawer>
         </Layout>
@@ -629,7 +686,7 @@ const Dashboard = () => {
                 if (k === 'lobster-panel') { handleOpenDashboard(); return; }
                 setActiveTab(k);
               }} 
-              onLogout={handleLogout} navItems={navItems} 
+              onLogout={handleLogout} navItems={menuItems} 
             />
           </Sider>
           <Layout style={{ 

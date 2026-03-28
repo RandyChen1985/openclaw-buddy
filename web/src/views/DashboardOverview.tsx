@@ -1,6 +1,6 @@
 import React from 'react';
 import { Row, Col, Card, Tag, Progress, Button } from 'antd';
-import { Server, Activity, Cpu, Play, Square, RefreshCw } from 'lucide-react';
+import { Server, Activity, Cpu, Play, Square, RefreshCw, Smartphone } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
 import dayjs from 'dayjs';
 
@@ -9,9 +9,10 @@ interface DashboardOverviewProps {
   history: any[];
   isRunning: boolean;
   onControl: (action: string) => void;
+  onNavigate?: (key: string) => void;
 }
 
-const DashboardOverview: React.FC<DashboardOverviewProps> = ({ status, history, isRunning, onControl }) => {
+const DashboardOverview: React.FC<DashboardOverviewProps> = ({ status, history, isRunning, onControl, onNavigate }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <Row gutter={[20, 20]}>
@@ -147,6 +148,22 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ status, history, 
             style={{ fontWeight: 500, flex: window.innerWidth < 768 ? '1 1 calc(50% - 6px)' : 'none', minWidth: 120 }}
           >
             重启网关
+          </Button>
+          <Button
+            size="large"
+            icon={<Smartphone size={14} />}
+            onClick={() => onNavigate?.('components')}
+            disabled={!isRunning}
+            style={{ 
+              fontWeight: 500, 
+              flex: window.innerWidth < 768 ? '1 1 calc(50% - 6px)' : 'none', 
+              minWidth: 120,
+              background: isRunning ? '#16a34a' : '#f5f5f5',
+              color: isRunning ? '#fff' : 'rgba(0, 0, 0, 0.25)',
+              border: 'none'
+            }}
+          >
+            绑定微信
           </Button>
         </div>
       </Card>
