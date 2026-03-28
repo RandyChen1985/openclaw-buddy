@@ -42,7 +42,7 @@ func NewServer(cfg *config.Config) *Server {
 func (s *Server) setupRoutes() {
 	// Public routes
 	s.engine.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
+		c.JSON(200, APIResponse{Code: 200, Message: "success", Data: gin.H{"status": "ok"}})
 	})
 
 	// Login endpoint
@@ -57,9 +57,9 @@ func (s *Server) setupRoutes() {
 
 		if req.Token == s.cfg.Token {
 			c.SetCookie("guardian_token", req.Token, 3600*24*7, "/", "", false, true)
-			c.JSON(200, gin.H{"status": "success"})
+			c.JSON(200, APIResponse{Code: 200, Message: "success"})
 		} else {
-			c.JSON(401, gin.H{"error": "Invalid token"})
+			c.JSON(401, APIResponse{Code: 401, Message: "Invalid token"})
 		}
 	})
 
