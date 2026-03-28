@@ -11,6 +11,48 @@
 
 ---
 
+## 0. 安装与部署 (Installation & Deployment)
+
+### 0.1 获取与解压
+从 Release 页面或构建产物中获取对应系统的压缩包（例如 `openclaw-buddy-linux-1.0.0.tar.gz`），并执行以下命令：
+```bash
+tar -xzf openclaw-buddy-linux-1.0.0.tar.gz
+cd openclaw-buddy-linux-1.0.0
+```
+
+### 0.2 配置指南
+在程序根目录下，找到 `env` 文件进行环境配置。
+#### 关键配置项解读：
+- **`WEB_PORT`**: Guardian 控制面板的 HTTP 监听端口，默认为 `3000`。
+- **`BUDDY_TOKEN`**: **[安全]** 访问面板的认证令牌。不一定以 `sk-` 开头，你可以修改为任何复杂的字符串。此外，初次启动时为了安全起见，系统会默认创建一个随机的复杂的密码并自动更新到 `env` 文件中。
+- **`DB_FILE`**: 系统运行时产生的 SQLite 数据库路径，默认位于 `./data/guardian.db`。
+- **`OPENCLAW_CONFIG_DIR`**: **[核心]** 小龙虾 (OpenClaw AI Agent) 的配置根目录（通常为 `~/.openclaw`）。Buddy 会实时读取并监控其中的 `openclaw.json`。
+- **`CHECK_INTERVAL_SECONDS`**: 健康状态的主动巡检频率（秒），默认 `30` 秒。
+- **`HEALTH_PORT`**: 小龙虾网关暴露的健康检查端口，通常在 `openclaw.json` 中配置为 `18789`。
+- **`FEISHU_ENABLED`**: 是否开启飞书机器人故障实时报警通知（需配置对应的 AppID 和 Secret）。
+
+### 0.3 启动与停止
+- **启动服务**:
+  ```bash
+  ./start.sh
+  ```
+  *提示：服务将以后台进程运行，并自动生成对应的 PID 文件。*
+- **停止服务**:
+  ```bash
+  ./stop.sh
+  ```
+
+### 0.4 查看日志
+若需观察系统自愈过程或诊断异常，请查看 `logs/guardian.log`：
+```bash
+tail -f ./logs/guardian.log
+```
+
+### 0.5 访问
+http://x.x.x.x:port/  输入你 env 中的 token 登录即可。
+
+---
+
 ## 1. 登录与访问 (Login)
 
 ### 模块说明
