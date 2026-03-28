@@ -7,9 +7,23 @@ set -e
 
 BINARY_NAME="openclaw-buddy-linux"
 RELEASE_ROOT="release"
-PKG_NAME="openclaw-buddy-linux"
+PKG_PREFIX="openclaw-buddy-linux"
+BASE_VERSION="1.0.0"
+
+# 自动检测并递增版本号
+LATEST_VERSION=$(ls "${RELEASE_ROOT}"/"${PKG_PREFIX}"-*.tar.gz 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -n1)
+
+if [ -z "$LATEST_VERSION" ]; then
+    VERSION="$BASE_VERSION"
+else
+    major=$(echo "$LATEST_VERSION" | cut -d. -f1)
+    minor=$(echo "$LATEST_VERSION" | cut -d. -f2)
+    patch=$(echo "$LATEST_VERSION" | cut -d. -f3)
+    VERSION="$major.$minor.$((patch + 1))"
+fi
+
+PKG_NAME="${PKG_PREFIX}-${VERSION}"
 PKG_DIR="${RELEASE_ROOT}/${PKG_NAME}"
-VERSION=$(date +%Y%m%d)
 
 echo "🚀 开始 Linux 版本打包 (交叉编译, 版本: ${VERSION})..."
 
@@ -115,7 +129,7 @@ chmod +x "${PKG_DIR}/stop.sh"
 
 # 5. 打包归档为 .tar.gz
 echo "📦 正在生成归档压缩包..."
-TAR_FILE="openclaw-buddy-linux-${VERSION}.tar.gz"
+TAR_FILE="${PKG_NAME}.tar.gz"
 cd "${RELEASE_ROOT}"
 # COPYFILE_DISABLE=1 防止 macOS 产生 ._ 文件
 # --no-xattrs 防止 Linux tar 提取时提示 LIBARCHIVE.xattr 警告

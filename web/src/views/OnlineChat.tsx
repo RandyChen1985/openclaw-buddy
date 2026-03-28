@@ -1,20 +1,43 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form } from 'antd';
-import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ExternalLink, Share2, ChevronUp, ChevronDown } from 'lucide-react';
+import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip } from 'antd';
+import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import remarkMath from 'remark-math';
 import rehypeSanitize from 'rehype-sanitize';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+import mermaid from 'mermaid';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import api from '../api';
 
 const { Option } = Select;
 
+// --- Mermaid Component ---
+const Mermaid = ({ chart }: { chart: string }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (ref.current && chart) {
+      mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+      mermaid.contentLoaded();
+      const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
+      mermaid.render(id, chart).then(({ svg }) => {
+        if (ref.current) ref.current.innerHTML = svg;
+      }).catch(err => {
+        if (ref.current) ref.current.innerHTML = `<div style="color: #ef4444; font-size: 12px; padding: 10px; border: 1px dashed #fecaca; border-radius: 8px;">Mermaid 渲染失败: ${err.message}</div>`;
+      });
+    }
+  }, [chart]);
+  return <div ref={ref} style={{ margin: '12px 0', overflowX: 'auto', display: 'flex', justifyContent: 'center' }} />;
+};
+
 interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
-  timestamp?: string; // 新增时间戳
+  timestamp?: string;
+  quotedMessage?: string; // 引用的消息内容
 }
 
 interface OnlineChatProps {
@@ -22,39 +45,44 @@ interface OnlineChatProps {
   loadingBots: boolean;
   onRefreshBots: () => void;
   isMobile?: boolean;
-  onRestartGateway?: () => Promise<void>; // 新增
+  onRestartGateway?: () => Promise<void>;
 }
 
 const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefreshBots, isMobile, onRestartGateway }) => {
   const [selectedBot, setSelectedBot] = useState<string>('');
   const [inputText, setInputText] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const saved = localStorage.getItem('chat_history');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [quotedMsg, setQuotedMsg] = useState<string | null>(null); // 当前正在引用的消息
   
-  // --- Markdown 预处理逻辑，修复模型输出不规范导致的渲染问题 ---
+  // 持久化存储
+  useEffect(() => {
+    localStorage.setItem('chat_history', JSON.stringify(messages));
+  }, [messages]);
+
+  // --- Markdown 预处理逻辑 ---
   const preprocessMarkdown = (content: string) => {
     if (!content) return '';
     return content
-      // 1. 确保标题 (#) 前有空行
       .replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2')
-      // 2. 确保表格 (|) 前有空行，且排除表格内部行
       .replace(/([^\n])\n(\|)/g, (match, p1, p2) => {
         return p1.trim().endsWith('|') ? match : p1 + '\n\n' + p2;
       })
-      // 3. 确保代码块 (```) 前有空行
       .replace(/([^\n])\n(```)/g, '$1\n\n$2');
   };
 
   const [isTyping, setIsTyping] = useState(false);
-  const [isComposing, setIsComposing] = useState(false); // IME 输入状态
+  const [isComposing, setIsComposing] = useState(false);
   const inputRef = useRef<any>(null);
-  const abortControllerRef = useRef<AbortController | null>(null); // 中断控制器
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [chatEnabled, setChatEnabled] = useState<boolean | null>(null);
   const [checkingEnabled, setCheckingEnabled] = useState(true);
   const [enabling, setEnabling] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [generatedSessionId, setGeneratedSessionId] = useState<string | null>(null); // 新增
+  const [generatedSessionId, setGeneratedSessionId] = useState<string | null>(null);
   
-  // 快捷指令相关状态
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
   const [showQuickActions, setShowQuickActions] = useState<boolean>(() => {
     return localStorage.getItem('chat_show_quick_actions') !== 'false';
@@ -62,7 +90,6 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [form] = Form.useForm();
 
-  // URL 参数解析
   const queryParams = new URLSearchParams(window.location.search);
   const urlBot = queryParams.get('bot');
   const urlUser = queryParams.get('user');
@@ -74,22 +101,21 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   }, []);
 
   useEffect(() => {
-    if (!urlUser) { // 只有当 urlUser 不存在时，才启用内部 session_id 逻辑
+    if (!urlUser) {
       let storedSessionId = localStorage.getItem('chat_session_id');
       if (!storedSessionId) {
-        storedSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`; // 生成一个简单的唯一ID
+        storedSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         localStorage.setItem('chat_session_id', storedSessionId);
       }
       setGeneratedSessionId(storedSessionId);
     } else {
-      setGeneratedSessionId(null); // 如果 urlUser 存在，则不需要内部生成的 session ID
+      setGeneratedSessionId(null);
     }
-  }, [urlUser]); // 依赖 urlUser，当其变化时重新评估
+  }, [urlUser]);
 
   useEffect(() => {
     if (botsModels?.data?.bots?.length > 0) {
       if (urlBot) {
-        // 如果 URL 指定了 Bot，优先使用
         const targetBot = botsModels.data.bots.find((b: any) => b.id === urlBot || b.name === urlBot);
         if (targetBot) {
           setSelectedBot(`openclaw:${targetBot.id}`);
@@ -101,12 +127,6 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       }
     }
   }, [botsModels, urlBot]);
-
-  useEffect(() => {
-    if (!isTyping && chatEnabled) {
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  }, [isTyping, chatEnabled]);
 
   const fetchQuickCommands = async () => {
     try {
@@ -162,11 +182,9 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       onOk: async () => {
         setEnabling(true);
         try {
-          // 1. 开启配置
           const res = await api.post('/v1/openclaw/chat/enable');
           if (res.data.status === 'success') {
             message.loading('配置已更新，正在重启网关...', 2);
-            // 2. 触发重启
             if (onRestartGateway) {
               await onRestartGateway();
             }
@@ -195,27 +213,37 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
     if (!text.trim() || isTyping || !selectedBot) return;
 
     if (!textOverride) setInputText('');
+    const currentQuoted = quotedMsg;
+    setQuotedMsg(null); // 发送后清除引用
     setIsTyping(true);
     
     abortControllerRef.current = new AbortController();
 
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const newUserMessage: Message = { role: 'user', content: text, timestamp };
+    const newUserMessage: Message = { role: 'user', content: text, timestamp, quotedMessage: currentQuoted || undefined };
     const newMessages = [...messages, newUserMessage];
     setMessages(newMessages);
 
+    // 将历史消息格式化为 OpenAI 格式（排除自定义属性）
+    const formattedMessages = newMessages.map(m => {
+        let content = m.content;
+        if (m.quotedMessage) {
+            content = `> ${m.quotedMessage.split('\n')[0]}...\n\n${content}`;
+        }
+        return { role: m.role, content };
+    });
+
     const requestBody: any = {
       model: selectedBot,
-      messages: newMessages,
+      messages: formattedMessages,
       stream: true
     };
 
-    let userIdToSend = urlUser; // 默认使用 urlUser
-    if (!userIdToSend && generatedSessionId) { // 如果 urlUser 不存在，且内部 session ID 已生成
+    let userIdToSend = urlUser;
+    if (!userIdToSend && generatedSessionId) {
       userIdToSend = `lobster-${generatedSessionId}`;
     }
-
-    if (userIdToSend) { // 只有当 userIdToSend 有值时才添加到 requestBody
+    if (userIdToSend) {
       requestBody.user = userIdToSend;
     }
 
@@ -291,26 +319,25 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
   const handleRegenerate = () => {
     // 找到最后一条用户消息
-    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
-    if (lastUserMsg) {
-      // 移除最后一条 AI 消息（如果有）
-      setMessages(prev => {
-        const last = prev[prev.length - 1];
-        if (last && last.role === 'assistant') {
-          return prev.slice(0, -1);
-        }
-        return prev;
-      });
+    const lastUserIndex = [...messages].reverse().findIndex(m => m.role === 'user');
+    if (lastUserIndex !== -1) {
+      const actualIndex = messages.length - 1 - lastUserIndex;
+      const lastUserMsg = messages[actualIndex];
+      
+      // 移除该用户消息之后的所有 AI 消息
+      setMessages(prev => prev.slice(0, actualIndex + 1));
+      
+      // 重新触发发送
       handleSend(lastUserMsg.content);
     }
   };
 
   const clearHistory = () => {
     setMessages([]);
-    // 生成一个新的 session ID 并存储
+    localStorage.removeItem('chat_history');
     const newSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     localStorage.setItem('chat_session_id', newSessionId);
-    setGeneratedSessionId(newSessionId); // 更新状态以确保下次发送使用新的 ID
+    setGeneratedSessionId(newSessionId);
     message.success('对话记录已清空');
   };
 
@@ -327,7 +354,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   if (chatEnabled === false) {
     return (
       <div style={{ height: 'calc(100vh - 120px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Card style={{ width: 450, borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,0.05)', textAlign: 'center' }} bodyStyle={{ padding: '40px 32px' }}>
+        <Card style={{ width: 450, borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,0.05)', textAlign: 'center' }} styles={{ body: { padding: '40px 32px' } }}>
           <div style={{ background: '#fff7ed', width: 64, height: 64, borderRadius: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', color: '#f97316' }}>
             <Zap size={32} />
           </div>
@@ -425,7 +452,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       {markdownStyles}
       {/* Top Bar */}
       <Card 
-        bodyStyle={{ padding: isMobile ? '8px 12px' : '12px 20px' }} 
+        styles={{ body: { padding: isMobile ? '8px 12px' : '12px 20px' } }} 
         style={{ 
           borderRadius: isEmbedMode ? 0 : 12, 
           boxShadow: isEmbedMode ? 'none' : '0 1px 2px rgba(0,0,0,0.03)',
@@ -487,58 +514,6 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
               ))}
             </Select>
             <Button icon={<RefreshCw size={14} />} onClick={onRefreshBots} loading={loadingBots} title="刷新列表" />
-            {!isEmbedMode && !isMobile && (
-              <Button 
-                icon={<ExternalLink size={14} />} 
-                title="在新窗口打开独立聊天"
-                onClick={() => {
-                  const token = localStorage.getItem('guardian_token');
-                  const botId = selectedBot.replace('openclaw:', '');
-                  const url = `${window.location.origin}/?page=chat&token=${token}&bot=${botId}&embed=true`;
-                  window.open(url, '_blank');
-                }}
-              />
-            )}
-            {!isEmbedMode && !isMobile && (
-              <Button 
-                  icon={<Share2 size={14} />} 
-                  title="获取嵌入代码"
-                  onClick={() => {
-                    const token = localStorage.getItem('guardian_token');
-                    const botId = selectedBot.replace('openclaw:', '');
-                    const url = `${window.location.origin}/?page=chat&token=${token}&bot=${botId}&embed=true`;
-                    const iframeCode = `<iframe src="${url}" width="100%" height="600" frameborder="0"></iframe>`;
-                    Modal.info({
-                      title: '获取嵌入代码',
-                      width: 500,
-                      content: (
-                        <div style={{ marginTop: 16 }}>
-                          <p style={{ fontSize: 13, color: '#64748b' }}>您可以将以下代码复制到其他系统中以嵌入此聊天窗口：</p>
-                          <Input.TextArea 
-                            readOnly 
-                            value={iframeCode} 
-                            autoSize={{ minRows: 3 }} 
-                            style={{ fontFamily: 'monospace', fontSize: 12, background: '#f8fafc' }}
-                          />
-                          <Button 
-                            type="primary" 
-                            size="small" 
-                            icon={<Copy size={12} />} 
-                            style={{ marginTop: 12 }}
-                            onClick={() => {
-                              navigator.clipboard.writeText(iframeCode);
-                              message.success('代码已复制');
-                            }}
-                          >
-                            复制 Iframe 代码
-                          </Button>
-                        </div>
-                      ),
-                      okText: '关闭'
-                    });
-                  }}
-              />
-            )}
             <Button danger icon={<Trash2 size={14} />} onClick={clearHistory} disabled={messages.length === 0}>{isMobile ? '' : '清空'}</Button>
           </div>
         </div>
@@ -638,11 +613,31 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                     whiteSpace: 'pre-wrap',
                     position: 'relative'
                   }}>
+                    {msg.quotedMessage && (
+                      <div style={{ 
+                        fontSize: 12, 
+                        background: 'rgba(0,0,0,0.05)', 
+                        padding: '6px 10px', 
+                        borderRadius: 8, 
+                        marginBottom: 8,
+                        borderLeft: `3px solid ${msg.role === 'user' ? '#fff' : '#2563eb'}`,
+                        color: msg.role === 'user' ? 'rgba(255,255,255,0.8)' : '#64748b',
+                        maxWidth: '100%',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical'
+                      }}>
+                        <Quote size={10} style={{ marginRight: 4, opacity: 0.6 }} />
+                        {msg.quotedMessage}
+                      </div>
+                    )}
                     {msg.role === 'assistant' ? (
                       <div className="markdown-body" style={{ whiteSpace: 'normal' }}>
                         <ReactMarkdown 
-                          remarkPlugins={[remarkGfm, remarkBreaks]}
-                          rehypePlugins={[rehypeSanitize]}
+                          remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
+                          rehypePlugins={[rehypeSanitize, rehypeKatex]}
                           components={{
                             table: ({ node, ...props }: any) => (
                               <div style={{ 
@@ -682,6 +677,10 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                               const match = /language-(\w+)/.exec(className || '');
                               const language = match ? match[1] : '';
                               
+                              if (!inline && language === 'mermaid') {
+                                return <Mermaid chart={String(children).replace(/\n$/, '')} />;
+                              }
+
                               if (!inline && language) {
                                 return (
                                   <div style={{ position: 'relative', margin: '12px 0', border: 'none' }}>
@@ -737,6 +736,18 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 2, alignItems: 'center' }}>
+                    <Tooltip title="回复此消息">
+                      <Button 
+                        type="text" 
+                        size="small" 
+                        icon={<Quote size={12} />} 
+                        style={{ color: '#94a3b8', height: 22, fontSize: 11, padding: '0 4px' }} 
+                        onClick={() => {
+                          setQuotedMsg(msg.content);
+                          inputRef.current?.focus();
+                        }}
+                      >回复</Button>
+                    </Tooltip>
                     <Button 
                       type="text" 
                       size="small" 
@@ -773,7 +784,28 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         </div>
 
         {/* Input Area */}
-        <div style={{ padding: isMobile ? '12px' : '16px 24px', background: '#fff', borderTop: '1px solid #f1f5f9' }}>
+        <div style={{ padding: isMobile ? '12px' : '16px 24px', background: '#fff', borderTop: '1px solid #f1f5f9', position: 'relative' }}>
+          {/* Quote Preview */}
+          {quotedMsg && (
+            <div style={{ 
+              background: '#f8fafc', 
+              padding: '8px 12px', 
+              borderLeft: '4px solid #2563eb', 
+              marginBottom: 8, 
+              borderRadius: '0 8px 8px 0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              animation: 'slide-up 0.2s ease'
+            }}>
+              <div style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                <span style={{ fontWeight: 700, marginRight: 6 }}>引用回复:</span>
+                {quotedMsg}
+              </div>
+              <Button type="text" size="small" icon={<X size={14} />} onClick={() => setQuotedMsg(null)} />
+            </div>
+          )}
+
           {/* Quick Actions */}
           <div style={{ display: 'flex', gap: 8, marginBottom: showQuickActions ? 12 : 8, alignItems: 'center', transition: 'all 0.3s ease' }}>
             {showQuickActions ? (
@@ -870,9 +902,9 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           </div>
           {!isMobile && (
             <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8', display: 'flex', gap: 16 }}>
-              <span>⚡️ 支持流式响应</span>
+              <span>⚡️ 支持流式响应与数学公式</span>
               <span>🤖 User: {urlUser || (generatedSessionId ? `lobster-${generatedSessionId}` : '匿名')}</span>
-              <span>🔒 Gateway Token 已隐藏</span>
+              <span>💾 消息已开启持久化存储</span>
             </div>
           )}
         </div>
