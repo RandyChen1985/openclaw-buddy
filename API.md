@@ -258,3 +258,29 @@ curl -X POST http://localhost:3000/v1/openclaw/bots/set-model \
 #   "data": { "status": "success", "message": "机器人默认模型修改成功" } 
 # }
 ```
+
+### 1.14 模型连通性直连测试 (TTFT)
+由于浏览器跨域限制，此测试由监控后端发起，直接调用提供商的 `baseUrl/chat/completions` 以测量真实网络延迟。
+
+- **URL**: `/v1/openclaw/models/test-direct`
+- **Method**: `POST`
+- **Auth**: `Bearer <token>`
+- **Request Body**:
+  ```json
+  {
+    "providerName": "aliyun",
+    "modelId": "qwen3.5-plus"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "code": 200,
+    "message": "success",
+    "data": {
+      "latency": 450,
+      "status": "success"
+    }
+  }
+  ```
+```

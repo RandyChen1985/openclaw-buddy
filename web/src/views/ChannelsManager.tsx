@@ -160,7 +160,28 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
       </Card>
 
       {/* 微信登录卡片 */}
-      <div style={{ marginTop: 20 }}>
+      <div style={{ marginTop: 20, position: 'relative', overflow: 'hidden', borderRadius: 12 }}>
+        {/* 监测中遮罩层 */}
+        {weixinStatus === null && (
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(255, 255, 255, 0.7)', backdropFilter: 'blur(4px)',
+            zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', gap: 12, borderRadius: 12, border: '1px solid #e2e8f0',
+            transition: 'all 0.3s ease'
+          }}>
+            <div className="radar-pulse-container" style={{ width: 48, height: 48 }}>
+              <div className="radar-ring"></div>
+              <div className="radar-ring" style={{ animationDelay: '0.4s' }}></div>
+              <Radar size={32} color="#3b82f6" style={{ position: 'relative', zIndex: 1 }} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>正在监测微信插件状态...</span>
+              <span style={{ fontSize: 12, color: '#64748b' }}>请稍候，正在确认核心组件安装情况 ({checkWeixinSeconds}s)</span>
+            </div>
+          </div>
+        )}
+
         {hasWeixinConfig && (
           <div style={{ 
             background: '#fffbeb', color: '#b45309', fontSize: 11, 
@@ -174,16 +195,17 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
         )}
         <Card
           onClick={() => {
-            if (isGettingQR) return;
+            if (isGettingQR || weixinStatus === null) return;
             if (weixinStatus?.installed) onGetQRCode();
           }}
           styles={{ body: { padding: 20 } }}
           style={{ 
             borderRadius: hasWeixinConfig ? '0 0 12px 12px' : 12, border: '1px solid #e2e8f0', 
             cursor: weixinStatus?.installed ? 'pointer' : 'not-allowed', 
-            transition: 'all 0.3s'
+            transition: 'all 0.3s',
+            filter: weixinStatus === null ? 'blur(1px)' : 'none' // 遮罩下方的轻微模糊
           }}
-          hoverable={weixinStatus?.installed}
+          hoverable={weixinStatus?.installed && weixinStatus !== null}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>

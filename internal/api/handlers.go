@@ -14,8 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"yovole-openclaw-monitor/internal/process"
-	"yovole-openclaw-monitor/internal/utils"
+	"openclaw-buddy/internal/process"
+	"openclaw-buddy/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -870,4 +870,91 @@ func (s *Server) deleteOpenClawModelFromProvider(c *gin.Context) {
 	process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
 
 	s.Success(c, gin.H{"status": "success", "message": "模型已成功从提供商移除"})
+}
+
+func (s *Server) testOpenClawModelDirect(c *gin.Context) {
+	var req struct {
+		ProviderName string `json:"providerName" binding:"required"`
+		ModelID      string `json:"modelId" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+
+	// 1. 获取模型配置
+	providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "无法加载模型配置: "+err.Error())
+		return
+	}
+
+	rawProv, ok := providers[req.ProviderName].(map[string]interface{})
+	if !ok {
+		s.Error(c, http.StatusNotFound, "找不到提供商: "+req.ProviderName)
+		return
+	}
+
+	baseUrl, _ := rawProv["baseUrl"].(string)
+	apiKey, _ := rawProv["apiKey"].(string)
+
+	if baseUrl == "" {
+		s.Error(c, http.StatusBadRequest, "提供商未配置 baseUrl")
+		return
+	}
+
+	// 2. 准备请求
+	testUrl := strings.TrimSuffix(baseUrl, "/")
+	if !strings.HasSuffix(testUrl, "/chat/completions") {
+		testUrl += "/chat/completions"
+	}
+
+	testBody := map[string]interface{}{
+		"model":    req.ModelID,
+		"messages": []map[string]string{{"role": "user", "content": "hello"}},
+		"stream":   true,
+	}
+	jsonBody, _ := json.Marshal(testBody)
+
+	httpReq, err := http.NewRequest("POST", testUrl, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "创建测试请求失败: "+err.Error())
+		return
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+
+	// 3. 执行测试计时
+	startTime := time.Now()
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		s.Error(c, http.StatusBadGateway, "直连提供商失败: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		s.Error(c, resp.StatusCode, fmt.Sprintf("AI提供商响应异常 (%d): %s", resp.StatusCode, string(body)))
+		return
+	}
+
+	// 监听首个字节
+	buf := make([]byte, 1)
+	_, err = resp.Body.Read(buf)
+	duration := time.Since(startTime).Milliseconds()
+
+	// 即使因为流未结束报错 EOF，也说明握手成功且有响应
+	if err != nil && err != io.EOF {
+		fmt.Printf("⚠️  [TestDirect] Stream read error: %v\n", err)
+	}
+
+	s.Success(c, gin.H{
+		"latency": duration,
+		"status":  "success",
+	})
 }

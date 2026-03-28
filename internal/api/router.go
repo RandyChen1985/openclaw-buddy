@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"time"
-	"yovole-openclaw-monitor/internal/config"
+	"openclaw-buddy/internal/config"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -81,6 +81,7 @@ func (s *Server) setupRoutes() {
 			oc.POST("/bots/delete", s.deleteOpenClawBot)
 			oc.POST("/models/set-default", s.setDefaultModel)
 			oc.GET("/models/config", s.getOpenClawModelsConfig)
+			oc.POST("/models/test-direct", s.testOpenClawModelDirect)
 			oc.POST("/models/provider", s.addOpenClawProvider)
 			oc.POST("/models/provider/model", s.addOpenClawModelToProvider)
 			oc.DELETE("/models/provider/model", s.deleteOpenClawModelFromProvider)

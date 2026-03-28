@@ -49,6 +49,10 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const [configForm] = Form.useForm();
   const [modelForm] = Form.useForm();
   const [submittingConfig, setSubmittingConfig] = useState(false);
+  
+  // 模型连通性测试状态
+  const [testingModelId, setTestingModelId] = useState<string | null>(null);
+  const [testLatencyMap, setTestLatencyMap] = useState<Record<string, { latency: number, error?: string }>>({});
 
   useEffect(() => {
     fetchSessions();
@@ -244,6 +248,34 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         await onSetDefaultModel(model.id);
       }
     });
+  };
+
+  const handleTestModel = async (providerName: string, modelId: string) => {
+    const fullId = `${providerName}/${modelId}`;
+    setTestingModelId(fullId);
+    
+    try {
+      // 调用后端中转接口进行直连测试，规避浏览器 CORS 限制
+      const res = await api.post('/v1/openclaw/models/test-direct', {
+        providerName,
+        modelId
+      });
+
+      if (res.data && res.data.code === 200) {
+        const latency = res.data.data.latency;
+        setTestLatencyMap(prev => ({ ...prev, [fullId]: { latency } }));
+        message.success(`测试成功: ${latency}ms`);
+      } else {
+        throw new Error(res.data?.message || '未知错误');
+      }
+    } catch (err: any) {
+      console.error('Model connectivity test failed:', err);
+      const errorMsg = err.response?.data?.message || err.message || '测试失败';
+      setTestLatencyMap(prev => ({ ...prev, [fullId]: { latency: -1, error: errorMsg } }));
+      message.error(`模型测试失败: ${errorMsg}`);
+    } finally {
+      setTestingModelId(null);
+    }
   };
 
   const handleDeleteModel = (providerName: string, modelID: string) => {
@@ -504,8 +536,13 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                   </div>
                                   <div style={{ minWidth: 0, flex: 1 }}>
                                     <Tooltip title={m.name || m.id}>
-                                      <div style={{ fontWeight: 800, color: '#1e293b', fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      <div style={{ fontWeight: 800, color: '#1e293b', fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
                                         {m.name || m.id}
+                                        {testLatencyMap[providerName + '/' + m.id] && (
+                                          <Tag color={testLatencyMap[providerName + '/' + m.id].latency > 0 ? 'success' : 'error'} style={{ margin: 0, fontSize: 10, padding: '0 4px', borderRadius: 4, height: 16, lineHeight: '14px', border: 'none', background: testLatencyMap[providerName + '/' + m.id].latency > 0 ? '#f0fdf4' : '#fef2f2', color: testLatencyMap[providerName + '/' + m.id].latency > 0 ? '#16a34a' : '#ef4444' }}>
+                                            {testLatencyMap[providerName + '/' + m.id].latency > 0 ? `${testLatencyMap[providerName + '/' + m.id].latency}ms` : 'FAIL'}
+                                          </Tag>
+                                        )}
                                       </div>
                                     </Tooltip>
                                     <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', opacity: 0.8 }}>ID: {m.id}</div>
@@ -521,6 +558,16 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                      )} 
                                   </div>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <Tooltip title="测试连通性 (hello)">
+                                        <Button
+                                            type="text"
+                                            size="small"
+                                            icon={<Zap size={14} className={testingModelId === `${providerName}/${m.id}` ? 'animate-pulse' : ''} />}
+                                            loading={testingModelId === `${providerName}/${m.id}`}
+                                            onClick={() => handleTestModel(providerName, m.id)}
+                                            style={{ color: testingModelId === `${providerName}/${m.id}` ? '#f59e0b' : '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        />
+                                    </Tooltip>
                                     {!isDefault && (
                                       <Tooltip title="设为全局默认">
                                         <Button 

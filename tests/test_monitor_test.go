@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"yovole-openclaw-monitor/internal/api"
-	"yovole-openclaw-monitor/internal/config"
-	"yovole-openclaw-monitor/internal/process"
+	"openclaw-buddy/internal/api"
+	"openclaw-buddy/internal/config"
+	"openclaw-buddy/internal/process"
 
 	"github.com/gin-gonic/gin"
 )

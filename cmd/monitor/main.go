@@ -7,11 +7,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"yovole-openclaw-monitor/internal/api"
-	"yovole-openclaw-monitor/internal/config"
-	"yovole-openclaw-monitor/internal/guardian"
-	"yovole-openclaw-monitor/internal/process"
-	"yovole-openclaw-monitor/internal/utils"
+	"openclaw-buddy/internal/api"
+	"openclaw-buddy/internal/config"
+	"openclaw-buddy/internal/guardian"
+	"openclaw-buddy/internal/process"
+	"openclaw-buddy/internal/utils"
 
 	"github.com/natefinch/lumberjack"
 )
