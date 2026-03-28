@@ -97,6 +97,11 @@
 - [ ] **流式接口兼容**: 验证 `POST /v1/openclaw/chat/completions` 是否成功绕过标准化包装，维持原始 OpenAI SSE 流。
 - [ ] **任务 ID 追踪**: 验证网关操作返回的 `taskID` 是否被正确包裹在 `data` 字段中。
 
+## 7. 文档与指南 (Documentation)
+- [ ] **HOWTO 渲染**: 检查 `HOWTO.md` 在 GitHub 或 Markdown 预览器中是否能正确加载图片。
+- [ ] **图片完整性**: 验证 `docs/images/` 和 `docs/mobile/` 目录下的所有图片均在文档中被引用且路径正确。
+- [ ] **移动端概览**: 确保 `HOWTO.md` 中的“移动端体验”章节包含至少 7 张核心功能截图。
+
 ---
 > [!NOTE]
 > 记录于 2026-03-28：已完成全量接口响应标准化重构，前端拦截器同步上线。

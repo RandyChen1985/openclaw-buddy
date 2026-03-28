@@ -1,4 +1,11 @@
 # 🦞 OpenClaw Buddy 使用指南 (HOWTO)
+> ![Banner](docs/mobile/howto.png)
+> [🌈!NOTE💗]
+> “其实了解一个系统并不代表什么，逻辑是会变的。今天它可能因为网络波动而沉默，明天它也可以因为配置冲突而任性。但我相信，有些守护是不会过期的。
+>
+> 这份指南不是为了教你如何完全控制，而是为了教你如何与它优雅地共处。即便在最孤独的深夜，当日志流如雨般落下，你也会在 **OpenClaw Buddy** 的引导下发现：原来运维，也可以是一场精准到 0.01 公分的重逢。”
+>
+
 
 欢迎使用 **OpenClaw Buddy**！本指南将带你深入了解如何高效使用这款专为 **OpenClaw (小龙虾 AI Agent)** 打造的自愈伴侣系统。
 
@@ -135,6 +142,26 @@ Buddy 支持以嵌入模式运行，你可以将特定功能无缝挂载到自�
 - `bot=your_bot_id`：预设默认对话的机器人。
 
 ![嵌入模式示例](docs/images/embed.png)
+
+---
+
+## 10. 移动端体验 (Mobile Experience)
+
+### 模块说明
+Buddy 专为移动端操作进行了极致优化，支持响应式布局，让你在手机上也能优雅地掌控 AI 服务。无需常驻电脑前，随时随地管理你的 Agent。
+
+### 效果预览
+
+| **仪表盘/操作面板 (Dashboard)** | **实时对话实验室 (Online Chat)** |
+| :---: | :---: |
+| ![仪表盘](docs/mobile/dashboard.png) | ![对话](docs/mobile/chat.png) |
+| **运行环境监控 (Runtime)** | **动态技能管理 (Skills)** |
+| ![运行环境](docs/mobile/operater.png) | ![技能](docs/mobile/skills.png) |
+| **微信渠道交互 (Channels)** | **秒级添加机器人 (Add Bot)** |
+| ![渠道](docs/mobile/channel.png) | ![添加机器人](docs/mobile/addbot.png) |
+| **模型源管理 (Models)** | **智能自愈监控 (Self-Healing)** |
+| :---: | :---: |
+| ![添加模型](docs/mobile/addmodel.png) | ![自愈监控](docs/mobile/recover.png) |
 
 ---
 
