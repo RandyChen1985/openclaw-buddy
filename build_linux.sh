@@ -104,13 +104,10 @@ fi
 
 echo "🚀 正在启动服务..."
 chmod +x ./lib/openclaw-buddy
-(trap "" INT; nohup ./lib/openclaw-buddy >> ./logs/guardian.log 2>&1 &)
+nohup ./lib/openclaw-buddy >> ./logs/guardian.log 2>&1 &
 echo $! > "$PID_FILE"
 echo "✅ 启动成功，PID: $(cat $PID_FILE)"
-echo "📋 正在自动追踪启动日志 (按 Ctrl+C 停止追踪，服务将继续后台运行)..."
-sleep 1
-# tail 运行在前台，接收到 Ctrl+C 后会退出，由于上面的 nohup 在子 shell 中由 trap 保护，不会受影响
-tail -n 20 -f ./logs/guardian.log
+echo "💡 提示: 可通过 tail -f ./logs/guardian.log 查看实时日志"
 EOF
 chmod +x "${PKG_DIR}/start.sh"
 
