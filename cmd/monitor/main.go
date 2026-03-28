@@ -7,11 +7,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"yovole-openclaw-monitor/internal/api"
-	"yovole-openclaw-monitor/internal/config"
-	"yovole-openclaw-monitor/internal/guardian"
-	"yovole-openclaw-monitor/internal/process"
-	"yovole-openclaw-monitor/internal/utils"
+	"openclaw-buddy/internal/api"
+	"openclaw-buddy/internal/config"
+	"openclaw-buddy/internal/guardian"
+	"openclaw-buddy/internal/process"
+	"openclaw-buddy/internal/utils"
 
 	"github.com/natefinch/lumberjack"
 )
@@ -20,7 +20,7 @@ func main() {
 	// 1. Singleton Check
 	pidPath := os.Getenv("PID_FILE")
 	if pidPath == "" {
-		pidPath = "/tmp/lobster-guardian.pid"
+		pidPath = "/tmp/openclaw-buddy.pid"
 	}
 	lock := utils.NewFileLock(pidPath)
 	if err := lock.Lock(); err != nil {
@@ -82,5 +82,5 @@ func main() {
 	}()
 
 	<-ctx.Done()
-	log.Printf("👋 有孚小龙虾监控服务正在退出...")
+	log.Printf("👋 OpenClaw Buddy 正在退出...")
 }

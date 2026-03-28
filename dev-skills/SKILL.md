@@ -1,4 +1,4 @@
-# Lobster Guardian 开发规范与技巧 (Development Skills)
+# OpenClaw Buddy 开发规范与技巧 (Development Skills)
 
 ## 1. 快速启动与隔离测试
 
@@ -24,6 +24,6 @@
 ## 2. 开发注意事项
 
 - **路径隔离**: 所有巡检日志、数据库记录、配置备份现在都位于 `temp-dev-test/` 下，不会出现在根目录。
-- **Token 认证**: 隔离环境的 Token 默认依然是 `lobster-guardian-2026`。
+- **Token 认证**: 隔离环境的 Token 默认已更新为 `openclaw-buddy-2026`。
 - **静态资源**: 每次前端代码修改，都必须通过 `./dev.sh` 触发重新编译。
 - **实时日志**: 推荐使用 `tail -f temp-dev-test/logs/guardian.log` 观察运行状态。

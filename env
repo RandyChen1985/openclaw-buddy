@@ -1,11 +1,11 @@
-# 🦞 有孚小龙虾管理监控 (Lobster Guardian) 核心配置
+# 🦞 OpenClaw Buddy (Lobster Guardian) 核心配置
 
 # [服务基础]
 # Guardian 面板监听端口 (用于浏览器访问及 API 交互)
 WEB_PORT=3000
 
-# 访问面板所需的认证令牌 (强烈建议首次运行后修改为高强度随机字符串)
-GUARDIAN_TOKEN="sk-replace-me-on-first-run"
+# 访问面板所需的认证令牌 (sk- 开头)
+BUDDY_TOKEN="sk-replace-me-on-first-run"
 
 # [存储与目录]
 # SQLite 数据库文件路径 (存储网关运行记录、自愈开关状态及历史指标数据)

@@ -22,3 +22,5 @@ monitor_test
 data/
 temp-dev-test/
 backups/
+openclaw-buddy
+/monitor

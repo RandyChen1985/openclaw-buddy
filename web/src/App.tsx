@@ -28,8 +28,12 @@ const { Content, Sider, Header } = Layout;
 
 // --- Dashboard Component (Internal Layout) ---------------------------------------
 const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [collapsed, setCollapsed] = useState(window.innerWidth < 1200);
+  const queryParams = new URLSearchParams(window.location.search);
+  const isEmbed = queryParams.get('embed') === 'true';
+  const initialPage = queryParams.get('page');
+
+  const [activeTab, setActiveTab] = useState(initialPage || 'dashboard');
+  const [collapsed, setCollapsed] = useState(window.innerWidth < 1200 || isEmbed);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isMobile = window.innerWidth < 1024;
 
@@ -50,7 +54,9 @@ const Dashboard = () => {
   const [checkWeixinSeconds, setCheckWeixinSeconds] = useState(0);
   const [botsModels, setBotsModels] = useState<any>(null);
   const [loadingBots, setLoadingBots] = useState(false);
-  const [healEvents, setHealEvents] = useState<any[]>([]);
+  const [healEvents, setHealEvents] = useState<any[]>([]);// Global loading for custom messages
+  const [globalLoadingMessage, setGlobalLoadingMessage] = useState<string | null>(null);
+  const [globalLoadingCountdown, setGlobalLoadingCountdown] = useState<number>(0);
   const [devices, setDevices] = useState<any>(null);
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [selfHealingEnabled, setSelfHealingEnabled] = useState(false);
@@ -171,6 +177,28 @@ const Dashboard = () => {
     } catch (err) {}
   };
 
+  const onShowGlobalLoading = (message: string, duration: number = 3000) => {
+    setGlobalLoadingMessage(message);
+    setGlobalLoadingCountdown(Math.ceil(duration / 1000)); // 初始化倒计时秒数
+  };
+
+  // 管理全局加载倒计时
+  useEffect(() => {
+    if (globalLoadingMessage && globalLoadingCountdown > 0) {
+      const timer = setInterval(() => {
+        setGlobalLoadingCountdown(prev => {
+          if (prev <= 1) { // 倒计时结束
+            clearInterval(timer);
+            setGlobalLoadingMessage(null);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [globalLoadingMessage, globalLoadingCountdown]);
+
 
   const handleControl = (action: string) => {
     const config: any = {
@@ -241,12 +269,18 @@ const Dashboard = () => {
   };
 
   const handleApproveDevice = async (requestId: string) => {
+    setTargetStatus('approving_device');
+    setIsTransitioning(true);
+    setTransitionSeconds(0);
     try {
       await api.post('/v1/openclaw/devices/approve', { requestId });
       message.success('设备已批准接入');
-      fetchDevices();
+      await fetchDevices();
     } catch (err: any) {
       message.error(err.response?.data?.error || '操作失败');
+    } finally {
+      setIsTransitioning(false);
+      setTargetStatus(null);
     }
   };
 
@@ -291,6 +325,24 @@ const Dashboard = () => {
       await fetchBotsModels(true); // 补全 await
     } catch (err: any) {
       const msg = err.response?.data?.error || '修改名称失败';
+      message.error(msg);
+      throw err;
+    } finally {
+      setIsTransitioning(false);
+      setTargetStatus(null);
+    }
+  };
+
+  const handleSetBotModel = async (id: string, model: string) => {
+    setTargetStatus('setting_bot_model');
+    setIsTransitioning(true);
+    setTransitionSeconds(0);
+    try {
+      await api.post('/v1/openclaw/bots/set-model', { id, model });
+      message.success(`机器人 ${id} 的默认模型已切换为 ${model}`);
+      await fetchBotsModels(true);
+    } catch (err: any) {
+      const msg = err.response?.data?.error || '修改模型失败';
       message.error(msg);
       throw err;
     } finally {
@@ -355,32 +407,90 @@ const Dashboard = () => {
 
   const isRunning = status?.gateway?.status?.toLowerCase() === 'running';
 
-  const navItems = [
-    { key: 'dashboard', label: '运行状态', icon: <LayoutDashboard size={14} /> },
-    { key: 'chat', label: '在线聊天', icon: <MessageSquare size={14} /> },
-    { key: 'bots-models', label: '虾兵蟹将', icon: <Boxes size={14} /> },
-    { key: 'components', label: '渠道绑定', icon: <ToyBrick size={14} /> },
-    { key: 'devices', label: '设备绑定', icon: <Smartphone size={14} /> },
-    { key: 'skills', label: '技能管理', icon: <Puzzle size={14} /> },
-    { key: 'logs', label: '实时日志', icon: <Terminal size={14} /> },
-    { key: 'tools', label: '自愈管理', icon: <Zap size={14} /> },
-    { key: 'lobster-panel', label: '龙虾面板', icon: <ExternalLink size={14} /> },
+  // --- Menu Configuration ---
+  const menuItems = [
+    {
+      key: 'grp-monitor',
+      label: '监控中心',
+      type: 'group',
+      children: [
+        { key: 'dashboard', label: '运行状态', icon: <LayoutDashboard size={14} /> },
+        { 
+          key: 'logs', 
+          label: (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              <span>实时日志</span>
+              {wsLogs.length > 0 && <Badge status="processing" size="small" style={{ marginLeft: 8 }} />}
+            </div>
+          ), 
+          icon: <Terminal size={14} /> 
+        },
+        { 
+          key: 'tools', 
+          label: (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: 4 }}>
+              <span>自愈管理</span>
+              {healEvents.length > 0 && <Badge count={healEvents.length} size="small" styles={{ indicator: { backgroundColor: '#3b82f6' } }} />}
+            </div>
+          ), 
+          icon: <Zap size={14} /> 
+        },
+      ]
+    },
+    {
+      key: 'grp-assets',
+      label: '资产管理',
+      type: 'group',
+      children: [
+        { key: 'chat', label: '在线聊天', icon: <MessageSquare size={14} /> },
+        { key: 'bots-models', label: '虾兵蟹将', icon: <Boxes size={14} /> },
+        { key: 'skills', label: '技能管理', icon: <Puzzle size={14} /> },
+      ]
+    },
+    {
+      key: 'grp-binding',
+      label: '绑定中心',
+      type: 'group',
+      children: [
+        { key: 'components', label: '渠道绑定', icon: <ToyBrick size={14} /> },
+        { key: 'devices', label: '设备绑定', icon: <Smartphone size={14} /> },
+      ]
+    },
+    {
+      key: 'grp-external',
+      label: '外部工具',
+      type: 'group',
+      children: [
+        { key: 'lobster-panel', label: '龙虾面板', icon: <ExternalLink size={14} /> },
+      ]
+    }
   ];
 
+  // Helper to find label for breadcrumb
+  const getActiveLabel = (key: string) => {
+    for (const group of menuItems) {
+      const item = group.children?.find(i => i.key === key);
+      if (item) return typeof item.label === 'string' ? item.label : (item.label as any).props.children[0].props.children;
+    }
+    return '';
+  };
+
   const renderContent = () => {
-    switch (activeTab) {
-      case 'dashboard': return <DashboardOverview status={status} history={history} isRunning={isRunning} onControl={handleControl} />;
-      case 'bots-models': return (
+    const viewMap: Record<string, React.ReactNode> = {
+      'dashboard': <DashboardOverview status={status} history={history} isRunning={isRunning} onControl={handleControl} onNavigate={setActiveTab} />,
+      'bots-models': (
         <BotsManager 
           botsModels={botsModels} loadingBots={loadingBots} isMobile={isMobile} 
           onRefresh={() => fetchBotsModels(true)}
           onAddBot={handleAddBot}
           onSetIdentity={handleSetBotIdentity}
+          onSetBotModel={handleSetBotModel}
           onDeleteBot={handleDeleteBot}
           onSetDefaultModel={handleSetDefaultModel}
+          onShowGlobalLoading={onShowGlobalLoading}
         />
-      );
-      case 'components': return (
+      ),
+      'components': (
         <ChannelsManager 
           chatChannels={chatChannels} weixinStatus={weixinStatus} loadingChannels={loadingChannels} 
           loadingWeixin={loadingWeixin} checkWeixinSeconds={checkWeixinSeconds}
@@ -388,26 +498,27 @@ const Dashboard = () => {
           onRefreshChannels={() => fetchChatChannels(true)}
           isMobile={isMobile}
         />
-      );
-      case 'devices': return (
+      ),
+      'devices': (
         <DeviceManager 
           devices={devices} loadingDevices={loadingDevices} 
           onApproveDevice={handleApproveDevice} 
           onRefresh={() => fetchDevices(true)}
           isMobile={isMobile}
         />
-      );
-      case 'logs': return <LogsViewer wsLogs={wsLogs} />;
-      case 'tools': return <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} />;
-      case 'chat': return <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} />;
-      case 'skills': return <SkillManagement isMobile={isMobile} />;
-      default: return null;
-    }
+      ),
+      'logs': <LogsViewer wsLogs={wsLogs} />,
+      'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} />,
+      'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} />,
+      'skills': <SkillManagement isMobile={isMobile} />
+    };
+
+    return viewMap[activeTab] || <div style={{ padding: 40, textAlign: 'center' }}><Spin size="large" tip="加载中..." /></div>;
   };
 
   if (fetching && !status) return <CrayfishLoading />;
 
-  const transitionMask = isTransitioning && (
+  const globalLoadingMask = (isTransitioning || globalLoadingMessage) && (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
       background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(8px)',
@@ -423,29 +534,50 @@ const Dashboard = () => {
       }}>
         <Spin size="large" />
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>
-            {targetStatus === 'adding_bot' && '正在创建机器人'}
-            {targetStatus === 'setting_identity' && '正在修改身份'}
-            {targetStatus === 'deleting_bot' && '正在移除机器人'}
-            {targetStatus === 'setting_default_model' && '正在切换默认模型'}
-            {!['adding_bot', 'setting_identity', 'deleting_bot', 'setting_default_model'].includes(targetStatus as string) && '正在同步网关状态'}
-          </div>
-          <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>
-            {targetStatus === 'adding_bot' && '小龙虾正在加紧孵化中，请稍后...'}
-            {targetStatus === 'setting_identity' && '正在同步身份信息，请稍后...'}
-            {targetStatus === 'deleting_bot' && '正在彻底清理相关数据，请稍后...'}
-            {targetStatus === 'setting_default_model' && '正在更新全局 AI 核心，请稍后...'}
-            {!['adding_bot', 'setting_identity', 'deleting_bot', 'setting_default_model'].includes(targetStatus as string) && '指令已确认，正在等待网关反馈状态...'}
-          </div>
-          <div style={{
-            marginTop: 16, padding: '6px 16px', background: '#eff6ff',
-            borderRadius: 20, fontSize: 13, color: '#2563eb',
-            fontWeight: 700, display: 'inline-block', border: '1px solid #dbeafe'
-          }}>
-            已等待 {transitionSeconds}s
-          </div>
+          {isTransitioning ? (
+            <>
+              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>
+                {targetStatus === 'adding_bot' && '正在创建机器人'}
+                {targetStatus === 'setting_identity' && '正在修改身份'}
+                {targetStatus === 'setting_bot_model' && '正在修改模型分配'}
+                {targetStatus === 'deleting_bot' && '正在移除机器人'}
+                {targetStatus === 'setting_default_model' && '正在切换默认模型'}
+                {targetStatus === 'approving_device' && '正在批准设备接入'}
+                {!['adding_bot', 'setting_identity', 'setting_bot_model', 'deleting_bot', 'setting_default_model', 'approving_device'].includes(targetStatus as string) && '正在同步网关状态'}
+              </div>
+              <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>
+                {targetStatus === 'adding_bot' && '小龙虾正在加紧孵化中，请稍后...'}
+                {targetStatus === 'setting_identity' && '正在同步身份信息，请稍后...'}
+                {targetStatus === 'setting_bot_model' && '正在重新分配 AI 核心，请稍后...'}
+                {targetStatus === 'deleting_bot' && '正在彻底清理相关数据，请稍后...'}
+                {targetStatus === 'setting_default_model' && '正在更新全局 AI 核心，请稍后...'}
+                {targetStatus === 'approving_device' && '正在授权设备访问权限，请稍后...'}
+                {!['adding_bot', 'setting_identity', 'setting_bot_model', 'deleting_bot', 'setting_default_model', 'approving_device'].includes(targetStatus as string) && '指令已确认，正在等待网关反馈状态...'}
+              </div>
+              <div style={{
+                marginTop: 16, padding: '6px 16px', background: '#eff6ff',
+                borderRadius: 20, fontSize: 13, color: '#2563eb',
+                fontWeight: 700, display: 'inline-block', border: '1px solid #dbeafe'
+              }}>
+                已等待 {transitionSeconds}s
+              </div>
+            </>
+          ) : globalLoadingMessage ? (
+            <>
+              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>{globalLoadingMessage}</div>
+              <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>后台正在处理中，请稍候...</div>
+              <div style={{
+                marginTop: 16, padding: '6px 16px', background: '#eff6ff',
+                borderRadius: 20, fontSize: 13, color: '#2563eb',
+                fontWeight: 700, display: 'inline-block', border: '1px solid #dbeafe'
+              }}>
+                {globalLoadingCountdown > 0 ? `自动关闭倒计时 ${globalLoadingCountdown}s` : '后台正在同步资产清单，请稍候...'}
+              </div>
+            </>
+          ) : null}
         </div>
-        {transitionSeconds > 60 && (
+        {/* 在 isTransitioning 超过 60 秒时才显示手动关闭/刷新的按钮 */}
+        {isTransitioning && transitionSeconds > 60 && (
           <div style={{ marginTop: 8, display: 'flex', gap: 12, width: '100%', paddingTop: 20, borderTop: '1px solid #f1f5f9' }}>
             <Button block onClick={() => setIsTransitioning(false)}>关闭遮罩</Button>
             <Button block type="primary" icon={<RefreshCw size={14} />} onClick={() => window.location.reload()}>强制刷新</Button>
@@ -479,7 +611,7 @@ const Dashboard = () => {
           </span>
           <span>/</span>
           <span style={{ color: '#2563eb', fontWeight: 500 }}>
-            {navItems.find(i => i.key === activeTab)?.label}
+            {getActiveLabel(activeTab)}
           </span>
         </div>
       </div>
@@ -499,10 +631,26 @@ const Dashboard = () => {
 
   return (
     <>
-      {transitionMask}
+      {globalLoadingMask}
       
-      {isMobile ? (
-        <Layout style={{ minHeight: '100vh', background: '#f8fafc' }}>
+      {isEmbed ? (
+        <div style={{ 
+          height: '100vh', 
+          background: '#f8fafc', 
+          display: 'flex', 
+          flexDirection: 'column',
+          padding: activeTab === 'chat' || activeTab === 'logs' ? 0 : 24,
+          overflow: activeTab === 'chat' || activeTab === 'logs' ? 'hidden' : 'auto'
+        }}>
+          {renderContent()}
+        </div>
+      ) : isMobile ? (
+        <Layout style={{ 
+          height: (activeTab === 'chat' || activeTab === 'logs') ? '100vh' : 'auto', 
+          minHeight: '100vh',
+          background: '#f8fafc', 
+          overflow: (activeTab === 'chat' || activeTab === 'logs') ? 'hidden' : 'auto' 
+        }}>
           {headerEl(() => setMobileMenuOpen(true))}
           <Content style={{ padding: 16, background: '#f8fafc' }}>
             {renderContent()}
@@ -518,12 +666,17 @@ const Dashboard = () => {
                 setActiveTab(k); 
                 setMobileMenuOpen(false); 
               }} 
-              onLogout={handleLogout} navItems={navItems} 
+              onLogout={handleLogout} navItems={menuItems} 
             />
           </Drawer>
         </Layout>
       ) : (
-        <Layout style={{ minHeight: '100vh', background: '#f8fafc' }}>
+        <Layout style={{ 
+          height: (activeTab === 'chat' || activeTab === 'logs') ? '100vh' : 'auto', 
+          minHeight: '100vh',
+          background: '#f8fafc', 
+          overflow: (activeTab === 'chat' || activeTab === 'logs') ? 'hidden' : 'auto' 
+        }}>
           <Sider
             width={220} collapsedWidth={64} collapsed={collapsed} onCollapse={setCollapsed}
             style={{ background: '#0f172a', position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 30 }}
@@ -533,13 +686,36 @@ const Dashboard = () => {
                 if (k === 'lobster-panel') { handleOpenDashboard(); return; }
                 setActiveTab(k);
               }} 
-              onLogout={handleLogout} navItems={navItems} 
+              onLogout={handleLogout} navItems={menuItems} 
             />
           </Sider>
-          <Layout style={{ marginLeft: collapsed ? 64 : 220, transition: 'margin-left 0.2s', minHeight: '100vh' }}>
+          <Layout style={{ 
+            marginLeft: collapsed ? 64 : 220, 
+            transition: 'margin-left 0.2s', 
+            height: (activeTab === 'chat' || activeTab === 'logs') ? '100vh' : 'auto', 
+            minHeight: 0,
+            display: 'flex', 
+            flexDirection: 'column', 
+            overflow: (activeTab === 'chat' || activeTab === 'logs') ? 'hidden' : 'auto' 
+          }}>
             {headerEl(() => setCollapsed(!collapsed))}
-            <Content style={{ padding: activeTab === 'logs' ? 0 : 24, background: '#f8fafc', flex: 1 }}>
-              <div style={{ maxWidth: 'none', margin: '0 auto', height: activeTab === 'logs' ? '100%' : 'auto' }}>
+            <Content style={{ 
+              padding: activeTab === 'logs' || activeTab === 'chat' ? 0 : 24, 
+              background: '#f8fafc', 
+              flex: 1,
+              display: 'flex', 
+              flexDirection: 'column', 
+              minHeight: 0
+            }}>
+              <div style={{ 
+                maxWidth: 'none', 
+                margin: '0 auto', 
+                flex: 1,
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                minHeight: 0
+              }}>
                 {renderContent()}
               </div>
             </Content>
@@ -657,7 +833,13 @@ export default function App() {
     if (urlToken) {
       localStorage.setItem('guardian_token', urlToken);
       setToken(urlToken);
-      window.history.replaceState({}, '', window.location.pathname);
+      
+      // 仅移除 token 参数，保留其他参数（如 embed, page 等）
+      params.delete('token');
+      const newSearch = params.toString();
+      const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
+      window.history.replaceState({}, '', newUrl);
+      
       message.success('已自动登录');
     }
   }, []);

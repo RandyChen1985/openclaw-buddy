@@ -19,24 +19,20 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
         borderBottom: '1px solid rgba(51,65,85,0.6)',
         padding: collapsed ? '0 18px' : '0 20px', gap: 10,
         overflow: 'hidden', whiteSpace: 'nowrap',
+        flexShrink: 0
       }}>
         <div style={{ fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           🦞
         </div>
         {!collapsed && (
-          <span style={{ color: '#fff', fontWeight: 700, fontSize: 14, letterSpacing: '-0.01em' }}>
-            Lobster Guardian
+          <span style={{ fontSize: 15, fontWeight: 700, color: '#fff', letterSpacing: '0.02em', marginLeft: 8 }}>
+            OpenClaw Buddy
           </span>
         )}
       </div>
 
       {/* Nav */}
       <div style={{ padding: '12px 0', flex: 1, overflowY: 'auto' }}>
-        {!collapsed && (
-          <div style={{ padding: '4px 20px 8px', fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.15em' }}>
-            Monitor
-          </div>
-        )}
         <Menu
           mode="inline"
           selectedKeys={[activeTab]}
@@ -48,7 +44,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
       </div>
 
       {/* Logout */}
-      <div style={{ padding: '0 8px 16px', borderTop: '1px solid rgba(51,65,85,0.3)' }}>
+      <div style={{ padding: '0 8px 16px', borderTop: '1px solid rgba(51,65,85,0.3)', flexShrink: 0 }}>
         <Tooltip title={collapsed ? '退出登录' : ''} placement="right">
           <Button
             block

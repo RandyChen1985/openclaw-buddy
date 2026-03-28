@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"time"
-	"yovole-openclaw-monitor/internal/config"
+	"openclaw-buddy/internal/config"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -42,7 +42,7 @@ func NewServer(cfg *config.Config) *Server {
 func (s *Server) setupRoutes() {
 	// Public routes
 	s.engine.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
+		c.JSON(200, APIResponse{Code: 200, Message: "success", Data: gin.H{"status": "ok"}})
 	})
 
 	// Login endpoint
@@ -57,9 +57,9 @@ func (s *Server) setupRoutes() {
 
 		if req.Token == s.cfg.Token {
 			c.SetCookie("guardian_token", req.Token, 3600*24*7, "/", "", false, true)
-			c.JSON(200, gin.H{"status": "success"})
+			c.JSON(200, APIResponse{Code: 200, Message: "success"})
 		} else {
-			c.JSON(401, gin.H{"error": "Invalid token"})
+			c.JSON(401, APIResponse{Code: 401, Message: "Invalid token"})
 		}
 	})
 
@@ -77,8 +77,14 @@ func (s *Server) setupRoutes() {
 			oc.POST("/devices/approve", s.approveDevice)
 			oc.POST("/bots/add", s.addOpenClawBot)
 			oc.POST("/bots/set-identity", s.setOpenClawBotIdentity)
+			oc.POST("/bots/set-model", s.setOpenClawBotModel)
 			oc.POST("/bots/delete", s.deleteOpenClawBot)
 			oc.POST("/models/set-default", s.setDefaultModel)
+			oc.GET("/models/config", s.getOpenClawModelsConfig)
+			oc.POST("/models/test-direct", s.testOpenClawModelDirect)
+			oc.POST("/models/provider", s.addOpenClawProvider)
+			oc.POST("/models/provider/model", s.addOpenClawModelToProvider)
+			oc.DELETE("/models/provider/model", s.deleteOpenClawModelFromProvider)
 			oc.POST("/chat/completions", s.chatProxy)
 			oc.GET("/chat/status", s.getChatStatus)
 			oc.POST("/chat/enable", s.enableChat)
@@ -109,6 +115,8 @@ func (s *Server) setupRoutes() {
 		v1.GET("/settings/self-healing", s.getSelfHealingSetting)
 		v1.POST("/settings/self-healing", s.updateSelfHealingSetting)
 		v1.GET("/heal/events", s.getHealEvents)
+		v1.GET("/heal/reports", s.getHealReports)
+		v1.GET("/heal/reports/:name", s.getHealReportDetail)
 		v1.GET("/tasks/status", s.getTasksStatus)
 
 		// Proxy for external dashboard

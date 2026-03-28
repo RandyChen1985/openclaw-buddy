@@ -1,16 +1,43 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form } from 'antd';
-import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus } from 'lucide-react';
+import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip } from 'antd';
+import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
+import remarkMath from 'remark-math';
+import rehypeSanitize from 'rehype-sanitize';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+import mermaid from 'mermaid';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import api from '../api';
 
 const { Option } = Select;
 
+// --- Mermaid Component ---
+const Mermaid = ({ chart }: { chart: string }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (ref.current && chart) {
+      mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+      mermaid.contentLoaded();
+      const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
+      mermaid.render(id, chart).then(({ svg }) => {
+        if (ref.current) ref.current.innerHTML = svg;
+      }).catch(err => {
+        if (ref.current) ref.current.innerHTML = `<div style="color: #ef4444; font-size: 12px; padding: 10px; border: 1px dashed #fecaca; border-radius: 8px;">Mermaid 渲染失败: ${err.message}</div>`;
+      });
+    }
+  }, [chart]);
+  return <div ref={ref} style={{ margin: '12px 0', overflowX: 'auto', display: 'flex', justifyContent: 'center' }} />;
+};
+
 interface Message {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
-  timestamp?: string; // 新增时间戳
+  timestamp?: string;
+  quotedMessage?: string; // 引用的消息内容
 }
 
 interface OnlineChatProps {
@@ -18,40 +45,88 @@ interface OnlineChatProps {
   loadingBots: boolean;
   onRefreshBots: () => void;
   isMobile?: boolean;
-  onRestartGateway?: () => Promise<void>; // 新增
+  onRestartGateway?: () => Promise<void>;
 }
 
 const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefreshBots, isMobile, onRestartGateway }) => {
   const [selectedBot, setSelectedBot] = useState<string>('');
   const [inputText, setInputText] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const saved = localStorage.getItem('chat_history');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [quotedMsg, setQuotedMsg] = useState<string | null>(null); // 当前正在引用的消息
+  
+  // 持久化存储
+  useEffect(() => {
+    localStorage.setItem('chat_history', JSON.stringify(messages));
+  }, [messages]);
+
+  // --- Markdown 预处理逻辑 ---
+  const preprocessMarkdown = (content: string) => {
+    if (!content) return '';
+    return content
+      .replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2')
+      .replace(/([^\n])\n(\|)/g, (match, p1, p2) => {
+        return p1.trim().endsWith('|') ? match : p1 + '\n\n' + p2;
+      })
+      .replace(/([^\n])\n(```)/g, '$1\n\n$2');
+  };
+
   const [isTyping, setIsTyping] = useState(false);
-  const [isComposing, setIsComposing] = useState(false); // IME 输入状态
+  const [isComposing, setIsComposing] = useState(false);
   const inputRef = useRef<any>(null);
-  const abortControllerRef = useRef<AbortController | null>(null); // 中断控制器
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [chatEnabled, setChatEnabled] = useState<boolean | null>(null);
   const [checkingEnabled, setCheckingEnabled] = useState(true);
   const [enabling, setEnabling] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [generatedSessionId, setGeneratedSessionId] = useState<string | null>(null);
   
-  // 快捷指令相关状态
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
+  const [showQuickActions, setShowQuickActions] = useState<boolean>(() => {
+    return localStorage.getItem('chat_show_quick_actions') !== 'false';
+  });
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [form] = Form.useForm();
+
+  const queryParams = new URLSearchParams(window.location.search);
+  const urlBot = queryParams.get('bot');
+  const urlUser = queryParams.get('user');
+  const isEmbedMode = queryParams.get('embed') === 'true';
 
   useEffect(() => {
     checkChatStatus();
     fetchQuickCommands();
-    if (botsModels?.data?.bots?.length > 0 && !selectedBot) {
-        setSelectedBot(`openclaw:${botsModels.data.bots[0].id}`);
-    }
-  }, [botsModels]);
+  }, []);
 
   useEffect(() => {
-    if (!isTyping && chatEnabled) {
-      setTimeout(() => inputRef.current?.focus(), 100);
+    if (!urlUser) {
+      let storedSessionId = localStorage.getItem('chat_session_id');
+      if (!storedSessionId) {
+        storedSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        localStorage.setItem('chat_session_id', storedSessionId);
+      }
+      setGeneratedSessionId(storedSessionId);
+    } else {
+      setGeneratedSessionId(null);
     }
-  }, [isTyping, chatEnabled]);
+  }, [urlUser]);
+
+  useEffect(() => {
+    if (botsModels?.data?.bots?.length > 0) {
+      if (urlBot) {
+        const targetBot = botsModels.data.bots.find((b: any) => b.id === urlBot || b.name === urlBot);
+        if (targetBot) {
+          setSelectedBot(`openclaw:${targetBot.id}`);
+        } else if (!selectedBot) {
+          setSelectedBot(`openclaw:${botsModels.data.bots[0].id}`);
+        }
+      } else if (!selectedBot) {
+        setSelectedBot(`openclaw:${botsModels.data.bots[0].id}`);
+      }
+    }
+  }, [botsModels, urlBot]);
 
   const fetchQuickCommands = async () => {
     try {
@@ -107,11 +182,9 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       onOk: async () => {
         setEnabling(true);
         try {
-          // 1. 开启配置
           const res = await api.post('/v1/openclaw/chat/enable');
           if (res.data.status === 'success') {
             message.loading('配置已更新，正在重启网关...', 2);
-            // 2. 触发重启
             if (onRestartGateway) {
               await onRestartGateway();
             }
@@ -140,14 +213,39 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
     if (!text.trim() || isTyping || !selectedBot) return;
 
     if (!textOverride) setInputText('');
+    const currentQuoted = quotedMsg;
+    setQuotedMsg(null); // 发送后清除引用
     setIsTyping(true);
     
     abortControllerRef.current = new AbortController();
 
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const newUserMessage: Message = { role: 'user', content: text, timestamp };
+    const newUserMessage: Message = { role: 'user', content: text, timestamp, quotedMessage: currentQuoted || undefined };
     const newMessages = [...messages, newUserMessage];
     setMessages(newMessages);
+
+    // 将历史消息格式化为 OpenAI 格式（排除自定义属性）
+    const formattedMessages = newMessages.map(m => {
+        let content = m.content;
+        if (m.quotedMessage) {
+            content = `> ${m.quotedMessage.split('\n')[0]}...\n\n${content}`;
+        }
+        return { role: m.role, content };
+    });
+
+    const requestBody: any = {
+      model: selectedBot,
+      messages: formattedMessages,
+      stream: true
+    };
+
+    let userIdToSend = urlUser;
+    if (!userIdToSend && generatedSessionId) {
+      userIdToSend = `lobster-${generatedSessionId}`;
+    }
+    if (userIdToSend) {
+      requestBody.user = userIdToSend;
+    }
 
     try {
       const response = await fetch(`${api.defaults.baseURL || ''}/v1/openclaw/chat/completions`, {
@@ -156,11 +254,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('guardian_token')}`
         },
-        body: JSON.stringify({
-          model: selectedBot,
-          messages: newMessages,
-          stream: true
-        }),
+        body: JSON.stringify(requestBody),
         signal: abortControllerRef.current.signal
       });
 
@@ -225,22 +319,25 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
   const handleRegenerate = () => {
     // 找到最后一条用户消息
-    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
-    if (lastUserMsg) {
-      // 移除最后一条 AI 消息（如果有）
-      setMessages(prev => {
-        const last = prev[prev.length - 1];
-        if (last && last.role === 'assistant') {
-          return prev.slice(0, -1);
-        }
-        return prev;
-      });
+    const lastUserIndex = [...messages].reverse().findIndex(m => m.role === 'user');
+    if (lastUserIndex !== -1) {
+      const actualIndex = messages.length - 1 - lastUserIndex;
+      const lastUserMsg = messages[actualIndex];
+      
+      // 移除该用户消息之后的所有 AI 消息
+      setMessages(prev => prev.slice(0, actualIndex + 1));
+      
+      // 重新触发发送
       handleSend(lastUserMsg.content);
     }
   };
 
   const clearHistory = () => {
     setMessages([]);
+    localStorage.removeItem('chat_history');
+    const newSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    localStorage.setItem('chat_session_id', newSessionId);
+    setGeneratedSessionId(newSessionId);
     message.success('对话记录已清空');
   };
 
@@ -257,7 +354,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   if (chatEnabled === false) {
     return (
       <div style={{ height: 'calc(100vh - 120px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Card style={{ width: 450, borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,0.05)', textAlign: 'center' }} bodyStyle={{ padding: '40px 32px' }}>
+        <Card style={{ width: 450, borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,0.05)', textAlign: 'center' }} styles={{ body: { padding: '40px 32px' } }}>
           <div style={{ background: '#fff7ed', width: 64, height: 64, borderRadius: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', color: '#f97316' }}>
             <Zap size={32} />
           </div>
@@ -287,66 +384,82 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   const markdownStyles = (
     <style>{`
       .markdown-body {
-        font-size: 14px;
-        line-height: 1.6;
+        font-size: 13.5px;
+        line-height: 1.5;
         word-wrap: break-word;
-      }
-      .markdown-body h1, .markdown-body h2, .markdown-body h3 {
-        margin-top: 16px;
-        margin-bottom: 8px;
-        font-weight: 600;
         color: inherit;
       }
-      .markdown-body p { margin-bottom: 8px; }
-      .markdown-body code {
-        padding: 0.2em 0.4em;
-        margin: 0;
-        font-size: 85%;
-        background-color: rgba(175, 184, 193, 0.2);
-        border-radius: 6px;
-        font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+      .markdown-body > *:first-child { margin-top: 0 !important; }
+      .markdown-body > *:last-child { margin-bottom: 0 !important; }
+      
+      .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+        margin-top: 12px;
+        margin-bottom: 6px;
+        font-weight: 700;
+        color: #1e293b;
       }
-      .markdown-body pre {
-        padding: 12px;
-        overflow: auto;
-        font-size: 85%;
-        line-height: 1.45;
-        background-color: #f6f8fa;
-        border-radius: 6px;
-        border: 1px solid #e2e8f0;
-        margin-bottom: 12px;
-      }
-      .markdown-body pre code {
-        padding: 0;
-        margin: 0;
-        background-color: transparent;
-        border: 0;
-      }
+      .markdown-body p { margin-bottom: 6px; }
       .markdown-body ul, .markdown-body ol {
-        margin-bottom: 8px;
+        margin-bottom: 6px;
         padding-left: 20px;
+      }
+      .markdown-body li {
+        margin-bottom: 2px;
       }
       .markdown-body table {
         border-spacing: 0;
         border-collapse: collapse;
-        margin-bottom: 16px;
+        margin-bottom: 10px;
         width: 100%;
+        overflow-x: auto;
+        display: block;
+        -webkit-overflow-scrolling: touch;
       }
-      .markdown-body table th, .markdown-body table td {
-        padding: 6px 13px;
-        border: 1px solid #d0d7de;
+      .markdown-body table th {
+        background-color: #f8fafc;
+        font-weight: 600;
+        text-align: left;
       }
       .markdown-body table tr:nth-child(2n) {
-        background-color: #f6f8fa;
+        background-color: #fcfcfc;
+      }
+      .markdown-body blockquote {
+        margin: 0 0 10px 0;
+        padding: 0 12px;
+        color: #64748b;
+        border-left: 4px solid #e2e8f0;
+      }
+      .markdown-body pre {
+        margin-bottom: 10px !important;
+        max-width: 100%;
+        overflow-x: auto;
       }
     `}</style>
   );
 
   return (
-    <div style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ 
+      flex: 1,
+      display: 'flex', 
+      flexDirection: 'column', 
+      gap: isEmbedMode ? 0 : 16,
+      background: '#f8fafc',
+      width: '100%',
+      height: '100%',
+      minHeight: 0,
+      minWidth: 0
+    }}>
       {markdownStyles}
       {/* Top Bar */}
-      <Card bodyStyle={{ padding: isMobile ? '8px 12px' : '12px 20px' }} style={{ borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+      <Card 
+        styles={{ body: { padding: isMobile ? '8px 12px' : '12px 20px' } }} 
+        style={{ 
+          borderRadius: isEmbedMode ? 0 : 12, 
+          boxShadow: isEmbedMode ? 'none' : '0 1px 2px rgba(0,0,0,0.03)',
+          border: isEmbedMode ? 'none' : '1px solid #e2e8f0',
+          borderBottom: isEmbedMode ? '1px solid #f1f5f9' : 'none'
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'nowrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12 }}>
             <div style={{ padding: isMobile ? 6 : 8, background: '#eff6ff', borderRadius: 10, color: '#2563eb', flexShrink: 0 }}>
@@ -354,7 +467,22 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
             </div>
             {!isMobile && (
               <div>
-                <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 15 }}>对话实验室</div>
+                <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  对话实验室
+                  {urlUser && (
+                    <span style={{ 
+                      fontSize: 10, 
+                      fontWeight: 600, 
+                      background: '#dcfce7', 
+                      color: '#166534', 
+                      padding: '2px 8px', 
+                      borderRadius: 10,
+                      border: '1px solid #bbf7d0'
+                    }}>
+                      User: {urlUser}
+                    </span>
+                  )}
+                </div>
                 <div style={{ fontSize: 12, color: '#64748b' }}>实时与 Lobster Bot 进行交互测试</div>
               </div>
             )}
@@ -395,8 +523,8 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       <div style={{ 
         flex: 1, 
         background: '#fff', 
-        borderRadius: 12, 
-        border: '1px solid #e2e8f0',
+        borderRadius: isEmbedMode ? 0 : 12, 
+        border: isEmbedMode ? 'none' : '1px solid #e2e8f0',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -466,7 +594,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                   icon={msg.role === 'user' ? <User size={18} /> : <Bot size={18} color="#2563eb" />}
                 />
                 <div style={{ 
-                  maxWidth: '85%',
+                  maxWidth: isMobile ? '92%' : '85%',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
@@ -485,49 +613,122 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                     whiteSpace: 'pre-wrap',
                     position: 'relative'
                   }}>
+                    {msg.quotedMessage && (
+                      <div style={{ 
+                        fontSize: 12, 
+                        background: 'rgba(0,0,0,0.05)', 
+                        padding: '6px 10px', 
+                        borderRadius: 8, 
+                        marginBottom: 8,
+                        borderLeft: `3px solid ${msg.role === 'user' ? '#fff' : '#2563eb'}`,
+                        color: msg.role === 'user' ? 'rgba(255,255,255,0.8)' : '#64748b',
+                        maxWidth: '100%',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical'
+                      }}>
+                        <Quote size={10} style={{ marginRight: 4, opacity: 0.6 }} />
+                        {msg.quotedMessage}
+                      </div>
+                    )}
                     {msg.role === 'assistant' ? (
-                      <div className="markdown-body">
+                      <div className="markdown-body" style={{ whiteSpace: 'normal' }}>
                         <ReactMarkdown 
-                          remarkPlugins={[remarkGfm]}
+                          remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
+                          rehypePlugins={[rehypeSanitize, rehypeKatex]}
                           components={{
-                            a: ({ node, ...props }) => {
-                              const href = props.href || '';
-                              const isAction = href.startsWith('action:');
-                              if (isAction) {
-                                // 解码，因为预处理时编码了
-                                const actionText = decodeURIComponent(href.replace('action:', ''));
+                            table: ({ node, ...props }: any) => (
+                              <div style={{ 
+                                width: '100%', 
+                                overflowX: 'auto', 
+                                marginBottom: 12, 
+                                borderRadius: 8,
+                                border: '1px solid #e2e8f0',
+                                background: '#fff'
+                              }}>
+                                <table {...props} style={{ 
+                                  width: '100%', 
+                                  borderCollapse: 'collapse',
+                                  fontSize: isMobile ? '12px' : '13px',
+                                  minWidth: isMobile ? '500px' : 'auto'
+                                }} />
+                              </div>
+                            ),
+                            th: ({ node, ...props }: any) => (
+                              <th {...props} style={{ 
+                                padding: '8px 12px', 
+                                background: '#f8fafc', 
+                                borderBottom: '1px solid #e2e8f0', 
+                                borderRight: '1px solid #e2e8f0',
+                                textAlign: 'left',
+                                fontWeight: 600
+                              }} />
+                            ),
+                            td: ({ node, ...props }: any) => (
+                              <td {...props} style={{ 
+                                padding: '8px 12px', 
+                                borderBottom: '1px solid #e2e8f0', 
+                                borderRight: '1px solid #e2e8f0'
+                              }} />
+                            ),
+                            code: ({ node, inline, className, children, ...props }: any) => {
+                              const match = /language-(\w+)/.exec(className || '');
+                              const language = match ? match[1] : '';
+                              
+                              if (!inline && language === 'mermaid') {
+                                return <Mermaid chart={String(children).replace(/\n$/, '')} />;
+                              }
+
+                              if (!inline && language) {
                                 return (
-                                  <Button 
-                                    size="small" 
-                                    type="link"
-                                    onClick={() => handleSend(actionText)}
-                                    style={{ 
-                                      padding: '0 8px', 
-                                      height: 24, 
-                                      fontSize: 12, 
-                                      background: '#f0f9ff', 
-                                      borderRadius: 12, 
-                                      border: '1px solid #bae6fd',
-                                      color: '#0369a1',
-                                      margin: '2px 4px',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
+                                  <div style={{ position: 'relative', margin: '12px 0', border: 'none' }}>
+                                    <div style={{ 
+                                      position: 'absolute', 
+                                      right: 8, 
+                                      top: 8, 
+                                      zIndex: 1, 
+                                      fontSize: 10, 
+                                      color: '#94a3b8',
+                                      textTransform: 'uppercase',
                                       fontWeight: 600,
-                                      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
-                                    }}
-                                  >
-                                    <Zap size={10} style={{ marginRight: 4 }} />
-                                    {props.children}
-                                  </Button>
+                                      pointerEvents: 'none'
+                                    }}>
+                                      {language}
+                                    </div>
+                                    <SyntaxHighlighter
+                                      {...props}
+                                      style={vscDarkPlus}
+                                      language={language}
+                                      PreTag="div"
+                                      customStyle={{
+                                        margin: 0,
+                                        borderRadius: '8px',
+                                        fontSize: '13px',
+                                        padding: '16px 12px'
+                                      }}
+                                    >
+                                      {String(children).replace(/\n$/, '')}
+                                    </SyntaxHighlighter>
+                                  </div>
                                 );
                               }
-                              return <a {...props} target="_blank" rel="noopener noreferrer" />;
+                              
+                              return (
+                                <code className={className} {...props} style={{
+                                  padding: '0.2em 0.4em',
+                                  backgroundColor: 'rgba(175, 184, 193, 0.2)',
+                                  borderRadius: '6px',
+                                  fontSize: '85%'
+                                }}>
+                                  {children}
+                                </code>
+                              );
                             }
                           }}
                         >
-                          {msg.content.replace(/\[([^\]]+)\]\(action:([^\)]+)\)/g, (_, label, action) => {
-                            return `[${label}](action:${encodeURIComponent(action.trim())})`;
-                          })}
+                          {preprocessMarkdown(msg.content)}
                         </ReactMarkdown>
                       </div>
                     ) : (
@@ -535,6 +736,18 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 2, alignItems: 'center' }}>
+                    <Tooltip title="回复此消息">
+                      <Button 
+                        type="text" 
+                        size="small" 
+                        icon={<Quote size={12} />} 
+                        style={{ color: '#94a3b8', height: 22, fontSize: 11, padding: '0 4px' }} 
+                        onClick={() => {
+                          setQuotedMsg(msg.content);
+                          inputRef.current?.focus();
+                        }}
+                      >回复</Button>
+                    </Tooltip>
                     <Button 
                       type="text" 
                       size="small" 
@@ -571,29 +784,84 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         </div>
 
         {/* Input Area */}
-        <div style={{ padding: isMobile ? '12px' : '16px 24px', background: '#fff', borderTop: '1px solid #f1f5f9' }}>
-          {/* Quick Actions */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', flex: 1, paddingBottom: 4, scrollbarWidth: 'none' }}>
-              {quickCommands.map(item => (
-                <Button 
-                  key={item.id}
-                  size="small"
-                  style={{ borderRadius: 16, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, background: '#f8fafc', color: '#64748b', borderColor: '#e2e8f0', flexShrink: 0 }}
-                  onClick={() => handleSend(item.prompt)}
-                >
-                  {item.label}
-                </Button>
-              ))}
+        <div style={{ padding: isMobile ? '12px' : '16px 24px', background: '#fff', borderTop: '1px solid #f1f5f9', position: 'relative' }}>
+          {/* Quote Preview */}
+          {quotedMsg && (
+            <div style={{ 
+              background: '#f8fafc', 
+              padding: '8px 12px', 
+              borderLeft: '4px solid #2563eb', 
+              marginBottom: 8, 
+              borderRadius: '0 8px 8px 0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              animation: 'slide-up 0.2s ease'
+            }}>
+              <div style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                <span style={{ fontWeight: 700, marginRight: 6 }}>引用回复:</span>
+                {quotedMsg}
+              </div>
+              <Button type="text" size="small" icon={<X size={14} />} onClick={() => setQuotedMsg(null)} />
             </div>
-            <Button 
-                type="text" 
-                size="small" 
-                icon={<Settings size={14} />} 
-                style={{ color: '#94a3b8', background: '#f1f5f9', borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onClick={() => setIsManageModalOpen(true)}
-                title="管理快捷指令"
-            />
+          )}
+
+          {/* Quick Actions */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: showQuickActions ? 12 : 8, alignItems: 'center', transition: 'all 0.3s ease' }}>
+            {showQuickActions ? (
+              <>
+                <div style={{ display: 'flex', gap: 8, overflowX: 'auto', flex: 1, paddingBottom: 4, scrollbarWidth: 'none' }}>
+                  {quickCommands.map(item => (
+                    <Button 
+                      key={item.id}
+                      size="small"
+                      style={{ borderRadius: 16, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, background: '#f8fafc', color: '#64748b', borderColor: '#e2e8f0', flexShrink: 0 }}
+                      onClick={() => handleSend(item.prompt)}
+                    >
+                      {item.label}
+                    </Button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <Button 
+                    type="text" 
+                    size="small" 
+                    icon={<Settings size={14} />} 
+                    style={{ color: '#94a3b8', background: '#f1f5f9', borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={() => setIsManageModalOpen(true)}
+                    title="管理快捷指令"
+                  />
+                  <Button 
+                    type="text" 
+                    size="small" 
+                    icon={<ChevronUp size={16} />} 
+                    style={{ color: '#94a3b8', background: '#f1f5f9', borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={() => {
+                        setShowQuickActions(false);
+                        localStorage.setItem('chat_show_quick_actions', 'false');
+                    }}
+                    title="收起快捷指令"
+                  />
+                </div>
+              </>
+            ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                    <div style={{ height: 1, flex: 1, background: '#f1f5f9' }}></div>
+                    <Button 
+                        type="text" 
+                        size="small" 
+                        icon={<ChevronDown size={14} style={{ marginRight: 4 }} />}
+                        onClick={() => {
+                            setShowQuickActions(true);
+                            localStorage.setItem('chat_show_quick_actions', 'true');
+                        }}
+                        style={{ fontSize: 11, color: '#94a3b8', height: 20, padding: '0 8px', borderRadius: 10, background: '#f8fafc', display: 'flex', alignItems: 'center' }}
+                    >
+                        展开快捷指令
+                    </Button>
+                    <div style={{ height: 1, flex: 1, background: '#f1f5f9' }}></div>
+                </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: isMobile ? 8 : 12, alignItems: 'flex-end' }}>
@@ -634,9 +902,9 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           </div>
           {!isMobile && (
             <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8', display: 'flex', gap: 16 }}>
-              <span>⚡️ 支持流式响应</span>
-              <span>🤖 User: lobster</span>
-              <span>🔒 Gateway Token 已隐藏</span>
+              <span>⚡️ 支持流式响应与数学公式</span>
+              <span>🤖 User: {urlUser || (generatedSessionId ? `lobster-${generatedSessionId}` : '匿名')}</span>
+              <span>💾 消息已开启持久化存储</span>
             </div>
           )}
         </div>

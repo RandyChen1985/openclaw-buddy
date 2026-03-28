@@ -1,15 +1,29 @@
 #!/bin/bash
 
-# 🦞 有孚小龙虾监控 (Lobster Guardian) Linux 生产环境打包脚本
+# 🦞 OpenClaw Buddy Linux 生产环境打包脚本
 # 用途：在 Mac/Windows 上运行，跨平台编译生成 Linux 全量包
 
 set -e
 
-BINARY_NAME="lobster-monitor-linux"
+BINARY_NAME="openclaw-buddy-linux"
 RELEASE_ROOT="release"
-PKG_NAME="lobster-guardian-linux"
+PKG_PREFIX="openclaw-buddy-linux"
+BASE_VERSION="1.0.0"
+
+# 自动检测并递增版本号
+LATEST_VERSION=$(ls "${RELEASE_ROOT}"/"${PKG_PREFIX}"-*.tar.gz 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -n1)
+
+if [ -z "$LATEST_VERSION" ]; then
+    VERSION="$BASE_VERSION"
+else
+    major=$(echo "$LATEST_VERSION" | cut -d. -f1)
+    minor=$(echo "$LATEST_VERSION" | cut -d. -f2)
+    patch=$(echo "$LATEST_VERSION" | cut -d. -f3)
+    VERSION="$major.$minor.$((patch + 1))"
+fi
+
+PKG_NAME="${PKG_PREFIX}-${VERSION}"
 PKG_DIR="${RELEASE_ROOT}/${PKG_NAME}"
-VERSION=$(date +%Y%m%d)
 
 echo "🚀 开始 Linux 版本打包 (交叉编译, 版本: ${VERSION})..."
 
@@ -33,16 +47,16 @@ GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o "${BINARY_NAME}" cmd/monito
 
 # 3. 组织发布包结构
 mkdir -p "${PKG_DIR}/lib" "${PKG_DIR}/logs" "${PKG_DIR}/reports" "${PKG_DIR}/backups" "${PKG_DIR}/data"
-mv "${BINARY_NAME}" "${PKG_DIR}/lib/lobster-monitor"
-[ -f "README.md" ] && cp README.md "${PKG_DIR}/"
+mv "${BINARY_NAME}" "${PKG_DIR}/lib/openclaw-buddy"
+[ -f "release/README.md" ] && cp "release/README.md" "${PKG_DIR}/README.md"
 
 # 4. 生成 Linux 默认 env 配置文件
 cat <<EOF > "${PKG_DIR}/env"
-# 🦞 有孚小龙虾监控 (Linux 生产环境)
+# 🦞 OpenClaw Buddy (Linux 生产环境)
 # Guardian 面板监听端口
 WEB_PORT=3000
 # 访问面板所需的认证令牌 (sk- 开头)
-GUARDIAN_TOKEN="sk-replace-me-on-first-run"
+BUDDY_TOKEN="sk-replace-me-on-first-run"
 
 # [存储与目录]
 # SQLite 数据库文件路径 (存储记录与自愈开关)
@@ -77,7 +91,7 @@ EOF
 cat <<'EOF' > "${PKG_DIR}/start.sh"
 #!/bin/bash
 cd "$(dirname "$0")"
-PID_FILE="/tmp/lobster-guardian-linux.pid"
+PID_FILE="/tmp/openclaw-buddy-linux.pid"
 
 if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")
@@ -89,17 +103,20 @@ if [ -f "$PID_FILE" ]; then
 fi
 
 echo "🚀 正在启动服务..."
-chmod +x ./lib/lobster-monitor
-nohup ./lib/lobster-monitor >> ./logs/guardian.log 2>&1 &
+chmod +x ./lib/openclaw-buddy
+nohup ./lib/openclaw-buddy >> ./logs/guardian.log 2>&1 &
 echo $! > "$PID_FILE"
 echo "✅ 启动成功，PID: $(cat $PID_FILE)"
+echo "📋 正在自动追踪启动日志 (按 Ctrl+C 停止追踪，服务将继续后台运行)..."
+sleep 1
+tail -n 20 -f ./logs/guardian.log
 EOF
 chmod +x "${PKG_DIR}/start.sh"
 
 # 生成 Linux 停止脚本 (stop.sh)
 cat <<'EOF' > "${PKG_DIR}/stop.sh"
 #!/bin/bash
-PID_FILE="/tmp/lobster-guardian-linux.pid"
+PID_FILE="/tmp/openclaw-buddy-linux.pid"
 if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")
     kill $PID && echo "✅ 服务已停止 (PID: $PID)"
@@ -112,7 +129,7 @@ chmod +x "${PKG_DIR}/stop.sh"
 
 # 5. 打包归档为 .tar.gz
 echo "📦 正在生成归档压缩包..."
-TAR_FILE="lobster-guardian-linux-${VERSION}.tar.gz"
+TAR_FILE="${PKG_NAME}.tar.gz"
 cd "${RELEASE_ROOT}"
 # COPYFILE_DISABLE=1 防止 macOS 产生 ._ 文件
 # --no-xattrs 防止 Linux tar 提取时提示 LIBARCHIVE.xattr 警告

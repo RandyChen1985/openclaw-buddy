@@ -16,11 +16,6 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs }) => {
     <div style={{ display: 'flex', flexDirection: 'column', background: '#0d1117', borderRadius: 0, overflow: 'hidden', border: '1px solid #21262d', height: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: '#161b22', borderBottom: '1px solid #21262d', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(255,95,86,0.7)' }} />
-            <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(255,189,46,0.7)' }} />
-            <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(39,201,63,0.7)' }} />
-          </div>
           <span style={{ color: '#8b949e', fontSize: 12, fontFamily: 'monospace' }}>guardian.log</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
