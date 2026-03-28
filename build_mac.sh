@@ -89,11 +89,12 @@ cat <<'EOF' > "${PKG_DIR}/start.sh"
 cd "$(dirname "$0")"
 PID_FILE="/tmp/openclaw-buddy-mac.pid"
 [ -f "$PID_FILE" ] && ps -p $(cat "$PID_FILE") > /dev/null && echo "❌ 已经在运行中" && exit 1
-nohup ./lib/openclaw-buddy >> ./logs/guardian.log 2>&1 &
+(trap "" INT; nohup ./lib/openclaw-buddy >> ./logs/guardian.log 2>&1 &)
 echo $! > "$PID_FILE"
 echo "✅ macOS 版启动成功，PID: $(cat $PID_FILE)"
 echo "📋 正在自动追踪启动日志 (按 Ctrl+C 停止追踪，服务将继续后台运行)..."
 sleep 1
+# tail 运行在前台，接收到 Ctrl+C 后会退出，由于上面的 nohup 在子 shell 中由 trap 保护，不会受影响
 tail -n 20 -f ./logs/guardian.log
 EOF
 chmod +x "${PKG_DIR}/start.sh"
