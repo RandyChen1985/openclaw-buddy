@@ -101,11 +101,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   api: values.api || 'openai-completions'
               }
           });
-          hide(); // 隐藏加载遮罩
-          message.success('提供商添加成功');
-          configForm.resetFields();
-          await fetchModelsConfig();
-          setIsProviderModalOpen(false); // 添加成功后关闭弹窗
+          setIsProviderModalOpen(false); // 获取配置成功后关闭弹窗
           onShowGlobalLoading('提供商配置已更新，后台正在处理中...', 3000); // 触发全局遮罩
       } catch (err: any) {
           hide(); // 隐藏加载遮罩
@@ -143,11 +139,11 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       console.log('🚀 Final Submit Data:', submitData);
       await api.post('/v1/openclaw/models/provider/model', submitData);
       
+      setIsModelModalOpen(false); // 成功后立即关闭弹窗
       hide(); // 隐藏加载遮罩
       message.success('模型已成功追加');
       modelForm.resetFields(['id', 'name', 'reasoning']); // 仅重置模型部分，保留 provider 方便连续添加
       await Promise.all([fetchModelsConfig(), onRefresh()]);
-      setIsModelModalOpen(false); // 关闭弹窗
       onShowGlobalLoading('模型配置已更新，后台正在处理中...', 3000); // 触发全局遮罩
     } catch (err: any) {
       hide(); // 隐藏加载遮罩
