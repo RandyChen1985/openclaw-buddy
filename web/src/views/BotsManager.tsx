@@ -261,12 +261,13 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         modelId
       });
 
-      if (res.data && res.data.code === 200) {
-        const latency = res.data.data.latency;
+      // 提示：Axios 拦截器已自动解包标准响应格式，此处的 res.data 即为后端返回的 data 字段内容
+      if (res.data && typeof res.data.latency === 'number') {
+        const latency = res.data.latency;
         setTestLatencyMap(prev => ({ ...prev, [fullId]: { latency } }));
         message.success(`测试成功: ${latency}ms`);
       } else {
-        throw new Error(res.data?.message || '未知错误');
+        throw new Error('响应数据格式异常');
       }
     } catch (err: any) {
       console.error('Model connectivity test failed:', err);
@@ -558,7 +559,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                      )} 
                                   </div>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    <Tooltip title="测试连通性 (hello)">
+                                    <Tooltip title="测试连通性 (hello)" placement="bottom">
                                         <Button
                                             type="text"
                                             size="small"
@@ -569,7 +570,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                         />
                                     </Tooltip>
                                     {!isDefault && (
-                                      <Tooltip title="设为全局默认">
+                                      <Tooltip title="设为全局默认" placement="bottom">
                                         <Button 
                                           type="text" 
                                           size="small" 
@@ -579,7 +580,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                         />
                                       </Tooltip>
                                     )}
-                                    <Tooltip title="移除模型">
+                                    <Tooltip title="移除模型" placement="bottom">
                                         <Button
                                             type="text"
                                             size="small"

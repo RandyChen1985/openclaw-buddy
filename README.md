@@ -22,6 +22,8 @@
 | ![Dashboard](docs/images/overview.png) |  ![GetQR](docs/images/getqr.png)  |
 |      **安全登录 (Auth)**      |  **扫码登录 (Show QR)**  |
 |    ![Login](docs/images/login.png)    | ![ShowQR](docs/images/showqr.png) |
+|    **虾兵蟹将 (Bots & Models)**    |   **对话实验室 (Online Chat)**   |
+|     ![Bots](docs/images/bots.png)     |     ![Chat](docs/images/chat.png)     |
 
 ---
 
@@ -52,19 +54,21 @@
 
 ## 🏗️ 系统架构
 
+OpenClaw Buddy 采用非侵入式的“侧挂”架构，通过监控回路与管理链路实现对 OpenClaw 的全方位加固。
+
 ```text
-       [ 浏览器 / 移动端 ]
-               │
-       [ Guardian Web Server ] (Gin + React)
-               │
-    ┌──────────┴──────────┐
-    │                    │
-[ 监控回路 ]         [ 插件/设备管理 ]
-    │                    │
-- 端口探针 (18789)    - 微信插件流式捕获
-- 健康检查请求        - 设备连接授权 (Approve)
-- 自动备份/回滚       - SQLite 配置持久化
-- 趋势指标入库        - 反向代理 (Native UI)
+       [ 现代浏览器 / 移动端 ]
+                 │
+       [ OpenClaw Buddy Server ] (Go + Gin + React)
+                 │
+    ┌────────────┼────────────┐
+    │            │            │
+[ 监控自愈 ]   [ 资产管理 ]   [ 插件/授权 ]
+    │            │            │
+- 端口探针 (TCP)  - 模型直连测试  - 微信登录流捕获
+- 心跳/故障分析   - 资产强制同步  - 设备连接联机批准
+- 自动备份/回滚   - 默认模型分发  - 反向代理 (Native UI)
+- 趋势报表/入库   - 自定义渠道路由 - SQLite 状态持久化
 ```
 
 ## 🚀 快速开始
@@ -90,6 +94,30 @@
 2. **获取产物**: 产物位于 `release/` 目录下，解压后上传至服务器。
 3. **参数配置**: 修改 `env` 文件（首次启动会自动生成 16 位随机 `BUDDY_TOKEN`）。
 4. **启动服务**: `./start.sh`
+
+## 📂 目录结构
+
+OpenClaw Buddy 采用标准的模块化设计，确保监控与被监控逻辑解耦。
+
+```text
+.
+├── cmd/monitor/             # [入口层] 程序主启动入口，负责加载配置、初始化日志与信号监控
+├── internal/
+│   ├── api/                 # [服务层] 核心 Web API 实现 (Gin)，包含权限验证与静态资源分包
+│   ├── guardian/            # [守护层] 哨兵核心逻辑，执行周期性健康检查与故障自愈流程
+│   ├── process/             # [进程层] 封装 openclaw 命令行交互及微信/机器人状态管理
+│   ├── config/              # [配置层] 环境变量解析与全局配置参数管理
+│   └── utils/               # [工具层] 共用工具类 (SQLite 初始化、文件锁、日志轮转)
+├── web/                     # [前端工程] 基于 React + Antd + Lucide 的后台管理面板
+├── tests/                   # [测试集]   包含集成测试脚本、飞书模拟器及核心自愈逻辑验证 (含 CHECKLIST.md 自动化清单)
+├── docs/                    # [文档集]   存放项目相关图片 (images) 及补充说明文档 (md)
+├── openspec/                # [规格集]   存放项目设计规范、功能定义 (specs) 及详细变更记录
+├── release/                 # [发布层]   生产环境的最终部署包所在地（包含二进制、静态资源、管理脚本及文档）
+├── dev.sh                   # [开发脚本] 一键式全栈开发脚本（隔离运行、自动编译、日志追踪）
+├── Makefile                 # [构建脚本] 用于交叉编译、清理产物及快速执行发布流程
+├── API.md                   # [文档]     详尽的 RESTful 接口定义说明
+└── README.md                # [文档]     本自愈伴侣系统的核心宣言指南
+```
 
 ## 🔌 API 接口说明
 
