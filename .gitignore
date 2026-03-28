@@ -14,6 +14,7 @@ vendor/
 
 # OS files
 .DS_Store
+release/
 release_pkg/
 web/node_modules/
 web/dist/

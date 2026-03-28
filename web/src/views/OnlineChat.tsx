@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip } from 'antd';
-import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X } from 'lucide-react';
+import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -514,6 +514,56 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
               ))}
             </Select>
             <Button icon={<RefreshCw size={14} />} onClick={onRefreshBots} loading={loadingBots} title="刷新列表" />
+            {!isEmbedMode && (
+              <Button 
+                icon={<ExternalLink size={14} />} 
+                title="在新窗口打开独立聊天"
+                onClick={() => {
+                  const token = localStorage.getItem('guardian_token');
+                  const botId = selectedBot.replace('openclaw:', '');
+                  const url = `${window.location.origin}/?page=chat&token=${token}&bot=${botId}&embed=true`;
+                  window.open(url, '_blank');
+                }}
+              />
+            )}
+            <Button 
+                icon={<Share2 size={14} />} 
+                title="获取嵌入代码"
+                onClick={() => {
+                  const token = localStorage.getItem('guardian_token');
+                  const botId = selectedBot.replace('openclaw:', '');
+                  const url = `${window.location.origin}/?page=chat&token=${token}&bot=${botId}&embed=true`;
+                  const iframeCode = `<iframe src="${url}" width="100%" height="600" frameborder="0"></iframe>`;
+                  Modal.info({
+                    title: '获取嵌入代码',
+                    width: 500,
+                    content: (
+                      <div style={{ marginTop: 16 }}>
+                        <p style={{ fontSize: 13, color: '#64748b' }}>您可以将以下代码复制到其他系统中以嵌入此聊天窗口：</p>
+                        <Input.TextArea 
+                          readOnly 
+                          value={iframeCode} 
+                          autoSize={{ minRows: 3 }} 
+                          style={{ fontFamily: 'monospace', fontSize: 12, background: '#f8fafc' }}
+                        />
+                        <Button 
+                          type="primary" 
+                          size="small" 
+                          icon={<Copy size={12} />} 
+                          style={{ marginTop: 12 }}
+                          onClick={() => {
+                            navigator.clipboard.writeText(iframeCode);
+                            message.success('代码已复制');
+                          }}
+                        >
+                          复制 Iframe 代码
+                        </Button>
+                      </div>
+                    ),
+                    okText: '关闭'
+                  });
+                }}
+            />
             <Button danger icon={<Trash2 size={14} />} onClick={clearHistory} disabled={messages.length === 0}>{isMobile ? '' : '清空'}</Button>
           </div>
         </div>
