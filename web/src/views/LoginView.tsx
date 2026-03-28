@@ -159,9 +159,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             </div>
           </div>
 
-          <p style={{ color: 'rgba(71, 85, 105, 0.6)', fontSize: 12, fontWeight: 500, margin: 0 }}>
-             © {new Date().getFullYear()} OpenClaw Buddy · Copyright by Randy Chen · cexlong@gmail.com
-          </p>
+          <div />
         </div>
       )}
 

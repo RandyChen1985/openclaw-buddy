@@ -4,6 +4,7 @@
 - [ ] **Token 校验**: 访问 `/v1/openclaw/status` 无 Token 时应返回 401。
 - [ ] **Bearer Token**: 携带正确 `Authorization: Bearer <token>` 时应正常访问。
 - [ ] **Cookie 校验**: 设置 `buddy_token` Cookie 后，Web 访问应无需再次登录。
+- [ ] **接口一致性**: `/login` 接口应统一使用 `s.Success` 包装，返回 `status: success` 以兼容前端拦截器。
 
 ## 2. API 接口 (API V1)
 - [ ] **状态查询**: `GET /v1/openclaw/status` 返回结构化 JSON，包含 PID 和 Runtime。
@@ -104,4 +105,4 @@
 
 ---
 > [!NOTE]
-> 记录于 2026-03-28：已完成全量接口响应标准化重构，前端拦截器同步上线。
+> 记录于 2026-03-28：已完成全量接口响应标准化重构（含 `/login` 补丁），前端拦截器与登录 UI 细节同步优化。

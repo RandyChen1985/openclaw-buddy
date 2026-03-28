@@ -57,9 +57,9 @@ func (s *Server) setupRoutes() {
 
 		if req.Token == s.cfg.Token {
 			c.SetCookie("guardian_token", req.Token, 3600*24*7, "/", "", false, true)
-			c.JSON(200, APIResponse{Code: 200, Message: "success"})
+			s.Success(c, gin.H{"status": "success"})
 		} else {
-			c.JSON(401, APIResponse{Code: 401, Message: "Invalid token"})
+			s.Error(c, http.StatusUnauthorized, "Invalid token")
 		}
 	})
 
