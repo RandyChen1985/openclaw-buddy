@@ -232,6 +232,53 @@ func SetOpenClawDefaultModel(modelID string) error {
 	return nil
 }
 
+func SetOpenClawBotModel(configDir, botID, modelID string) error {
+	configPath := filepath.Join(configDir, "openclaw.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+
+	var fullCfg map[string]interface{}
+	if err := json.Unmarshal(data, &fullCfg); err != nil {
+		return err
+	}
+
+	agents, ok := fullCfg["agents"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid config: agents key not found")
+	}
+
+	list, ok := agents["list"].([]interface{})
+	if !ok {
+		return fmt.Errorf("invalid config: agents.list not found or not an array")
+	}
+
+	found := false
+	for i := range list {
+		bot, ok := list[i].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if id, ok := bot["id"].(string); ok && id == botID {
+			bot["model"] = modelID
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("bot with ID '%s' not found in agents.list", botID)
+	}
+
+	newData, err := json.MarshalIndent(fullCfg, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(configPath, newData, 0644)
+}
+
 func GetOpenClawGatewayConfig(configDir string) (*OpenClawGatewayConfig, error) {
 	configPath := filepath.Join(configDir, "openclaw.json")
 	data, err := os.ReadFile(configPath)

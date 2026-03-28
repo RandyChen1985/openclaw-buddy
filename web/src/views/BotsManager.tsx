@@ -12,13 +12,14 @@ interface BotsManagerProps {
   onRefresh: () => void;
   onAddBot: (id: string, model: string) => Promise<void>;
   onSetIdentity: (id: string, name: string) => Promise<void>;
+  onSetBotModel: (id: string, model: string) => Promise<void>;
   onDeleteBot: (id: string) => Promise<void>;
   onSetDefaultModel: (id: string) => Promise<void>;
   onShowGlobalLoading: (message: string, duration?: number) => void; // 新增
 }
 
 const BotsManager: React.FC<BotsManagerProps> = ({ 
-  botsModels, loadingBots, isMobile, onRefresh, onAddBot, onSetIdentity, onDeleteBot, onSetDefaultModel, onShowGlobalLoading
+  botsModels, loadingBots, isMobile, onRefresh, onAddBot, onSetIdentity, onSetBotModel, onDeleteBot, onSetDefaultModel, onShowGlobalLoading
 }) => {
   const cardColors = [
     { bg: '#eff6ff', border: '#dbeafe', iconBg: '#dbeafe', theme: '#2563eb' }, // Blue
@@ -35,7 +36,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const [editForm] = Form.useForm();
   const [adding, setAdding] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [editingBot, setEditingBot] = useState<{ id: string, name: string } | null>(null);
+  const [editingBot, setEditingBot] = useState<{ id: string, name: string, model: string } | null>(null);
   const [deletingBotId, setDeletingBotId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
@@ -88,10 +89,14 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   };
 
   const handleAddProvider = async () => {
-      const hide = message.loading('正在保存提供商配置...', 0); // 添加加载遮罩
       try {
           const values = await configForm.validateFields();
           setSubmittingConfig(true);
+          
+          // 💡 立即关闭弹窗并显示全局处理遮罩 (不等待接口)
+          setIsProviderModalOpen(false);
+          onShowGlobalLoading('正在同步提供商配置...', 0); 
+          
           await api.post('/v1/openclaw/models/provider', {
               name: values.name,
               config: {
@@ -101,28 +106,30 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   api: values.api || 'openai-completions'
               }
           });
-          setIsProviderModalOpen(false); // 获取配置成功后关闭弹窗
-          onShowGlobalLoading('提供商配置已更新，后台正在处理中...', 3000); // 触发全局遮罩
+          
+          configForm.resetFields();
+          await fetchModelsConfig();
+          onShowGlobalLoading('提供商配置已同步，正在重载...', 3000);
       } catch (err: any) {
-          hide(); // 隐藏加载遮罩
-          message.error('添加失败: ' + ((err as any).response?.data?.error || (err as any).message));
+          // 发生错误时关闭遮罩并提示
+          onShowGlobalLoading('', 1);
+          if (!err.errorFields) {
+              message.error('配置保存失败: ' + ((err as any).response?.data?.error || (err as any).message));
+          }
       } finally {
           setSubmittingConfig(false);
       }
   };
   const handleAddModelToProvider = async () => {
-    const hide = message.loading('正在追加模型配置...', 0); // 添加加载遮罩
     try {
-      // 1. 先进行表单校验（会自动触发 rules 提示）
       await modelForm.validateFields();
-      
-      // 2. 显式从 form 实例中拉取所有字段（包含 preserve 的字段）
       const values = modelForm.getFieldsValue(true);
-      console.log('📦 Form Instance Data:', values);
-      
       setSubmittingConfig(true);
       
-      // 3. 构建结构化提交数据
+      // 💡 立即关闭弹窗并显示全局加载 (不等待接口)
+      setIsModelModalOpen(false);
+      onShowGlobalLoading('正在追加模型配置...', 0);
+
       const submitData = {
         provider_name: values.provider_name,
         model_config: {
@@ -136,24 +143,15 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         }
       };
 
-      console.log('🚀 Final Submit Data:', submitData);
       await api.post('/v1/openclaw/models/provider/model', submitData);
       
-      setIsModelModalOpen(false); // 成功后立即关闭弹窗
-      hide(); // 隐藏加载遮罩
-      message.success('模型已成功追加');
-      modelForm.resetFields(['id', 'name', 'reasoning']); // 仅重置模型部分，保留 provider 方便连续添加
+      modelForm.resetFields(['id', 'name', 'reasoning']);
       await Promise.all([fetchModelsConfig(), onRefresh()]);
-      onShowGlobalLoading('模型配置已更新，后台正在处理中...', 3000); // 触发全局遮罩
+      onShowGlobalLoading('模型追加成功，正在重载配置...', 3000);
     } catch (err: any) {
-      hide(); // 隐藏加载遮罩
-      if (err.errorFields) {
-        // 这是 Form 校验失败的情况
-        console.warn('⚠️ Form Validation Failed:', err.errorFields);
-        return;
-      }
-      console.error('❌ Model Add Failed:', err);
-      message.error('添加失败: ' + ((err as any).response?.data?.error || (err as any).message || '未知错误'));
+      onShowGlobalLoading('', 1);
+      if (err.errorFields) return;
+      message.error('模型追加失败: ' + ((err as any).response?.data?.error || (err as any).message || '未知错误'));
     } finally {
       setSubmittingConfig(false);
     }
@@ -176,8 +174,11 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const handleEdit = (bot: any) => {
     // 假设 bot 对象中有 ID 和目前的 Name
     // 注意: bot 结构里当前解析的是 id (OpenClaw ID) 和 name (Identity 中的名称)
-    setEditingBot({ id: bot.id, name: bot.name });
-    editForm.setFieldsValue({ name: bot.name });
+    setEditingBot({ id: bot.id, name: bot.name, model: bot.model });
+    editForm.setFieldsValue({ 
+        name: bot.name,
+        model: bot.model
+    });
     setIsEditModalOpen(true);
   };
 
@@ -186,8 +187,20 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     try {
       const values = await editForm.validateFields();
       setProcessing(true);
-      setIsEditModalOpen(false); // 同步关闭，避免重叠
-      await onSetIdentity(editingBot.id, values.name);
+      setIsEditModalOpen(false); 
+      
+      // 并发请求修改名称和模型（如果发生了变化）
+      const tasks = [];
+      if (values.name !== editingBot.name) {
+        tasks.push(onSetIdentity(editingBot.id, values.name));
+      }
+      if (values.model !== editingBot.model) {
+        tasks.push(onSetBotModel(editingBot.id, values.model));
+      }
+      
+      if (tasks.length > 0) {
+        await Promise.all(tasks);
+      }
     } catch (err) {
       // 错误已在 App.tsx 处理
     } finally {
@@ -239,20 +252,22 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       content: `您确定要从提供商 [${providerName}] 中删除模型 [${modelID}] 吗？`,
       okText: '删除',
       cancelText: '取消',
-      onOk: async () => {
-        const hide = message.loading('正在删除模型...', 0); // 添加加载遮罩
-        try {
-          await api.delete('/v1/openclaw/models/provider/model', {
-            data: { provider_name: providerName, model_id: modelID }
-          });
-          hide(); // 隐藏加载遮罩
-          message.success('模型已成功删除');
-          await Promise.all([fetchModelsConfig(), onRefresh()]);
-          onShowGlobalLoading('模型配置已更新，后台正在处理中...', 3000); // 触发全局遮罩
-        } catch (err: any) {
-          hide(); // 隐藏加载遮罩
-          message.error('删除失败: ' + ((err as any).response?.data?.error || (err as any).message));
-        }
+      onOk: () => {
+        // 💡 立即触发删除操作并开启遮罩，不使用 promise 阻塞 Modal
+        onShowGlobalLoading('正在删除模型配置...', 0);
+        const performDelete = async () => {
+          try {
+            await api.delete('/v1/openclaw/models/provider/model', {
+              data: { provider_name: providerName, model_id: modelID }
+            });
+            await Promise.all([fetchModelsConfig(), onRefresh()]);
+            onShowGlobalLoading('模型已移除，资产清单正在更新...', 3000);
+          } catch (err: any) {
+            onShowGlobalLoading('', 1);
+            message.error('删除请求失败: ' + ((err as any).response?.data?.error || (err as any).message));
+          }
+        };
+        performDelete();
       }
     });
   };
@@ -359,7 +374,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(255,255,255,0.4)', padding: 12, borderRadius: 12 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                        <span style={{ color: '#64748b' }}>关联模型</span>
+                        <span style={{ color: '#64748b' }}>默认模型</span>
                         <span style={{ color: color.theme, fontWeight: 700 }}>{bot.model || '未设定'}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
@@ -895,6 +910,22 @@ const BotsManager: React.FC<BotsManagerProps> = ({
               rules={[{ required: true, message: '请输出新的显示名称' }]}
             >
               <Input placeholder="输入新的显示名称" autoFocus />
+            </Form.Item>
+            <Form.Item 
+              label="默认模型" 
+              name="model" 
+              rules={[{ required: true, message: '请选择默认模型' }]}
+            >
+              <Select placeholder="选择此机器人默认使用的模型">
+                {botsModels?.data?.models?.map((m: any) => (
+                  <Select.Option key={m.id} value={m.id}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                       <span style={{ fontWeight: 600, fontSize: 13 }}>{m.name || m.id}</span>
+                       <span style={{ fontSize: 11, color: '#94a3b8' }}>{m.id}</span>
+                    </div>
+                  </Select.Option>
+                ))}
+              </Select>
             </Form.Item>
           </Form>
         </div>

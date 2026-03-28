@@ -447,6 +447,27 @@ func (s *Server) setOpenClawBotIdentity(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "名称修改成功"})
 }
 
+func (s *Server) setOpenClawBotModel(c *gin.Context) {
+	var req struct {
+		ID    string `json:"id" binding:"required"`
+		Model string `json:"model" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误，请检查机器人 ID 和模型 ID 是否正确"})
+		return
+	}
+
+	if err := process.SetOpenClawBotModel(s.cfg.OpenClawConfigDir, req.ID, req.Model); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 成功后强制同步缓存
+	process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "机器人默认模型修改成功"})
+}
+
 func (s *Server) deleteOpenClawBot(c *gin.Context) {
 	var req struct {
 		ID string `json:"id" binding:"required"`

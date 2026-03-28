@@ -102,24 +102,66 @@ OpenClaw Buddy 提供了一套标准的 RESTful API 供外部系统集成或移�
 - **Header**: `Authorization`
 - **Value**: `Bearer <YOUR_BUDDY_TOKEN>`
 
-### 核心接口预览
+### 核心接口说明 (By Module)
 
-| 路径                                 | 方法     | 功能说明                                                        |
-| :----------------------------------- | :------- | :-------------------------------------------------------------- |
-| `/v1/openclaw/status`              | GET      | 获取网关核心运行状态、版本及运行时长                            |
-| `/v1/gateway/start`                | POST     | 启动小龙虾网关进程                                              |
-| `/v1/gateway/stop`                 | POST     | 停止小龙虾网关进程                                              |
-| `/v1/gateway/restart`              | POST     | 重启网关 (**异步接口**，返回 `{"taskId": "..."}`)       |
-| `/v1/tasks/status`                 | GET      | 查询异步任务状态 (Query:`?taskId=...`)                        |
-| `/v1/openclaw/devices`             | GET      | 获取设备列表 (包含待处理与已配对)                               |
-| `/v1/openclaw/devices/approve`     | POST     | 批准设备接入 (Body:`{"requestId": "..."}`)                    |
-| `/v1/openclaw/bots-models`         | GET      | 获取机器人信息 (**支持缓存**，`?refresh=true` 强制刷新) |
-| `/v1/openclaw/chat/completions`    | POST     | **流式对话服务** (支持 OpenAI 协议格式)                   |
-| `/v1/openclaw/chat/quick-commands` | GET/POST | 获取或添加聊天快捷指令                                          |
-| `/v1/wechat/qrcode`                | GET      | 获取微信插件登录二维码 (流式解析)                               |
-| `/v1/stats/health`                 | GET      | 获取近 24 小时或历史心跳延迟统计数据                            |
+#### 📊 运行状态 (Dashboard)
+| 路径 | 方法 | 功能说明 |
+| :--- | :--- | :--- |
+| `/v1/openclaw/status` | GET | 获取网关核心运行状态、版本及运行时长 |
+| `/v1/openclaw/dashboard-url` | GET | **计算并返回** 龙虾面板 (External Dashboard) 的访问地址 |
+| `/v1/gateway/start` | POST | 启动小龙虾网关进程 |
+| `/v1/gateway/stop` | POST | 停止小龙虾网关进程 |
+| `/v1/gateway/restart` | POST | 重启网关 (**异步接口**，返回 `taskId`) |
+| `/v1/tasks/status` | GET | 查询异步任务执行进度 (Query:`?taskId=...`) |
+| `/v1/stats/health` | GET | 获取近 24 小时心跳延迟统计数据 |
 
-## ⚙️ 配置文件说明 (env)
+#### 💬 在线聊天 (Online Chat)
+| 路径 | 方法 | 功能说明 |
+| :--- | :--- | :--- |
+| `/v1/openclaw/chat/completions` | POST | **OpenAI 兼容流式对话服务** |
+| `/v1/openclaw/chat/quick-commands` | GET/POST/DEL | 管理对话实验室的快捷指令话术 |
+| `/v1/openclaw/chat/status` | GET | 检查网关是否已开启 `chatCompletions` 配置 |
+| `/v1/openclaw/sessions` | GET | 获取当前网关活跃的会话详情与上下文使用情况 |
+
+#### 🤖 虾兵蟹将 (Bots & Models)
+| 路径 | 方法 | 功能说明 |
+| :--- | :--- | :--- |
+| `/v1/openclaw/bots-models` | GET | 获取机器人/模型资产清单 (`?refresh=true` 强制同步) |
+| `/v1/openclaw/models/provider` | POST | 动态添加 API 提供商配置 (BaseURL/ApiKey/API型) |
+| `/v1/openclaw/models/provider/model` | POST/DEL | 向特定渠道追加或删除模型定义 |
+| `/v1/openclaw/models/set-default` | POST | 设定系统全局默认模型 |
+| `/v1/openclaw/bots/add` | POST | 在线创建并初始化新的小龙虾机器人 (隔离工作区) |
+| `/v1/openclaw/bots/set-identity` | POST | 修改机器人的显示名称 (Identity Name) |
+| `/v1/openclaw/bots/set-model` | POST | 在线修改并覆盖指定机器人的默认模型分配 |
+| `/v1/openclaw/bots/delete` | POST | 彻底移除机器人并清理相关数据目录 |
+
+#### 🕹️ 技能管理 (Skills)
+| 路径 | 方法 | 功能说明 |
+| :--- | :--- | :--- |
+| `/v1/openclaw/skills` | GET | 获取已安装的技能列表与详情 (`?refresh=true` 同步) |
+| `/v1/openclaw/skills/:name` | DELETE | 卸载特定的小龙虾技能插件 |
+| `/v1/openclaw/skills/reload` | POST | 重新加载系统规则与所有技能插件 |
+
+#### 🔌 渠道绑定 (Channels)
+| 路径 | 方法 | 功能说明 |
+| :--- | :--- | :--- |
+| `/v1/wechat/config/status` | GET | 获取当前微信渠道的绑定状态与配置 |
+| `/v1/wechat/install` | POST | 触发微信控制插件的自动化下载与安装 |
+| `/v1/wechat/qrcode` | GET | **流式获取** 微信插件登录二维码 (支持实时捕获) |
+
+#### 📱 设备中心 (Devices)
+| 路径 | 方法 | 功能说明 |
+| :--- | :--- | :--- |
+| `/v1/openclaw/devices` | GET | 获取设备列表 (包含待处理请求与已配对设备) |
+| `/v1/openclaw/devices/approve` | POST | 在线批准新设备的接入请求 |
+
+#### 🩺 自愈管理 (Self-Healing)
+| 路径 | 方法 | 功能说明 |
+| :--- | :--- | :--- |
+| `/v1/heal/events` | GET | 查询历史自愈事件、原因及处置结果 |
+| `/v1/settings/self-healing` | GET/POST | 开启或禁用 Buddy 自动巡检与故障恢复功能 |
+
+### ⚙️ 配置文件说明 (env)
 
 ```env
 WEB_PORT=3000                 # Guardian 面板端口

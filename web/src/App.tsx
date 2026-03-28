@@ -333,6 +333,24 @@ const Dashboard = () => {
     }
   };
 
+  const handleSetBotModel = async (id: string, model: string) => {
+    setTargetStatus('setting_bot_model');
+    setIsTransitioning(true);
+    setTransitionSeconds(0);
+    try {
+      await api.post('/v1/openclaw/bots/set-model', { id, model });
+      message.success(`机器人 ${id} 的默认模型已切换为 ${model}`);
+      await fetchBotsModels(true);
+    } catch (err: any) {
+      const msg = err.response?.data?.error || '修改模型失败';
+      message.error(msg);
+      throw err;
+    } finally {
+      setIsTransitioning(false);
+      setTargetStatus(null);
+    }
+  };
+
   const handleDeleteBot = async (id: string) => {
     setTargetStatus('deleting_bot');
     setIsTransitioning(true);
@@ -410,6 +428,7 @@ const Dashboard = () => {
           onRefresh={() => fetchBotsModels(true)}
           onAddBot={handleAddBot}
           onSetIdentity={handleSetBotIdentity}
+          onSetBotModel={handleSetBotModel}
           onDeleteBot={handleDeleteBot}
           onSetDefaultModel={handleSetDefaultModel}
           onShowGlobalLoading={onShowGlobalLoading}
@@ -463,18 +482,20 @@ const Dashboard = () => {
               <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>
                 {targetStatus === 'adding_bot' && '正在创建机器人'}
                 {targetStatus === 'setting_identity' && '正在修改身份'}
+                {targetStatus === 'setting_bot_model' && '正在修改模型分配'}
                 {targetStatus === 'deleting_bot' && '正在移除机器人'}
                 {targetStatus === 'setting_default_model' && '正在切换默认模型'}
                 {targetStatus === 'approving_device' && '正在批准设备接入'}
-                {!['adding_bot', 'setting_identity', 'deleting_bot', 'setting_default_model', 'approving_device'].includes(targetStatus as string) && '正在同步网关状态'}
+                {!['adding_bot', 'setting_identity', 'setting_bot_model', 'deleting_bot', 'setting_default_model', 'approving_device'].includes(targetStatus as string) && '正在同步网关状态'}
               </div>
               <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>
                 {targetStatus === 'adding_bot' && '小龙虾正在加紧孵化中，请稍后...'}
                 {targetStatus === 'setting_identity' && '正在同步身份信息，请稍后...'}
+                {targetStatus === 'setting_bot_model' && '正在重新分配 AI 核心，请稍后...'}
                 {targetStatus === 'deleting_bot' && '正在彻底清理相关数据，请稍后...'}
                 {targetStatus === 'setting_default_model' && '正在更新全局 AI 核心，请稍后...'}
                 {targetStatus === 'approving_device' && '正在授权设备访问权限，请稍后...'}
-                {!['adding_bot', 'setting_identity', 'deleting_bot', 'setting_default_model', 'approving_device'].includes(targetStatus as string) && '指令已确认，正在等待网关反馈状态...'}
+                {!['adding_bot', 'setting_identity', 'setting_bot_model', 'deleting_bot', 'setting_default_model', 'approving_device'].includes(targetStatus as string) && '指令已确认，正在等待网关反馈状态...'}
               </div>
               <div style={{
                 marginTop: 16, padding: '6px 16px', background: '#eff6ff',
@@ -493,7 +514,7 @@ const Dashboard = () => {
                 borderRadius: 20, fontSize: 13, color: '#2563eb',
                 fontWeight: 700, display: 'inline-block', border: '1px solid #dbeafe'
               }}>
-                自动关闭倒计时 {globalLoadingCountdown}s
+                {globalLoadingCountdown > 0 ? `自动关闭倒计时 ${globalLoadingCountdown}s` : '后台正在同步资产清单，请稍候...'}
               </div>
             </>
           ) : null}

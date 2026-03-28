@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form } from 'antd';
-import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ExternalLink, Share2 } from 'lucide-react';
+import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ExternalLink, Share2, ChevronUp, ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -56,6 +56,9 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   
   // 快捷指令相关状态
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
+  const [showQuickActions, setShowQuickActions] = useState<boolean>(() => {
+    return localStorage.getItem('chat_show_quick_actions') !== 'false';
+  });
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [form] = Form.useForm();
 
@@ -772,27 +775,61 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         {/* Input Area */}
         <div style={{ padding: isMobile ? '12px' : '16px 24px', background: '#fff', borderTop: '1px solid #f1f5f9' }}>
           {/* Quick Actions */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', flex: 1, paddingBottom: 4, scrollbarWidth: 'none' }}>
-              {quickCommands.map(item => (
-                <Button 
-                  key={item.id}
-                  size="small"
-                  style={{ borderRadius: 16, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, background: '#f8fafc', color: '#64748b', borderColor: '#e2e8f0', flexShrink: 0 }}
-                  onClick={() => handleSend(item.prompt)}
-                >
-                  {item.label}
-                </Button>
-              ))}
-            </div>
-            <Button 
-                type="text" 
-                size="small" 
-                icon={<Settings size={14} />} 
-                style={{ color: '#94a3b8', background: '#f1f5f9', borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onClick={() => setIsManageModalOpen(true)}
-                title="管理快捷指令"
-            />
+          <div style={{ display: 'flex', gap: 8, marginBottom: showQuickActions ? 12 : 8, alignItems: 'center', transition: 'all 0.3s ease' }}>
+            {showQuickActions ? (
+              <>
+                <div style={{ display: 'flex', gap: 8, overflowX: 'auto', flex: 1, paddingBottom: 4, scrollbarWidth: 'none' }}>
+                  {quickCommands.map(item => (
+                    <Button 
+                      key={item.id}
+                      size="small"
+                      style={{ borderRadius: 16, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, background: '#f8fafc', color: '#64748b', borderColor: '#e2e8f0', flexShrink: 0 }}
+                      onClick={() => handleSend(item.prompt)}
+                    >
+                      {item.label}
+                    </Button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <Button 
+                    type="text" 
+                    size="small" 
+                    icon={<Settings size={14} />} 
+                    style={{ color: '#94a3b8', background: '#f1f5f9', borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={() => setIsManageModalOpen(true)}
+                    title="管理快捷指令"
+                  />
+                  <Button 
+                    type="text" 
+                    size="small" 
+                    icon={<ChevronUp size={16} />} 
+                    style={{ color: '#94a3b8', background: '#f1f5f9', borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={() => {
+                        setShowQuickActions(false);
+                        localStorage.setItem('chat_show_quick_actions', 'false');
+                    }}
+                    title="收起快捷指令"
+                  />
+                </div>
+              </>
+            ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                    <div style={{ height: 1, flex: 1, background: '#f1f5f9' }}></div>
+                    <Button 
+                        type="text" 
+                        size="small" 
+                        icon={<ChevronDown size={14} style={{ marginRight: 4 }} />}
+                        onClick={() => {
+                            setShowQuickActions(true);
+                            localStorage.setItem('chat_show_quick_actions', 'true');
+                        }}
+                        style={{ fontSize: 11, color: '#94a3b8', height: 20, padding: '0 8px', borderRadius: 10, background: '#f8fafc', display: 'flex', alignItems: 'center' }}
+                    >
+                        展开快捷指令
+                    </Button>
+                    <div style={{ height: 1, flex: 1, background: '#f1f5f9' }}></div>
+                </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: isMobile ? 8 : 12, alignItems: 'flex-end' }}>
