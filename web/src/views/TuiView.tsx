@@ -1,9 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
-import { Card, Breadcrumb, message } from 'antd';
+import { message, Button, Tooltip, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
+import { RotateCcw, XCircle } from 'lucide-react';
 
 const TuiView: React.FC = () => {
   const { t } = useTranslation();
@@ -11,6 +12,20 @@ const TuiView: React.FC = () => {
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const [sessionKey, setSessionKey] = useState(0);
+
+  const handleRestart = () => {
+    setSessionKey(prev => prev + 1);
+    message.success(t('common.restarting', { defaultValue: '正在重启终端...' }));
+  };
+
+  const handleInterrupt = () => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      // 发送 Ctrl+C (\x03) 指令
+      socketRef.current.send('\x03');
+      message.info(t('common.interruptSent', { defaultValue: '已发送中断信号 (Ctrl+C)' }));
+    }
+  };
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -29,10 +44,12 @@ const TuiView: React.FC = () => {
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(terminalRef.current);
+    term.focus();
     
     // 给 DOM 渲染留一点时间后再计算尺寸
     const initialFit = setTimeout(() => {
       fitAddon.fit();
+      term.focus(); // 再次确保聚焦
       if (socketRef.current?.readyState === WebSocket.OPEN) {
         sendResize();
       }
@@ -105,24 +122,76 @@ const TuiView: React.FC = () => {
       clearTimeout(initialFit);
       socket.close();
       term.dispose();
+      xtermRef.current = null;
     };
-  }, [t]);
+  }, [t, sessionKey]);
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Breadcrumb items={[
-          { title: t('common.console') },
-          { title: t('common.tuiChat') }
-        ]} />
+    <div 
+      style={{ 
+        height: '100%', 
+        width: '100%', 
+        background: '#0f172a',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        position: 'relative'
+      }}
+    >
+      {/* 悬浮操作按钮组 */}
+      <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 100 }}>
+        <Space>
+          <Tooltip title={t('common.interrupt', { defaultValue: '强制中断 (Ctrl+C)' })}>
+            <Button 
+              shape="circle" 
+              icon={<XCircle size={18} />} 
+              onClick={handleInterrupt}
+              style={{ 
+                background: 'rgba(239, 68, 68, 0.2)', 
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                color: '#fca5a5',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+              }} 
+              className="hover:bg-red-500/30 hover:scale-110 active:scale-95 transition-all"
+            />
+          </Tooltip>
+
+          <Tooltip title={t('common.restartTerminal', { defaultValue: '重启终端' })}>
+            <Button 
+              shape="circle" 
+              icon={<RotateCcw size={18} />} 
+              onClick={handleRestart}
+              style={{ 
+                background: 'rgba(255, 255, 255, 0.1)', 
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                color: '#fff',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+              }} 
+              className="hover:scale-110 active:scale-95 transition-all"
+            />
+          </Tooltip>
+        </Space>
       </div>
 
-      <Card 
-        styles={{ body: { padding: 0, height: 'calc(100vh - 120px)', background: '#0f172a' } }}
-        style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #1e293b' }}
-      >
-        <div ref={terminalRef} style={{ height: '100%', width: '100%', padding: '12px' }} />
-      </Card>
+      <div 
+        ref={terminalRef} 
+        tabIndex={0}
+        onClick={() => {
+          if (xtermRef.current) {
+            xtermRef.current.focus();
+            xtermRef.current.scrollToBottom();
+          }
+        }}
+        style={{ 
+          height: '100%', 
+          width: '100%', 
+          padding: '12px',
+          cursor: 'text',
+          outline: 'none'
+        }} 
+      />
     </div>
   );
 };

@@ -718,20 +718,23 @@ const Dashboard = () => {
           background: '#f8fafc', 
           display: 'flex', 
           flexDirection: 'column',
-          padding: activeTab === 'chat' || activeTab === 'logs' ? 0 : 24,
-          overflow: activeTab === 'chat' || activeTab === 'logs' ? 'hidden' : 'auto'
+          padding: activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' ? 0 : 24,
+          overflow: activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' ? 'hidden' : 'auto'
         }}>
           {renderContent()}
         </div>
       ) : isMobile ? (
         <Layout style={{ 
-          height: (activeTab === 'chat' || activeTab === 'logs') ? '100vh' : 'auto', 
+          height: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui') ? '100vh' : 'auto', 
           minHeight: '100vh',
           background: '#f8fafc', 
-          overflow: (activeTab === 'chat' || activeTab === 'logs') ? 'hidden' : 'auto' 
+          overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui') ? 'hidden' : 'auto' 
         }}>
           {headerEl(() => setMobileMenuOpen(true))}
-          <Content style={{ padding: 16, background: '#f8fafc' }}>
+          <Content style={{ 
+            padding: activeTab === 'tui' || activeTab === 'chat' || activeTab === 'logs' ? 0 : 16, 
+            background: activeTab === 'tui' ? '#0f172a' : '#f8fafc' 
+          }}>
             {renderContent()}
           </Content>
           <Drawer
@@ -752,10 +755,10 @@ const Dashboard = () => {
         </Layout>
       ) : (
         <Layout style={{ 
-          height: (activeTab === 'chat' || activeTab === 'logs') ? '100vh' : 'auto', 
+          height: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui') ? '100vh' : 'auto', 
           minHeight: '100vh',
           background: '#f8fafc', 
-          overflow: (activeTab === 'chat' || activeTab === 'logs') ? 'hidden' : 'auto' 
+          overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui') ? 'hidden' : 'auto' 
         }}>
           <Sider
             width={220} collapsedWidth={64} collapsed={collapsed} onCollapse={setCollapsed}
@@ -773,15 +776,15 @@ const Dashboard = () => {
           <Layout style={{ 
             marginLeft: collapsed ? 64 : 220, 
             transition: 'margin-left 0.2s', 
-            height: (activeTab === 'chat' || activeTab === 'logs') ? '100vh' : 'auto', 
+            height: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui') ? '100vh' : 'auto', 
             minHeight: 0,
             display: 'flex', 
             flexDirection: 'column', 
-            overflow: (activeTab === 'chat' || activeTab === 'logs') ? 'hidden' : 'auto' 
+            overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui') ? 'hidden' : 'auto' 
           }}>
             {headerEl(() => setCollapsed(!collapsed))}
             <Content style={{ 
-              padding: activeTab === 'logs' || activeTab === 'chat' ? 0 : 24, 
+              padding: activeTab === 'logs' || activeTab === 'chat' || activeTab === 'tui' ? 0 : 24, 
               background: '#f8fafc', 
               flex: 1,
               display: 'flex', 
