@@ -64,6 +64,7 @@ func (g *Guardian) Run(ctx context.Context) {
 		g.feishu.StartLongConnection(ctx)
 		hostname, _ := os.Hostname()
 		status := process.GetGatewayStatus()
+		utils.RecordSystemEvent("INFO", "🛡️ OpenClaw Buddy 监控服务已启动")
 		g.notifyFeishu(context.Background(), "🛡️ OpenClaw Buddy 监控服务已启动", fmt.Sprintf("节点: %s\n状态: ✅ 监控运行中\n版本: 🦞 OpenClaw Buddy\n\n---\n**OpenClaw 状态详情:**\n%s", hostname, status))
 	}
 
@@ -268,6 +269,7 @@ func (g *Guardian) heal(reason string) {
 
 	hostname, _ := os.Hostname()
 	statusBefore := process.GetGatewayStatus()
+	utils.RecordSystemEvent("HEAL", fmt.Sprintf("检测到服务宕机 (%s)，启动自愈程序", reason))
 	g.notifyFeishu(context.Background(), "⚠️ 小龙虾故障报警", fmt.Sprintf("节点: %s\n状态: ⚠️ 检测到服务宕机\n原因: %s\n正在尝试自愈...\n\n---\n**当前状态详情:**\n%s", hostname, reason, statusBefore))
 
 	configPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json")
@@ -396,6 +398,7 @@ func (g *Guardian) checkVersionUpdate() {
 	if err := utils.SetSetting("latest_version", latestVersion); err != nil {
 		log.Printf("❌ [Update] 存储最新版本号失败: %v", err)
 	} else {
+		utils.RecordSystemEvent("UPDATE", fmt.Sprintf("发现新版本: %s", latestVersion))
 		log.Printf("📡 [Update] 版本检查完成，当前最新版本: %s", latestVersion)
 	}
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Row, Col, Card, Tag, Progress, Button, Skeleton, Spin } from 'antd';
-import { Server, Activity, Play, Square, RefreshCw, Smartphone, Terminal } from 'lucide-react';
+import { Row, Col, Card, Tag, Progress, Button, Skeleton, Spin, Timeline } from 'antd';
+import { Server, Activity, Play, Square, RefreshCw, Smartphone, Terminal, History, Trophy, AlertTriangle, Zap, Download } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
 import dayjs from 'dayjs';
 
@@ -11,9 +11,14 @@ interface DashboardOverviewProps {
   isRunning: boolean;
   onControl: (action: string) => void;
   onNavigate?: (key: string) => void;
+  systemEvents?: any[];
+  topBots?: any[];
 }
 
-const DashboardOverview: React.FC<DashboardOverviewProps> = ({ status, history, wsLogs, isRunning, onControl, onNavigate }) => {
+const DashboardOverview: React.FC<DashboardOverviewProps> = ({ 
+  status, history, wsLogs, isRunning, onControl, onNavigate,
+  systemEvents = [], topBots = []
+}) => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -22,7 +27,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ status, history, 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
 
   const renderChart = (data: any[], dataKey: string, color: string, label: string, unit: string) => (
     <div style={{ height: 120 }}>
@@ -58,7 +62,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ status, history, 
         {/* 左侧：核心状态与负载 */}
         <Col xs={24} lg={10}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20, height: '100%' }}>
-            <Card styles={{ body: { padding: 24 } }} style={{ borderRadius: 12, border: '1px solid #e2e8f0', flex: 1 }}>
+            <Card styles={{ body: { padding: 24 } }} style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: 13, fontWeight: 500 }}>
                   <Server size={15} color={isRunning ? '#22c55e' : '#ef4444'} />
@@ -88,7 +92,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ status, history, 
                 </div>
               </div>
               
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
                     <span style={{ color: '#64748b', fontWeight: 500 }}>CPU 当前负载</span>
@@ -104,17 +108,41 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ status, history, 
                   <Progress percent={status?.metrics?.memory_usage} showInfo={false} strokeColor="#8b5cf6" trailColor="#f5f3ff" strokeWidth={6} />
                 </div>
               </div>
+            </Card>
 
-              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16, display: 'flex', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>PID</div>
-                  <div style={{ fontFamily: 'monospace', color: '#334155', fontWeight: 700, fontSize: 14 }}>{status?.gateway?.pid || '---'}</div>
+            {/* 机器人活跃榜 (Bot Top) */}
+            <Card 
+              styles={{ body: { padding: '20px 24px' } }} 
+              style={{ borderRadius: 12, border: '1px solid #e2e8f0', flex: 1 }}
+              title={<span style={{ fontSize: 13, fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}><Trophy size={14} color="#f59e0b" /> 机器人资源活跃榜 (Top Bots)</span>}
+            >
+              {topBots.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px 0', color: '#94a3b8', fontSize: 12 }}>
+                  暂无活跃会话数据
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>最后同步</div>
-                  <div style={{ fontFamily: 'monospace', color: '#64748b', fontSize: 13 }}>{dayjs().format('HH:mm:ss')}</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {topBots.map((bot, idx) => (
+                    <div key={bot.id}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 16 }}>{bot.emoji}</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{bot.name}</span>
+                        </div>
+                        <Tag color="blue" bordered={false} style={{ margin: 0, fontSize: 10, borderRadius: 4 }}>
+                          {bot.sessions} 活跃会话
+                        </Tag>
+                      </div>
+                      <Progress 
+                        percent={Math.min(100, (bot.sessions / 10) * 100)} 
+                        showInfo={false} 
+                        strokeColor={idx === 0 ? '#f59e0b' : idx === 1 ? '#3b82f6' : '#8b5cf6'} 
+                        strokeWidth={6} 
+                      />
+                    </div>
+                  ))}
                 </div>
-              </div>
+              )}
             </Card>
           </div>
         </Col>
@@ -137,6 +165,39 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ status, history, 
               </Row>
               <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 20 }}>
                 {renderChart(history, 'response_time_ms', '#10b981', '网关延迟 (TTFT)', 'ms')}
+              </div>
+            </div>
+
+            {/* 巡检事件轨迹 (Timeline) */}
+            <div style={{ marginTop: 24, borderTop: '1px solid #f1f5f9', paddingTop: 24 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 20 }}>
+                <History size={15} color="#64748b" /> 巡检历史轨迹 (Inspection Timeline)
+              </div>
+              <div style={{ height: 260, overflowY: 'auto', paddingRight: 10 }}>
+                <Timeline
+                  items={systemEvents.map(ev => ({
+                    color: ev.event_type === 'HEAL' ? 'red' : ev.event_type === 'UPDATE' ? 'blue' : ev.event_type === 'CONTROL' ? 'green' : 'gray',
+                    children: (
+                      <div style={{ fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingRight: 4 }}>
+                        <span style={{ fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                          {ev.event_type === 'HEAL' && <AlertTriangle size={12} />}
+                          {ev.event_type === 'UPDATE' && <Download size={12} />}
+                          {ev.event_type === 'CONTROL' && <Zap size={12} />}
+                          {ev.message}
+                        </span>
+                        <span style={{ color: '#94a3b8', fontSize: 11, flexShrink: 0, fontFamily: 'monospace' }}>
+                          {dayjs(ev.timestamp).format('HH:mm:ss')}
+                        </span>
+                      </div>
+                    ),
+                  }))}
+                  style={{ paddingTop: 8 }}
+                />
+                {systemEvents.length === 0 && (
+                  <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 12, padding: '20px 0' }}>
+                    暂无巡检记录
+                  </div>
+                )}
               </div>
             </div>
           </Card>
@@ -194,7 +255,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ status, history, 
         </div>
       </Card>
 
-      {/* 实时监控日志 - 重新加入 */}
+      {/* 实时监控日志 */}
       <Card
         title={<span style={{ fontSize: 13, fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}><Terminal size={15} color="#64748b" /> 实时巡检日志 (Local Monitor)</span>}
         styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 52 }, body: { padding: 0, overflow: 'hidden' } }}

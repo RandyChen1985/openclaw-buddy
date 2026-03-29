@@ -64,6 +64,8 @@ const Dashboard = () => {
   const [loadingSets, setLoadingSets] = useState(false);
   const [commandPaletteVisible, setCommandPaletteVisible] = useState(false);
   const [versionUpdate, setVersionUpdate] = useState<{ latest: string, current: string, release_url: string } | null>(null);
+  const [systemEvents, setSystemEvents] = useState<any[]>([]);
+  const [topBots, setTopBots] = useState<any[]>([]);
 
   // Hooks
   const { status, history, fetching, refreshCountdown } = useStatusPolling(
@@ -93,6 +95,10 @@ const Dashboard = () => {
   }, [isGettingQR]);
 
   useEffect(() => {
+    if (activeTab === 'dashboard') {
+      fetchSystemEvents();
+      fetchTopBots();
+    }
     if (activeTab === 'bots-models' || activeTab === 'chat') fetchBotsModels();
     if (activeTab === 'components') {
       fetchChatChannels();
@@ -206,6 +212,20 @@ const Dashboard = () => {
       ]);
       setHealEvents(Array.isArray(historyRes.data) ? historyRes.data : historyRes.data?.events || []);
       setSelfHealingEnabled(settingsRes.data?.enabled || false);
+    } catch (err) {}
+  };
+  
+  const fetchSystemEvents = async () => {
+    try {
+      const res = await api.get('/v1/system/events');
+      setSystemEvents(res.data);
+    } catch (err) {}
+  };
+
+  const fetchTopBots = async () => {
+    try {
+      const res = await api.get('/v1/openclaw/bots/top');
+      setTopBots(res.data);
     } catch (err) {}
   };
 
@@ -518,7 +538,18 @@ const Dashboard = () => {
 
   const renderContent = () => {
     const viewMap: Record<string, React.ReactNode> = {
-      'dashboard': <DashboardOverview status={status} history={history} wsLogs={wsLogs} isRunning={isRunning} onControl={handleControl} onNavigate={setActiveTab} />,
+      'dashboard': (
+        <DashboardOverview 
+          status={status} 
+          history={history} 
+          wsLogs={wsLogs} 
+          isRunning={isRunning} 
+          onControl={handleControl} 
+          onNavigate={setActiveTab}
+          systemEvents={systemEvents}
+          topBots={topBots}
+        />
+      ),
       'bots-models': (
         <BotsManager 
           botsModels={botsModels} loadingBots={loadingBots} isMobile={isMobile} 

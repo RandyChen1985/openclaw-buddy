@@ -211,6 +211,7 @@ func (s *Server) runAsyncCommand(c *gin.Context, taskName string, args ...string
 }
 
 func (s *Server) startGateway(c *gin.Context) {
+	utils.RecordSystemEvent("CONTROL", "用户手动请求【启动网关】")
 	s.runAsyncCommand(c, "启动网关", "gateway", "start")
 }
 
@@ -227,6 +228,7 @@ func (s *Server) stopGateway(c *gin.Context) {
 		}
 	}()
 
+	utils.RecordSystemEvent("CONTROL", "用户手动请求【停止网关】")
 	c.JSON(http.StatusAccepted, APIResponse{
 		Code:    202,
 		Message: "Stop command initiated with force fallback",
@@ -247,6 +249,7 @@ func (s *Server) restartGateway(c *gin.Context) {
 		}
 	}()
 
+	utils.RecordSystemEvent("CONTROL", "用户手动请求【重启网关】")
 	c.JSON(http.StatusAccepted, APIResponse{
 		Code:    202,
 		Message: "Restart command initiated (Stop + Start)",
@@ -973,4 +976,97 @@ func (s *Server) getSystemVersion(c *gin.Context) {
 		"latest":      latest,
 		"release_url": "https://github.com/RandyChen1985/openclaw-buddy/releases",
 	})
+}
+
+func (s *Server) getSystemEvents(c *gin.Context) {
+	rows, err := utils.DB.Query(`
+		SELECT id, timestamp, event_type, message 
+		FROM system_events 
+		ORDER BY timestamp DESC 
+		LIMIT 20
+	`)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer rows.Close()
+
+	type SystemEvent struct {
+		ID        int    `json:"id"`
+		Timestamp string `json:"timestamp"`
+		Type      string `json:"event_type"`
+		Message   string `json:"message"`
+	}
+
+	events := []SystemEvent{}
+	for rows.Next() {
+		var ev SystemEvent
+		if err := rows.Scan(&ev.ID, &ev.Timestamp, &ev.Type, &ev.Message); err != nil {
+			continue
+		}
+		events = append(events, ev)
+	}
+	s.Success(c, events)
+}
+
+func (s *Server) getTopBots(c *gin.Context) {
+	sessions, err := process.GetOpenClawSessions()
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// 聚合分析：统计每个 Agent 的活跃会话
+	stats := make(map[string]int)
+	for _, sess := range sessions {
+		stats[sess.AgentID]++
+	}
+
+	// 获取所有机器人名称信息以丰富结果
+	botsData, _ := process.GetOpenClawBotsModels(s.cfg.OpenClawConfigDir)
+	botNames := make(map[string]string)
+	botEmojis := make(map[string]string)
+	if botsData != nil {
+		for _, b := range botsData.Bots {
+			botNames[b.ID] = b.Name
+			botEmojis[b.ID] = b.Emoji
+		}
+	}
+
+	type BotRank struct {
+		ID       string `json:"id"`
+		Name     string `json:"name"`
+		Emoji    string `json:"emoji"`
+		Sessions int    `json:"sessions"`
+	}
+
+	ranks := []BotRank{}
+	for id, count := range stats {
+		name := id
+		if n, ok := botNames[id]; ok {
+			name = n
+		}
+		emoji := "🤖"
+		if e, ok := botEmojis[id]; ok {
+			emoji = e
+		}
+		ranks = append(ranks, BotRank{
+			ID:       id,
+			Name:     name,
+			Emoji:    emoji,
+			Sessions: count,
+		})
+	}
+
+	// 按会话数倒序排序
+	sort.Slice(ranks, func(i, j int) bool {
+		return ranks[i].Sessions > ranks[j].Sessions
+	})
+
+	// 仅返回前 3 名
+	if len(ranks) > 3 {
+		ranks = ranks[:3]
+	}
+
+	s.Success(c, ranks)
 }
