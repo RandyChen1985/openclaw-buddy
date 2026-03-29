@@ -100,7 +100,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
           width: 100%;
           height: 100%;
           border-radius: 50%;
-          border: 2px solid #3b82f6;
+          border: 2px solid var(--radar-color, #3b82f6);
           animation: radar-scan 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
         }
       `}</style>
@@ -130,11 +130,11 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
             {weixinStatus === null ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <span style={{ fontSize: 13, color: '#3b82f6', fontWeight: 600 }}>监测中 ({checkWeixinSeconds}s)</span>
-                <div className="radar-pulse-container" style={{ width: 32, height: 32 }}>
+                <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>监测中 ({checkWeixinSeconds}s)</span>
+                <div className="radar-pulse-container" style={{ width: 32, height: 32, '--radar-color': '#ef4444' } as any}>
                   <div className="radar-ring"></div>
                   <div className="radar-ring" style={{ animationDelay: '0.5s' }}></div>
-                  <Radar size={24} color="#3b82f6" style={{ position: 'relative', zIndex: 1 }} />
+                  <Radar size={24} color="#ef4444" style={{ position: 'relative', zIndex: 1 }} />
                 </div>
               </div>
             ) : weixinStatus.installed ? (
@@ -170,10 +170,10 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
             justifyContent: 'center', gap: 12, borderRadius: 12, border: '1px solid #e2e8f0',
             transition: 'all 0.3s ease'
           }}>
-            <div className="radar-pulse-container" style={{ width: 48, height: 48 }}>
+            <div className="radar-pulse-container" style={{ width: 48, height: 48, '--radar-color': '#94a3b8' } as any}>
               <div className="radar-ring"></div>
               <div className="radar-ring" style={{ animationDelay: '0.4s' }}></div>
-              <Radar size={32} color="#3b82f6" style={{ position: 'relative', zIndex: 1 }} />
+              <Radar size={32} color="#94a3b8" style={{ position: 'relative', zIndex: 1 }} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>正在监测微信插件状态...</span>

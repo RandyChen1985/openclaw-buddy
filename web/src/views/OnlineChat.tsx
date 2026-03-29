@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip } from 'antd';
-import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2 } from 'lucide-react';
+import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2, ArrowDown, Check, ZapOff, Activity } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -33,11 +33,64 @@ const Mermaid = ({ chart }: { chart: string }) => {
   return <div ref={ref} style={{ margin: '12px 0', overflowX: 'auto', display: 'flex', justifyContent: 'center' }} />;
 };
 
+// --- Code Block Component with Copy Functionality ---
+const CodeBlock = ({ language, value }: { language: string, value: string }) => {
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div style={{ position: 'relative', margin: '14px 0', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        background: '#1e293b', 
+        padding: '6px 12px',
+        borderBottom: '1px solid rgba(255,255,255,0.05)'
+      }}>
+        <span style={{ color: '#94a3b8', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{language}</span>
+        <Button 
+          type="text" 
+          size="small" 
+          onClick={handleCopy}
+          icon={copied ? <Check size={12} color="#10b981" /> : <Copy size={12} color="#94a3b8" />}
+          style={{ height: 24, fontSize: 11, color: copied ? '#10b981' : '#94a3b8', background: 'rgba(255,255,255,0.05)', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 4 }}
+        >
+          {copied ? '已复制' : '复制'}
+        </Button>
+      </div>
+      <SyntaxHighlighter
+        language={language}
+        style={vscDarkPlus}
+        PreTag="div"
+        customStyle={{
+          margin: 0,
+          padding: '16px',
+          fontSize: '13px',
+          background: '#0f172a'
+        }}
+      >
+        {value}
+      </SyntaxHighlighter>
+    </div>
+  );
+};
+
 interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp?: string;
-  quotedMessage?: string; // 引用的消息内容
+  quotedMessage?: string;
+  metrics?: {
+    ttft?: number;
+    tps?: number;
+    duration?: number;
+  }
 }
 
 interface OnlineChatProps {
@@ -55,7 +108,21 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
     const saved = localStorage.getItem('chat_history');
     return saved ? JSON.parse(saved) : [];
   });
-  const [quotedMsg, setQuotedMsg] = useState<string | null>(null); // 当前正在引用的消息
+  const [quotedMsg, setQuotedMsg] = useState<string | null>(null);
+
+  // --- Provider Icon Component ---
+  const ProviderIcon = ({ provider, size = 18 }: { provider: string, size?: number }) => {
+    const p = (provider || '').toLowerCase();
+    const iconStyle = { width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' };
+    
+    if (p.includes('openai')) return <div style={iconStyle}><Bot size={size * 0.8} color="#10a37f" /></div>;
+    if (p.includes('anthropic') || p.includes('claude')) return <div style={{ ...iconStyle, fontSize: size * 0.7, fontWeight: 900, color: '#d97706', fontFamily: 'serif' }}>A</div>;
+    if (p.includes('google') || p.includes('gemini')) return <div style={iconStyle}><Zap size={size * 0.8} color="#4285f4" fill="#4285f4" /></div>;
+    if (p.includes('deepseek')) return <div style={iconStyle}><Activity size={size * 0.8} color="#0891b2" /></div>;
+    if (p.includes('mistral')) return <div style={iconStyle}><ZapOff size={size * 0.8} color="#f97316" /></div>;
+    
+    return <div style={{ ...iconStyle, fontSize: size * 0.8 }}>🍭</div>;
+  };
   
   // 持久化存储
   useEffect(() => {
@@ -73,8 +140,9 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       .replace(/([^\n])\n(```)/g, '$1\n\n$2');
   };
 
-  const [isTyping, setIsTyping] = useState(false);
-  const [isComposing, setIsComposing] = useState(false);
+   const [isTyping, setIsTyping] = useState(false);
+   const [showScrollButton, setShowScrollButton] = useState(false);
+   const [isComposing, setIsComposing] = useState(false);
   const inputRef = useRef<any>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [chatEnabled, setChatEnabled] = useState<boolean | null>(null);
@@ -203,7 +271,28 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   };
 
   useEffect(() => {
+    const handleScroll = () => {
+      if (scrollRef.current) {
+        const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+        setShowScrollButton(scrollHeight - scrollTop - clientHeight > 300);
+      }
+    };
+    const div = scrollRef.current;
+    div?.addEventListener('scroll', handleScroll);
+    return () => div?.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToBottom = () => {
     if (scrollRef.current) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (scrollRef.current && !showScrollButton) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
@@ -269,14 +358,20 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
       const decoder = new TextDecoder();
       let accumulatedContent = '';
+      let firstTokenTime: number | null = null;
+      const startTime = Date.now();
+      let totalLength = 0;
       
       streamLoop: while (true) {
         const { done, value } = await reader.read();
         if (done) break streamLoop;
 
         const chunk = decoder.decode(value);
+        if (!firstTokenTime && (chunk.includes('"content":') || chunk.includes('"delta":'))) {
+          firstTokenTime = Date.now();
+        }
+
         const lines = chunk.split('\n');
-        
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const dataStr = line.slice(6).trim();
@@ -284,15 +379,38 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
             try {
                 const data = JSON.parse(dataStr);
                 const content = data.choices[0]?.delta?.content || '';
-                accumulatedContent += content;
-                setMessages(prev => {
-                    const last = prev[prev.length - 1];
-                    return [...prev.slice(0, -1), { ...last, content: accumulatedContent }];
-                });
+                if (content) {
+                  accumulatedContent += content;
+                  totalLength += content.length;
+                  setMessages(prev => {
+                      const last = prev[prev.length - 1];
+                      return [...prev.slice(0, -1), { ...last, content: accumulatedContent }];
+                  });
+                }
             } catch (e) {}
           }
         }
       }
+
+      const endTime = Date.now();
+      const durationSec = (endTime - (firstTokenTime || startTime)) / 1000;
+      const ttft = firstTokenTime ? firstTokenTime - startTime : 0;
+      const tps = durationSec > 0 ? (totalLength / 4) / durationSec : 0;
+
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last && last.role === 'assistant') {
+          return [...prev.slice(0, -1), { 
+            ...last, 
+            metrics: { 
+              ttft, 
+              tps: Math.round(tps * 10) / 10, 
+              duration: Math.round((endTime - startTime) / 10) / 100 
+            } 
+          }];
+        }
+        return prev;
+      });
     } catch (err: any) {
       if (err.name === 'AbortError') {
         message.info('回复已停止');
@@ -333,12 +451,22 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   };
 
   const clearHistory = () => {
-    setMessages([]);
-    localStorage.removeItem('chat_history');
-    const newSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    localStorage.setItem('chat_session_id', newSessionId);
-    setGeneratedSessionId(newSessionId);
-    message.success('对话记录已清空');
+    Modal.confirm({
+      title: '确认清空对话记录？',
+      content: '清除后将无法找回当前的对话历史，并会自动开启一个新的会话。',
+      okText: '确认清空',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      centered: true,
+      onOk: () => {
+        setMessages([]);
+        localStorage.removeItem('chat_history');
+        const newSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        localStorage.setItem('chat_session_id', newSessionId);
+        setGeneratedSessionId(newSessionId);
+        message.success('对话记录已清空');
+      }
+    });
   };
 
   const botList = botsModels?.data?.bots || [];
@@ -502,7 +630,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
               {botList.map((bot: any) => (
                 <Option key={bot.id} value={`openclaw:${bot.id}`}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0' }}>
-                    <span style={{ fontSize: 18 }}>🦞</span>
+                    <ProviderIcon provider={bot.provider || (bot.id === 'main' ? 'openai' : '')} size={20} />
                     <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2' }}>
                       <span style={{ fontWeight: 600, color: '#1e293b', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bot.name || bot.id}</span>
                       <span style={{ fontSize: 10, color: '#94a3b8', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -514,7 +642,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
               ))}
             </Select>
             <Button icon={<RefreshCw size={14} />} onClick={onRefreshBots} loading={loadingBots} title="刷新列表" />
-            {!isEmbedMode && (
+            {!isMobile && !isEmbedMode && (
               <Button 
                 icon={<ExternalLink size={14} />} 
                 title="在新窗口打开独立聊天"
@@ -526,6 +654,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                 }}
               />
             )}
+            {!isMobile && (
             <Button 
                 icon={<Share2 size={14} />} 
                 title="获取嵌入代码"
@@ -564,6 +693,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                   });
                 }}
             />
+            )}
             <Button danger icon={<Trash2 size={14} />} onClick={clearHistory} disabled={messages.length === 0}>{isMobile ? '' : '清空'}</Button>
           </div>
         </div>
@@ -617,10 +747,68 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           }}
         >
           {messages.length === 0 ? (
-            <div style={{ margin: 'auto', textAlign: 'center' }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>🦞</div>
-              <h3 style={{ color: '#1e293b', fontWeight: 600 }}>准备好开始对话了吗？</h3>
-              <p style={{ color: '#64748b', maxWidth: 300 }}>选择一个机器人，输入您的问题，系统将通过 OpenClaw 网关为您转发。</p>
+            <div style={{ margin: 'auto', textAlign: 'center', maxWidth: 640, padding: isMobile ? '20px' : '40px', width: '100%' }}>
+              <div style={{ marginBottom: 24, position: 'relative', display: 'inline-block' }}>
+                <img 
+                  src="/openclaw.png" 
+                  style={{ width: 80, height: 80, borderRadius: 20, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '4px solid #fff' }} 
+                  alt="Mascot"
+                />
+                <div style={{ position: 'absolute', bottom: -5, right: -5, width: 24, height: 24, background: '#22c55e', borderRadius: '50%', border: '4px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Zap size={10} color="#fff" fill="#fff" />
+                </div>
+              </div>
+              <h2 style={{ color: '#1e293b', fontWeight: 800, fontSize: isMobile ? 20 : 26, letterSpacing: '-0.02em', marginBottom: 8 }}>
+                欢迎来到对话实验室
+              </h2>
+              <p style={{ color: '#64748b', fontSize: isMobile ? 13 : 15, marginBottom: 32, maxWidth: 440, margin: '0 auto 32px' }}>
+                选择一个 AI 机器人开始对话。您的请求将通过 Guardian 网关进行安全审计和高效转发。
+              </p>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
+                {[
+                  ...quickCommands.map(c => ({ icon: '🍭', title: c.label || '快捷指令', text: c.prompt })),
+                  { icon: '💡', title: '智能助手', text: '帮我写一份 OpenClaw 使用指南' },
+                  { icon: '🚀', title: '性能优化', text: '如何降低 AI 接口响应延迟？' },
+                  { icon: '🛡️', title: '安全审计', text: 'Guardian 是如何监控对话风险的？' },
+                  { icon: '🔧', title: '代码分析', text: '请帮我优化这段 TypeScript 代码' }
+                ].filter((v, i, a) => a.findIndex(t => t.text === v.text) === i).slice(0, 8).map((item, i) => (
+                  <div 
+                    key={i} 
+                    onClick={() => {
+                        if (!selectedBot) {
+                            message.warning('请先在右上方选择一个对话机器人 ☝️');
+                            return;
+                        }
+                        handleSend(item.text);
+                    }}
+                    style={{ 
+                      padding: '16px', background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', 
+                      cursor: 'pointer', textAlign: 'left', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      display: 'flex', flexDirection: 'column', gap: 6,
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                    }}
+                    onMouseEnter={e => { 
+                      e.currentTarget.style.borderColor = '#2563eb'; 
+                      e.currentTarget.style.background = '#f0f7ff';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(37, 99, 235, 0.1)';
+                    }}
+                    onMouseLeave={e => { 
+                      e.currentTarget.style.borderColor = '#e2e8f0'; 
+                      e.currentTarget.style.background = '#fff';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.02)';
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 18 }}>{item.icon}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{item.title}</span>
+                    </div>
+                    <span style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.text}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             messages.map((msg, index) => (
@@ -723,47 +911,18 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                                 borderRight: '1px solid #e2e8f0'
                               }} />
                             ),
-                            code: ({ node, inline, className, children, ...props }: any) => {
-                              const match = /language-(\w+)/.exec(className || '');
-                              const language = match ? match[1] : '';
-                              
-                              if (!inline && language === 'mermaid') {
-                                return <Mermaid chart={String(children).replace(/\n$/, '')} />;
-                              }
+                              code: ({ node, inline, className, children, ...props }: any) => {
+                                const match = /language-(\w+)/.exec(className || '');
+                                const language = match ? match[1] : '';
+                                const codeContent = String(children).replace(/\n$/, '');
+                                
+                                if (!inline && language === 'mermaid') {
+                                  return <Mermaid chart={codeContent} />;
+                                }
 
-                              if (!inline && language) {
-                                return (
-                                  <div style={{ position: 'relative', margin: '12px 0', border: 'none' }}>
-                                    <div style={{ 
-                                      position: 'absolute', 
-                                      right: 8, 
-                                      top: 8, 
-                                      zIndex: 1, 
-                                      fontSize: 10, 
-                                      color: '#94a3b8',
-                                      textTransform: 'uppercase',
-                                      fontWeight: 600,
-                                      pointerEvents: 'none'
-                                    }}>
-                                      {language}
-                                    </div>
-                                    <SyntaxHighlighter
-                                      {...props}
-                                      style={vscDarkPlus}
-                                      language={language}
-                                      PreTag="div"
-                                      customStyle={{
-                                        margin: 0,
-                                        borderRadius: '8px',
-                                        fontSize: '13px',
-                                        padding: '16px 12px'
-                                      }}
-                                    >
-                                      {String(children).replace(/\n$/, '')}
-                                    </SyntaxHighlighter>
-                                  </div>
-                                );
-                              }
+                                if (!inline && language) {
+                                  return <CodeBlock language={language} value={codeContent} {...props} />;
+                                }
                               
                               return (
                                 <code className={className} {...props} style={{
@@ -814,6 +973,21 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                         onClick={handleRegenerate}
                       >重试</Button>
                     )}
+                    {msg.metrics && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10, color: '#94a3b8', opacity: 0.6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                          <Zap size={10} color="#f59e0b" fill="#f59e0b" />
+                          <span>TTFT: {msg.metrics.ttft}ms</span>
+                        </div>
+                        <div style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }}></div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                          <Activity size={10} color="#10b981" />
+                          <span>Speed: {msg.metrics.tps} tps</span>
+                        </div>
+                        <div style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }}></div>
+                        <span>Time: {msg.metrics.duration}s</span>
+                      </div>
+                    )}
                     <span style={{ fontSize: 10, color: '#94a3b8', opacity: 0.8, marginLeft: 4 }}>
                       {msg.timestamp}
                     </span>
@@ -822,16 +996,44 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
               </div>
             ))
           )}
-          {isTyping && (
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8 }}>
+          {isTyping && messages[messages.length - 1]?.role !== 'assistant' && (
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, animation: 'fade-in 0.3s ease' }}>
                 <Avatar size={36} style={{ background: '#fff', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }} icon={<Bot size={18} color="#2563eb" />} />
-                <div style={{ padding: '8px 12px', background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Spin size="small" />
-                    <span style={{ fontSize: 12, color: '#64748b' }}>Lobster 正在思考回复中...</span>
+                <div style={{ padding: '12px 16px', background: '#fff', borderRadius: '4px 16px 16px 16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>Lobster 正在思考回复中</span>
+                    <div className="typing-indicator">
+                      <div className="typing-dot"></div>
+                      <div className="typing-dot"></div>
+                      <div className="typing-dot"></div>
+                    </div>
                 </div>
             </div>
           )}
         </div>
+
+        {/* Scroll to Bottom Button */}
+        {showScrollButton && (
+          <Button
+            type="primary"
+            shape="circle"
+            icon={<ArrowDown size={20} />}
+            onClick={scrollToBottom}
+            style={{
+              position: 'absolute',
+              bottom: 120,
+              right: 24,
+              zIndex: 100,
+              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+              width: 44,
+              height: 44,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: 'none',
+              background: '#2563eb'
+            }}
+          />
+        )}
 
         {/* Input Area */}
         <div style={{ padding: isMobile ? '12px' : '16px 24px', background: '#fff', borderTop: '1px solid #f1f5f9', position: 'relative' }}>
@@ -1008,6 +1210,33 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
             </Form>
         </div>
       </Modal>
+      <style>{`
+        .typing-indicator {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          height: 12px;
+        }
+        .typing-dot {
+          width: 5px;
+          height: 5px;
+          background: #2563eb;
+          border-radius: 50%;
+          opacity: 0.4;
+          animation: typing-bounce 1.4s infinite ease-in-out;
+        }
+        .typing-dot:nth-child(1) { animation-delay: 0s; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing-bounce {
+          0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+          40% { transform: translateY(-4px); opacity: 1; }
+        }
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(5px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   </div>
 );

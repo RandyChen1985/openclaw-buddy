@@ -67,6 +67,9 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const loginImages = ['/openclaw.png', '/openclaw2.png', '/openclaw3.jpg'];
+  const [mascotImage] = useState(() => loginImages[Math.floor(Math.random() * loginImages.length)]);
+
   const onFinish = async (values: { token: string }) => {
     setLoading(true);
     try {
@@ -91,7 +94,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       {/* 左侧装饰区 (Dark, 3:2 比例中的 "3") - 移动端彻底移除 */}
       {!isMobileLogin && (
         <div style={{
-          flex: 3, background: '#0f172a', padding: '60px 64px 8px',
+          flex: 7, background: '#0f172a', padding: '60px 64px 8px',
           display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
           position: 'relative', overflow: 'hidden'
         }}>
@@ -165,7 +168,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
       {/* 右侧面板 (White, 3:2 比例中的 "2") */}
       <div style={{
-        flex: isMobileLogin ? 1 : 2, background: '#fff',
+        flex: isMobileLogin ? 1 : 3, background: '#fff',
         display: 'flex', flexDirection: 'column',
         padding: isMobileLogin ? '40px 24px 8px' : '60px 48px 8px'
       }}>
@@ -174,7 +177,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             {/* Mascot 图片 (与白色背景底衬融合) */}
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
                <img
-                 src="/openclaw.jpg"
+                 src={mascotImage}
                  alt="Mascot"
                  style={{ width: '100%', maxWidth: 280, height: 'auto', display: 'block' }}
                />

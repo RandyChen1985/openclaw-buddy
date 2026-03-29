@@ -19,6 +19,7 @@ import SelfHealing from './views/SelfHealing';
 import OnlineChat from './views/OnlineChat';
 import SkillManagement from './views/SkillManagement';
 import CrayfishLoading from './components/common/CrayfishLoading';
+import CommandPalette from './components/common/CommandPalette';
 
 // Hooks
 import { useStatusPolling } from './hooks/useStatusPolling';
@@ -61,6 +62,7 @@ const Dashboard = () => {
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [selfHealingEnabled, setSelfHealingEnabled] = useState(false);
   const [loadingSets, setLoadingSets] = useState(false);
+  const [commandPaletteVisible, setCommandPaletteVisible] = useState(false);
 
   // Hooks
   const { status, history, fetching, refreshCountdown } = useStatusPolling(
@@ -102,6 +104,31 @@ const Dashboard = () => {
     if (activeTab === 'devices') fetchDevices();
     if (activeTab === 'tools') fetchSelfHealing();
   }, [activeTab]);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandPaletteVisible(true);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
+  const handleCommandAction = (action: string, params?: any) => {
+    if (action === 'nav') {
+      setActiveTab(params);
+      if (isMobile) setMobileMenuOpen(false);
+    } else if (action === 'select-bot') {
+      setActiveTab('chat');
+      // 延迟一点确保在线聊天页面已加载，由于 activeTab 切换后 OnlineChat 会渲染
+      // 这里通过 URL 参数同步 bot 选定状态是一种解法
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.set('bot', params);
+      window.history.replaceState({}, '', newUrl.toString());
+    }
+  };
 
   // 微信插件检测定时器逻辑 (1s UI计数, 5s 接口轮询)
   useEffect(() => {
@@ -804,6 +831,13 @@ const Dashboard = () => {
           </Button>
         </div>
       </Modal>
+
+      <CommandPalette 
+        visible={commandPaletteVisible} 
+        onClose={() => setCommandPaletteVisible(false)} 
+        onAction={handleCommandAction}
+        bots={botsModels?.data?.bots || []}
+      />
     </>
   );
 };
@@ -863,6 +897,21 @@ export default function App() {
         },
       },
     }}>
+      <style>{`
+        .ant-modal-content, .ant-drawer-content {
+          backdrop-filter: blur(12px) !important;
+          background: rgba(255, 255, 255, 0.75) !important;
+          border: 1px solid rgba(255, 255, 255, 0.3) !important;
+          box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1) !important;
+        }
+        .ant-modal-header, .ant-modal-footer {
+          background: transparent !important;
+        }
+        .ant-drawer-header {
+           background: transparent !important;
+           border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+        }
+      `}</style>
       {token ? <Dashboard /> : <LoginView onLoginSuccess={setToken} />}
     </ConfigProvider>
   );

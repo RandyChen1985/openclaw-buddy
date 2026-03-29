@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox } from 'antd';
-import { Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star } from 'lucide-react';
+import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox, Skeleton } from 'antd';
+import { Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star, ChevronDown, ChevronUp, Activity, ZapOff, Bot } from 'lucide-react';
 import dayjs from 'dayjs';
 import api from '../api';
 import { message } from 'antd';
@@ -43,6 +43,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   
   // 模型管理相关状态
   const [modelsConfig, setModelsConfig] = useState<any>(null);
+  const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(new Set());
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [isProviderModalOpen, setIsProviderModalOpen] = useState(false);
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
@@ -53,6 +54,22 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   // 模型连通性测试状态
   const [testingModelId, setTestingModelId] = useState<string | null>(null);
   const [testLatencyMap, setTestLatencyMap] = useState<Record<string, { latency: number, error?: string }>>({});
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // --- Provider Icon Component ---
+  const ProviderIcon = ({ provider, size = 28 }: { provider: string, size?: number }) => {
+    const p = (provider || '').toLowerCase();
+    const iconStyle = { width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' };
+    
+    if (p.includes('openai')) return <div style={iconStyle}><Bot size={size * 0.8} color="#10a37f" /></div>;
+    if (p.includes('anthropic') || p.includes('claude')) return <div style={{ ...iconStyle, fontSize: size * 0.7, fontWeight: 900, color: '#d97706', fontFamily: 'serif' }}>A</div>;
+    if (p.includes('google') || p.includes('gemini')) return <div style={iconStyle}><Zap size={size * 0.8} color="#4285f4" fill="#4285f4" /></div>;
+    if (p.includes('deepseek')) return <div style={iconStyle}><Activity size={size * 0.8} color="#0891b2" /></div>;
+    if (p.includes('mistral')) return <div style={iconStyle}><ZapOff size={size * 0.8} color="#f97316" /></div>;
+    if (p.includes('zhipu')) return <div style={iconStyle}><Zap size={size * 0.8} color="#6366f1" fill="#6366f1" /></div>;
+    
+    return <div style={{ ...iconStyle, fontSize: size * 0.8 }}>🍭</div>;
+  };
 
   useEffect(() => {
     fetchSessions();
@@ -348,30 +365,39 @@ const BotsManager: React.FC<BotsManagerProps> = ({
             </div>
           </Col>
 
-          {botsModels?.data?.bots?.map((bot: any, index: number) => {
-            const color = cardColors[index % cardColors.length];
-            return (
-              <Col xs={24} sm={12} lg={8} key={bot.id}>
-                <Card
-                  hoverable
-                  styles={{ body: { padding: '20px' } }}
-                  style={{ 
-                    borderRadius: 20, 
-                    border: `1px solid ${color.border}`,
-                    background: color.bg,
-                    height: '100%',
-                    transition: 'all 0.3s ease',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)'
-                  }}
-                >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          {loadingBots && !botsModels ? (
+            [1, 2, 3].map(i => (
+              <Col xs={24} sm={12} lg={8} key={i}>
+                <Card style={{ borderRadius: 20, height: 260 }}>
+                  <Skeleton loading={true} active avatar paragraph={{ rows: 4 }} />
+                </Card>
+              </Col>
+            ))
+          ) : (
+            botsModels?.data?.bots?.map((bot: any, index: number) => {
+              const color = cardColors[index % cardColors.length];
+              return (
+                <Col xs={24} sm={12} lg={8} key={bot.id}>
+                  <Card
+                    hoverable
+                    styles={{ body: { padding: '20px' } }}
+                    style={{ 
+                      borderRadius: 20, 
+                      border: `1px solid ${color.border}`,
+                      background: color.bg,
+                      height: '100%',
+                      transition: 'all 0.3s ease',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                       <div style={{ 
                         width: 52, height: 52, borderRadius: 14, background: color.iconBg,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 28, flexShrink: 0, boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)'
+                        flexShrink: 0, boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)'
                       }}>
-                        🦞
+                        <ProviderIcon provider={bot.provider || (bot.id === 'main' ? 'openai' : '')} size={32} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -393,15 +419,13 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                         </div>
                       </div>
                       {bot.id !== 'main' && (
-                        <Tooltip title="移除此机器人">
-                          <Button 
-                            danger 
-                            type="text" 
-                            icon={<Trash2 size={16} />} 
-                            onClick={() => handleDelete(bot.id)}
-                            style={{ opacity: 0.5, borderRadius: 8 }}
-                          />
-                        </Tooltip>
+                        <Button 
+                          danger 
+                          type="text" 
+                          icon={<Trash2 size={16} />} 
+                          onClick={() => handleDelete(bot.id)}
+                          style={{ opacity: 0.5, borderRadius: 8 }}
+                        />
                       )}
                     </div>
 
@@ -426,7 +450,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 0 2px #dcfce7' }}></div>
+                        <div className="status-pulse" style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }}></div>
                         <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>运行中</span>
                       </div>
                       <div style={{ fontSize: 11, color: '#94a3b8' }}>{bot.provider || '本地节点'}</div>
@@ -435,7 +459,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 </Card>
               </Col>
             );
-          })}
+          })
+        )}
 
           {botsModels?.data?.bots?.length === 0 && (
             <Col span={24}>
@@ -448,20 +473,38 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           <Col span={24}>
             <Card
               title={
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Cpu size={isMobile ? 18 : 20} color="#6366f1" /> 模型军团 (Models)
+                <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', width: '100%', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 12 : 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: isMobile ? '100%' : 'auto' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+                      <Cpu size={isMobile ? 18 : 20} color="#6366f1" /> 
+                      <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b' }}>模型军团 (Models)</span>
+                    </div>
+                    <Input 
+                      placeholder="快速检索模型..." 
+                      prefix={<Boxes size={12} style={{ color: '#94a3b8' }} />}
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                      size="small"
+                      allowClear
+                      style={{ 
+                        borderRadius: 20, 
+                        maxWidth: isMobile ? '100%' : 220, 
+                        fontSize: 12,
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0'
+                      }}
+                    />
                   </div>
-                  <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ display: 'flex', gap: 10, alignSelf: isMobile ? 'flex-end' : 'center' }}>
                     <Button 
                       type="primary" 
                       ghost 
                       size="small" 
                       icon={<ShieldCheck size={14} />} 
                       onClick={() => setIsProviderModalOpen(true)}
-                      style={{ borderRadius: 8, fontSize: 12 }}
+                      style={{ borderRadius: 8, fontSize: 12, height: 28 }}
                     >
-                      添加渠道
+                      {isMobile ? '渠道' : '添加渠道'}
                     </Button>
                     <Button 
                       type="primary" 
@@ -469,9 +512,9 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                       size="small" 
                       icon={<Plus size={14} />} 
                       onClick={() => setIsModelModalOpen(true)}
-                      style={{ borderRadius: 8, fontSize: 12 }}
+                      style={{ borderRadius: 8, fontSize: 12, height: 28 }}
                     >
-                      添加模型
+                      {isMobile ? '模型' : '添加模型'}
                     </Button>
                   </div>
                 </div>
@@ -483,120 +526,135 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 <div style={{ textAlign: 'center', padding: '20px 0' }}><Spin size="small" /></div>
               ) : modelsConfig ? (
                 Object.entries(modelsConfig).map(([providerName, providerData]: [string, any]) => {
-                  const providerModels = providerData.models || [];
+                  const providerModels = (providerData.models || []).filter((m: any) => 
+                    m.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                    (m.name && m.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                  );
                   if (providerModels.length === 0) return null;
 
                   return (
                     <div key={providerName} style={{ marginBottom: 28 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, paddingLeft: 4 }}>
+                      <div 
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, paddingLeft: 4, cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => {
+                          const newCollapsed = new Set(collapsedProviders);
+                          if (newCollapsed.has(providerName)) {
+                            newCollapsed.delete(providerName);
+                          } else {
+                            newCollapsed.add(providerName);
+                          }
+                          setCollapsedProviders(newCollapsed);
+                        }}
+                      >
                         <div style={{ width: 4, height: 16, background: '#6366f1', borderRadius: 2 }}></div>
                         <span style={{ fontWeight: 800, color: '#475569', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          {providerName}
+                          {providerName} ({providerModels.length})
                         </span>
+                        {collapsedProviders.has(providerName) ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
                         <div style={{ height: 1, flex: 1, background: '#f1f5f9', marginLeft: 8 }}></div>
                       </div>
-                      <Row gutter={[16, 16]}>
-                        {providerModels.map((m: any) => {
-                          const isDefault = botsModels?.data?.models?.find((dm: any) => dm.id === `${providerName}/${m.id}`)?.isDefault;
-                          
-                          return (
-                            <Col xs={24} sm={12} md={12} lg={8} xl={6} key={m.id}>
-                              <div style={{
-                                background: isDefault ? '#f5f3ff' : '#fff',
-                                padding: '18px',
-                                borderRadius: 18,
-                                border: isDefault ? '2px solid #a78bfa' : '1px solid #e2e8f0',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 12,
-                                position: 'relative',
-                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                boxShadow: isDefault ? '0 10px 15px -3px rgba(139, 92, 246, 0.12), 0 4px 6px -4px rgba(139, 92, 246, 0.1)' : '0 1px 3px rgba(0,0,0,0.02)',
-                                cursor: 'default'
-                              }} className="model-card">
-                                {isDefault && (
-                                  <div style={{
-                                    position: 'absolute', top: -10, right: 12,
-                                    background: '#7c3aed', color: '#fff', fontSize: 9,
-                                    padding: '2px 10px', borderRadius: 20, fontWeight: 800,
-                                    boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)', 
-                                    display: 'flex', alignItems: 'center', gap: 4,
-                                    zIndex: 2, letterSpacing: '0.02em'
-                                  }}>
-                                    DEFAULT
-                                  </div>
-                                )}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                  <div style={{ 
-                                    width: 38, height: 38, borderRadius: 10, background: isDefault ? '#ede9fe' : '#f8fafc',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)',
-                                    flexShrink: 0
-                                  }}>
-                                    <Cpu size={18} color={isDefault ? '#7c3aed' : '#94a3b8'} />
-                                  </div>
-                                  <div style={{ minWidth: 0, flex: 1 }}>
-                                    <Tooltip title={m.name || m.id}>
-                                      <div style={{ fontWeight: 800, color: '#1e293b', fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        {m.name || m.id}
-                                        {testLatencyMap[providerName + '/' + m.id] && (
-                                          <Tag color={testLatencyMap[providerName + '/' + m.id].latency > 0 ? 'success' : 'error'} style={{ margin: 0, fontSize: 10, padding: '0 4px', borderRadius: 4, height: 16, lineHeight: '14px', border: 'none', background: testLatencyMap[providerName + '/' + m.id].latency > 0 ? '#f0fdf4' : '#fef2f2', color: testLatencyMap[providerName + '/' + m.id].latency > 0 ? '#16a34a' : '#ef4444' }}>
-                                            {testLatencyMap[providerName + '/' + m.id].latency > 0 ? `${testLatencyMap[providerName + '/' + m.id].latency}ms` : 'FAIL'}
-                                          </Tag>
-                                        )}
-                                      </div>
-                                    </Tooltip>
-                                    <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', opacity: 0.8 }}>ID: {m.id}</div>
-                                  </div>
-                                </div>
-
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                     {m.reasoning && (
-                                       <Tag color="orange" style={{ margin: 0, borderRadius: 6, fontSize: 10, border: 'none', background: '#fff7ed', color: '#f59e0b', fontWeight: 700, padding: '0 6px' }}>
-                                         <Zap size={10} style={{ marginRight: 2, display: 'inline-block', verticalAlign: 'middle' }} /> 推理型
-                                       </Tag>
-                                     )} 
-                                  </div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    <Tooltip title="测试连通性 (hello)" placement="bottom">
-                                        <Button
-                                            type="text"
-                                            size="small"
-                                            icon={<Zap size={14} className={testingModelId === `${providerName}/${m.id}` ? 'animate-pulse' : ''} />}
-                                            loading={testingModelId === `${providerName}/${m.id}`}
-                                            onClick={() => handleTestModel(providerName, m.id)}
-                                            style={{ color: testingModelId === `${providerName}/${m.id}` ? '#f59e0b' : '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                        />
-                                    </Tooltip>
-                                    {!isDefault && (
-                                      <Tooltip title="设为全局默认" placement="bottom">
-                                        <Button 
-                                          type="text" 
-                                          size="small" 
-                                          icon={<Star size={14} />} 
-                                          onClick={() => handleSetDefaultModel(m)}
-                                          style={{ color: '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                        />
+                      {!collapsedProviders.has(providerName) && (
+                        <Row gutter={[16, 16]}>
+                          {providerModels.map((m: any) => {
+                            const isDefault = botsModels?.data?.models?.find((dm: any) => dm.id === `${providerName}/${m.id}`)?.isDefault;
+                            
+                            return (
+                              <Col xs={24} sm={12} md={12} lg={8} xl={6} key={m.id}>
+                                <div style={{
+                                  background: isDefault ? '#f5f3ff' : '#fff',
+                                  padding: '18px',
+                                  borderRadius: 18,
+                                  border: isDefault ? '2px solid #a78bfa' : '1px solid #e2e8f0',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 12,
+                                  position: 'relative',
+                                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                  boxShadow: isDefault ? '0 10px 15px -3px rgba(139, 92, 246, 0.12), 0 4px 6px -4px rgba(139, 92, 246, 0.1)' : '0 1px 3px rgba(0,0,0,0.02)',
+                                  cursor: 'default'
+                                }} className="model-card">
+                                  {isDefault && (
+                                    <div style={{
+                                      position: 'absolute', top: -10, right: 12,
+                                      background: '#7c3aed', color: '#fff', fontSize: 9,
+                                      padding: '2px 10px', borderRadius: 20, fontWeight: 800,
+                                      boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)', 
+                                      display: 'flex', alignItems: 'center', gap: 4,
+                                      zIndex: 2, letterSpacing: '0.02em'
+                                    }}>
+                                      DEFAULT
+                                    </div>
+                                  )}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                    <div style={{ 
+                                      width: 38, height: 38, borderRadius: 10, background: isDefault ? '#ede9fe' : '#f8fafc',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)',
+                                      flexShrink: 0
+                                    }}>
+                                      <Cpu size={18} color={isDefault ? '#7c3aed' : '#94a3b8'} />
+                                    </div>
+                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                      <Tooltip title={m.name || m.id}>
+                                        <div style={{ fontWeight: 800, color: '#1e293b', fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                          {m.name || m.id}
+                                          {testLatencyMap[providerName + '/' + m.id] && (
+                                            <Tag color={testLatencyMap[providerName + '/' + m.id].latency > 0 ? 'success' : 'error'} style={{ margin: 0, fontSize: 10, padding: '0 4px', borderRadius: 4, height: 16, lineHeight: '14px', border: 'none', background: testLatencyMap[providerName + '/' + m.id].latency > 0 ? '#f0fdf4' : '#fef2f2', color: testLatencyMap[providerName + '/' + m.id].latency > 0 ? '#16a34a' : '#ef4444' }}>
+                                              {testLatencyMap[providerName + '/' + m.id].latency > 0 ? `${testLatencyMap[providerName + '/' + m.id].latency}ms` : 'FAIL'}
+                                            </Tag>
+                                          )}
+                                        </div>
                                       </Tooltip>
-                                    )}
-                                    <Tooltip title="移除模型" placement="bottom">
-                                        <Button
-                                            type="text"
-                                            size="small"
-                                            icon={<Trash2 size={14} />}
-                                            onClick={() => handleDeleteModel(providerName, m.id)}
+                                      <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', opacity: 0.8 }}>ID: {m.id}</div>
+                                    </div>
+                                  </div>
+  
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                       {m.reasoning && (
+                                         <Tag color="orange" style={{ margin: 0, borderRadius: 6, fontSize: 10, border: 'none', background: '#fff7ed', color: '#f59e0b', fontWeight: 700, padding: '0 6px' }}>
+                                           <Zap size={10} style={{ marginRight: 2, display: 'inline-block', verticalAlign: 'middle' }} /> 推理型
+                                         </Tag>
+                                       )} 
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                      <Tooltip title="测试连通性 (hello)" placement="bottom">
+                                          <Button
+                                              type="text"
+                                              size="small"
+                                              icon={<Zap size={14} className={testingModelId === `${providerName}/${m.id}` ? 'animate-pulse' : ''} />}
+                                              loading={testingModelId === `${providerName}/${m.id}`}
+                                              onClick={() => handleTestModel(providerName, m.id)}
+                                              style={{ color: testingModelId === `${providerName}/${m.id}` ? '#f59e0b' : '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                          />
+                                      </Tooltip>
+                                      {!isDefault && (
+                                        <Tooltip title="设为全局默认" placement="bottom">
+                                          <Button 
+                                            type="text" 
+                                            size="small" 
+                                            icon={<Star size={14} />} 
+                                            onClick={() => handleSetDefaultModel(m)}
                                             style={{ color: '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                            className="delete-hover"
-                                        />
-                                    </Tooltip>
+                                          />
+                                        </Tooltip>
+                                      )}
+                                      <Button
+                                          type="text"
+                                          size="small"
+                                          icon={<Trash2 size={14} />}
+                                          onClick={() => handleDeleteModel(providerName, m.id)}
+                                          style={{ color: '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                          className="delete-hover"
+                                      />
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            </Col>
-                          );
-                        })}
-                      </Row>
+                              </Col>
+                            );
+                          })}
+                        </Row>
+                      )}
                     </div>
                   );
                 })
@@ -1000,6 +1058,16 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           <p style={{ color: '#64748b', fontSize: 13 }}>该操作不可逆，请谨慎操作。</p>
         </div>
       </Modal>
+      <style>{`
+        @keyframes pulse-green {
+          0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+          70% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+        .status-pulse {
+          animation: pulse-green 2s infinite;
+        }
+      `}</style>
     </div>
   );
 };

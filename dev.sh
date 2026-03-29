@@ -5,13 +5,26 @@ DEV_ROOT="temp-dev-test"
 PID_FILE="/tmp/openclaw-buddy-dev.pid"
 
 stop_and_clean() {
-    if [ -f "$PID_FILE" ]; then
-        PID=$(cat "$PID_FILE")
-        if ps -p $PID > /dev/null; then
-            echo "🛑 正在停止进程 (PID: $PID)..."
-            kill $PID
-            sleep 1
+    echo "🔍 检查端口 3000 占用情况..."
+    PORT_PID=$(lsof -ti :3000)
+    
+    if [ ! -z "$PORT_PID" ]; then
+        echo "🛑 发现正在运行的服务 (PID: $PORT_PID)，正在尝试停止..."
+        kill $PORT_PID
+        sleep 2
+        
+        # 如果还在运行，暴力关掉
+        if ps -p $PORT_PID > /dev/null; then
+            echo "⚠️  进程服务仍未退出，执行强制清理 (kill -9)..."
+            kill -9 $PORT_PID
         fi
+    fi
+
+    # 兜底清理同名进程
+    pkill -f "openclaw-buddy-dev" 2>/dev/null
+
+    # 清理 PID 文件与临时环境
+    if [ -f "$PID_FILE" ]; then
         rm -f "$PID_FILE"
     fi
     
