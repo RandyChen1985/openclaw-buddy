@@ -15,6 +15,8 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"sort"
+	"net/http"
+	"strings"
 )
 
 type Guardian struct {
@@ -43,13 +45,18 @@ func (g *Guardian) Run(ctx context.Context) {
 	cacheTicker := time.NewTicker(10 * time.Minute)
 	defer cacheTicker.Stop()
 
-	// 启动时立即执行一次清理和全量同步
+	// 每 12 小时检查一次版本更新
+	versionTicker := time.NewTicker(12 * time.Hour)
+	defer versionTicker.Stop()
+
+	// 启动时立即执行一次清理和全量同步，并检查更新
 	go func() {
 		rows, err := utils.CleanupOldData(7)
 		if err == nil && rows > 0 {
 			log.Printf("🧹 [DB] 已自动清理超过 7 天的旧监控数据 (共 %d 条).", rows)
 		}
 		process.SyncAll(g.config.OpenClawConfigDir)
+		g.checkVersionUpdate()
 	}()
 
 	// 启动飞书 WebSocket 长链接
@@ -86,6 +93,9 @@ func (g *Guardian) Run(ctx context.Context) {
 		case <-cacheTicker.C:
 			log.Printf("🔄 [Cache] 执行定时业务数据全量同步...")
 			process.SyncAll(g.config.OpenClawConfigDir)
+		case <-versionTicker.C:
+			log.Printf("🌐 [Update] 执行定时版本更新检查...")
+			g.checkVersionUpdate()
 		case <-ctx.Done():
 			hostname, _ := os.Hostname()
 			g.notifyFeishu(context.Background(), "👋 OpenClaw Buddy 监控服务已停止", fmt.Sprintf("节点: %s\n状态: ⏹️ 服务已正常退出", hostname))
@@ -346,4 +356,41 @@ func copyFile(src, dst string) error {
 
 	_, err = io.Copy(destFile, sourceFile)
 	return err
+}
+
+func (g *Guardian) checkVersionUpdate() {
+	url := "https://raw.githubusercontent.com/RandyChen1985/openclaw-buddy/main/VERSION"
+	client := http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Get(url)
+	if err != nil {
+		log.Printf("⚠️ [Update] 检查更新失败 (网络错误): %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("⚠️ [Update] 检查更新失败 (HTTP %d)", resp.StatusCode)
+		return
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("⚠️ [Update] 读取版本响应失败: %v", err)
+		return
+	}
+
+	latestVersion := strings.TrimSpace(string(body))
+	if latestVersion == "" {
+		return
+	}
+
+	// 存储到本地数据库
+	if err := utils.SetSetting("latest_version", latestVersion); err != nil {
+		log.Printf("❌ [Update] 存储最新版本号失败: %v", err)
+	} else {
+		log.Printf("📡 [Update] 版本检查完成，当前最新版本: %s", latestVersion)
+	}
 }

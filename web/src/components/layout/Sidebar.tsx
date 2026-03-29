@@ -9,9 +9,10 @@ interface SidebarProps {
   onSelect: (key: string) => void;
   onLogout: () => void;
   navItems: any[];
+  versionUpdate?: { latest: string, current: string, release_url: string } | null;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLogout, navItems }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLogout, navItems, versionUpdate }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#001529' }}>
       {/* Logo */}
@@ -42,7 +43,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
             }}>
               OpenClaw Buddy
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <a 
+              href={versionUpdate?.release_url || "https://github.com/RandyChen1985/openclaw-buddy/releases"}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, textDecoration: 'none' }}
+            >
               <div style={{ 
                 width: 6, height: 6, borderRadius: '50%', background: '#22c55e', 
                 boxShadow: '0 0 8px #22c55e', 
@@ -55,7 +61,19 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
               }}>
                 REL-{APP_VERSION}
               </span>
-            </div>
+              {versionUpdate && versionUpdate.latest !== versionUpdate.current && (
+                <span style={{
+                  fontSize: 10, padding: '0 5px', borderRadius: 4,
+                  background: '#ff4d4f', color: '#fff', fontWeight: 900,
+                  marginLeft: 4, transformOrigin: 'center',
+                  animation: 'badgePulse 2s ease-in-out infinite',
+                  display: 'inline-block',
+                  lineHeight: '14px'
+                }}>
+                  NEW
+                </span>
+              )}
+            </a>
           </div>
         )}
       </div>
@@ -65,6 +83,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
           0% { opacity: 0.6; transform: scale(0.95); }
           50% { opacity: 1; transform: scale(1.05); }
           100% { opacity: 0.6; transform: scale(0.95); }
+        }
+        @keyframes badgePulse {
+          0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.4); }
+          50% { transform: scale(1.05); box-shadow: 0 0 10px 3px rgba(255, 77, 79, 0.5); }
+          100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.2); }
         }
       `}</style>
 

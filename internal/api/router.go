@@ -118,6 +118,7 @@ func (s *Server) setupRoutes() {
 		v1.GET("/heal/reports", s.getHealReports)
 		v1.GET("/heal/reports/:name", s.getHealReportDetail)
 		v1.GET("/tasks/status", s.getTasksStatus)
+		v1.GET("/system/version", s.getSystemVersion)
 
 		// Proxy for external dashboard
 		v1.Any("/proxy/*path", s.proxyLobsterDashboard)

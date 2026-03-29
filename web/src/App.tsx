@@ -63,6 +63,7 @@ const Dashboard = () => {
   const [selfHealingEnabled, setSelfHealingEnabled] = useState(false);
   const [loadingSets, setLoadingSets] = useState(false);
   const [commandPaletteVisible, setCommandPaletteVisible] = useState(false);
+  const [versionUpdate, setVersionUpdate] = useState<{ latest: string, current: string, release_url: string } | null>(null);
 
   // Hooks
   const { status, history, fetching, refreshCountdown } = useStatusPolling(
@@ -113,6 +114,10 @@ const Dashboard = () => {
       }
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
+    
+    // 首次加载检查版本更新
+    checkVersionUpdate();
+    
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
@@ -207,6 +212,15 @@ const Dashboard = () => {
   const onShowGlobalLoading = (message: string, duration: number = 3000) => {
     setGlobalLoadingMessage(message);
     setGlobalLoadingCountdown(Math.ceil(duration / 1000)); // 初始化倒计时秒数
+  };
+
+  const checkVersionUpdate = async () => {
+    try {
+      const res = await api.get('/v1/system/version');
+      if (res.data) setVersionUpdate(res.data);
+    } catch (e) {
+      console.warn('检查版本更新失败', e);
+    }
   };
 
   // 管理全局加载倒计时
@@ -694,6 +708,7 @@ const Dashboard = () => {
                 setMobileMenuOpen(false); 
               }} 
               onLogout={handleLogout} navItems={menuItems} 
+              versionUpdate={versionUpdate}
             />
           </Drawer>
         </Layout>
@@ -714,6 +729,7 @@ const Dashboard = () => {
                 setActiveTab(k);
               }} 
               onLogout={handleLogout} navItems={menuItems} 
+              versionUpdate={versionUpdate}
             />
           </Sider>
           <Layout style={{ 

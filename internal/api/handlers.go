@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"openclaw-buddy/internal/config"
 	"openclaw-buddy/internal/process"
 	"openclaw-buddy/internal/utils"
 
@@ -956,5 +957,15 @@ func (s *Server) testOpenClawModelDirect(c *gin.Context) {
 	s.Success(c, gin.H{
 		"latency": duration,
 		"status":  "success",
+	})
+}
+func (s *Server) getSystemVersion(c *gin.Context) {
+	current := config.Version
+	latest := utils.GetSetting("latest_version", current)
+	
+	s.Success(c, gin.H{
+		"current":     current,
+		"latest":      latest,
+		"release_url": "https://github.com/RandyChen1985/openclaw-buddy/releases",
 	})
 }
