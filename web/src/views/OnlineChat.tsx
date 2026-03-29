@@ -305,6 +305,18 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
     }
   };
 
+  const handleScrollToMessage = (content: string) => {
+    const messageElements = document.querySelectorAll('[data-msg-content]');
+    for (const el of Array.from(messageElements)) {
+      if (el.getAttribute('data-msg-content') === content) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('message-highlight');
+        setTimeout(() => el.classList.remove('message-highlight'), 2000);
+        break;
+      }
+    }
+  };
+
   useEffect(() => {
     if (scrollRef.current && !showScrollButton) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -794,6 +806,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                 ].filter((v, i, a) => a.findIndex(t => t.text === v.text) === i).slice(0, 8).map((item, i) => (
                   <div 
                     key={i} 
+                    className="stagger-entry card-float"
                     onClick={() => {
                         if (!selectedBot) {
                             message.warning(t('chat.selectBot'));
@@ -803,22 +816,11 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                     }}
                     style={{ 
                       padding: '16px', background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', 
-                      cursor: 'pointer', textAlign: 'left', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      cursor: 'pointer', textAlign: 'left', transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
                       display: 'flex', flexDirection: 'column', gap: 6,
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
-                    }}
-                    onMouseEnter={e => { 
-                      e.currentTarget.style.borderColor = '#2563eb'; 
-                      e.currentTarget.style.background = '#f0f7ff';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(37, 99, 235, 0.1)';
-                    }}
-                    onMouseLeave={e => { 
-                      e.currentTarget.style.borderColor = '#e2e8f0'; 
-                      e.currentTarget.style.background = '#fff';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.02)';
-                    }}
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+                      '--delay': `${i * 0.05}s`
+                    } as React.CSSProperties}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontSize: 18 }}>{item.icon}</span>
@@ -833,6 +835,9 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
             messages.map((msg, index) => (
               <div 
                 key={index} 
+                id={`msg-${index}`}
+                data-msg-content={msg.content}
+                className="stagger-entry"
                 style={{ 
                   display: 'flex', 
                   gap: 12,
@@ -871,21 +876,25 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                     position: 'relative'
                   }}>
                     {msg.quotedMessage && (
-                      <div style={{ 
-                        fontSize: 12, 
-                        background: 'rgba(0,0,0,0.05)', 
-                        padding: '6px 10px', 
-                        borderRadius: 8, 
-                        marginBottom: 8,
-                        borderLeft: `3px solid ${msg.role === 'user' ? '#fff' : '#2563eb'}`,
-                        color: msg.role === 'user' ? 'rgba(255,255,255,0.8)' : '#64748b',
-                        maxWidth: '100%',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical'
-                      }}>
+                      <div 
+                        onClick={() => handleScrollToMessage(msg.quotedMessage!)}
+                        style={{ 
+                          fontSize: 12, 
+                          background: 'rgba(0,0,0,0.05)', 
+                          padding: '6px 10px', 
+                          borderRadius: 8, 
+                          marginBottom: 8,
+                          borderLeft: `3px solid ${msg.role === 'user' ? '#fff' : '#2563eb'}`,
+                          color: msg.role === 'user' ? 'rgba(255,255,255,0.8)' : '#64748b',
+                          maxWidth: '100%',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          cursor: 'pointer'
+                        }}
+                      >
                         <Quote size={10} style={{ marginRight: 4, opacity: 0.6 }} />
                         {msg.quotedMessage}
                       </div>
@@ -1254,6 +1263,14 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         @keyframes fade-in {
           from { opacity: 0; transform: translateY(5px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        .message-highlight {
+          animation: highlight-pulse 2s ease-out;
+        }
+        @keyframes highlight-pulse {
+          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
+          30% { transform: scale(1.02); box-shadow: 0 0 20px 5px rgba(37, 99, 235, 0.2); }
+          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
         }
       `}</style>
     </div>

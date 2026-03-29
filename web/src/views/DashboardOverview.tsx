@@ -95,20 +95,29 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               </div>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
-                    <span style={{ color: '#64748b', fontWeight: 500 }}>{t('dashboard.cpuLoad')}</span>
-                    <span style={{ color: '#1e293b', fontWeight: 700 }}>{status?.metrics?.cpu_usage?.toFixed(1)}%</span>
+                {!status?.metrics ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <Skeleton active paragraph={{ rows: 1 }} />
+                    <Skeleton active paragraph={{ rows: 1 }} />
                   </div>
-                  <Progress percent={status?.metrics?.cpu_usage} showInfo={false} strokeColor="#3b82f6" trailColor="#eff6ff" strokeWidth={6} />
-                </div>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
-                    <span style={{ color: '#64748b', fontWeight: 500 }}>{t('dashboard.memLoad')}</span>
-                    <span style={{ color: '#1e293b', fontWeight: 700 }}>{status?.metrics?.memory_usage?.toFixed(1)}%</span>
-                  </div>
-                  <Progress percent={status?.metrics?.memory_usage} showInfo={false} strokeColor="#8b5cf6" trailColor="#f5f3ff" strokeWidth={6} />
-                </div>
+                ) : (
+                  <>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
+                        <span style={{ color: '#64748b', fontWeight: 500 }}>{t('dashboard.cpuLoad')}</span>
+                        <span style={{ color: '#1e293b', fontWeight: 700 }}>{status?.metrics?.cpu_usage?.toFixed(1)}%</span>
+                      </div>
+                      <Progress percent={status?.metrics?.cpu_usage} showInfo={false} strokeColor="#3b82f6" trailColor="#eff6ff" strokeWidth={6} />
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
+                        <span style={{ color: '#64748b', fontWeight: 500 }}>{t('dashboard.memLoad')}</span>
+                        <span style={{ color: '#1e293b', fontWeight: 700 }}>{status?.metrics?.memory_usage?.toFixed(1)}%</span>
+                      </div>
+                      <Progress percent={status?.metrics?.memory_usage} showInfo={false} strokeColor="#8b5cf6" trailColor="#f5f3ff" strokeWidth={6} />
+                    </div>
+                  </>
+                )}
               </div>
             </Card>
 
@@ -170,24 +179,39 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               </div>
             </div>
 
-            {/* 巡检事件轨迹 (Timeline) */}
+            {/* 巡检事件轨迹 (Terminal Style Timeline) */}
             <div style={{ marginTop: 24, borderTop: '1px solid #f1f5f9', paddingTop: 24 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 20 }}>
                 <History size={15} color="#64748b" /> {t('dashboard.timeline')}
               </div>
-              <div style={{ height: 260, overflowY: 'auto', paddingRight: 10 }}>
+              <div style={{ 
+                height: 260, 
+                overflowY: 'auto', 
+                padding: '16px', 
+                background: '#f8fafc', 
+                borderRadius: 12,
+                border: '1px solid #f1f5f9'
+              }}>
                 <Timeline
                   items={systemEvents.map(ev => ({
-                    color: ev.event_type === 'HEAL' ? 'red' : ev.event_type === 'UPDATE' ? 'blue' : ev.event_type === 'CONTROL' ? 'green' : 'gray',
+                    color: ev.event_type === 'HEAL' ? '#f43f5e' : ev.event_type === 'UPDATE' ? '#3b82f6' : ev.event_type === 'CONTROL' ? '#10b981' : '#64748b',
                     children: (
-                      <div style={{ fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingRight: 4 }}>
-                        <span style={{ fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
-                          {ev.event_type === 'HEAL' && <AlertTriangle size={12} />}
-                          {ev.event_type === 'UPDATE' && <Download size={12} />}
-                          {ev.event_type === 'CONTROL' && <Zap size={12} />}
+                      <div style={{ 
+                        fontSize: 11, 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        gap: 12, 
+                        color: '#64748b',
+                        fontFamily: '"JetBrains Mono", monospace'
+                      }}>
+                        <span style={{ color: ev.event_type === 'HEAL' ? '#e11d48' : '#334155', display: 'flex', alignItems: 'center', gap: 6, flex: 1, fontWeight: 500 }}>
+                          {ev.event_type === 'HEAL' && <AlertTriangle size={11} />}
+                          {ev.event_type === 'UPDATE' && <Download size={11} />}
+                          {ev.event_type === 'CONTROL' && <Zap size={11} />}
                           {ev.message}
                         </span>
-                        <span style={{ color: '#94a3b8', fontSize: 11, flexShrink: 0, fontFamily: 'monospace' }}>
+                        <span style={{ opacity: 0.5, flexShrink: 0 }}>
                           {dayjs(ev.timestamp).format('HH:mm:ss')}
                         </span>
                       </div>
@@ -196,7 +220,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   style={{ paddingTop: 8 }}
                 />
                 {systemEvents.length === 0 && (
-                  <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 12, padding: '20px 0' }}>
+                  <div style={{ textAlign: 'center', color: '#475569', fontSize: 12, padding: '40px 0', fontFamily: 'monospace' }}>
                     {t('dashboard.noEvents')}
                   </div>
                 )}

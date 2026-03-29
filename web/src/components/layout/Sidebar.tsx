@@ -52,9 +52,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
               style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, textDecoration: 'none' }}
             >
               <div style={{ 
-                width: 6, height: 6, borderRadius: '50%', background: '#22c55e', 
-                boxShadow: '0 0 8px #22c55e', 
-                animation: 'pulse 2s infinite' 
+                width: 8, height: 8, borderRadius: '50%', background: '#22c55e', 
+                animation: 'glow-pulse 2s infinite ease-in-out' 
               }}></div>
               <span style={{ 
                 fontSize: 9, color: '#64748b', fontWeight: 800, 

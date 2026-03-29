@@ -20,6 +20,7 @@ import OnlineChat from './views/OnlineChat';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import SkillManagement from './views/SkillManagement';
 import CrayfishLoading from './components/common/CrayfishLoading';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import CommandPalette from './components/common/CommandPalette';
 
 // Hooks
@@ -593,7 +594,11 @@ const Dashboard = () => {
       'skills': <SkillManagement isMobile={isMobile} />
     };
 
-    return viewMap[activeTab] || <div style={{ padding: 40, textAlign: 'center' }}><Spin size="large" tip={t('common.loading')} /></div>;
+    return (
+      <ErrorBoundary key={activeTab}>
+        {viewMap[activeTab] || <div style={{ padding: 40, textAlign: 'center' }}><Spin size="large" tip={t('common.loading')} /></div>}
+      </ErrorBoundary>
+    );
   };
 
   if (fetching && !status) return <CrayfishLoading />;

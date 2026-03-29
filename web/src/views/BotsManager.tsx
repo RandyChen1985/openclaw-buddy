@@ -378,16 +378,17 @@ const BotsManager: React.FC<BotsManagerProps> = ({
             botsModels?.data?.bots?.map((bot: any, index: number) => {
               const color = cardColors[index % cardColors.length];
               return (
-                <Col xs={24} sm={12} lg={8} key={bot.id}>
+                <Col xs={24} sm={12} lg={8} key={bot.id} className="stagger-entry" style={{ '--delay': `${index * 0.05}s` } as React.CSSProperties}>
                   <Card
                     hoverable
+                    className="card-float"
                     styles={{ body: { padding: '20px' } }}
                     style={{ 
                       borderRadius: 20, 
                       border: `1px solid ${color.border}`,
                       background: color.bg,
                       height: '100%',
-                      transition: 'all 0.3s ease',
+                      transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
                       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)'
                     }}
                   >
