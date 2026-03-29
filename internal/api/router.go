@@ -111,6 +111,7 @@ func (s *Server) setupRoutes() {
 		v1.GET("/wechat/config/status", s.getWeChatConfigStatus)
 		v1.POST("/wechat/install", s.installWeChatPlugin)
 		v1.GET("/ws/logs", s.streamLogs)
+		v1.GET("/ws/tui", s.handleTUI)
 
 		// Self-healing management
 		v1.GET("/settings/self-healing", s.getSelfHealingSetting)

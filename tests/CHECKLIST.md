@@ -22,6 +22,7 @@
 - [ ] **对话一键开启**: `POST /v1/openclaw/chat/enable` 应自动更新 `openclaw.json` 并触发异步重启任务。
 - [ ] **流式对话服务**: `POST /v1/openclaw/chat/completions` 应兼容 OpenAI 协议，且在 `stream: true` 时返回标准 SSE 流。
 - [ ] **`chat/completions` 用户标识**: `POST /v1/openclaw/chat/completions` 请求应能接收并透传来自上游的 `user` 参数，且不再硬编码为 `lobster`。
+- [ ] **`chat/completions` 权限容错**: 当后端返回 `missing scope: operator.write` (403/401) 时，前端应弹出友好提示，建议使用 TUI 聊天。
 - [ ] **`chat/completions` 系统提示注入**: `POST /v1/openclaw/chat/completions` 请求应不再自动注入系统提示到 `messages` 数组中。
 - [ ] **前端用户标识生成**: 聊天界面应能根据 `urlUser` 或 `localStorage` 中的 `session_id`（格式为 `lobster-{session_id}`）生成 `user` 标识并发送，并在清空会话时更新 `session_id`。
 - [ ] **快捷指令管理**: `GET/POST /v1/openclaw/chat/quick-commands` 应能存取用户自定义的对话话术。

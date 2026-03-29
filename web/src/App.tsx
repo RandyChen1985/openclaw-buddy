@@ -19,6 +19,7 @@ import SelfHealing from './views/SelfHealing';
 import OnlineChat from './views/OnlineChat';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import SkillManagement from './views/SkillManagement';
+import TuiView from './views/TuiView';
 import CrayfishLoading from './components/common/CrayfishLoading';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import CommandPalette from './components/common/CommandPalette';
@@ -507,6 +508,7 @@ const Dashboard = () => {
       type: 'group',
       children: [
         { key: 'chat', label: t('common.chat'), icon: <MessageSquare size={14} /> },
+        { key: 'tui', label: t('common.tuiChat'), icon: <Terminal size={14} /> },
         { key: 'bots-models', label: t('common.bots'), icon: <Boxes size={14} /> },
         { key: 'skills', label: t('common.skills'), icon: <Puzzle size={14} /> },
       ]
@@ -591,6 +593,7 @@ const Dashboard = () => {
       'logs': <LogsViewer wsLogs={wsLogs} />,
       'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} />,
       'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} />,
+      'tui': <TuiView />,
       'skills': <SkillManagement isMobile={isMobile} />
     };
 

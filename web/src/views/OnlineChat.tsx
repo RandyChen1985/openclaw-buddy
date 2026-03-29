@@ -380,7 +380,22 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         signal: abortControllerRef.current.signal
       });
 
-      if (!response.ok) throw new Error(t('chat.networkError'));
+      if (!response.ok) {
+        // 增加容错：处理网关版本更新导致的权限协议变更 (operator.write 缺失)
+        if (response.status === 403 || response.status === 401) {
+          try {
+            const errorData = await response.clone().json();
+            if (errorData.error?.message?.includes('operator.write')) {
+              message.error(t('chat.permissionError'), 10);
+              setIsTyping(false);
+              return;
+            }
+          } catch (e) {
+            // 解析失败则走通用错误逻辑
+          }
+        }
+        throw new Error(t('chat.networkError'));
+      }
 
       const reader = response.body?.getReader();
       if (!reader) throw new Error(t('chat.streamError'));
