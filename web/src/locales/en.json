@@ -179,7 +179,12 @@
       "setting_default_model": "Switching Default Model",
       "setting_default_model_desc": "Updating global AI core, please wait...",
       "approving_device": "Approving Device Access",
-      "approving_device_desc": "Authorizing device access, please wait..."
+      "approving_device_desc": "Authorizing device access, please wait...",
+      "running": "Starting Gateway",
+      "running_desc": "Lobster is getting ready, please wait...",
+      "stopped": "Stopping Gateway",
+      "stopped_desc": "Safely shutting down service process, please wait...",
+      "syncing": "Syncing Status"
     },
     "userLabel": "User"
   },

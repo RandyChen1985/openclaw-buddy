@@ -179,7 +179,12 @@
       "setting_default_model": "正在切换默认模型",
       "setting_default_model_desc": "正在更新全局 AI 核心，请稍后...",
       "approving_device": "正在批准设备接入",
-      "approving_device_desc": "正在授权设备访问权限，请稍后..."
+      "approving_device_desc": "正在授权设备访问权限，请稍后...",
+      "running": "正在启动网关",
+      "running_desc": "小龙虾正在加紧就位中，请稍后...",
+      "stopped": "正在停止网关",
+      "stopped_desc": "正在安全关闭服务进程，请稍后...",
+      "syncing": "正在同步状态"
     },
     "userLabel": "用户"
   },
@@ -330,9 +335,9 @@
     "deleteFailed": "删除请求失败",
     "syncingAssets": "正在同步 OpenClaw 资产清单...",
     "justNow": "刚刚",
-    "minutesAgo": "{{count}}m ago",
-    "hoursAgo": "{{count}}h ago",
-    "daysAgo": "{{count}}d ago",
+    "minutesAgo": "{{count}} 分钟前",
+    "hoursAgo": "{{count}} 小时前",
+    "daysAgo": "{{count}} 天前",
     "createSuccess": "机器人 {{id}} 创建成功",
     "createFailed": "创建机器人失败",
     "updateSuccess": "机器人 {{id}} 的名称已更新为 {{name}}",
