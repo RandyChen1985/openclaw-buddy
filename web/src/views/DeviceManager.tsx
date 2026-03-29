@@ -1,5 +1,6 @@
 import React from 'react';
 import { Card, Tag, Spin, List, Button, Tooltip, Modal } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { Smartphone, CheckCircle, RefreshCw } from 'lucide-react';
 import dayjs from 'dayjs';
 
@@ -18,6 +19,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
   onRefresh,
   isMobile
 }) => {
+  const { t } = useTranslation();
   const deviceList = devices?.data || [];
   const pendingDevices = deviceList.filter((d: any) => d.status === 'pending');
   const pairedDevices = deviceList.filter((d: any) => d.status === 'paired');
@@ -29,12 +31,12 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
         title={
           <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', width: '100%', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 12 }}>
             <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Smartphone size={isMobile ? 18 : 20} color="#f59e0b" /> 待处理连接请求
+              <Smartphone size={isMobile ? 18 : 20} color="#f59e0b" /> {t('devices.pendingRequests')}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
               {devices?.updated_at && (
                 <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
-                  同步于: {dayjs(devices.updated_at).format('YYYY-MM-DD HH:mm:ss')}
+                  {t('channels.syncedAt')}: {dayjs(devices.updated_at).format('YYYY-MM-DD HH:mm:ss')}
                 </span>
               )}
               <Button 
@@ -45,7 +47,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
                 loading={loadingDevices}
                 style={{ color: '#64748b', display: 'flex', alignItems: 'center', padding: isMobile ? '0 4px' : '0 8px' }}
               >
-                {isMobile ? '' : '刷新'}
+                {isMobile ? '' : t('common.refresh')}
               </Button>
             </div>
           </div>
@@ -54,15 +56,15 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
         style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
       >
         <div style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9', marginBottom: 0, color: '#64748b', fontSize: 13 }}>
-          以下设备正在请求接入 OpenClaw，请审核并决定是否批准授权。
+          {t('devices.description')}
         </div>
         {loadingDevices && !devices?.data ? (
           <div style={{ padding: '40px 0', textAlign: 'center' }}>
-            <Spin tip="同步中..." size="small" />
+            <Spin tip={t('common.syncing')} size="small" />
           </div>
         ) : pendingDevices.length === 0 ? (
           <div style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8' }}>
-            <div style={{ fontSize: 13 }}>暂无待处理的设备请求</div>
+            <div style={{ fontSize: 13 }}>{t('devices.noPending')}</div>
           </div>
         ) : (
           <List
@@ -78,17 +80,17 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
                     size="small"
                     onClick={() => {
                       Modal.confirm({
-                        title: '确认批准设备接入？',
-                        content: `您正在批准设备 "${item.displayName || '未知设备'}" 接入 OpenClaw，确认后其将获得访问权限。`,
-                        okText: '确认批准',
-                        cancelText: '取消',
+                        title: t('devices.confirmTitle'),
+                        content: t('devices.confirmContent', { name: item.displayName || t('devices.unknownDevice') }),
+                        okText: t('devices.confirmApprove'),
+                        cancelText: t('common.cancel'),
                         centered: true,
                         onOk: () => onApproveDevice(item.requestId)
                       });
                     }}
                     style={{ borderRadius: 6, fontSize: 12 }}
                   >
-                    批准授权
+                    {t('devices.approveBtn')}
                   </Button>
                 ]}
               >
@@ -103,19 +105,19 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
                   }
                   title={
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 15 }}>{item.displayName || '未知设备'}</span>
-                      <Tag color="orange" style={{ borderRadius: 4, margin: 0, fontSize: 11 }}>待批准</Tag>
+                      <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 15 }}>{item.displayName || t('devices.unknownDevice')}</span>
+                      <Tag color="orange" style={{ borderRadius: 4, margin: 0, fontSize: 11 }}>{t('devices.status.pending')}</Tag>
                     </div>
                   }
                   description={
                     <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '80px 1fr', gap: '4px 12px', fontSize: 12 }}>
-                      <span style={{ color: '#94a3b8' }}>请求 ID:</span>
+                      <span style={{ color: '#94a3b8' }}>{t('devices.requestId')}:</span>
                       <Tooltip title={item.requestId}>
                         <span style={{ fontFamily: 'monospace', color: '#2563eb', background: '#eff6ff', padding: '1px 6px', borderRadius: 4, cursor: 'help' }}>
                           {item.requestId?.substring(0, 12)}...
                         </span>
                       </Tooltip>
-                      <span style={{ color: '#94a3b8' }}>操作系统:</span>
+                      <span style={{ color: '#94a3b8' }}>{t('devices.os')}:</span>
                       <span style={{ color: '#475569' }}>{item.platform || '—'}</span>
                     </div>
                   }
@@ -128,20 +130,20 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
 
       {/* 2. 已成功配对设备 */}
       <Card
-        title={<span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={isMobile ? 18 : 20} color="#10b981" /> 已配对合规设备</span>}
+        title={<span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={isMobile ? 18 : 20} color="#10b981" /> {t('devices.pairedDevices')}</span>}
         styles={{ body: { padding: isMobile ? '0 16px' : '0 24px' } }}
         style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
       >
         <div style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9', marginBottom: 0, color: '#64748b', fontSize: 13 }}>
-          当前已成功配对并获准通过 OpenClaw 终端的合法设备及应用列表。
+          {t('devices.pairedDescription')}
         </div>
         {loadingDevices && !devices?.data ? (
           <div style={{ padding: '40px 0', textAlign: 'center' }}>
-            <Spin tip="同步中..." size="small" />
+            <Spin tip={t('common.syncing')} size="small" />
           </div>
         ) : pairedDevices.length === 0 ? (
           <div style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8' }}>
-            <div style={{ fontSize: 13 }}>暂无已配对的设备信息</div>
+            <div style={{ fontSize: 13 }}>{t('devices.noPaired')}</div>
           </div>
         ) : (
           <List
@@ -159,21 +161,21 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
                   }
                   title={
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 15 }}>{item.displayName || '未知设备'}</span>
-                      <Tag color="success" style={{ borderRadius: 4, margin: 0, fontSize: 11 }}>已加固</Tag>
+                      <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 15 }}>{item.displayName || t('devices.unknownDevice')}</span>
+                      <Tag color="success" style={{ borderRadius: 4, margin: 0, fontSize: 11 }}>{t('devices.status.paired')}</Tag>
                     </div>
                   }
                   description={
                     <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '80px 1fr', gap: '4px 12px', fontSize: 12 }}>
-                      <span style={{ color: '#94a3b8' }}>设备 ID:</span>
+                      <span style={{ color: '#94a3b8' }}>{t('devices.deviceId')}:</span>
                       <Tooltip title={item.deviceId}>
                         <span style={{ fontFamily: 'monospace', color: '#2563eb', background: '#eff6ff', padding: '1px 6px', borderRadius: 4, cursor: 'help' }}>
                           {item.deviceId?.substring(0, 12)}...
                         </span>
                       </Tooltip>
-                      <span style={{ color: '#94a3b8' }}>操作系统:</span>
+                      <span style={{ color: '#94a3b8' }}>{t('devices.os')}:</span>
                       <span style={{ color: '#475569' }}>{item.platform || '—'}</span>
-                      <span style={{ color: '#94a3b8' }}>运行模式:</span>
+                      <span style={{ color: '#94a3b8' }}>{t('devices.clientMode')}:</span>
                       <span><Tag color="blue" style={{ margin: 0, fontSize: 10 }}>{item.clientMode || '—'}</Tag></span>
                     </div>
                   }

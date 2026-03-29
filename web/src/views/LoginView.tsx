@@ -1,32 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Input, Form, message } from 'antd';
 import { KeyRound } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import api from '../api';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 interface LoginViewProps {
   onLoginSuccess: (token: string) => void;
 }
 
-const quotes = [
-  { main: "0.01 公分的距离", sub: "来自带外的重连契约，写在每一个丢包的瞬间" },
-  { main: "1/60 秒的脉搏", sub: "捕捉比特平原上的每一次震颤" },
-  { main: "第 2046 个数据包", sub: "在寂静的机架间听见跳动的心脏" },
-  { main: "带外之外的余温", sub: "是系统崩溃前最后的温柔" },
-  { main: "每一个消失的信号", sub: "是一场未曾抵达的重逢" },
-  { main: "0.01 公分的距离", sub: "守着那些虾宝宝的黄昏，不问归期" }
-
-];
-
 const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [isMobileLogin, setIsMobileLogin] = useState(window.innerWidth < 1024);
   const [displayText, setDisplayText] = useState('');
   const [index, setIndex] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [speed, setSpeed] = useState(100);
+  const quotes = (t('login.quotes', { returnObjects: true }) as any[]) || [];
   const [quoteIndex, setQuoteIndex] = useState(() => Math.floor(Math.random() * quotes.length));
-
-  const typewriterText = "“我听人说，如果连咖啡都没有伴侣，那它就不叫咖啡，叫苦水。在这个习惯了礼貌拒绝的时代，连空气中都带着独身的湿气。但我始终觉得，即使是代码堆砌的小龙虾，也该有个依靠。OpenClaw Buddy，它就在离你 0.01 公分的地方。它不说话，只是陪你守着那些虾宝宝。希望有一天，你也能找到那个让你不再需要‘监控哨兵’的人。”";
+  
+  const typewriterText = t('login.typewriter');
 
   useEffect(() => {
     const handleType = () => {
@@ -77,10 +71,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       if (res.data.status === 'success') {
         localStorage.setItem('guardian_token', values.token);
         onLoginSuccess(values.token);
-        message.success('认证成功，欢迎回来');
+        message.success(t('login.authSuccess'));
       }
     } catch (err: any) {
-      message.error(err.response?.data?.error || '无效的访问凭据');
+      message.error(err.response?.data?.error || t('login.invalidCredentials'));
     } finally {
       setLoading(false);
     }
@@ -149,14 +143,14 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               `}</style>
             </p>
             <div style={{ display: 'flex', gap: 16 }}>
-              {['24/7 监测', '秒级告警', '一键闭环'].map(f => (
-                <div key={f} style={{
+              {['monit', 'alert', 'loop'].map(key => (
+                <div key={key} style={{
                   background: 'rgba(255,255,255,0.05)', borderRadius: 20,
-                  padding: '8px 20px', color: '#cbd5e1', fontSize: 14,
+                  padding: '8px 20px', color: '#cbd5e1', fontSize: 13,
                   border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 8
                 }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6' }} />
-                  {f}
+                  {t(`login.features.${key}`)}
                 </div>
               ))}
             </div>
@@ -170,8 +164,12 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       <div style={{
         flex: isMobileLogin ? 1 : 3, background: '#fff',
         display: 'flex', flexDirection: 'column',
-        padding: isMobileLogin ? '40px 24px 8px' : '60px 48px 8px'
+        padding: isMobileLogin ? '40px 24px 8px' : '60px 48px 8px',
+        position: 'relative'
       }}>
+        <div style={{ position: 'absolute', top: 24, right: 24, zIndex: 10 }}>
+           <LanguageSwitcher />
+        </div>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ width: '100%', maxWidth: 400 }}>
             {/* Mascot 图片 (与白色背景底衬融合) */}
@@ -184,18 +182,18 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             </div>
 
             <div style={{ marginBottom: 40, textAlign: 'center' }}>
-              <h2 style={{ fontSize: 32, fontWeight: 800, color: '#1e293b', margin: '0 0 10px', letterSpacing: '-0.02em' }}>欢迎回来</h2>
-              <p style={{ fontSize: 15, color: '#64748b', margin: 0 }}>请提供您的 Buddy Token 凭据</p>
+              <h2 style={{ fontSize: 32, fontWeight: 800, color: '#1e293b', margin: '0 0 10px', letterSpacing: '-0.02em' }}>{t('login.welcomeBack')}</h2>
+              <p style={{ fontSize: 15, color: '#64748b', margin: 0 }}>{t('login.credentialsTip')}</p>
             </div>
 
             <Form layout="vertical" onFinish={onFinish} size="large">
               <Form.Item
                 name="token"
-                label={<span style={{ fontSize: 12, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Access Token</span>}
-                rules={[{ required: true, message: '请输入访问令牌' }]}
+                label={<span style={{ fontSize: 12, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('login.accessToken')}</span>}
+                rules={[{ required: true, message: t('login.tokenRequired') }]}
               >
                 <Input.Password
-                  placeholder="输入您的 Buddy Token"
+                  placeholder={t('login.tokenPlaceholder')}
                   prefix={<KeyRound size={18} color="#94a3b8" style={{ marginRight: 8 }} />}
                   style={{ borderRadius: 12, padding: '12px 16px', background: '#f8fafc', border: '1px solid #e2e8f0' }}
                 />
@@ -212,7 +210,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   boxShadow: '0 10px 15px -3px rgba(37,99,235,0.3)'
                 }}
               >
-                进入控制台
+                {t('login.button')}
               </Button>
             </Form>
           </div>

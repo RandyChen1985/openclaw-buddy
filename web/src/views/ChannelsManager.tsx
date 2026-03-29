@@ -1,5 +1,6 @@
 import React from 'react';
 import { Card, Tag, Spin, Button } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle, Cloud, RefreshCw, Zap, AlertCircle, Smartphone, Radar } from 'lucide-react';
 import dayjs from 'dayjs';
 
@@ -28,6 +29,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   onRefreshChannels,
   isMobile
 }) => {
+  const { t } = useTranslation();
   const channelsList = chatChannels?.data || [];
   const configuredChannels = channelsList.filter((c: any) => c.configured);
   const hasWeixinConfig = configuredChannels.some((c: any) => c.name.toLowerCase().includes('weixin'));
@@ -39,12 +41,12 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
         title={
           <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', width: '100%', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 12 }}>
             <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <CheckCircle size={isMobile ? 18 : 20} color="#10b981" /> 已绑定渠道
+              <CheckCircle size={isMobile ? 18 : 20} color="#10b981" /> {t('channels.boundChannels')}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
               {chatChannels?.updated_at && (
                 <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
-                  同步于: {dayjs(chatChannels.updated_at).format('YYYY-MM-DD HH:mm:ss')}
+                  {t('channels.syncedAt')}: {dayjs(chatChannels.updated_at).format('YYYY-MM-DD HH:mm:ss')}
                 </span>
               )}
               <Button 
@@ -55,7 +57,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                 loading={loadingChannels}
                 style={{ color: '#64748b', display: 'flex', alignItems: 'center', padding: isMobile ? '0 4px' : '0 8px' }}
               >
-                {isMobile ? '' : '刷新'}
+                {isMobile ? '' : t('common.refresh')}
               </Button>
             </div>
           </div>
@@ -65,11 +67,11 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
       >
         {loadingChannels && !chatChannels?.data ? (
           <div style={{ textAlign: 'center', padding: '12px 0' }}>
-            <Spin size="small" tip="正在同步渠道信息..." />
+            <Spin size="small" tip={t('channels.syncing')} />
           </div>
         ) : configuredChannels.length === 0 ? (
           <div style={{ color: '#94a3b8', fontSize: 12, textAlign: 'center', padding: '12px 0' }}>
-            暂无已绑定渠道，请在下方选择插件进行配置
+            {t('channels.noChannels')}
           </div>
         ) : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -115,14 +117,14 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 15, marginBottom: 4 }}>
-                微信官方插件 (openclaw-weixin)
+                {t('channels.weixinPlugin')} (openclaw-weixin)
               </div>
               <div style={{ color: '#64748b', fontSize: 12 }}>
                 {weixinStatus === null 
-                  ? '正在连接插件系统并检索状态...'
+                  ? t('channels.connecting')
                   : weixinStatus.installed 
-                    ? `运行状态: ${weixinStatus.status} (已托管至配置中心)`
-                    : '核心组件缺失，需完成安装后方可获取登录码'}
+                    ? t('channels.runningManaged', { status: weixinStatus.status })
+                    : t('channels.coreMissing')}
               </div>
             </div>
           </div>
@@ -130,7 +132,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
             {weixinStatus === null ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>监测中 ({checkWeixinSeconds}s)</span>
+                <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>{t('channels.monitoring')} ({checkWeixinSeconds}s)</span>
                 <div className="radar-pulse-container" style={{ width: 32, height: 32, '--radar-color': '#ef4444' } as any}>
                   <div className="radar-ring"></div>
                   <div className="radar-ring" style={{ animationDelay: '0.5s' }}></div>
@@ -139,11 +141,11 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
               </div>
             ) : weixinStatus.installed ? (
               <Tag color="success" style={{ borderRadius: 6, fontSize: 12, padding: '4px 12px', border: 'none', background: '#f0fdf4', color: '#16a34a', fontWeight: 600 }}>
-                已安装 v{weixinStatus.version}
+                {t('channels.installed')} v{weixinStatus.version}
               </Tag>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <Tag color="error" style={{ borderRadius: 4, fontSize: 11 }}>未安装</Tag>
+                <Tag color="error" style={{ borderRadius: 4, fontSize: 11 }}>{t('channels.notInstalled')}</Tag>
                 <Button 
                   type="primary" 
                   icon={<Zap size={14} />} 
@@ -151,7 +153,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                   onClick={onInstallWeixin}
                   style={{ borderRadius: 8, height: 36 }}
                 >
-                  一键安装插件
+                  {t('channels.installPlugin')}
                 </Button>
               </div>
             )}
@@ -176,8 +178,8 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
               <Radar size={32} color="#94a3b8" style={{ position: 'relative', zIndex: 1 }} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>正在监测微信插件状态...</span>
-              <span style={{ fontSize: 12, color: '#64748b' }}>请稍候，正在确认核心组件安装情况 ({checkWeixinSeconds}s)</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{t('channels.monitoringStatus')}</span>
+              <span style={{ fontSize: 12, color: '#64748b' }}>{t('channels.confirmingCore')} ({checkWeixinSeconds}s)</span>
             </div>
           </div>
         )}
@@ -190,7 +192,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
             display: 'flex', alignItems: 'center', gap: 8,
             fontWeight: 600, width: '100%'
           }}>
-            <AlertCircle size={14} /> 已经绑定过微信，重复绑定则覆盖之前的配置
+            <AlertCircle size={14} /> {t('channels.overwriteWarning')}
           </div>
         )}
         <Card
@@ -226,9 +228,9 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                   marginBottom: 4,
                   transition: 'all 0.3s'
                 }}>
-                  获取微信登录码
+                  {t('channels.getLoginCode')}
                 </div>
-                <div style={{ color: '#64748b', fontSize: 12 }}>生成用于身份授权的微信二维码，用于绑定个人微信，有效期 5 分钟</div>
+                <div style={{ color: '#64748b', fontSize: 12 }}>{t('channels.getLoginCodeDesc')}</div>
               </div>
             </div>
             {weixinStatus?.installed && (
@@ -240,7 +242,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                 alignItems: 'center', 
                 gap: 4 
               }}>
-                立即获取 <RefreshCw size={12} />
+                {t('channels.getNow')} <RefreshCw size={12} />
               </div>
             )}
           </div>

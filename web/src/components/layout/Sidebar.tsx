@@ -2,6 +2,7 @@ import React from 'react';
 import { Menu, Button, Tooltip } from 'antd';
 import { APP_VERSION } from '../../version';
 import { LogOut } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface SidebarProps {
   activeTab: string;
@@ -13,6 +14,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLogout, navItems, versionUpdate }) => {
+  const { t } = useTranslation();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#001529' }}>
       {/* Logo */}
@@ -105,7 +107,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
 
       {/* Logout */}
       <div style={{ padding: '0 8px 16px', borderTop: '1px solid rgba(51,65,85,0.3)', flexShrink: 0 }}>
-        <Tooltip title={collapsed ? '退出登录' : ''} placement="right">
+        <Tooltip title={collapsed ? t('common.logout') : ''} placement="right">
           <Button
             block
             icon={<LogOut size={14} />}
@@ -118,7 +120,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
               paddingLeft: collapsed ? 0 : 12, gap: 8,
             }}
           >
-            {!collapsed && <span style={{ fontSize: 12 }}>退出登录</span>}
+            {!collapsed && <span style={{ fontSize: 12 }}>{t('common.logout')}</span>}
           </Button>
         </Tooltip>
       </div>

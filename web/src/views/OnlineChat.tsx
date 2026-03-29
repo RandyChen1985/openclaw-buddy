@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2, ArrowDown, Check, ZapOff, Activity } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -17,6 +18,7 @@ const { Option } = Select;
 
 // --- Mermaid Component ---
 const Mermaid = ({ chart }: { chart: string }) => {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (ref.current && chart) {
@@ -26,7 +28,7 @@ const Mermaid = ({ chart }: { chart: string }) => {
       mermaid.render(id, chart).then(({ svg }) => {
         if (ref.current) ref.current.innerHTML = svg;
       }).catch(err => {
-        if (ref.current) ref.current.innerHTML = `<div style="color: #ef4444; font-size: 12px; padding: 10px; border: 1px dashed #fecaca; border-radius: 8px;">Mermaid 渲染失败: ${err.message}</div>`;
+        if (ref.current) ref.current.innerHTML = `<div style="color: #ef4444; font-size: 12px; padding: 10px; border: 1px dashed #fecaca; border-radius: 8px;">${t('chat.mermaidError')}: ${err.message}</div>`;
       });
     }
   }, [chart]);
@@ -35,6 +37,7 @@ const Mermaid = ({ chart }: { chart: string }) => {
 
 // --- Code Block Component with Copy Functionality ---
 const CodeBlock = ({ language, value }: { language: string, value: string }) => {
+  const { t } = useTranslation();
   const [copied, setCopied] = React.useState(false);
 
   const handleCopy = () => {
@@ -61,7 +64,7 @@ const CodeBlock = ({ language, value }: { language: string, value: string }) => 
           icon={copied ? <Check size={12} color="#10b981" /> : <Copy size={12} color="#94a3b8" />}
           style={{ height: 24, fontSize: 11, color: copied ? '#10b981' : '#94a3b8', background: 'rgba(255,255,255,0.05)', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 4 }}
         >
-          {copied ? '已复制' : '复制'}
+          {copied ? t('chat.copySuccess') : t('chat.copy')}
         </Button>
       </div>
       <SyntaxHighlighter
@@ -102,6 +105,7 @@ interface OnlineChatProps {
 }
 
 const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefreshBots, isMobile, onRestartGateway }) => {
+  const { t } = useTranslation();
   const [selectedBot, setSelectedBot] = useState<string>('');
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<Message[]>(() => {
@@ -133,11 +137,21 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   const preprocessMarkdown = (content: string) => {
     if (!content) return '';
     return content
+      // 1. 确保标题 (#) 前后有空行
       .replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2')
+      .replace(/(#{1,6}\s.*)\n([^\n])/g, '$1\n\n$2')
+      // 2. 确保代码块 (```) 前后有空行
+      .replace(/([^\n])\n(```)/g, '$1\n\n$2')
+      .replace(/(```[\s\S]*?```)\n([^\n])/g, '$1\n\n$2')
+      // 3. 强化表格 (|) 前后空行，确保表格不被普通文本截断
       .replace(/([^\n])\n(\|)/g, (match, p1, p2) => {
         return p1.trim().endsWith('|') ? match : p1 + '\n\n' + p2;
       })
-      .replace(/([^\n])\n(```)/g, '$1\n\n$2');
+      .replace(/(\|)\n([^|\n][^\n]*)/g, (match, p1, p2) => {
+        return p2.trim().startsWith('|') ? match : p1 + '\n\n' + p2;
+      })
+      // 4. 修复模型输出中可能存在的非标准表格分隔线
+      .replace(/(\n\|[^\n]+\|)\n(\|(?:\s*:-+\s*\|)+)/g, '$1\n$2');
   };
 
    const [isTyping, setIsTyping] = useState(false);
@@ -209,12 +223,12 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
     try {
       const res = await api.post('/v1/openclaw/chat/quick-commands', values);
       if (res.data.status === 'success') {
-        message.success('添加成功');
+        message.success(t('common.success'));
         form.resetFields();
         fetchQuickCommands();
       }
     } catch (err) {
-      message.error('添加失败');
+      message.error(t('common.error'));
     }
   };
 
@@ -222,11 +236,11 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
     try {
       const res = await api.delete(`/v1/openclaw/chat/quick-commands/${id}`);
       if (res.data.status === 'success') {
-        message.success('已删除');
+        message.success(t('common.success'));
         fetchQuickCommands();
       }
     } catch (err) {
-      message.error('删除失败');
+      message.error(t('common.error'));
     }
   };
 
@@ -243,26 +257,26 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
   const handleEnableChat = () => {
     Modal.confirm({
-      title: '确认一键开启聊天功能？',
-      content: '开启后需要自动重启 OpenClaw 网关以使配置生效，重启期间网关服务将短时间不可用。',
-      okText: '确认开启并重启',
-      cancelText: '取消',
+      title: t('chat.enableChatTitle'),
+      content: t('chat.enableChatContent'),
+      okText: t('chat.enableChatButton'),
+      cancelText: t('common.cancel'),
       onOk: async () => {
         setEnabling(true);
         try {
           const res = await api.post('/v1/openclaw/chat/enable');
           if (res.data.status === 'success') {
-            message.loading('配置已更新，正在重启网关...', 2);
+            message.loading(t('dashboard.asyncRestart'), 2);
             if (onRestartGateway) {
               await onRestartGateway();
             }
-            message.success('对话功能已成功开启');
+            message.success(t('common.success'));
             setChatEnabled(true);
           } else {
-            message.error(res.data.error || '开启失败');
+            message.error(res.data.error || t('common.error'));
           }
         } catch (err) {
-          message.error('请求失败: ' + err);
+          message.error(t('common.error') + ': ' + err);
         } finally {
           setEnabling(false);
         }
@@ -347,10 +361,10 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         signal: abortControllerRef.current.signal
       });
 
-      if (!response.ok) throw new Error('网络请求失败');
+      if (!response.ok) throw new Error(t('chat.networkError'));
 
       const reader = response.body?.getReader();
-      if (!reader) throw new Error('无法读取响应流');
+      if (!reader) throw new Error(t('chat.streamError'));
 
       const assistantTimestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const assistantMessage: Message = { role: 'assistant', content: '', timestamp: assistantTimestamp };
@@ -413,9 +427,9 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       });
     } catch (err: any) {
       if (err.name === 'AbortError') {
-        message.info('回复已停止');
+        message.info(t('chat.stopGenerating'));
       } else {
-        message.error('发送失败，请检查网关连接');
+        message.error(t('common.error'));
       }
     } finally {
       setIsTyping(false);
@@ -431,7 +445,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
-      message.success('已复制到剪贴板');
+      message.success(t('chat.copySuccess'));
     });
   };
 
@@ -452,10 +466,10 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
   const clearHistory = () => {
     Modal.confirm({
-      title: '确认清空对话记录？',
-      content: '清除后将无法找回当前的对话历史，并会自动开启一个新的会话。',
-      okText: '确认清空',
-      cancelText: '取消',
+      title: t('chat.confirmClear'),
+      content: t('chat.confirmClearContent'),
+      okText: t('common.clear'),
+      cancelText: t('common.cancel'),
       okButtonProps: { danger: true },
       centered: true,
       onOk: () => {
@@ -464,7 +478,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         const newSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         localStorage.setItem('chat_session_id', newSessionId);
         setGeneratedSessionId(newSessionId);
-        message.success('对话记录已清空');
+        message.success(t('chat.historyCleared'));
       }
     });
   };
@@ -474,7 +488,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   if (checkingEnabled) {
     return (
         <div style={{ padding: 40, textAlign: 'center' }}>
-            <Spin tip="正在检查聊天功能配置..." />
+            <Spin tip={t('chat.checkStatus')} />
         </div>
     );
   }
@@ -486,9 +500,9 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           <div style={{ background: '#fff7ed', width: 64, height: 64, borderRadius: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', color: '#f97316' }}>
             <Zap size={32} />
           </div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1e293b', marginBottom: 12 }}>小龙虾服务未开启聊天功能</h2>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1e293b', marginBottom: 12 }}>{t('chat.notEnabled')}</h2>
           <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6, marginBottom: 32 }}>
-            当前的 OpenClaw 网关配置中未启用 <code>chatCompletions</code> 接口。开启后，您可以直接在监控台与机器人进行对话。
+            {t('chat.notEnabledDesc')}
           </p>
           <Button 
             type="primary" 
@@ -498,10 +512,10 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
             onClick={handleEnableChat}
             loading={enabling}
           >
-            一键开启聊天功能
+            {t('chat.oneClickEnable')}
           </Button>
           <div style={{ marginTop: 16, fontSize: 12, color: '#94a3b8' }}>
-            开启操作将自动修改配置文件并重启网关
+            {t('chat.enableWarning')}
           </div>
         </Card>
       </div>
@@ -537,11 +551,16 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       .markdown-body table {
         border-spacing: 0;
         border-collapse: collapse;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
         width: 100%;
         overflow-x: auto;
         display: block;
-        -webkit-overflow-scrolling: touch;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+      }
+      .markdown-body table th, .markdown-body table td {
+        padding: 8px 12px;
+        border: 1px solid #e2e8f0;
       }
       .markdown-body table th {
         background-color: #f8fafc;
@@ -596,7 +615,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
             {!isMobile && (
               <div>
                 <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  对话实验室
+                  {t('chat.welcomeTitle')}
                   {urlUser && (
                     <span style={{ 
                       fontSize: 10, 
@@ -607,19 +626,19 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                       borderRadius: 10,
                       border: '1px solid #bbf7d0'
                     }}>
-                      User: {urlUser}
+                      {t('chat.userLabel')}: {urlUser}
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: 12, color: '#64748b' }}>实时与 Lobster Bot 进行交互测试</div>
+                <div style={{ fontSize: 12, color: '#64748b' }}>{t('chat.labDescription')}</div>
               </div>
             )}
           </div>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flex: isMobile ? 1 : 'none', justifyContent: 'flex-end', minWidth: 0 }}>
-            {!isMobile && <span style={{ color: '#64748b', fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap' }}>请选择机器人:</span>}
+            {!isMobile && <span style={{ color: '#64748b', fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap' }}>{t('chat.selectBotTip')}:</span>}
             <Select 
-              placeholder="选择机器人" 
+              placeholder={t('chat.selectBotTip')} 
               style={{ width: isMobile ? 'auto' : 240, flex: isMobile ? 1 : 'none', minWidth: isMobile ? 120 : 0, height: 40 }} 
               value={selectedBot}
               onChange={setSelectedBot}
@@ -634,18 +653,18 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                     <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2' }}>
                       <span style={{ fontWeight: 600, color: '#1e293b', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bot.name || bot.id}</span>
                       <span style={{ fontSize: 10, color: '#94a3b8', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {bot.model || '未设定'}
+                        {bot.model || t('common.loading')}
                       </span>
                     </div>
                   </div>
                 </Option>
               ))}
             </Select>
-            <Button icon={<RefreshCw size={14} />} onClick={onRefreshBots} loading={loadingBots} title="刷新列表" />
+            <Button icon={<RefreshCw size={14} />} onClick={onRefreshBots} loading={loadingBots} title={t('common.refresh')} />
             {!isMobile && !isEmbedMode && (
               <Button 
                 icon={<ExternalLink size={14} />} 
-                title="在新窗口打开独立聊天"
+                title={t('chat.labDescription')}
                 onClick={() => {
                   const token = localStorage.getItem('guardian_token');
                   const botId = selectedBot.replace('openclaw:', '');
@@ -657,18 +676,18 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
             {!isMobile && (
             <Button 
                 icon={<Share2 size={14} />} 
-                title="获取嵌入代码"
+                title={t('chat.shareTitle')}
                 onClick={() => {
                   const token = localStorage.getItem('guardian_token');
                   const botId = selectedBot.replace('openclaw:', '');
                   const url = `${window.location.origin}/?page=chat&token=${token}&bot=${botId}&embed=true`;
                   const iframeCode = `<iframe src="${url}" width="100%" height="600" frameborder="0"></iframe>`;
                   Modal.info({
-                    title: '获取嵌入代码',
+                    title: t('chat.shareTitle'),
                     width: 500,
                     content: (
                       <div style={{ marginTop: 16 }}>
-                        <p style={{ fontSize: 13, color: '#64748b' }}>您可以将以下代码复制到其他系统中以嵌入此聊天窗口：</p>
+                        <p style={{ fontSize: 13, color: '#64748b' }}>{t('chat.shareDesc')}</p>
                         <Input.TextArea 
                           readOnly 
                           value={iframeCode} 
@@ -682,19 +701,19 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                           style={{ marginTop: 12 }}
                           onClick={() => {
                             navigator.clipboard.writeText(iframeCode);
-                            message.success('代码已复制');
+                            message.success(t('chat.copySuccess'));
                           }}
                         >
-                          复制 Iframe 代码
+                          {t('chat.copyIframe')}
                         </Button>
                       </div>
                     ),
-                    okText: '关闭'
+                    okText: t('common.close')
                   });
                 }}
             />
             )}
-            <Button danger icon={<Trash2 size={14} />} onClick={clearHistory} disabled={messages.length === 0}>{isMobile ? '' : '清空'}</Button>
+            <Button danger icon={<Trash2 size={14} />} onClick={clearHistory} disabled={messages.length === 0}>{isMobile ? '' : t('common.clear')}</Button>
           </div>
         </div>
       </Card>
@@ -729,8 +748,8 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           }}>
             <div style={{ padding: '24px 32px', background: '#fff', borderRadius: 16, boxShadow: '0 12px 40px rgba(0,0,0,0.1)', border: '1px solid #f1f5f9', textAlign: 'center' }}>
               <div style={{ fontSize: 32, marginBottom: 12 }}>☝️</div>
-              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>请先在右上方选择一个对话机器人</div>
-              <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>选择后即可开始实时交互测试</div>
+              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>{t('chat.selectBot')}</div>
+              <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>{t('chat.labDescription')}</div>
             </div>
           </div>
         )}
@@ -759,25 +778,25 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                 </div>
               </div>
               <h2 style={{ color: '#1e293b', fontWeight: 800, fontSize: isMobile ? 20 : 26, letterSpacing: '-0.02em', marginBottom: 8 }}>
-                欢迎来到对话实验室
+                {t('chat.welcomeTitle')}
               </h2>
               <p style={{ color: '#64748b', fontSize: isMobile ? 13 : 15, marginBottom: 32, maxWidth: 440, margin: '0 auto 32px' }}>
-                选择一个 AI 机器人开始对话。您的请求将通过 Guardian 网关进行安全审计和高效转发。
+                {t('chat.welcomeSubtitle')}
               </p>
               
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
                 {[
-                  ...quickCommands.map(c => ({ icon: '🍭', title: c.label || '快捷指令', text: c.prompt })),
-                  { icon: '💡', title: '智能助手', text: '帮我写一份 OpenClaw 使用指南' },
-                  { icon: '🚀', title: '性能优化', text: '如何降低 AI 接口响应延迟？' },
-                  { icon: '🛡️', title: '安全审计', text: 'Guardian 是如何监控对话风险的？' },
-                  { icon: '🔧', title: '代码分析', text: '请帮我优化这段 TypeScript 代码' }
+                  ...quickCommands.map(c => ({ icon: '🍭', title: c.label || t('chat.quickCommand'), text: c.prompt })),
+                  { icon: '💡', title: t('login.features.monit'), text: t('chat.guidePrompt') },
+                  { icon: '🚀', title: t('common.restart'), text: t('chat.latencyPrompt') },
+                  { icon: '🛡️', title: t('common.dashboard'), text: t('chat.guardianPrompt') },
+                  { icon: '🔧', title: t('common.assets'), text: t('chat.codePrompt') }
                 ].filter((v, i, a) => a.findIndex(t => t.text === v.text) === i).slice(0, 8).map((item, i) => (
                   <div 
                     key={i} 
                     onClick={() => {
                         if (!selectedBot) {
-                            message.warning('请先在右上方选择一个对话机器人 ☝️');
+                            message.warning(t('chat.selectBot'));
                             return;
                         }
                         handleSend(item.text);
@@ -945,7 +964,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 2, alignItems: 'center' }}>
-                    <Tooltip title="回复此消息">
+                    <Tooltip title={t('chat.reply')}>
                       <Button 
                         type="text" 
                         size="small" 
@@ -955,7 +974,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                           setQuotedMsg(msg.content);
                           inputRef.current?.focus();
                         }}
-                      >回复</Button>
+                      >{t('chat.reply')}</Button>
                     </Tooltip>
                     <Button 
                       type="text" 
@@ -963,7 +982,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                       icon={<Copy size={12} />} 
                       style={{ color: '#94a3b8', height: 22, fontSize: 11, padding: '0 4px' }} 
                       onClick={() => copyToClipboard(msg.content)}
-                    >复制</Button>
+                    >{t('chat.copy')}</Button>
                     {msg.role === 'assistant' && index === messages.length - 1 && !isTyping && (
                       <Button 
                         type="text" 
@@ -971,7 +990,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                         icon={<RotateCcw size={12} />} 
                         style={{ color: '#94a3b8', height: 22, fontSize: 11, padding: '0 4px' }} 
                         onClick={handleRegenerate}
-                      >重试</Button>
+                      >{t('chat.retry')}</Button>
                     )}
                     {msg.metrics && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10, color: '#94a3b8', opacity: 0.6 }}>
@@ -1000,7 +1019,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, animation: 'fade-in 0.3s ease' }}>
                 <Avatar size={36} style={{ background: '#fff', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }} icon={<Bot size={18} color="#2563eb" />} />
                 <div style={{ padding: '12px 16px', background: '#fff', borderRadius: '4px 16px 16px 16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>Lobster 正在思考回复中</span>
+                    <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>{t('chat.thinking')}</span>
                     <div className="typing-indicator">
                       <div className="typing-dot"></div>
                       <div className="typing-dot"></div>
@@ -1051,7 +1070,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
               animation: 'slide-up 0.2s ease'
             }}>
               <div style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                <span style={{ fontWeight: 700, marginRight: 6 }}>引用回复:</span>
+                <span style={{ fontWeight: 700, marginRight: 6 }}>{t('chat.reply')}:</span>
                 {quotedMsg}
               </div>
               <Button type="text" size="small" icon={<X size={14} />} onClick={() => setQuotedMsg(null)} />
@@ -1081,7 +1100,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                     icon={<Settings size={14} />} 
                     style={{ color: '#94a3b8', background: '#f1f5f9', borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onClick={() => setIsManageModalOpen(true)}
-                    title="管理快捷指令"
+                    title={t('chat.manageQuickCommands')}
                   />
                   <Button 
                     type="text" 
@@ -1092,7 +1111,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                         setShowQuickActions(false);
                         localStorage.setItem('chat_show_quick_actions', 'false');
                     }}
-                    title="收起快捷指令"
+                    title={t('chat.collapseQuickCommands')}
                   />
                 </div>
               </>
@@ -1109,7 +1128,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                         }}
                         style={{ fontSize: 11, color: '#94a3b8', height: 20, padding: '0 8px', borderRadius: 10, background: '#f8fafc', display: 'flex', alignItems: 'center' }}
                     >
-                        展开快捷指令
+                        {t('chat.expandQuickCommands')}
                     </Button>
                     <div style={{ height: 1, flex: 1, background: '#f1f5f9' }}></div>
                 </div>
@@ -1119,7 +1138,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           <div style={{ display: 'flex', gap: isMobile ? 8 : 12, alignItems: 'flex-end' }}>
             <Input.TextArea 
               ref={inputRef}
-              placeholder={selectedBot ? (isMobile ? "输入消息" : "输入消息，Shift + Enter 换行...") : "选机器人"}
+              placeholder={selectedBot ? t('chat.inputPlaceholder') : t('chat.selectBotTip')}
               autoSize={{ minRows: 1, maxRows: 4 }}
               value={inputText}
               onChange={e => setInputText(e.target.value)}
@@ -1140,7 +1159,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                 icon={<StopCircle size={18} />} 
                 style={{ borderRadius: 12, height: 40, width: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
                 onClick={handleStopGeneration}
-                title="停止生成"
+                title={t('chat.stopGenerating')}
               />
             ) : (
               <Button 
@@ -1154,9 +1173,9 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           </div>
           {!isMobile && (
             <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8', display: 'flex', gap: 16 }}>
-              <span>⚡️ 支持流式响应与数学公式</span>
-              <span>🤖 User: {urlUser || (generatedSessionId ? `lobster-${generatedSessionId}` : '匿名')}</span>
-              <span>💾 消息已开启持久化存储</span>
+              <span>{t('chat.streamingInfo')}</span>
+              <span>🤖 User: {urlUser || (generatedSessionId ? `lobster-${generatedSessionId}` : t('chat.anonymous'))}</span>
+              <span>{t('chat.persistenceInfo')}</span>
             </div>
           )}
         </div>
@@ -1165,7 +1184,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         title={
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <ListRestart size={20} color="#2563eb" />
-                <span>管理快捷指令</span>
+                <span>{t('chat.manageQuickCommands')}</span>
             </div>
         }
         open={isManageModalOpen}
@@ -1175,7 +1194,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         bodyStyle={{ paddingTop: 16 }}
       >
         <div style={{ marginBottom: 24 }}>
-            <h4 style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>当前指令</h4>
+            <h4 style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>{t('chat.currentCommands')}</h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {quickCommands.map(cmd => (
                     <div key={cmd.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #f1f5f9' }}>
@@ -1198,15 +1217,15 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         </div>
 
         <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 24 }}>
-            <h4 style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>新增指令</h4>
+            <h4 style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>{t('chat.addCommand')}</h4>
             <Form form={form} layout="vertical" onFinish={handleAddQuickCommand}>
-                <Form.Item name="label" label="显示标签" rules={[{ required: true, message: '请输入标签名称' }]}>
-                    <Input placeholder="例如：我的背景" style={{ borderRadius: 8 }} />
+                <Form.Item name="label" label={t('chat.commandLabel')} rules={[{ required: true, message: t('chat.labelRequired') }]}>
+                    <Input placeholder={t('chat.commandLabelPlaceholder')} style={{ borderRadius: 8 }} />
                 </Form.Item>
-                <Form.Item name="prompt" label="指令内容" rules={[{ required: true, message: '请输入指令快捷话术' }]}>
-                    <Input.TextArea placeholder="填入点击按钮后自动发送的内容" autoSize={{ minRows: 2 }} style={{ borderRadius: 8 }} />
+                <Form.Item name="prompt" label={t('chat.commandPrompt')} rules={[{ required: true, message: t('chat.promptRequired') }]}>
+                    <Input.TextArea placeholder={t('chat.commandPromptPlaceholder')} autoSize={{ minRows: 2 }} style={{ borderRadius: 8 }} />
                 </Form.Item>
-                <Button type="primary" htmlType="submit" icon={<Plus size={16} />} block style={{ borderRadius: 8, height: 40 }}>添加指令</Button>
+                <Button type="primary" htmlType="submit" icon={<Plus size={16} />} block style={{ borderRadius: 8, height: 40 }}>{t('chat.addCommandBtn')}</Button>
             </Form>
         </div>
       </Modal>

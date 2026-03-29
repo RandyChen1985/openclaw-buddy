@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox, Skeleton } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star, ChevronDown, ChevronUp, Activity, ZapOff, Bot } from 'lucide-react';
 import dayjs from 'dayjs';
 import api from '../api';
@@ -21,6 +22,7 @@ interface BotsManagerProps {
 const BotsManager: React.FC<BotsManagerProps> = ({ 
   botsModels, loadingBots, isMobile, onRefresh, onAddBot, onSetIdentity, onSetBotModel, onDeleteBot, onSetDefaultModel, onShowGlobalLoading
 }) => {
+  const { t } = useTranslation();
   const cardColors = [
     { bg: '#eff6ff', border: '#dbeafe', iconBg: '#dbeafe', theme: '#2563eb' }, // Blue
     { bg: '#f5f3ff', border: '#ddd6fe', iconBg: '#ede9fe', theme: '#7c3aed' }, // Indigo
@@ -101,12 +103,12 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   };
 
   const formatAgeMs = (ms: number) => {
-    if (ms < 60000) return '刚刚';
+    if (ms < 60000) return t('bots.justNow');
     const minutes = Math.floor(ms / 60000);
-    if (minutes < 60) return `${minutes}m ago`;
+    if (minutes < 60) return t('bots.minutesAgo', { count: minutes });
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.floor(hours / 24)}d ago`;
+    if (hours < 24) return t('bots.hoursAgo', { count: hours });
+    return t('bots.daysAgo', { count: Math.floor(hours / 24) });
   };
 
   const handleAddProvider = async () => {
@@ -116,7 +118,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           
           // 💡 立即关闭弹窗并显示全局处理遮罩 (不等待接口)
           setIsProviderModalOpen(false);
-          onShowGlobalLoading('正在同步提供商配置...', 0); 
+          onShowGlobalLoading(t('bots.syncingProvider'), 0); 
           
           await api.post('/v1/openclaw/models/provider', {
               name: values.name,
@@ -130,12 +132,12 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           
           configForm.resetFields();
           await fetchModelsConfig();
-          onShowGlobalLoading('提供商配置已同步，正在重载...', 3000);
+          onShowGlobalLoading(t('bots.providerSynced'), 3000);
       } catch (err: any) {
           // 发生错误时关闭遮罩并提示
           onShowGlobalLoading('', 1);
           if (!err.errorFields) {
-              message.error('配置保存失败: ' + ((err as any).response?.data?.error || (err as any).message));
+              message.error(t('bots.saveFailed') + ': ' + ((err as any).response?.data?.error || (err as any).message));
           }
       } finally {
           setSubmittingConfig(false);
@@ -149,7 +151,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       
       // 💡 立即关闭弹窗并显示全局加载 (不等待接口)
       setIsModelModalOpen(false);
-      onShowGlobalLoading('正在追加模型配置...', 0);
+      onShowGlobalLoading(t('bots.appendingModel'), 0);
 
       const submitData = {
         provider_name: values.provider_name,
@@ -168,11 +170,11 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       
       modelForm.resetFields(['id', 'name', 'reasoning']);
       await Promise.all([fetchModelsConfig(), onRefresh()]);
-      onShowGlobalLoading('模型追加成功，正在重载配置...', 3000);
+      onShowGlobalLoading(t('bots.modelAdded'), 3000);
     } catch (err: any) {
       onShowGlobalLoading('', 1);
       if (err.errorFields) return;
-      message.error('模型追加失败: ' + ((err as any).response?.data?.error || (err as any).message || '未知错误'));
+      message.error(t('bots.modelAddFailed') + ': ' + ((err as any).response?.data?.error || (err as any).message || t('common.error')));
     } finally {
       setSubmittingConfig(false);
     }
@@ -232,9 +234,9 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const handleDelete = (id: string) => {
     if (botsModels?.data?.bots?.length <= 1) {
       Modal.warning({
-        title: '无法移除最后一只小龙虾',
-        content: '系统要求至少保留一个机器人以维持基础服务运行。',
-        okText: '知道了',
+        title: t('bots.cannotRemoveLast'),
+        content: t('bots.atLeastOneRequired'),
+        okText: t('common.gotIt'),
         centered: true
       });
       return;
@@ -256,10 +258,10 @@ const BotsManager: React.FC<BotsManagerProps> = ({
 
   const handleSetDefaultModel = (model: any) => {
     Modal.confirm({
-      title: '确认切换全局默认模型？',
-      content: `确认要将“${model.name}”设为系统全局默认模型吗？这可能会影响所有未独立配置模型的机器人行为。`,
-      okText: '确认切换',
-      cancelText: '取消',
+      title: t('bots.confirmSwitchDefault'),
+      content: t('bots.switchDefaultContent', { name: model.name }),
+      okText: t('bots.confirmSwitch'),
+      cancelText: t('common.cancel'),
       centered: true,
       onOk: async () => {
         await onSetDefaultModel(model.id);
@@ -282,15 +284,15 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       if (res.data && typeof res.data.latency === 'number') {
         const latency = res.data.latency;
         setTestLatencyMap(prev => ({ ...prev, [fullId]: { latency } }));
-        message.success(`测试成功: ${latency}ms`);
+        message.success(t('bots.testSuccess', { latency }));
       } else {
-        throw new Error('响应数据格式异常');
+        throw new Error(t('bots.formatError'));
       }
     } catch (err: any) {
       console.error('Model connectivity test failed:', err);
-      const errorMsg = err.response?.data?.message || err.message || '测试失败';
+      const errorMsg = err.response?.data?.message || err.message || t('bots.testFailed');
       setTestLatencyMap(prev => ({ ...prev, [fullId]: { latency: -1, error: errorMsg } }));
-      message.error(`模型测试失败: ${errorMsg}`);
+      message.error(`${t('bots.modelTestFailed')}: ${errorMsg}`);
     } finally {
       setTestingModelId(null);
     }
@@ -298,23 +300,22 @@ const BotsManager: React.FC<BotsManagerProps> = ({
 
   const handleDeleteModel = (providerName: string, modelID: string) => {
     Modal.confirm({
-      title: '确认删除此模型?',
-      content: `您确定要从提供商 [${providerName}] 中删除模型 [${modelID}] 吗？`,
-      okText: '删除',
-      cancelText: '取消',
+      title: t('bots.confirmDeleteModel'),
+      content: t('bots.confirmDeleteModelContent', { provider: providerName, id: modelID }),
+      okText: t('common.delete'),
+      cancelText: t('common.cancel'),
       onOk: () => {
         // 💡 立即触发删除操作并开启遮罩，不使用 promise 阻塞 Modal
-        onShowGlobalLoading('正在删除模型配置...', 0);
         const performDelete = async () => {
           try {
             await api.delete('/v1/openclaw/models/provider/model', {
               data: { provider_name: providerName, model_id: modelID }
             });
             await Promise.all([fetchModelsConfig(), onRefresh()]);
-            onShowGlobalLoading('模型已移除，资产清单正在更新...', 3000);
+            onShowGlobalLoading(t('bots.modelRemoved'), 3000);
           } catch (err: any) {
             onShowGlobalLoading('', 1);
-            message.error('删除请求失败: ' + ((err as any).response?.data?.error || (err as any).message));
+            message.error(t('bots.deleteFailed') + ': ' + ((err as any).response?.data?.error || (err as any).message));
           }
         };
         performDelete();
@@ -328,7 +329,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       {loadingBots && !botsModels ? (
         <Card style={{ borderRadius: 16, border: '1px solid #e2e8f0' }}>
           <div style={{ padding: isMobile ? '60px 0' : '80px 0', textAlign: 'center' }}>
-            <Spin tip="正在同步 OpenClaw 资产清单..." />
+            <Spin tip={t('bots.syncingAssets')} />
           </div>
         </Card>
       ) : (
@@ -336,12 +337,12 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           <Col span={24}>
             <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', width: '100%', marginBottom: 16 }}>
               <span style={{ fontSize: isMobile ? 15 : 18, fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Boxes size={22} color="#2563eb" /> 小龙虾们 (Bots)
+                <Boxes size={22} color="#2563eb" /> {t('bots.title')}
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 {botsModels?.updated_at && !isMobile && (
                   <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>
-                    上次同步: {dayjs(botsModels.updated_at).format('HH:mm:ss')}
+                    {t('bots.lastSynced')}: {dayjs(botsModels.updated_at).format('HH:mm:ss')}
                   </span>
                 )}
                 <Button 
@@ -351,7 +352,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   loading={loadingBots}
                   style={{ borderRadius: 10, fontWeight: 700, background: '#e2e8f0', color: '#64748b' }}
                 >
-                  {isMobile ? '' : '刷新'}
+                  {isMobile ? '' : t('common.refresh')}
                 </Button>
                 <Button 
                   type="primary" 
@@ -359,7 +360,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   onClick={() => setIsModalOpen(true)}
                   style={{ borderRadius: 10, fontWeight: 700, background: '#2563eb' }}
                 >
-                  添加{isMobile ? '' : 'Bot'}
+                  {t('bots.addBot')}
                 </Button>
               </div>
             </div>
@@ -404,7 +405,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                           <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b', maxWidth: '80%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {bot.name || bot.id}
                           </div>
-                          <Tooltip title="修改名称">
+                          <Tooltip title={t('bots.editName')}>
                             <Button 
                               type="text" 
                               size="small" 
@@ -431,11 +432,11 @@ const BotsManager: React.FC<BotsManagerProps> = ({
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(255,255,255,0.4)', padding: 12, borderRadius: 12 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                        <span style={{ color: '#64748b' }}>默认模型</span>
-                        <span style={{ color: color.theme, fontWeight: 700 }}>{bot.model || '未设定'}</span>
+                        <span style={{ color: '#64748b' }}>{t('bots.defaultModel')}</span>
+                        <span style={{ color: color.theme, fontWeight: 700 }}>{bot.model || t('bots.notSet')}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                        <span style={{ color: '#64748b' }}>工作区</span>
+                        <span style={{ color: '#64748b' }}>{t('bots.workspace')}</span>
                         <Tooltip title={bot.workspace}>
                           <span style={{ color: '#1e293b', fontSize: 11, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {bot.workspace || '-'}
@@ -443,17 +444,17 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                         </Tooltip>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, alignItems: 'center' }}>
-                         <span style={{ color: '#64748b' }}>路由规则</span>
-                         <Tag color="processing" style={{ margin: 0, borderRadius: 10, fontSize: 10, padding: '0 6px' }}>{bot.routingRules || 0} 条</Tag>
+                         <span style={{ color: '#64748b' }}>{t('bots.routingRules')}</span>
+                         <Tag color="processing" style={{ margin: 0, borderRadius: 10, fontSize: 10, padding: '0 6px' }}>{t('bots.rulesCount', { count: bot.routingRules || 0 })}</Tag>
                       </div>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <div className="status-pulse" style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }}></div>
-                        <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>运行中</span>
+                        <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>{t('bots.running')}</span>
                       </div>
-                      <div style={{ fontSize: 11, color: '#94a3b8' }}>{bot.provider || '本地节点'}</div>
+                      <div style={{ fontSize: 11, color: '#94a3b8' }}>{bot.provider || t('bots.localNode')}</div>
                     </div>
                   </div>
                 </Card>
@@ -465,7 +466,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           {botsModels?.data?.bots?.length === 0 && (
             <Col span={24}>
               <Card style={{ borderRadius: 16, border: '1px solid #e2e8f0' }}>
-                <div style={{ padding: '32px 0', color: '#94a3b8', textAlign: 'center' }}>暂未配置机器人</div>
+                <div style={{ padding: '32px 0', color: '#94a3b8', textAlign: 'center' }}>{t('bots.noBots')}</div>
               </Card>
             </Col>
           )}
@@ -477,10 +478,10 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: isMobile ? '100%' : 'auto' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
                       <Cpu size={isMobile ? 18 : 20} color="#6366f1" /> 
-                      <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b' }}>模型军团 (Models)</span>
+                      <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b' }}>{t('bots.modelLegion')}</span>
                     </div>
                     <Input 
-                      placeholder="快速检索模型..." 
+                      placeholder={t('bots.searchModels')} 
                       prefix={<Boxes size={12} style={{ color: '#94a3b8' }} />}
                       value={searchTerm}
                       onChange={e => setSearchTerm(e.target.value)}
@@ -504,7 +505,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                       onClick={() => setIsProviderModalOpen(true)}
                       style={{ borderRadius: 8, fontSize: 12, height: 28 }}
                     >
-                      {isMobile ? '渠道' : '添加渠道'}
+                      {isMobile ? t('bots.addChannel') : t('bots.addChannel')}
                     </Button>
                     <Button 
                       type="primary" 
@@ -514,7 +515,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                       onClick={() => setIsModelModalOpen(true)}
                       style={{ borderRadius: 8, fontSize: 12, height: 28 }}
                     >
-                      {isMobile ? '模型' : '添加模型'}
+                      {isMobile ? t('bots.addModel') : t('bots.addModel')}
                     </Button>
                   </div>
                 </div>
@@ -523,7 +524,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
               style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', width: '100%' }}
             >
               {loadingConfig && !modelsConfig ? (
-                <div style={{ textAlign: 'center', padding: '20px 0' }}><Spin size="small" /></div>
+                <div style={{ textAlign: 'center', padding: '20px 0' }}><Spin size="small" tip={t('common.syncing')} /></div>
               ) : modelsConfig ? (
                 Object.entries(modelsConfig).map(([providerName, providerData]: [string, any]) => {
                   const providerModels = (providerData.models || []).filter((m: any) => 
@@ -582,7 +583,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                       display: 'flex', alignItems: 'center', gap: 4,
                                       zIndex: 2, letterSpacing: '0.02em'
                                     }}>
-                                      DEFAULT
+                                      {t('bots.default')}
                                     </div>
                                   )}
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -600,7 +601,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                           {m.name || m.id}
                                           {testLatencyMap[providerName + '/' + m.id] && (
                                             <Tag color={testLatencyMap[providerName + '/' + m.id].latency > 0 ? 'success' : 'error'} style={{ margin: 0, fontSize: 10, padding: '0 4px', borderRadius: 4, height: 16, lineHeight: '14px', border: 'none', background: testLatencyMap[providerName + '/' + m.id].latency > 0 ? '#f0fdf4' : '#fef2f2', color: testLatencyMap[providerName + '/' + m.id].latency > 0 ? '#16a34a' : '#ef4444' }}>
-                                              {testLatencyMap[providerName + '/' + m.id].latency > 0 ? `${testLatencyMap[providerName + '/' + m.id].latency}ms` : 'FAIL'}
+                                              {testLatencyMap[providerName + '/' + m.id].latency > 0 ? `${testLatencyMap[providerName + '/' + m.id].latency}ms` : t('bots.fail')}
                                             </Tag>
                                           )}
                                         </div>
@@ -613,7 +614,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                        {m.reasoning && (
                                          <Tag color="orange" style={{ margin: 0, borderRadius: 6, fontSize: 10, border: 'none', background: '#fff7ed', color: '#f59e0b', fontWeight: 700, padding: '0 6px' }}>
-                                           <Zap size={10} style={{ marginRight: 2, display: 'inline-block', verticalAlign: 'middle' }} /> 推理型
+                                           <Zap size={10} style={{ marginRight: 2, display: 'inline-block', verticalAlign: 'middle' }} /> {t('bots.reasoningType')}
                                          </Tag>
                                        )} 
                                     </div>
@@ -659,7 +660,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   );
                 })
               ) : (
-                <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8' }}>暂未配置模型分组信息</div>
+                <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8' }}>{t('bots.noModelGroups')}</div>
               )}
             </Card>
           </Col>
@@ -670,11 +671,11 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', width: '100%', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <History size={isMobile ? 18 : 20} color="#f59e0b" /> 
-                    <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b' }}>最近活跃会话 (Sessions)</span>
+                    <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b' }}>{t('bots.recentSessions')}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
                     <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
-                      实时同步中
+                      {t('bots.realtimeSync')}
                     </span>
                     <Button 
                       type="text"
@@ -684,7 +685,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                       loading={loadingSessions}
                       style={{ color: '#64748b', display: 'flex', alignItems: 'center', padding: isMobile ? '0 4px' : '0 8px' }}
                     >
-                      {isMobile ? '' : '刷新'}
+                      {isMobile ? '' : t('common.refresh')}
                     </Button>
                   </div>
                 </div>
@@ -701,7 +702,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 scroll={{ x: 'max-content' }}
                 columns={[
                   {
-                    title: '会话 Key',
+                    title: t('bots.sessionKey'),
                     dataIndex: 'key',
                     key: 'key',
                     render: (text: string) => (
@@ -713,25 +714,25 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                     )
                   },
                   {
-                    title: 'Agent',
+                    title: t('bots.agent'),
                     dataIndex: 'agentId',
                     key: 'agentId',
                     render: (id: string) => <Tag color="blue" style={{ borderRadius: 6, margin: 0 }}>{id}</Tag>
                   },
                   {
-                    title: '活跃时间',
+                    title: t('bots.activeTime'),
                     dataIndex: 'ageMs',
                     key: 'ageMs',
                     render: (ms: number) => <span style={{ color: '#64748b', fontSize: 13 }}>{formatAgeMs(ms)}</span>
                   },
                   {
-                    title: '使用模型',
+                    title: t('bots.usingModel'),
                     dataIndex: 'model',
                     key: 'model',
                     render: (m: string) => <span style={{ fontWeight: 600, color: '#1e293b', fontSize: 13 }}>{m}</span>
                   },
                   {
-                    title: 'Token 消耗 (Ctx %)',
+                    title: t('bots.tokenUsage'),
                     key: 'tokens',
                     render: (_, record: any) => {
                       const percent = Math.round((record.totalTokens / record.contextTokens) * 100) || 0;
@@ -753,7 +754,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                     }
                   },
                   ...(!isMobile ? [{
-                    title: '类型',
+                    title: t('bots.type'),
                     dataIndex: 'kind',
                     key: 'kind',
                     render: (k: string) => <Tag style={{ borderRadius: 6, margin: 0 }}>{String(k).toUpperCase()}</Tag>
@@ -769,39 +770,39 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ padding: 6, background: '#eff6ff', borderRadius: 8 }}><Boxes size={18} color="#2563eb" /></div>
-            <span>添加小龙虾机器人</span>
+            <span>{t('bots.addBotTitle')}</span>
           </div>
         }
         open={isModalOpen}
         onOk={handleOk}
         onCancel={() => setIsModalOpen(false)}
         confirmLoading={adding}
-        okText="确认创建"
-        cancelText="取消"
+        okText={t('bots.confirmCreate')}
+        cancelText={t('common.cancel')}
         centered
         style={{ borderRadius: 16 }}
       >
         <div style={{ padding: '8px 0' }}>
           <Form form={form} layout="vertical" initialValues={{ id: '', model: '' }}>
             <Form.Item
-              label="机器人 ID"
+              label={t('bots.botId')}
               name="id"
               rules={[
-                { required: true, message: '请输入由字母、数字或下划线组成的 ID' },
-                { pattern: /^[a-zA-Z0-9_]+$/, message: '仅支持字母、数字和下划线' }
+                { required: true, message: t('bots.botIdRequired') },
+                { pattern: /^[a-zA-Z0-9_]+$/, message: t('bots.botIdPattern') }
               ]}
-              extra={<span style={{ fontSize: 11, color: '#94a3b8' }}>建议格式如: <code style={{ background: '#f1f5f9', padding: '1px 4px' }}>dev_bot</code>。添加后工作区将自动设为 <code style={{ background: '#f1f5f9', padding: '1px 4px' }}>~/.openclaw/workspace_[id]</code></span>}
+              extra={<span style={{ fontSize: 11, color: '#94a3b8' }}>{t('bots.idFormatTip')}: <code style={{ background: '#f1f5f9', padding: '1px 4px' }}>dev_bot</code>。{t('bots.workspaceAutoTip')} <code style={{ background: '#f1f5f9', padding: '1px 4px' }}>~/.openclaw/workspace_[id]</code></span>}
             >
-              <Input placeholder="输入机器人 ID" />
+              <Input placeholder={t('bots.botIdPlaceholder')} />
             </Form.Item>
             
             <Form.Item
-              label="选择模型"
+              label={t('bots.selectModel')}
               name="model"
-              rules={[{ required: true, message: '请选择关联的模型' }]}
+              rules={[{ required: true, message: t('bots.selectModelRequired') }]}
             >
               <Select 
-                placeholder="请选择 AI 模型" 
+                placeholder={t('bots.selectModelPlaceholder')} 
                 dropdownStyle={{ borderRadius: 12 }}
                 showSearch
                 optionFilterProp="label"
@@ -838,7 +839,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ padding: 6, background: '#f5f3ff', borderRadius: 8 }}><ShieldCheck size={18} color="#7c3aed" /></div>
-            <span>添加 API 提供商配置 (Add Provider)</span>
+            <span>{t('bots.addProviderTitle')}</span>
           </div>
         }
         open={isProviderModalOpen}
@@ -852,33 +853,33 @@ const BotsManager: React.FC<BotsManagerProps> = ({
             <Form form={configForm} layout="vertical">
               <Row gutter={16}>
                 <Col span={24}>
-                  <Form.Item label="提供商标识 (ID)" name="name" rules={[{ required: true, message: '必填' }]} extra="例如: deepseek, yovole, openai">
-                    <Input placeholder="输入提供商 ID" />
+                  <Form.Item label={t('bots.providerId')} name="name" rules={[{ required: true, message: t('bots.providerIdRequired') }]} extra={t('bots.providerIdTip')}>
+                    <Input placeholder={t('bots.providerIdPlaceholder')} />
                   </Form.Item>
                 </Col>
                 <Col span={24}>
-                  <Form.Item label="API 基准地址 (Base URL)" name="baseUrl" rules={[{ required: true, message: '必填' }]}>
+                  <Form.Item label={t('bots.baseUrl')} name="baseUrl" rules={[{ required: true, message: t('bots.baseUrlRequired') }]}>
                     <Input placeholder="https://api.example.com/v1" />
                   </Form.Item>
                 </Col>
                 <Col span={24}>
-                  <Form.Item label="API 密钥 (API Key)" name="apiKey" rules={[{ required: true, message: '必填' }]}>
+                  <Form.Item label={t('bots.apiKey')} name="apiKey" rules={[{ required: true, message: t('bots.apiKeyRequired') }]}>
                     <Input.Password placeholder="sk-..." />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item label="认证类型" name="auth" initialValue="api-key">
+                  <Form.Item label={t('bots.authType')} name="auth" initialValue="api-key">
                     <Select options={[{ label: 'API Key', value: 'api-key' }]} />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item label="API 协议" name="api" initialValue="openai-completions">
+                  <Form.Item label={t('bots.apiProtocol')} name="api" initialValue="openai-completions">
                     <Select options={[{ label: 'OpenAI Completions', value: 'openai-completions' }]} />
                   </Form.Item>
                 </Col>
               </Row>
               <Button type="primary" block onClick={handleAddProvider} loading={submittingConfig} icon={<Plus size={16} />} style={{ marginTop: 8, height: 40, borderRadius: 10 }}>
-                保存并生效渠道配置
+                {t('bots.saveConfig')}
               </Button>
             </Form>
         </div>
@@ -889,7 +890,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ padding: 6, background: '#f5f3ff', borderRadius: 8 }}><Cpu size={18} color="#7c3aed" /></div>
-            <span>添加新模型 (Add Model to Provider)</span>
+            <span>{t('bots.addNewModelTitle')}</span>
           </div>
         }
         open={isModelModalOpen}
@@ -914,8 +915,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
             >
               <Row gutter={16}>
                 <Col span={12}>
-                  <Form.Item label="所属提供商" name="provider_name" rules={[{ required: true, message: '请选择提供商' }]}>
-                    <Select placeholder="选择一个提供商" allowClear>
+                  <Form.Item label={t('bots.selectProvider')} name="provider_name" rules={[{ required: true, message: t('bots.selectProviderRequired') }]}>
+                    <Select placeholder={t('bots.selectProviderPlaceholder')} allowClear>
                       {modelsConfig && Object.keys(modelsConfig).map(name => (
                         <Select.Option key={name} value={name}>{name}</Select.Option>
                       ))}
@@ -923,17 +924,17 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item label="模型标识 (ID)" name="id" rules={[{ required: true, message: '必填' }]}>
-                    <Input placeholder="例如: deepseek-chat" />
+                  <Form.Item label={t('bots.modelId')} name="id" rules={[{ required: true, message: t('bots.modelIdRequired') }]}>
+                    <Input placeholder={t('bots.modelIdPlaceholder')} />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item label="显示名称 (Name)" name="name">
-                    <Input placeholder="例如: DeepSeek-V3" />
+                  <Form.Item label={t('bots.displayName')} name="name">
+                    <Input placeholder={t('bots.displayNamePlaceholder')} />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item label="API 协议" name="api">
+                  <Form.Item label={t('bots.apiProtocol')} name="api">
                     <Select options={[
                       { label: 'OpenAI Completions', value: 'openai-completions' },
                       { label: 'OpenAI Responses', value: 'openai-responses' },
@@ -947,21 +948,21 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   </Form.Item>
                 </Col>
                  <Col span={24}>
-                  <Form.Item label="支持的能力 (Input)" name="input">
-                    <Select mode="multiple" placeholder="支持的输入类型" options={[
-                      { label: 'Text (文本)', value: 'text' },
-                      { label: 'Image (图片)', value: 'image' },
-                      { label: 'Audio (音频)', value: 'audio' }
+                  <Form.Item label={t('bots.capabilities')} name="input">
+                    <Select mode="multiple" placeholder={t('bots.capabilitiesPlaceholder')} options={[
+                      { label: `Text (${t('bots.text')})`, value: 'text' },
+                      { label: `Image (${t('bots.image')})`, value: 'image' },
+                      { label: `Audio (${t('bots.audio')})`, value: 'audio' }
                     ]} />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item label="上下文窗口 (Context Window)" name="contextWindow" rules={[{ required: true, message: '必填' }]}>
+                  <Form.Item label={t('bots.contextWindow')} name="contextWindow" rules={[{ required: true, message: t('bots.modelIdRequired') }]}>
                     <Input type="number" placeholder="2000000" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item label="最大输出 (Max Tokens)" name="maxTokens" rules={[{ required: true, message: '必填' }]}>
+                  <Form.Item label={t('bots.maxTokens')} name="maxTokens" rules={[{ required: true, message: t('bots.modelIdRequired') }]}>
                     <Input type="number" placeholder="2000000" />
                   </Form.Item>
                 </Col>
@@ -971,8 +972,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <Zap size={18} color="#f59e0b" />
                           <div>
-                            <div style={{ fontWeight: 600, fontSize: 13 }}>开启推理模式 (Reasoning)</div>
-                            <div style={{ fontSize: 11, color: '#94a3b8' }}>针对 DeepSeek-R1 或 O1 等思考型模型</div>
+                            <div style={{ fontWeight: 600, fontSize: 13 }}>{t('bots.enableReasoning')}</div>
+                            <div style={{ fontSize: 11, color: '#94a3b8' }}>{t('bots.reasoningDesc')}</div>
                           </div>
                         </div>
                         <Form.Item name="reasoning" valuePropName="checked" noStyle>
@@ -983,7 +984,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 </Col>
               </Row>
               <Button type="primary" block onClick={handleAddModelToProvider} loading={submittingConfig} icon={<Plus size={16} />} style={{ marginTop: 8, height: 40, borderRadius: 10 }}>
-                将模型追加至该渠道
+                {t('bots.appendModel')}
               </Button>
             </Form>
         </div>
@@ -994,35 +995,35 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ padding: 6, background: '#fef2f2', borderRadius: 8 }}><Pencil size={18} color="#ef4444" /></div>
-            <span>修改机器人显示名称</span>
+            <span>{t('bots.editNameTitle')}</span>
           </div>
         }
         open={isEditModalOpen}
         onOk={handleEditOk}
         onCancel={() => setIsEditModalOpen(false)}
         confirmLoading={processing}
-        okText="确认修改"
-        cancelText="取消"
+        okText={t('common.confirm')}
+        cancelText={t('common.cancel')}
         centered
       >
         <div style={{ padding: '8px 0' }}>
           <Form form={editForm} layout="vertical">
-            <Form.Item label="当前 ID">
+            <Form.Item label={t('bots.currentId')}>
               <Input value={editingBot?.id} disabled />
             </Form.Item>
             <Form.Item
-              label="新的显示名称"
+              label={t('bots.newDisplayName')}
               name="name"
-              rules={[{ required: true, message: '请输出新的显示名称' }]}
+              rules={[{ required: true, message: t('bots.newDisplayNameRequired') }]}
             >
-              <Input placeholder="输入新的显示名称" autoFocus />
+              <Input placeholder={t('bots.newDisplayNamePlaceholder')} autoFocus />
             </Form.Item>
             <Form.Item 
-              label="默认模型" 
+              label={t('bots.defaultModel')} 
               name="model" 
-              rules={[{ required: true, message: '请选择默认模型' }]}
+              rules={[{ required: true, message: t('bots.selectModelRequired') }]}
             >
-              <Select placeholder="选择此机器人默认使用的模型">
+              <Select placeholder={t('bots.botDefaultModelPlaceholder')}>
                 {botsModels?.data?.models?.map((m: any) => (
                   <Select.Option key={m.id} value={m.id}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1042,20 +1043,20 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ padding: 6, background: '#fef2f2', borderRadius: 8 }}><Trash2 size={18} color="#ef4444" /></div>
-            <span>确认要移除该机器人吗？</span>
+            <span>{t('bots.removeBotTitle')}</span>
           </div>
         }
         open={isDeleteModalOpen}
         onOk={handleConfirmDelete}
         onCancel={() => setIsDeleteModalOpen(false)}
-        okText="确认移除"
-        cancelText="取消"
+        okText={t('bots.removeBotConfirm')}
+        cancelText={t('common.cancel')}
         okButtonProps={{ danger: true }}
         centered
       >
         <div style={{ padding: '8px 0' }}>
-          <p style={{ color: '#ef4444', fontWeight: 600 }}>将会彻底删除机器人 {deletingBotId} 以及相关工作目录！</p>
-          <p style={{ color: '#64748b', fontSize: 13 }}>该操作不可逆，请谨慎操作。</p>
+          <p style={{ color: '#ef4444', fontWeight: 600 }}>{t('bots.removeBotWarning', { id: deletingBotId })}</p>
+          <p style={{ color: '#64748b', fontSize: 13 }}>{t('bots.irreversible')}</p>
         </div>
       </Modal>
       <style>{`

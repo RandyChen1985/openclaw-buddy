@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode } from 'antd';
+import { useTranslation } from 'react-i18next';
 import {
-  LayoutDashboard, Boxes, ToyBrick, Smartphone, Terminal, Zap,
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
-  Puzzle
+  Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone
 } from 'lucide-react';
 import api from './api';
 
@@ -17,6 +17,7 @@ import DeviceManager from './views/DeviceManager';
 import LogsViewer from './views/LogsViewer';
 import SelfHealing from './views/SelfHealing';
 import OnlineChat from './views/OnlineChat';
+import LanguageSwitcher from './components/LanguageSwitcher';
 import SkillManagement from './views/SkillManagement';
 import CrayfishLoading from './components/common/CrayfishLoading';
 import CommandPalette from './components/common/CommandPalette';
@@ -29,6 +30,7 @@ const { Content, Sider, Header } = Layout;
 
 // --- Dashboard Component (Internal Layout) ---------------------------------------
 const Dashboard = () => {
+  const { t } = useTranslation();
   const queryParams = new URLSearchParams(window.location.search);
   const isEmbed = queryParams.get('embed') === 'true';
   const initialPage = queryParams.get('page');
@@ -73,7 +75,7 @@ const Dashboard = () => {
       setIsTransitioning(false);
       setTargetStatus(null);
       setTransitionSeconds(0);
-      message.success(`网关指令已成功生效 (当前状态: ${status})`);
+      message.success(t('chat.gatewayCommandSuccess', { status }));
     }
   );
 
@@ -163,9 +165,9 @@ const Dashboard = () => {
     try {
       const res = await api.get(`/v1/openclaw/bots-models${force ? '?refresh=true' : ''}`);
       setBotsModels(res.data);
-      if (force) message.success('资产清单已强制同步并更新');
+      if (force) message.success(t('chat.syncAssetsSuccess'));
     } catch (e) {
-      message.error('同步 OpenClaw 资产失败');
+      message.error(t('chat.syncAssetsError'));
     } finally {
       setLoadingBots(false);
     }
@@ -177,7 +179,7 @@ const Dashboard = () => {
       const res = await api.get(`/v1/wechat/config/status${force ? '?refresh=true' : ''}`);
       setChatChannels(res.data);
     } catch (e) {
-      console.warn('同步渠道信息失败', e);
+      console.warn(t('chat.syncChannelsError'), e);
     } finally {
       setLoadingChannels(false);
     }
@@ -198,7 +200,7 @@ const Dashboard = () => {
       const res = await api.get(`/v1/openclaw/devices${force ? '?refresh=true' : ''}`);
       setDevices(res.data);
     } catch (err) {
-      message.error('同步设备清单失败');
+      message.error(t('chat.syncDevicesError'));
     } finally {
       setLoadingDevices(false);
     }
@@ -239,7 +241,7 @@ const Dashboard = () => {
       const res = await api.get('/v1/system/version');
       if (res.data) setVersionUpdate(res.data);
     } catch (e) {
-      console.warn('检查版本更新失败', e);
+      console.warn(t('common.versionCheckFailed'), e);
     }
   };
 
@@ -263,10 +265,10 @@ const Dashboard = () => {
 
   const handleControl = (action: string) => {
     const config: any = {
-      start: { title: '启动网关核心', color: '#22c55e' },
-      stop: { title: '停止运行网关', color: '#ef4444' },
-      restart: { title: '重启网关核心', color: '#3b82f6' },
-      wechat: { title: '请求微信登录码', color: '#16a34a' }
+      start: { title: t('common.start'), color: '#22c55e' },
+      stop: { title: t('common.stop'), color: '#ef4444' },
+      restart: { title: t('common.restart'), color: '#3b82f6' },
+      wechat: { title: t('chat.wechatAuth'), color: '#16a34a' }
     };
     setConfirmModal({ open: true, action, ...config[action] });
   };
@@ -283,7 +285,7 @@ const Dashboard = () => {
         setQrData(res.data);
         setQrModalVisible(true);
       } catch (err: any) {
-        message.error(err.response?.data?.error || '获取二维码失败');
+        message.error(err.response?.data?.error || t('chat.getQrFailed'));
       } finally {
         setIsGettingQR(false);
       }
@@ -296,7 +298,7 @@ const Dashboard = () => {
       setTargetStatus(action === 'stop' ? 'stopped' : 'running');
       setTransitionSeconds(0);
     } catch (err: any) {
-      message.error(err.response?.data?.error || '网关指令发送失败');
+      message.error(err.response?.data?.error || t('common.commandFailed'));
     }
   };
 
@@ -307,7 +309,7 @@ const Dashboard = () => {
       setTargetStatus('running');
       setTransitionSeconds(0);
     } catch (err: any) {
-      message.error(err.response?.data?.error || '重启网关失败');
+      message.error(err.response?.data?.error || t('common.restartFailed'));
       throw err;
     }
   };
@@ -316,14 +318,14 @@ const Dashboard = () => {
     setLoadingWeixin(true);
     try {
       await api.post('/v1/wechat/install');
-      message.loading('正在安装微信插件，请勿刷新...', 0);
+      message.loading(t('common.processing'), 0);
       setTimeout(() => {
         message.destroy();
-        message.success('插件安装指令已发送');
+        message.success(t('chat.gatewayCommandSuccess', { status: 'Installed' }));
         checkWeixinPlugin();
       }, 3000);
     } catch (err: any) {
-      message.error(err.response?.data?.error || '安装失败');
+      message.error(err.response?.data?.error || t('common.error'));
     } finally {
       setLoadingWeixin(false);
     }
@@ -335,10 +337,10 @@ const Dashboard = () => {
     setTransitionSeconds(0);
     try {
       await api.post('/v1/openclaw/devices/approve', { requestId });
-      message.success('设备已批准接入');
+      message.success(t('devices.approveSuccess'));
       await fetchDevices();
     } catch (err: any) {
-      message.error(err.response?.data?.error || '操作失败');
+      message.error(err.response?.data?.error || t('common.error'));
     } finally {
       setIsTransitioning(false);
       setTargetStatus(null);
@@ -350,9 +352,9 @@ const Dashboard = () => {
     try {
       await api.post('/v1/settings/self-healing', { enabled });
       setSelfHealingEnabled(enabled);
-      message.success(enabled ? '自动自愈已开启' : '自愈服务已禁用');
+      message.success(t('heal.toggleSuccess', { status: enabled ? t('heal.recovered') : t('heal.disabled') }));
     } catch (err) {
-      message.error('设置更新失败');
+      message.error(t('common.updateFailed'));
     } finally {
       setLoadingSets(false);
     }
@@ -364,10 +366,10 @@ const Dashboard = () => {
     setTransitionSeconds(0);
     try {
       await api.post('/v1/openclaw/bots/add', { id, model });
-      message.success(`机器人 ${id} 创建成功`);
+      message.success(t('bots.createSuccess', { id }));
       await fetchBotsModels(true); // 补全 await
     } catch (err: any) {
-      const msg = err.response?.data?.error || '创建机器人失败';
+      const msg = err.response?.data?.error || t('bots.createFailed');
       message.error(msg);
       throw err; // 继续抛出以阻止 Modal 关闭
     } finally {
@@ -382,10 +384,10 @@ const Dashboard = () => {
     setTransitionSeconds(0);
     try {
       await api.post('/v1/openclaw/bots/set-identity', { id, name });
-      message.success(`机器人 ${id} 的名称已更新为 ${name}`);
+      message.success(t('bots.updateSuccess', { id, name }));
       await fetchBotsModels(true); // 补全 await
     } catch (err: any) {
-      const msg = err.response?.data?.error || '修改名称失败';
+      const msg = err.response?.data?.error || t('bots.updateFailed');
       message.error(msg);
       throw err;
     } finally {
@@ -400,10 +402,10 @@ const Dashboard = () => {
     setTransitionSeconds(0);
     try {
       await api.post('/v1/openclaw/bots/set-model', { id, model });
-      message.success(`机器人 ${id} 的默认模型已切换为 ${model}`);
+      message.success(t('bots.modelUpdateSuccess', { id, model }));
       await fetchBotsModels(true);
     } catch (err: any) {
-      const msg = err.response?.data?.error || '修改模型失败';
+      const msg = err.response?.data?.error || t('bots.modelUpdateFailed');
       message.error(msg);
       throw err;
     } finally {
@@ -418,10 +420,10 @@ const Dashboard = () => {
     setTransitionSeconds(0);
     try {
       await api.post('/v1/openclaw/bots/delete', { id });
-      message.success(`机器人 ${id} 已被移除`);
+      message.success(t('bots.removeSuccess', { id }));
       await fetchBotsModels(true); // 补全 await
     } catch (err: any) {
-      const msg = err.response?.data?.error || '删除机器人失败';
+      const msg = err.response?.data?.error || t('bots.removeFailed');
       message.error(msg);
       throw err;
     } finally {
@@ -436,10 +438,10 @@ const Dashboard = () => {
     setTransitionSeconds(0);
     try {
       await api.post('/v1/openclaw/models/set-default', { modelId });
-      message.success(`已将 ${modelId} 设为全局默认模型`);
+      message.success(t('bots.setDefaultSuccess', { id: modelId }));
       await fetchBotsModels(true);
     } catch (err: any) {
-      const msg = err.response?.data?.error || '设置默认模型失败';
+      const msg = err.response?.data?.error || t('bots.setDefaultFailed');
       message.error(msg);
     } finally {
       setIsTransitioning(false);
@@ -453,14 +455,14 @@ const Dashboard = () => {
   };
   
   const handleOpenDashboard = async () => {
-    const hide = message.loading('正在计算龙虾面板访问地址...', 0);
+    const hide = message.loading(t('common.processing'), 0);
     try {
       const res = await api.get('/v1/openclaw/dashboard-url');
       if (res.data.url) {
         window.open(res.data.url, '_blank');
       }
     } catch (e) {
-      message.error('无法获取龙虾面板地址');
+      message.error(t('chat.getDashboardUrlError'));
     } finally {
       hide();
     }
@@ -472,15 +474,15 @@ const Dashboard = () => {
   const menuItems = [
     {
       key: 'grp-monitor',
-      label: '监控中心',
+      label: t('common.monitor_center'),
       type: 'group',
       children: [
-        { key: 'dashboard', label: '运行状态', icon: <LayoutDashboard size={14} /> },
+        { key: 'dashboard', label: t('common.dashboard'), icon: <LayoutDashboard size={14} /> },
         { 
           key: 'logs', 
           label: (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-              <span>实时日志</span>
+              <span>{t('common.logs')}</span>
               {wsLogs.length > 0 && <Badge status="processing" size="small" style={{ marginLeft: 8 }} />}
             </div>
           ), 
@@ -490,7 +492,7 @@ const Dashboard = () => {
           key: 'tools', 
           label: (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: 4 }}>
-              <span>自愈管理</span>
+              <span>{t('common.tools')}</span>
               {healEvents.length > 0 && <Badge count={healEvents.length} size="small" styles={{ indicator: { backgroundColor: '#3b82f6' } }} />}
             </div>
           ), 
@@ -500,29 +502,29 @@ const Dashboard = () => {
     },
     {
       key: 'grp-assets',
-      label: '资产管理',
+      label: t('common.assets'),
       type: 'group',
       children: [
-        { key: 'chat', label: '在线聊天', icon: <MessageSquare size={14} /> },
-        { key: 'bots-models', label: '虾兵蟹将', icon: <Boxes size={14} /> },
-        { key: 'skills', label: '技能管理', icon: <Puzzle size={14} /> },
+        { key: 'chat', label: t('common.chat'), icon: <MessageSquare size={14} /> },
+        { key: 'bots-models', label: t('common.bots'), icon: <Boxes size={14} /> },
+        { key: 'skills', label: t('common.skills'), icon: <Puzzle size={14} /> },
       ]
     },
     {
       key: 'grp-binding',
-      label: '绑定中心',
+      label: t('common.binding'),
       type: 'group',
       children: [
-        { key: 'components', label: '渠道绑定', icon: <ToyBrick size={14} /> },
-        { key: 'devices', label: '设备绑定', icon: <Smartphone size={14} /> },
+        { key: 'components', label: t('common.channels'), icon: <ToyBrick size={14} /> },
+        { key: 'devices', label: t('common.devices'), icon: <Smartphone size={14} /> },
       ]
     },
     {
       key: 'grp-external',
-      label: '外部工具',
+      label: t('common.external'),
       type: 'group',
       children: [
-        { key: 'lobster-panel', label: '龙虾面板', icon: <ExternalLink size={14} /> },
+        { key: 'lobster-panel', label: t('common.lobsterPanel'), icon: <ExternalLink size={14} /> },
       ]
     }
   ];
@@ -531,7 +533,13 @@ const Dashboard = () => {
   const getActiveLabel = (key: string) => {
     for (const group of menuItems) {
       const item = group.children?.find(i => i.key === key);
-      if (item) return typeof item.label === 'string' ? item.label : (item.label as any).props.children[0].props.children;
+      if (item) {
+        if (typeof item.label === 'string') return item.label;
+        // Handle complex labels like Logs with badges
+        if (item.key === 'logs') return t('common.logs');
+        if (item.key === 'tools') return t('common.tools');
+        return key;
+      }
     }
     return '';
   };
@@ -585,7 +593,7 @@ const Dashboard = () => {
       'skills': <SkillManagement isMobile={isMobile} />
     };
 
-    return viewMap[activeTab] || <div style={{ padding: 40, textAlign: 'center' }}><Spin size="large" tip="加载中..." /></div>;
+    return viewMap[activeTab] || <div style={{ padding: 40, textAlign: 'center' }}><Spin size="large" tip={t('common.loading')} /></div>;
   };
 
   if (fetching && !status) return <CrayfishLoading />;
@@ -609,41 +617,31 @@ const Dashboard = () => {
           {isTransitioning ? (
             <>
               <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>
-                {targetStatus === 'adding_bot' && '正在创建机器人'}
-                {targetStatus === 'setting_identity' && '正在修改身份'}
-                {targetStatus === 'setting_bot_model' && '正在修改模型分配'}
-                {targetStatus === 'deleting_bot' && '正在移除机器人'}
-                {targetStatus === 'setting_default_model' && '正在切换默认模型'}
-                {targetStatus === 'approving_device' && '正在批准设备接入'}
-                {!['adding_bot', 'setting_identity', 'setting_bot_model', 'deleting_bot', 'setting_default_model', 'approving_device'].includes(targetStatus as string) && '正在同步网关状态'}
+                {targetStatus && t(`chat.status.${targetStatus}`)}
+                {!targetStatus && t('chat.status.syncing')}
               </div>
               <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>
-                {targetStatus === 'adding_bot' && '小龙虾正在加紧孵化中，请稍后...'}
-                {targetStatus === 'setting_identity' && '正在同步身份信息，请稍后...'}
-                {targetStatus === 'setting_bot_model' && '正在重新分配 AI 核心，请稍后...'}
-                {targetStatus === 'deleting_bot' && '正在彻底清理相关数据，请稍后...'}
-                {targetStatus === 'setting_default_model' && '正在更新全局 AI 核心，请稍后...'}
-                {targetStatus === 'approving_device' && '正在授权设备访问权限，请稍后...'}
-                {!['adding_bot', 'setting_identity', 'setting_bot_model', 'deleting_bot', 'setting_default_model', 'approving_device'].includes(targetStatus as string) && '指令已确认，正在等待网关反馈状态...'}
+                {targetStatus && t(`chat.status.${targetStatus}_desc`)}
+                {!targetStatus && t('common.waitingGateway')}
               </div>
               <div style={{
                 marginTop: 16, padding: '6px 16px', background: '#eff6ff',
                 borderRadius: 20, fontSize: 13, color: '#2563eb',
                 fontWeight: 700, display: 'inline-block', border: '1px solid #dbeafe'
               }}>
-                已等待 {transitionSeconds}s
+                {t('common.secondsElapsed', { seconds: transitionSeconds })}
               </div>
             </>
           ) : globalLoadingMessage ? (
             <>
               <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>{globalLoadingMessage}</div>
-              <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>后台正在处理中，请稍候...</div>
+              <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>{t('common.waiting')}</div>
               <div style={{
                 marginTop: 16, padding: '6px 16px', background: '#eff6ff',
                 borderRadius: 20, fontSize: 13, color: '#2563eb',
                 fontWeight: 700, display: 'inline-block', border: '1px solid #dbeafe'
               }}>
-                {globalLoadingCountdown > 0 ? `自动关闭倒计时 ${globalLoadingCountdown}s` : '后台正在同步资产清单，请稍候...'}
+                {globalLoadingCountdown > 0 ? t('common.loadingCountdown', { seconds: globalLoadingCountdown }) : t('common.syncing')}
               </div>
             </>
           ) : null}
@@ -651,8 +649,8 @@ const Dashboard = () => {
         {/* 在 isTransitioning 超过 60 秒时才显示手动关闭/刷新的按钮 */}
         {isTransitioning && transitionSeconds > 60 && (
           <div style={{ marginTop: 8, display: 'flex', gap: 12, width: '100%', paddingTop: 20, borderTop: '1px solid #f1f5f9' }}>
-            <Button block onClick={() => setIsTransitioning(false)}>关闭遮罩</Button>
-            <Button block type="primary" icon={<RefreshCw size={14} />} onClick={() => window.location.reload()}>强制刷新</Button>
+            <Button block onClick={() => setIsTransitioning(false)}>{t('common.close')}</Button>
+            <Button block type="primary" icon={<RefreshCw size={14} />} onClick={() => window.location.reload()}>{t('common.refresh')}</Button>
           </div>
         )}
       </div>
@@ -661,7 +659,7 @@ const Dashboard = () => {
 
   const headerEl = (onMenuClick?: () => void) => (
     <Header style={{
-      background: '#fff', height: 56, padding: '0 24px', borderBottom: '1px solid #e2e8f0',
+      background: '#fff', height: 56, padding: isMobile ? '0 12px' : '0 24px', borderBottom: '1px solid #e2e8f0',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       position: 'sticky', top: 0, zIndex: 20, flexShrink: 0, lineHeight: 'normal',
     }}>
@@ -679,7 +677,7 @@ const Dashboard = () => {
             onMouseEnter={(e) => (e.currentTarget.style.color = '#2563eb')}
             onMouseLeave={(e) => (e.currentTarget.style.color = '#1e293b')}
           >
-            控制台
+            {t('common.console')}
           </span>
           <span>/</span>
           <span style={{ color: '#2563eb', fontWeight: 500 }}>
@@ -687,12 +685,13 @@ const Dashboard = () => {
           </span>
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, flexShrink: 0 }}>
+        <LanguageSwitcher isMobile={isMobile} />
         <Badge
           status={isRunning ? 'success' : 'error'}
           text={
-            <span style={{ color: '#64748b', fontSize: 12, fontWeight: 500 }}>
-              Gateway {isRunning ? '在线' : '离线'}
+            <span style={{ color: '#64748b', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>
+              {!isMobile && 'Gateway '}{isRunning ? t('dashboard.running') : t('dashboard.stopped')}
               {isRunning && <span style={{ color: '#3b82f6', marginLeft: 4 }}>({refreshCountdown}s)</span>}
             </span>
           }
@@ -817,19 +816,17 @@ const Dashboard = () => {
           </div>
           <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>{confirmModal.title}</h3>
           <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
-            {confirmModal.action === 'stop' && '确定要停止 OpenClaw 网关吗？这将导致所有渠道通信中断。'}
+            {confirmModal.action === 'stop' && t('chat.stopGatewayWarning')}
             {confirmModal.action === 'wechat' && (
-              <span style={{ textAlign: 'left', display: 'inline-block' }}>
-                请确认：<br />
-                1. 您的微信已升级到<b>最新版本</b><br />
-                2. 系统设置中的插件模块已支持<b>小龙虾</b>
+              <span style={{ textAlign: 'left', display: 'inline-block', whiteSpace: 'pre-line' }}>
+                {t('chat.wechatLoginConfirm')}
               </span>
             )}
-            {['start', 'restart'].includes(confirmModal.action) && `您正在请求 ${confirmModal.title} 指令，系统将异步处理。`}
+            {['start', 'restart'].includes(confirmModal.action) && t('chat.asyncCommandTip', { title: confirmModal.title })}
           </p>
           <div style={{ display: 'flex', gap: 12 }}>
-            <Button block onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}>取消</Button>
-            <Button block type="primary" onClick={executeControl} style={{ background: confirmModal.color, borderColor: confirmModal.color }}>确认指令</Button>
+            <Button block onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}>{t('common.cancel')}</Button>
+            <Button block type="primary" onClick={executeControl} style={{ background: confirmModal.color, borderColor: confirmModal.color }}>{t('common.confirmAction')}</Button>
           </div>
         </div>
       </Modal>
@@ -838,8 +835,8 @@ const Dashboard = () => {
       <Modal open={isGettingQR} footer={null} closable={false} centered width={320}>
         <div style={{ textAlign: 'center', padding: 20 }}>
           <Spin size="large" />
-          <div style={{ marginTop: 24, fontWeight: 600 }}>正在请求微信登录指令...</div>
-          <div style={{ marginTop: 8, color: '#64748b' }}>后端处理中 ({qrSeconds}s)</div>
+          <div style={{ marginTop: 24, fontWeight: 600 }}>{t('chat.requestingWechat')}</div>
+          <div style={{ marginTop: 8, color: '#64748b' }}>{t('common.waiting')} ({qrSeconds}s)</div>
         </div>
       </Modal>
 
@@ -854,15 +851,15 @@ const Dashboard = () => {
       >
         <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center' }}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>🦞</div>
-          <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>微信授权登录</h3>
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>{t('chat.wechatAuth')}</h3>
           <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
-            请使用需要绑定的微信扫码<br />授权后 OpenClaw 将自动完成同步
+            {t('chat.wechatAuthDesc')}
           </p>
           <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #f1f5f9', display: 'inline-block', marginBottom: 12 }}>
             {qrData && <QRCode value={qrData.qrcode_url} size={isMobile ? 160 : 180} bordered={false} color="#1e293b" />}
           </div>
           <div style={{ marginBottom: 20 }}>
-              <Button type="link" size="small" onClick={() => window.open(qrData?.qrcode_url, '_blank')}>在浏览器中打开授权链接</Button>
+              <Button type="link" size="small" onClick={() => window.open(qrData?.qrcode_url, '_blank')}>{t('chat.openInBrowser')}</Button>
           </div>
           <Button 
             block 
@@ -874,7 +871,7 @@ const Dashboard = () => {
             }} 
             style={{ borderRadius: 10, fontWeight: 700 }}
           >
-            已完成扫码
+            {t('chat.scanCompleted')}
           </Button>
         </div>
       </Modal>
@@ -891,6 +888,7 @@ const Dashboard = () => {
 
 // --- App Root ---------------------------------------------------------------------
 export default function App() {
+  const { t } = useTranslation();
   const [token, setToken] = useState<string | null>(localStorage.getItem('guardian_token'));
 
   useEffect(() => {
@@ -900,7 +898,7 @@ export default function App() {
         if (error.response?.status === 401) {
           localStorage.removeItem('guardian_token');
           setToken(null);
-          if (token) message.error('会话已过期，请重新登录');
+          if (token) message.error(t('common.sessionExpired'));
         }
         return Promise.reject(error);
       }
@@ -921,7 +919,7 @@ export default function App() {
       const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
       window.history.replaceState({}, '', newUrl);
       
-      message.success('已自动登录');
+      message.success(t('common.autoLogin'));
     }
   }, []);
 

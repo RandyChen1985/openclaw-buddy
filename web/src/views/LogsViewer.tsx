@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { Spin, Input, Tag, Space, Button } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { Search, Filter, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 
 interface LogsViewerProps {
@@ -7,6 +8,7 @@ interface LogsViewerProps {
 }
 
 const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs }) => {
+  const { t } = useTranslation();
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [searchText, setSearchText] = useState('');
   const [activeLevel, setActiveLevel] = useState<string>('all');
@@ -65,7 +67,7 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 200 }}>
           <span style={{ color: '#8b949e', fontSize: 13, fontWeight: 600, fontFamily: 'monospace', marginRight: 8 }}>guardian.log</span>
           <Input
-            placeholder="搜索日志关键词..."
+            placeholder={t('logs.searchPlaceholder')}
             variant="borderless"
             prefix={<Search size={14} color="#8b949e" />}
             value={searchText}
@@ -85,10 +87,10 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Space size={4}>
             {[
-              { id: 'all', label: '全部', color: '#8b949e', icon: <Filter size={12} /> },
-              { id: 'info', label: '信息', color: '#3b82f6', icon: <Info size={12} /> },
-              { id: 'warn', label: '警告', color: '#f59e0b', icon: <AlertTriangle size={12} /> },
-              { id: 'error', label: '错误', color: '#ef4444', icon: <AlertCircle size={12} /> }
+              { id: 'all', label: t('logs.all'), color: '#8b949e', icon: <Filter size={12} /> },
+              { id: 'info', label: t('logs.info'), color: '#3b82f6', icon: <Info size={12} /> },
+              { id: 'warn', label: t('logs.warn'), color: '#f59e0b', icon: <AlertTriangle size={12} /> },
+              { id: 'error', label: t('logs.error'), color: '#ef4444', icon: <AlertCircle size={12} /> }
             ].map(level => (
               <Tag.CheckableTag
                 key={level.id}
@@ -115,7 +117,7 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs }) => {
           <div style={{ width: 1, height: 16, background: '#30363d', margin: '0 4px' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', border: '1px solid rgba(34, 197, 94, 0.4)', boxShadow: '0 0 8px rgba(34, 197, 94, 0.6)' }} />
-            <span style={{ color: '#22c55e', fontSize: 10, fontWeight: 700, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Live</span>
+            <span style={{ color: '#22c55e', fontSize: 10, fontWeight: 700, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('logs.live')}</span>
           </div>
         </div>
       </div>
@@ -125,13 +127,13 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs }) => {
         {wsLogs.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, color: '#484f58', height: '100%', justifyContent: 'center' }}>
             <Spin size="small" />
-            <span style={{ fontSize: 13 }}>正在建立 WebSocket 安全隧道...</span>
+            <span style={{ fontSize: 13 }}>{t('logs.connecting')}</span>
           </div>
         ) : filteredLogs.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, color: '#484f58', height: '100%', justifyContent: 'center' }}>
             <Search size={24} />
-            <span style={{ fontSize: 13 }}>未找到匹配 "{searchText}" 的日志</span>
-            <Button type="link" size="small" onClick={() => { setSearchText(''); setActiveLevel('all'); }}>清除所有过滤器</Button>
+            <span style={{ fontSize: 13 }}>{t('logs.noMatch', { text: searchText })}</span>
+            <Button type="link" size="small" onClick={() => { setSearchText(''); setActiveLevel('all'); }}>{t('logs.clearFilters')}</Button>
           </div>
         ) : (
           filteredLogs.map((log, i) => (
