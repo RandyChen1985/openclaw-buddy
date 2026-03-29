@@ -56,7 +56,6 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   // 模型连通性测试状态
   const [testingModelId, setTestingModelId] = useState<string | null>(null);
   const [testLatencyMap, setTestLatencyMap] = useState<Record<string, { latency: number, error?: string }>>({});
-  const [searchTerm, setSearchTerm] = useState('');
 
   // --- Provider Icon Component ---
   const ProviderIcon = ({ provider, size = 28 }: { provider: string, size?: number }) => {
@@ -307,6 +306,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       onOk: () => {
         // 💡 立即触发删除操作并开启遮罩，不使用 promise 阻塞 Modal
         const performDelete = async () => {
+          onShowGlobalLoading(t('bots.deletingModel'), 0);
           try {
             await api.delete('/v1/openclaw/models/provider/model', {
               data: { provider_name: providerName, model_id: modelID }
@@ -360,7 +360,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   onClick={() => setIsModalOpen(true)}
                   style={{ borderRadius: 10, fontWeight: 700, background: '#2563eb' }}
                 >
-                  {t('bots.addBot')}
+                  {isMobile ? t('bots.bot') : t('bots.addBot')}
                 </Button>
               </div>
             </div>
@@ -475,29 +475,12 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           <Col span={24}>
             <Card
               title={
-                <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', width: '100%', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 12 : 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: isMobile ? '100%' : 'auto' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
-                      <Cpu size={isMobile ? 18 : 20} color="#6366f1" /> 
-                      <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b' }}>{t('bots.modelLegion')}</span>
-                    </div>
-                    <Input 
-                      placeholder={t('bots.searchModels')} 
-                      prefix={<Boxes size={12} style={{ color: '#94a3b8' }} />}
-                      value={searchTerm}
-                      onChange={e => setSearchTerm(e.target.value)}
-                      size="small"
-                      allowClear
-                      style={{ 
-                        borderRadius: 20, 
-                        maxWidth: isMobile ? '100%' : 220, 
-                        fontSize: 12,
-                        background: '#f8fafc',
-                        border: '1px solid #e2e8f0'
-                      }}
-                    />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+                    <Cpu size={isMobile ? 18 : 20} color="#6366f1" /> 
+                    <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b' }}>{t('bots.modelLegion')}</span>
                   </div>
-                  <div style={{ display: 'flex', gap: 10, alignSelf: isMobile ? 'flex-end' : 'center' }}>
+                  <div style={{ display: 'flex', gap: 10 }}>
                     <Button 
                       type="primary" 
                       ghost 
@@ -506,7 +489,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                       onClick={() => setIsProviderModalOpen(true)}
                       style={{ borderRadius: 8, fontSize: 12, height: 28 }}
                     >
-                      {isMobile ? t('bots.addChannel') : t('bots.addChannel')}
+                      {isMobile ? t('bots.channel') : t('bots.addChannel')}
                     </Button>
                     <Button 
                       type="primary" 
@@ -516,7 +499,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                       onClick={() => setIsModelModalOpen(true)}
                       style={{ borderRadius: 8, fontSize: 12, height: 28 }}
                     >
-                      {isMobile ? t('bots.addModel') : t('bots.addModel')}
+                      {isMobile ? t('bots.model') : t('bots.addModel')}
                     </Button>
                   </div>
                 </div>
@@ -528,10 +511,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 <div style={{ textAlign: 'center', padding: '20px 0' }}><Spin size="small" tip={t('common.syncing')} /></div>
               ) : modelsConfig ? (
                 Object.entries(modelsConfig).map(([providerName, providerData]: [string, any]) => {
-                  const providerModels = (providerData.models || []).filter((m: any) => 
-                    m.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                    (m.name && m.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                  );
+                  const providerModels = (providerData.models || []);
                   if (providerModels.length === 0) return null;
 
                   return (

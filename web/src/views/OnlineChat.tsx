@@ -36,7 +36,7 @@ const Mermaid = ({ chart }: { chart: string }) => {
 };
 
 // --- Code Block Component with Copy Functionality ---
-const CodeBlock = ({ language, value }: { language: string, value: string }) => {
+const CodeBlock = ({ language, value, isMobile }: { language: string, value: string, isMobile?: boolean }) => {
   const { t } = useTranslation();
   const [copied, setCopied] = React.useState(false);
 
@@ -47,7 +47,14 @@ const CodeBlock = ({ language, value }: { language: string, value: string }) => 
   };
 
   return (
-    <div style={{ position: 'relative', margin: '14px 0', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+    <div style={{ 
+      position: 'relative', 
+      margin: isMobile ? '8px 0' : '14px 0', 
+      borderRadius: 12, 
+      overflow: 'hidden', 
+      border: '1px solid rgba(0,0,0,0.05)', 
+      boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' 
+    }}>
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -73,8 +80,8 @@ const CodeBlock = ({ language, value }: { language: string, value: string }) => 
         PreTag="div"
         customStyle={{
           margin: 0,
-          padding: '16px',
-          fontSize: '13px',
+          padding: isMobile ? '10px' : '16px',
+          fontSize: isMobile ? '12px' : '13px',
           background: '#0f172a'
         }}
       >
@@ -593,6 +600,19 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         max-width: 100%;
         overflow-x: auto;
       }
+      @media (max-width: 768px) {
+        .markdown-body {
+          font-size: 13px;
+          word-break: break-word;
+          overflow-wrap: anywhere;
+        }
+        .markdown-body h1 { fontSize: 1.5em; margin-top: 10px; }
+        .markdown-body h2 { fontSize: 1.3em; margin-top: 8px; }
+        .markdown-body h3 { fontSize: 1.1em; margin-top: 6px; }
+        .markdown-body p { margin-bottom: 4px; }
+        .markdown-body ul, .markdown-body ol { padding-left: 16px; margin-bottom: 4px; }
+        .markdown-body blockquote { margin-bottom: 6px; }
+      }
     `}</style>
   );
 
@@ -770,7 +790,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           style={{ 
             flex: 1, 
             overflowY: 'auto', 
-            padding: isMobile ? '16px' : '24px',
+            padding: isMobile ? '12px 10px' : '24px',
             display: 'flex',
             flexDirection: 'column',
             gap: isMobile ? 12 : 20,
@@ -840,13 +860,13 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                 className="stagger-entry"
                 style={{ 
                   display: 'flex', 
-                  gap: 12,
+                  gap: isMobile ? 8 : 12,
                   flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
                   alignItems: 'flex-start'
                 }}
               >
                 <Avatar 
-                  size={36} 
+                  size={isMobile ? 32 : 36} 
                   style={{ 
                     background: msg.role === 'user' ? '#2563eb' : '#fff',
                     border: msg.role === 'assistant' ? '1px solid #e2e8f0' : 'none',
@@ -873,6 +893,8 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                     fontSize: 14,
                     lineHeight: 1.6,
                     whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'anywhere',
                     position: 'relative'
                   }}>
                     {msg.quotedMessage && (
@@ -949,7 +971,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                                 }
 
                                 if (!inline && language) {
-                                  return <CodeBlock language={language} value={codeContent} {...props} />;
+                                  return <CodeBlock language={language} value={codeContent} isMobile={isMobile} {...props} />;
                                 }
                               
                               return (
@@ -957,7 +979,9 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                                   padding: '0.2em 0.4em',
                                   backgroundColor: 'rgba(175, 184, 193, 0.2)',
                                   borderRadius: '6px',
-                                  fontSize: '85%'
+                                  fontSize: '85%',
+                                  wordBreak: 'break-all',
+                                  whiteSpace: 'pre-wrap'
                                 }}>
                                   {children}
                                 </code>
@@ -1001,7 +1025,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                         onClick={handleRegenerate}
                       >{t('chat.retry')}</Button>
                     )}
-                    {msg.metrics && (
+                    {!isMobile && msg.metrics && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10, color: '#94a3b8', opacity: 0.6 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                           <Zap size={10} color="#f59e0b" fill="#f59e0b" />
@@ -1026,7 +1050,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
           )}
           {isTyping && messages[messages.length - 1]?.role !== 'assistant' && (
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, animation: 'fade-in 0.3s ease' }}>
-                <Avatar size={36} style={{ background: '#fff', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }} icon={<Bot size={18} color="#2563eb" />} />
+                <Avatar size={isMobile ? 32 : 36} style={{ background: '#fff', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }} icon={<Bot size={18} color="#2563eb" />} />
                 <div style={{ padding: '12px 16px', background: '#fff', borderRadius: '4px 16px 16px 16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>{t('chat.thinking')}</span>
                     <div className="typing-indicator">
