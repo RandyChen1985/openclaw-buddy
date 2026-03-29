@@ -79,6 +79,7 @@ func (s *Server) setupRoutes() {
 			oc.POST("/bots/set-identity", s.setOpenClawBotIdentity)
 			oc.POST("/bots/set-model", s.setOpenClawBotModel)
 			oc.POST("/bots/delete", s.deleteOpenClawBot)
+			oc.GET("/bots/top", s.getTopBots)
 			oc.POST("/models/set-default", s.setDefaultModel)
 			oc.GET("/models/config", s.getOpenClawModelsConfig)
 			oc.POST("/models/test-direct", s.testOpenClawModelDirect)
@@ -118,6 +119,8 @@ func (s *Server) setupRoutes() {
 		v1.GET("/heal/reports", s.getHealReports)
 		v1.GET("/heal/reports/:name", s.getHealReportDetail)
 		v1.GET("/tasks/status", s.getTasksStatus)
+		v1.GET("/system/events", s.getSystemEvents)
+		v1.GET("/system/version", s.getSystemVersion)
 
 		// Proxy for external dashboard
 		v1.Any("/proxy/*path", s.proxyLobsterDashboard)

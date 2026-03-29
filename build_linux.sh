@@ -22,6 +22,11 @@ else
     VERSION="$major.$minor.$((patch + 1))"
 fi
 
+# 同步版本号到前端与根目录 VERSION 文件 (自动化同步)
+echo "export const APP_VERSION = '${VERSION}';" > web/src/version.ts
+echo "${VERSION}" > VERSION
+echo "✅ 版本号已同步至 web/src/version.ts 和 VERSION 文件"
+
 PKG_NAME="${PKG_PREFIX}-${VERSION}"
 PKG_DIR="${RELEASE_ROOT}/${PKG_NAME}"
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Badge, Button, List, Tag, Modal, Spin, message } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { Zap, Terminal, FileText, ChevronRight, RefreshCw, Clock, HardDrive } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -23,6 +24,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
   loadingSets, 
   onToggle 
 }) => {
+  const { t } = useTranslation();
   const isMobile = window.innerWidth < 768;
   const [reports, setReports] = useState<any[]>([]);
   const [loadingReports, setLoadingReports] = useState(false);
@@ -35,14 +37,21 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
   const preprocessMarkdown = (content: string) => {
     if (!content) return '';
     return content
-      // 1. 确保标题 (#) 前有空行
+      // 1. 确保标题 (#) 前后有空行
       .replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2')
-      // 2. 确保表格 (|) 前有空行，且排除表格内部行
+      .replace(/(#{1,6}\s.*)\n([^\n])/g, '$1\n\n$2')
+      // 2. 确保代码块 (```) 前后有空行
+      .replace(/([^\n])\n(```)/g, '$1\n\n$2')
+      .replace(/(```[\s\S]*?```)\n([^\n])/g, '$1\n\n$2')
+      // 3. 强化表格 (|) 前后空行，确保表格不被普通文本截断
       .replace(/([^\n])\n(\|)/g, (match, p1, p2) => {
         return p1.trim().endsWith('|') ? match : p1 + '\n\n' + p2;
       })
-      // 3. 确保代码块 (```) 前有空行
-      .replace(/([^\n])\n(```)/g, '$1\n\n$2');
+      .replace(/(\|)\n([^|\n][^\n]*)/g, (match, p1, p2) => {
+        return p2.trim().startsWith('|') ? match : p1 + '\n\n' + p2;
+      })
+      // 4. 修复模型输出中可能存在的非标准表格分隔线
+      .replace(/(\n\|[^\n]+\|)\n(\|(?:\s*:-+\s*\|)+)/g, '$1\n$2');
   };
 
   useEffect(() => {
@@ -70,7 +79,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
       const res = await api.get(`/v1/heal/reports/${report.name}`);
       setReportContent(res.data.content);
     } catch (err) {
-      message.error('读取报表内容失败');
+      message.error(t('heal.readReportFailed'));
       setIsModalOpen(false);
     } finally {
       setLoadingContent(false);
@@ -150,11 +159,11 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
             </div>
             <div>
               <div style={{ fontWeight: 800, color: '#1e293b', fontSize: isMobile ? 16 : 17, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                自动自愈服务
+                {t('heal.title')}
                 <Badge status={selfHealingEnabled ? 'processing' : 'default'} />
               </div>
               <div style={{ color: '#64748b', fontSize: 13, maxWidth: 500, lineHeight: 1.5 }}>
-                开启后，当巡检发现网关宕机或响应超时，系统将自动尝试执行修复、配置回滚并重启服务。
+                {t('heal.description')}
               </div>
             </div>
           </div>
@@ -169,7 +178,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
             justifyContent: 'space-between'
           }}>
             <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: isMobile ? 0 : 8, fontWeight: 600 }}>
-              当前状态: <span style={{ color: selfHealingEnabled ? '#16a34a' : '#ef4444' }}>{selfHealingEnabled ? '运行中' : '已禁用'}</span>
+              {t('heal.status')}: <span style={{ color: selfHealingEnabled ? '#16a34a' : '#ef4444' }}>{selfHealingEnabled ? t('heal.running') : t('heal.disabled')}</span>
             </div>
             <Button 
               type={selfHealingEnabled ? "default" : "primary"}
@@ -183,7 +192,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
                 color: '#fff'
               }}
             >
-              {selfHealingEnabled ? '禁用服务' : '立即开启'}
+              {selfHealingEnabled ? t('heal.disableService') : t('heal.enableNow')}
             </Button>
           </div>
         </div>
@@ -192,14 +201,14 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
 
       {/* 自愈日志列表 */}
       <Card
-        title={<span style={{ fontSize: 14, fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: 8 }}><Terminal size={16} /> 历史自愈事件</span>}
+        title={<span style={{ fontSize: 14, fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: 8 }}><Terminal size={16} /> {t('heal.historyEvents')}</span>}
         styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 48 }, body: { padding: '0 24px' } }}
         style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
       >
         {healEvents.length === 0 ? (
           <div style={{ padding: '60px 0', textAlign: 'center', color: '#94a3b8' }}>
             <div style={{ fontSize: 40, marginBottom: 16 }}>☕</div>
-            <div style={{ fontSize: 13 }}>暂无自愈事件记录，系统运行平稳</div>
+            <div style={{ fontSize: 13 }}>{t('heal.noEvents')}</div>
           </div>
         ) : (
           <List
@@ -213,12 +222,12 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
                   </div>
                   <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: 8, border: '1px solid #f1f5f9' }}>
                     <div style={{ display: 'flex', gap: 12, fontSize: 13 }}>
-                      <span style={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>恢复方法:</span>
+                      <span style={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>{t('heal.recoveryMethod')}:</span>
                       <span style={{ color: '#1e293b' }}>{item.method}</span>
                     </div>
                     <div style={{ display: 'flex', gap: 12, fontSize: 13, marginTop: 4 }}>
-                      <span style={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>处置结果:</span>
-                      <span style={{ color: item.result === 'Success' ? '#16a34a' : '#ef4444', fontWeight: 600 }}>{item.result === 'Success' ? '✅ 已恢复' : '❌ 失败'}</span>
+                      <span style={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>{t('heal.disposalResult')}:</span>
+                      <span style={{ color: item.result === 'Success' ? '#16a34a' : '#ef4444', fontWeight: 600 }}>{item.result === 'Success' ? '✅ ' + t('heal.recovered') : '❌ ' + t('heal.failed')}</span>
                     </div>
                   </div>
                 </div>
@@ -233,10 +242,10 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
         title={
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <FileText size={16} /> 故障诊断报表 (Reports)
+              <FileText size={16} /> {t('heal.reports')}
             </span>
             <Button size="small" type="text" icon={<RefreshCw size={12} />} onClick={fetchReports} loading={loadingReports}>
-              刷新
+              {t('common.refresh')}
             </Button>
           </div>
         }
@@ -246,7 +255,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
         {reports.length === 0 ? (
           <div style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8' }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>📄</div>
-            <div style={{ fontSize: 12 }}>暂无生成的诊断报表</div>
+            <div style={{ fontSize: 12 }}>{t('heal.noReports')}</div>
           </div>
         ) : (
           <List
@@ -282,20 +291,20 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <FileText size={18} color="#3b82f6" />
-            <span>诊断报表详情: {selectedReport?.name}</span>
+            <span>{t('heal.reportDetail')}: {selectedReport?.name}</span>
           </div>
         }
         open={isModalOpen}
         onCancel={() => setIsModalOpen(false)}
         footer={[
-          <Button key="close" type="primary" onClick={() => setIsModalOpen(false)}>关闭</Button>
+          <Button key="close" type="primary" onClick={() => setIsModalOpen(false)}>{t('common.close')}</Button>
         ]}
         width={isMobile ? '95%' : 800}
         centered
         styles={{ body: { maxHeight: '70vh', overflowY: 'auto', padding: '20px 24px' } }}
       >
         {loadingContent ? (
-          <div style={{ padding: '60px 0', textAlign: 'center' }}><Spin tip="正在加载报表内容..." /></div>
+          <div style={{ padding: '60px 0', textAlign: 'center' }}><Spin tip={t('heal.loadingReport')} /></div>
         ) : (
           <div className="markdown-body">
             <ReactMarkdown 

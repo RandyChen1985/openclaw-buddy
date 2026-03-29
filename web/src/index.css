@@ -31,6 +31,55 @@ body {
   50% { opacity: 0.5; }
 }
 @keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes glow-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); opacity: 0.8; }
+  50% { box-shadow: 0 0 12px 4px rgba(34, 197, 94, 0.6); opacity: 1; }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); opacity: 0.8; }
+}
+
+.shimmer-placeholder {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 4px;
+}
+
+.stagger-entry {
+  animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--delay, 0s);
+}
+
+.card-float:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.1) !important;
+  border-color: #3b82f6 !important;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+}
+.typing-dot {
+  width: 4px;
+  height: 4px;
+  background: #2563eb;
+  border-radius: 50%;
+  animation: typing-bounce 1.4s infinite ease-in-out;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
 }

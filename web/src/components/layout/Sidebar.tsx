@@ -1,6 +1,8 @@
 import React from 'react';
 import { Menu, Button, Tooltip } from 'antd';
+import { APP_VERSION } from '../../version';
 import { LogOut } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface SidebarProps {
   activeTab: string;
@@ -8,28 +10,87 @@ interface SidebarProps {
   onSelect: (key: string) => void;
   onLogout: () => void;
   navItems: any[];
+  versionUpdate?: { latest: string, current: string, release_url: string } | null;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLogout, navItems }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLogout, navItems, versionUpdate }) => {
+  const { t } = useTranslation();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#001529' }}>
       {/* Logo */}
-      <div style={{
-        height: 56, display: 'flex', alignItems: 'center',
-        borderBottom: '1px solid rgba(51,65,85,0.6)',
-        padding: collapsed ? '0 18px' : '0 20px', gap: 10,
-        overflow: 'hidden', whiteSpace: 'nowrap',
-        flexShrink: 0
+      <div style={{ 
+        height: 72, padding: collapsed ? '0 12px' : '0 20px', 
+        display: 'flex', alignItems: 'center', gap: 12,
+        background: 'linear-gradient(to bottom, #0f172a, #131c31)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
+        flexShrink: 0,
+        overflow: 'hidden'
       }}>
-        <div style={{ fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          🦞
+        <div style={{ 
+          width: 40, height: 40, borderRadius: 12, 
+          background: 'rgba(99, 102, 241, 0.06)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: '1px solid rgba(99, 102, 241, 0.12)',
+          flexShrink: 0,
+          boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)'
+        }}>
+          <span style={{ fontSize: 24, lineHeight: 1 }}>🦞</span>
         </div>
         {!collapsed && (
-          <span style={{ fontSize: 15, fontWeight: 700, color: '#fff', letterSpacing: '0.02em', marginLeft: 8 }}>
-            OpenClaw Buddy
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <span style={{ 
+              fontSize: 14, fontWeight: 800, color: '#f8fafc', 
+              letterSpacing: '0.01em', lineHeight: 1.2,
+              whiteSpace: 'nowrap', textShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}>
+              OpenClaw Buddy
+            </span>
+            <a 
+              href={versionUpdate?.release_url || "https://github.com/RandyChen1985/openclaw-buddy/releases"}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, textDecoration: 'none' }}
+            >
+              <div style={{ 
+                width: 8, height: 8, borderRadius: '50%', background: '#22c55e', 
+                animation: 'glow-pulse 2s infinite ease-in-out' 
+              }}></div>
+              <span style={{ 
+                fontSize: 9, color: '#64748b', fontWeight: 800, 
+                letterSpacing: '0.08em', textTransform: 'uppercase',
+                fontFamily: 'monospace', opacity: 0.8
+              }}>
+                REL-{APP_VERSION}
+              </span>
+              {versionUpdate && versionUpdate.latest !== versionUpdate.current && (
+                <span style={{
+                  fontSize: 10, padding: '0 5px', borderRadius: 4,
+                  background: '#ff4d4f', color: '#fff', fontWeight: 900,
+                  marginLeft: 4, transformOrigin: 'center',
+                  animation: 'badgePulse 2s ease-in-out infinite',
+                  display: 'inline-block',
+                  lineHeight: '14px'
+                }}>
+                  NEW
+                </span>
+              )}
+            </a>
+          </div>
         )}
       </div>
+
+      <style>{`
+        @keyframes pulse {
+          0% { opacity: 0.6; transform: scale(0.95); }
+          50% { opacity: 1; transform: scale(1.05); }
+          100% { opacity: 0.6; transform: scale(0.95); }
+        }
+        @keyframes badgePulse {
+          0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.4); }
+          50% { transform: scale(1.05); box-shadow: 0 0 10px 3px rgba(255, 77, 79, 0.5); }
+          100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.2); }
+        }
+      `}</style>
 
       {/* Nav */}
       <div style={{ padding: '12px 0', flex: 1, overflowY: 'auto' }}>
@@ -45,7 +106,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
 
       {/* Logout */}
       <div style={{ padding: '0 8px 16px', borderTop: '1px solid rgba(51,65,85,0.3)', flexShrink: 0 }}>
-        <Tooltip title={collapsed ? '退出登录' : ''} placement="right">
+        <Tooltip title={collapsed ? t('common.logout') : ''} placement="right">
           <Button
             block
             icon={<LogOut size={14} />}
@@ -58,7 +119,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
               paddingLeft: collapsed ? 0 : 12, gap: 8,
             }}
           >
-            {!collapsed && <span style={{ fontSize: 12 }}>退出登录</span>}
+            {!collapsed && <span style={{ fontSize: 12 }}>{t('common.logout')}</span>}
           </Button>
         </Tooltip>
       </div>

@@ -15,6 +15,8 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"sort"
+	"net/http"
+	"strings"
 )
 
 type Guardian struct {
@@ -43,13 +45,18 @@ func (g *Guardian) Run(ctx context.Context) {
 	cacheTicker := time.NewTicker(10 * time.Minute)
 	defer cacheTicker.Stop()
 
-	// 启动时立即执行一次清理和全量同步
+	// 每 12 小时检查一次版本更新
+	versionTicker := time.NewTicker(12 * time.Hour)
+	defer versionTicker.Stop()
+
+	// 启动时立即执行一次清理和全量同步，并检查更新
 	go func() {
 		rows, err := utils.CleanupOldData(7)
 		if err == nil && rows > 0 {
 			log.Printf("🧹 [DB] 已自动清理超过 7 天的旧监控数据 (共 %d 条).", rows)
 		}
 		process.SyncAll(g.config.OpenClawConfigDir)
+		g.checkVersionUpdate()
 	}()
 
 	// 启动飞书 WebSocket 长链接
@@ -57,6 +64,7 @@ func (g *Guardian) Run(ctx context.Context) {
 		g.feishu.StartLongConnection(ctx)
 		hostname, _ := os.Hostname()
 		status := process.GetGatewayStatus()
+		utils.RecordSystemEvent("INFO", "🛡️ OpenClaw Buddy 监控服务已启动")
 		g.notifyFeishu(context.Background(), "🛡️ OpenClaw Buddy 监控服务已启动", fmt.Sprintf("节点: %s\n状态: ✅ 监控运行中\n版本: 🦞 OpenClaw Buddy\n\n---\n**OpenClaw 状态详情:**\n%s", hostname, status))
 	}
 
@@ -86,6 +94,9 @@ func (g *Guardian) Run(ctx context.Context) {
 		case <-cacheTicker.C:
 			log.Printf("🔄 [Cache] 执行定时业务数据全量同步...")
 			process.SyncAll(g.config.OpenClawConfigDir)
+		case <-versionTicker.C:
+			log.Printf("🌐 [Update] 执行定时版本更新检查...")
+			g.checkVersionUpdate()
 		case <-ctx.Done():
 			hostname, _ := os.Hostname()
 			g.notifyFeishu(context.Background(), "👋 OpenClaw Buddy 监控服务已停止", fmt.Sprintf("节点: %s\n状态: ⏹️ 服务已正常退出", hostname))
@@ -118,12 +129,15 @@ func (g *Guardian) check() {
 				lastErr = err
 			} else {
 				// Success!
-				g.recordHealthCheck("Healthy", responseTimeMs, "")
+				metrics := process.GetSystemMetrics()
+				g.recordHealthCheck("Healthy", responseTimeMs, metrics.CPUUsage, metrics.MemoryUsage, "")
 				if isSelfHealingEnabled {
-					log.Printf("✅ OpenClaw is healthy (Latency: %dms). Updating configuration backup...", responseTimeMs)
+					log.Printf("✅ OpenClaw is healthy (Latency: %dms, CPU: %.1f%%, Mem: %.1f%%). Updating configuration backup...", 
+						responseTimeMs, metrics.CPUUsage, metrics.MemoryUsage)
 					g.backupConfig()
 				} else {
-					log.Printf("✅ OpenClaw is healthy (Latency: %dms). [自愈流程已跳过]", responseTimeMs)
+					log.Printf("✅ OpenClaw is healthy (Latency: %dms, CPU: %.1f%%, Mem: %.1f%%). [自愈流程已跳过]", 
+						responseTimeMs, metrics.CPUUsage, metrics.MemoryUsage)
 				}
 				return
 			}
@@ -131,14 +145,16 @@ func (g *Guardian) check() {
 
 		if i < g.config.MaxRetries {
 			log.Printf("⚠️ Check failed (attempt %d/%d): %v. Retrying in 2 seconds...", i, g.config.MaxRetries, lastErr)
-			g.recordHealthCheck("Degraded", 0, lastErr.Error())
+			metrics := process.GetSystemMetrics()
+			g.recordHealthCheck("Degraded", 0, metrics.CPUUsage, metrics.MemoryUsage, lastErr.Error())
 			time.Sleep(2 * time.Second)
 		}
 	}
 
 	// If we reach here, all retries failed
 	log.Printf("🚨 All %d checks failed. Last error: %v", g.config.MaxRetries, lastErr)
-	g.recordHealthCheck("Down", 0, lastErr.Error())
+	metrics := process.GetSystemMetrics()
+	g.recordHealthCheck("Down", 0, metrics.CPUUsage, metrics.MemoryUsage, lastErr.Error())
 	
 	// Only trigger healing if switch is enabled
 	if isSelfHealingEnabled {
@@ -149,14 +165,14 @@ func (g *Guardian) check() {
 	}
 }
 
-func (g *Guardian) recordHealthCheck(status string, responseTime int, errorMsg string) {
+func (g *Guardian) recordHealthCheck(status string, responseTime int, cpuUsage, memUsage float64, errorMsg string) {
 	if utils.DB == nil {
 		return
 	}
 	_, err := utils.DB.Exec(`
-		INSERT INTO health_checks (status, response_time_ms, error_msg)
-		VALUES (?, ?, ?)
-	`, status, responseTime, errorMsg)
+		INSERT INTO health_checks (status, response_time_ms, cpu_usage, mem_usage, error_msg)
+		VALUES (?, ?, ?, ?, ?)
+	`, status, responseTime, cpuUsage, memUsage, errorMsg)
 	if err != nil {
 		log.Printf("❌ Failed to record health check to DB: %v", err)
 	}
@@ -253,6 +269,7 @@ func (g *Guardian) heal(reason string) {
 
 	hostname, _ := os.Hostname()
 	statusBefore := process.GetGatewayStatus()
+	utils.RecordSystemEvent("HEAL", fmt.Sprintf("检测到服务宕机 (%s)，启动自愈程序", reason))
 	g.notifyFeishu(context.Background(), "⚠️ 小龙虾故障报警", fmt.Sprintf("节点: %s\n状态: ⚠️ 检测到服务宕机\n原因: %s\n正在尝试自愈...\n\n---\n**当前状态详情:**\n%s", hostname, reason, statusBefore))
 
 	configPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json")
@@ -346,4 +363,42 @@ func copyFile(src, dst string) error {
 
 	_, err = io.Copy(destFile, sourceFile)
 	return err
+}
+
+func (g *Guardian) checkVersionUpdate() {
+	url := "https://raw.githubusercontent.com/RandyChen1985/openclaw-buddy/main/VERSION"
+	client := http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Get(url)
+	if err != nil {
+		log.Printf("⚠️ [Update] 检查更新失败 (网络错误): %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("⚠️ [Update] 检查更新失败 (HTTP %d)", resp.StatusCode)
+		return
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("⚠️ [Update] 读取版本响应失败: %v", err)
+		return
+	}
+
+	latestVersion := strings.TrimSpace(string(body))
+	if latestVersion == "" {
+		return
+	}
+
+	// 存储到本地数据库
+	if err := utils.SetSetting("latest_version", latestVersion); err != nil {
+		log.Printf("❌ [Update] 存储最新版本号失败: %v", err)
+	} else {
+		utils.RecordSystemEvent("UPDATE", fmt.Sprintf("发现新版本: %s", latestVersion))
+		log.Printf("📡 [Update] 版本检查完成，当前最新版本: %s", latestVersion)
+	}
 }

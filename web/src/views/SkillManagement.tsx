@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Tag, Button, Input, message, Tooltip, Segmented, Modal } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { RefreshCw, Search, CheckCircle2, AlertCircle, Puzzle, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import api from '../api';
@@ -25,6 +26,7 @@ interface SkillManagementProps {
 }
 
 const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
+  const { t } = useTranslation();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
@@ -50,9 +52,9 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
       }
       
       setSkills(skillsList);
-      if (force) message.success('技能清单已强制同步并更新');
+      if (force) message.success(t('skills.syncSuccess'));
     } catch (err) {
-      message.error('获取技能列表失败');
+      message.error(t('skills.fetchFailed'));
     } finally {
       setLoading(false);
     }
@@ -71,22 +73,22 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
 
   const handleUninstall = (name: string) => {
     Modal.confirm({
-      title: '确认要卸载该技能吗？',
-      content: `这将会执行 openclaw skills uninstall ${name} 并移除相关插件，操作不可逆。`,
-      okText: '确认卸载',
-      cancelText: '取消',
+      title: t('skills.uninstallConfirmTitle'),
+      content: t('skills.uninstallConfirmContent', { name }),
+      okText: t('skills.confirmUninstall'),
+      cancelText: t('common.cancel'),
       okButtonProps: { danger: true },
       centered: true,
       onOk: async () => {
         try {
           setLoading(true);
           await api.delete(`/v1/openclaw/skills/${name}`);
-          message.loading('正在重载系统技能引擎...', 1.5);
+          message.loading(t('skills.reloadingEngine'), 1.5);
           await api.post('/v1/openclaw/skills/reload');
-          message.success(`技能 ${name} 已成功移除`);
+          message.success(t('skills.uninstallSuccess', { name }));
           fetchSkills();
         } catch (err: any) {
-          message.error(err.response?.data?.error || '卸载失败');
+          message.error(err.response?.data?.error || t('skills.uninstallFailed'));
           setLoading(false);
         }
       }
@@ -95,7 +97,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
 
   const columns = [
     {
-      title: '技能名称',
+      title: t('skills.skillName'),
       dataIndex: 'name',
       key: 'name',
       render: (text: string, record: Skill) => (
@@ -109,29 +111,29 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
       ),
     },
     {
-      title: '状态',
+      title: t('skills.status'),
       key: 'eligible',
       width: 120,
       render: (record: Skill) => (
         record.eligible ? (
-          <Tag color="success" icon={<CheckCircle2 size={12} style={{ marginRight: 4 }} />} style={{ borderRadius: 6, padding: '2px 8px' }}>已就绪</Tag>
+          <Tag color="success" icon={<CheckCircle2 size={12} style={{ marginRight: 4 }} />} style={{ borderRadius: 6, padding: '2px 8px' }}>{t('skills.ready')}</Tag>
         ) : (
           <Tooltip title={
             record.missing ? (
               <div>
-                {record.missing.bins.length > 0 && <div>缺失二进制: {record.missing.bins.join(', ')}</div>}
-                {record.missing.env.length > 0 && <div>缺失变量: {record.missing.env.join(', ')}</div>}
-                {record.missing.config.length > 0 && <div>缺失配置: {record.missing.config.join(', ')}</div>}
+                {record.missing.bins.length > 0 && <div>{t('skills.missingBins')}: {record.missing.bins.join(', ')}</div>}
+                {record.missing.env.length > 0 && <div>{t('skills.missingEnv')}: {record.missing.env.join(', ')}</div>}
+                {record.missing.config.length > 0 && <div>{t('skills.missingConfig')}: {record.missing.config.join(', ')}</div>}
               </div>
-            ) : '环境不满足'
+            ) : t('skills.environmentNotMet')
           }>
-            <Tag color="warning" icon={<AlertCircle size={12} style={{ marginRight: 4 }} />} style={{ borderRadius: 6, padding: '2px 8px', cursor: 'help' }}>需配置</Tag>
+            <Tag color="warning" icon={<AlertCircle size={12} style={{ marginRight: 4 }} />} style={{ borderRadius: 6, padding: '2px 8px', cursor: 'help' }}>{t('skills.needsConfig')}</Tag>
           </Tooltip>
         )
       ),
     },
     {
-      title: '功能描述',
+      title: t('skills.functionDesc'),
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,
@@ -142,20 +144,20 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
       ),
     },
     {
-      title: '类型',
+      title: t('skills.type'),
       key: 'bundled',
       width: 100,
       render: (record: Skill) => (
-        <Tag style={{ borderRadius: 4 }}>{record.bundled ? '内置' : '外部'}</Tag>
+        <Tag style={{ borderRadius: 4 }}>{record.bundled ? t('skills.builtin') : t('skills.external')}</Tag>
       )
     },
     {
-      title: '操作',
+      title: t('skills.actions'),
       key: 'action',
       width: 80,
       render: (_: any, record: Skill) => (
         !record.bundled && (
-          <Tooltip title="卸载插件">
+          <Tooltip title={t('skills.uninstall')}>
             <Button 
               type="text" 
               danger 
@@ -176,12 +178,12 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
         title={
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12 }}>
             <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Puzzle size={isMobile ? 18 : 20} color="#2563eb" /> {isMobile ? '技能管理' : '技能扩展管理'}
+              <Puzzle size={isMobile ? 18 : 20} color="#2563eb" /> {isMobile ? t('skills.title') : t('skills.fullTitle')}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12 }}>
               {updatedAt && (
                 <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
-                  {isMobile ? updatedAt.split(' ')[1] : `同步于: ${updatedAt}`}
+                  {isMobile ? updatedAt.split(' ')[1] : `${t('skills.syncedAt')}: ${updatedAt}`}
                 </span>
               )}
               <Button 
@@ -192,7 +194,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
                 loading={loading}
                 style={{ color: '#64748b', display: 'flex', alignItems: 'center', padding: isMobile ? '0 4px' : '0 8px' }}
               >
-                {isMobile ? '' : '刷新'}
+                {isMobile ? '' : t('common.refresh')}
               </Button>
             </div>
           </div>
@@ -201,7 +203,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
         style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0', overflow: 'hidden' }}
       >
         <div style={{ padding: isMobile ? '10px 16px' : '12px 24px', borderBottom: '1px solid #f1f5f9', color: '#64748b', fontSize: 12 }}>
-          查看与管理 OpenClaw 插件扩展。
+          {t('skills.description')}
         </div>
         <div style={{ 
             padding: isMobile ? '12px 16px' : '16px 24px', 
@@ -214,7 +216,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: isMobile ? '100%' : 'auto', flex: 1 }}>
             <Input 
               prefix={<Search size={16} color="#94a3b8" />} 
-              placeholder="搜索..." 
+              placeholder={t('skills.search')} 
               value={searchText}
               onChange={e => setSearchText(e.target.value)}
               style={{ flex: 1, borderRadius: 8 }}
@@ -225,7 +227,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
                     fontSize: 12, color: '#2563eb', background: '#eff6ff', 
                     padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap'
                 }}>
-                    共 {filteredSkills.length} 项
+                    {t('skills.count', { count: filteredSkills.length })}
                 </div>
             )}
           </div>
@@ -233,8 +235,8 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
             <Segmented
               options={[
-                { label: '已就绪', value: 'ready' },
-                { label: '全部', value: 'all' }
+                { label: t('skills.ready'), value: 'ready' },
+                { label: t('skills.all'), value: 'all' }
               ]}
               value={statusFilter}
               onChange={(value) => setStatusFilter(value)}
@@ -245,7 +247,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
                     fontSize: 11, color: '#2563eb', background: '#eff6ff', 
                     padding: '2px 8px', borderRadius: 20
                 }}>
-                    共 {filteredSkills.length} 项
+                    {t('skills.count', { count: filteredSkills.length })}
                 </div>
             )}
           </div>
@@ -254,7 +256,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
         {isMobile ? (
           <div style={{ maxHeight: '60vh', overflowY: 'auto', padding: '0 4px' }}>
             {filteredSkills.length === 0 ? (
-                <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>未发现相关技能</div>
+                <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>{t('skills.noSkills')}</div>
             ) : (
                 filteredSkills.map(skill => (
                     <div key={skill.name} style={{ 
@@ -277,13 +279,13 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
                                 />
                             )}
                             {skill.eligible ? (
-                                <Tag color="success" style={{ margin: 0, borderRadius: 4 }}>就绪</Tag>
+                                <Tag color="success" style={{ margin: 0, borderRadius: 4 }}>{t('skills.ready')}</Tag>
                             ) : (
-                                <Tag color="warning" style={{ margin: 0, borderRadius: 4 }}>配置</Tag>
+                                <Tag color="warning" style={{ margin: 0, borderRadius: 4 }}>{t('skills.needsConfig')}</Tag>
                             ) }
                         </div>
                         <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.5 }}>{skill.description}</div>
-                        <div style={{ fontSize: 11, color: '#94a3b8' }}>来源: {skill.source}</div>
+                        <div style={{ fontSize: 11, color: '#94a3b8' }}>{t('skills.source')}: {skill.source}</div>
                     </div>
                 ))
             )}
@@ -295,7 +297,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
                 rowKey="name"
                 loading={loading}
                 pagination={{ pageSize: 12, hideOnSinglePage: true }}
-                locale={{ emptyText: '未发现相关技能' }}
+                locale={{ emptyText: t('skills.noSkills') }}
                 style={{ padding: '8px' }}
             />
         )}
