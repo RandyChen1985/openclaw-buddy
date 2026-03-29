@@ -913,21 +913,6 @@ export default function App() {
         },
       },
     }}>
-      <style>{`
-        .ant-modal-content, .ant-drawer-content {
-          backdrop-filter: blur(12px) !important;
-          background: rgba(255, 255, 255, 0.75) !important;
-          border: 1px solid rgba(255, 255, 255, 0.3) !important;
-          box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1) !important;
-        }
-        .ant-modal-header, .ant-modal-footer {
-          background: transparent !important;
-        }
-        .ant-drawer-header {
-           background: transparent !important;
-           border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
-        }
-      `}</style>
       {token ? <Dashboard /> : <LoginView onLoginSuccess={setToken} />}
     </ConfigProvider>
   );
