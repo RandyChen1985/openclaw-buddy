@@ -128,12 +128,15 @@ func (g *Guardian) check() {
 				lastErr = err
 			} else {
 				// Success!
-				g.recordHealthCheck("Healthy", responseTimeMs, "")
+				metrics := process.GetSystemMetrics()
+				g.recordHealthCheck("Healthy", responseTimeMs, metrics.CPUUsage, metrics.MemoryUsage, "")
 				if isSelfHealingEnabled {
-					log.Printf("✅ OpenClaw is healthy (Latency: %dms). Updating configuration backup...", responseTimeMs)
+					log.Printf("✅ OpenClaw is healthy (Latency: %dms, CPU: %.1f%%, Mem: %.1f%%). Updating configuration backup...", 
+						responseTimeMs, metrics.CPUUsage, metrics.MemoryUsage)
 					g.backupConfig()
 				} else {
-					log.Printf("✅ OpenClaw is healthy (Latency: %dms). [自愈流程已跳过]", responseTimeMs)
+					log.Printf("✅ OpenClaw is healthy (Latency: %dms, CPU: %.1f%%, Mem: %.1f%%). [自愈流程已跳过]", 
+						responseTimeMs, metrics.CPUUsage, metrics.MemoryUsage)
 				}
 				return
 			}
@@ -141,14 +144,16 @@ func (g *Guardian) check() {
 
 		if i < g.config.MaxRetries {
 			log.Printf("⚠️ Check failed (attempt %d/%d): %v. Retrying in 2 seconds...", i, g.config.MaxRetries, lastErr)
-			g.recordHealthCheck("Degraded", 0, lastErr.Error())
+			metrics := process.GetSystemMetrics()
+			g.recordHealthCheck("Degraded", 0, metrics.CPUUsage, metrics.MemoryUsage, lastErr.Error())
 			time.Sleep(2 * time.Second)
 		}
 	}
 
 	// If we reach here, all retries failed
 	log.Printf("🚨 All %d checks failed. Last error: %v", g.config.MaxRetries, lastErr)
-	g.recordHealthCheck("Down", 0, lastErr.Error())
+	metrics := process.GetSystemMetrics()
+	g.recordHealthCheck("Down", 0, metrics.CPUUsage, metrics.MemoryUsage, lastErr.Error())
 	
 	// Only trigger healing if switch is enabled
 	if isSelfHealingEnabled {
@@ -159,14 +164,14 @@ func (g *Guardian) check() {
 	}
 }
 
-func (g *Guardian) recordHealthCheck(status string, responseTime int, errorMsg string) {
+func (g *Guardian) recordHealthCheck(status string, responseTime int, cpuUsage, memUsage float64, errorMsg string) {
 	if utils.DB == nil {
 		return
 	}
 	_, err := utils.DB.Exec(`
-		INSERT INTO health_checks (status, response_time_ms, error_msg)
-		VALUES (?, ?, ?)
-	`, status, responseTime, errorMsg)
+		INSERT INTO health_checks (status, response_time_ms, cpu_usage, mem_usage, error_msg)
+		VALUES (?, ?, ?, ?, ?)
+	`, status, responseTime, cpuUsage, memUsage, errorMsg)
 	if err != nil {
 		log.Printf("❌ Failed to record health check to DB: %v", err)
 	}

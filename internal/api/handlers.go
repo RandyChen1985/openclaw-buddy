@@ -256,7 +256,7 @@ func (s *Server) restartGateway(c *gin.Context) {
 
 func (s *Server) getHealthStats(c *gin.Context) {
 	rows, err := utils.DB.Query(`
-		SELECT timestamp, status, response_time_ms 
+		SELECT timestamp, status, response_time_ms, cpu_usage, mem_usage
 		FROM health_checks 
 		WHERE timestamp >= datetime('now', '-24 hours')
 		ORDER BY timestamp ASC
@@ -268,17 +268,22 @@ func (s *Server) getHealthStats(c *gin.Context) {
 	defer rows.Close()
 
 	type HealthStat struct {
-		Timestamp      string `json:"timestamp"`
-		Status         string `json:"status"`
-		ResponseTimeMS int    `json:"response_time_ms"`
+		Timestamp      string  `json:"timestamp"`
+		Status         string  `json:"status"`
+		ResponseTimeMS int     `json:"response_time_ms"`
+		CPUUsage       float64 `json:"cpu_usage"`
+		MemoryUsage    float64 `json:"memory_usage"`
 	}
 
 	stats := []HealthStat{}
 	for rows.Next() {
 		var st HealthStat
-		if err := rows.Scan(&st.Timestamp, &st.Status, &st.ResponseTimeMS); err != nil {
+		var cpu, mem utils.NullFloat64
+		if err := rows.Scan(&st.Timestamp, &st.Status, &st.ResponseTimeMS, &cpu, &mem); err != nil {
 			continue
 		}
+		st.CPUUsage = cpu.Float64
+		st.MemoryUsage = mem.Float64
 		stats = append(stats, st)
 	}
 

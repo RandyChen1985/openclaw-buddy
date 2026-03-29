@@ -47,6 +47,8 @@ func createTables(existingToken string) (string, error) {
 			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
 			status TEXT,
 			response_time_ms INTEGER,
+			cpu_usage REAL,
+			mem_usage REAL,
 			error_msg TEXT
 		);`,
 		`CREATE TABLE IF NOT EXISTS heal_events (
@@ -82,6 +84,10 @@ func createTables(existingToken string) (string, error) {
 			return "", err
 		}
 	}
+
+	// 增量迁移检查：为旧的 health_checks 表添加 cpu_usage / mem_usage 字段
+	_, _ = DB.Exec("ALTER TABLE health_checks ADD COLUMN cpu_usage REAL")
+	_, _ = DB.Exec("ALTER TABLE health_checks ADD COLUMN mem_usage REAL")
 
 	// 初始化“首次启动时间”
 	firstRun := GetSetting("first_run_at", "")
@@ -201,4 +207,31 @@ func CleanupOldData(days int) (int64, error) {
 	_, _ = DB.Exec(queryHeal)
 
 	return rowsAffected, nil
+}
+
+// NullFloat64 兼容 SQLite 的 NULL 浮点数
+type NullFloat64 struct {
+	Float64 float64
+	Valid   bool
+}
+
+func (n *NullFloat64) Scan(value interface{}) error {
+	if value == nil {
+		n.Float64, n.Valid = 0, false
+		return nil
+	}
+	n.Valid = true
+	switch v := value.(type) {
+	case float64:
+		n.Float64 = v
+	case float32:
+		n.Float64 = float64(v)
+	case int64:
+		n.Float64 = float64(v)
+	case int:
+		n.Float64 = float64(v)
+	default:
+		return fmt.Errorf("unsupported type for NullFloat64: %T", value)
+	}
+	return nil
 }

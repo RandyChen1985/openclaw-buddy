@@ -64,7 +64,7 @@ func GetStructuredStatus(port int) (OpenClawStatus, error) {
 	status.Version = strings.TrimSpace(StripANSI(string(verOut)))
 
 	// 0.1 获取系统负载 (针对 Mac 优化)
-	status.Metrics = getSystemMetrics()
+	status.Metrics = GetSystemMetrics()
 
 	// 1. 解析网关状态：仅使用端口监听判断，确保最快响应速度
 	if IsPortListening(port) {
@@ -83,7 +83,7 @@ func GetStructuredStatus(port int) (OpenClawStatus, error) {
 	return status, nil
 }
 
-func getSystemMetrics() SystemMetrics {
+func GetSystemMetrics() SystemMetrics {
 	metrics := SystemMetrics{
 		CPUUsage:    0,
 		MemoryUsage: 0,

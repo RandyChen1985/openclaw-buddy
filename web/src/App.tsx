@@ -518,7 +518,7 @@ const Dashboard = () => {
 
   const renderContent = () => {
     const viewMap: Record<string, React.ReactNode> = {
-      'dashboard': <DashboardOverview status={status} history={history} isRunning={isRunning} onControl={handleControl} onNavigate={setActiveTab} />,
+      'dashboard': <DashboardOverview status={status} history={history} wsLogs={wsLogs} isRunning={isRunning} onControl={handleControl} onNavigate={setActiveTab} />,
       'bots-models': (
         <BotsManager 
           botsModels={botsModels} loadingBots={loadingBots} isMobile={isMobile} 
