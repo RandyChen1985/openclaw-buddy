@@ -286,21 +286,25 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   };
 
   const handleSetDefaultModel = (fullId: string) => {
-    Modal.confirm({
+    const confirmInstance = Modal.confirm({
       title: t('bots.confirmSwitchDefault'),
       content: t('bots.switchDefaultContent', { name: fullId }),
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
-      onOk: async () => {
-        try {
-          onShowGlobalLoading(t('bots.settingDefault'), 0);
-          await onSetDefaultModel(fullId);
-          await onRefresh();
-          onShowGlobalLoading(t('bots.defaultSet'), 3000);
-        } catch (err: any) {
-          onShowGlobalLoading('', 1);
-          message.error(err.message || 'Failed to set default model');
-        }
+      onOk: () => {
+        confirmInstance.destroy();
+        // 在弹窗销毁后立刻执行异步业务
+        (async () => {
+          try {
+            onShowGlobalLoading(t('bots.settingDefault'), 0);
+            await onSetDefaultModel(fullId);
+            await onRefresh();
+            onShowGlobalLoading(t('bots.defaultSet'), 3000);
+          } catch (err: any) {
+            onShowGlobalLoading('', 1);
+            message.error(err.message || 'Failed to set default model');
+          }
+        })();
       }
     });
   };
