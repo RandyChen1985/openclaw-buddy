@@ -3,7 +3,6 @@ package utils
 import (
 	"fmt"
 	"os"
-	"syscall"
 )
 
 type FileLock struct {
@@ -24,12 +23,8 @@ func (l *FileLock) Lock() error {
 	}
 	l.file = f
 
-	err = syscall.Flock(int(l.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
-	if err != nil {
-		if err == syscall.EWOULDBLOCK {
-			return fmt.Errorf("guardian is already running (locked by %s)", l.path)
-		}
-		return fmt.Errorf("failed to lock file: %v", err)
+	if err := s_lockFile(l.file); err != nil {
+		return fmt.Errorf("failed to lock file: %v. %s", err, l.path)
 	}
 
 	// Write current PID to the file
@@ -45,7 +40,7 @@ func (l *FileLock) Lock() error {
 
 func (l *FileLock) Unlock() {
 	if l.file != nil {
-		syscall.Flock(int(l.file.Fd()), syscall.LOCK_UN)
+		s_unlockFile(l.file)
 		l.file.Close()
 		os.Remove(l.path)
 	}

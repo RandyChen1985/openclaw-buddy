@@ -9,8 +9,10 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -1069,4 +1071,44 @@ func (s *Server) getTopBots(c *gin.Context) {
 	}
 
 	s.Success(c, ranks)
+}
+
+func (s *Server) getServerInfo(c *gin.Context) {
+	hostname, _ := os.Hostname()
+	s.Success(c, gin.H{
+		"hostname": hostname,
+		"os":       runtime.GOOS,
+		"arch":     runtime.GOARCH,
+		"cpus":     runtime.NumCPU(),
+	})
+}
+
+func (s *Server) getOpenClawVersion(c *gin.Context) {
+	path, err := exec.LookPath("openclaw")
+	if err != nil {
+		s.Success(c, gin.H{
+			"installed": false,
+			"version":   "",
+			"path":      "",
+			"error":     "openclaw terminal command not found",
+		})
+		return
+	}
+
+	out, err := exec.Command(path, "--version").Output()
+	if err != nil {
+		// 尝试不带 -- 
+		out, err = exec.Command(path, "version").Output()
+	}
+
+	version := "Unknown"
+	if err == nil {
+		version = strings.TrimSpace(string(out))
+	}
+
+	s.Success(c, gin.H{
+		"installed": true,
+		"version":   version,
+		"path":      path,
+	})
 }

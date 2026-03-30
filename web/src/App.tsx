@@ -20,6 +20,7 @@ import OnlineChat from './views/OnlineChat';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import SkillManagement from './views/SkillManagement';
 import TuiView from './views/TuiView';
+import ShellView from './views/ShellView';
 import CrayfishLoading from './components/common/CrayfishLoading';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import CommandPalette from './components/common/CommandPalette';
@@ -70,6 +71,7 @@ const Dashboard = () => {
   const [versionUpdate, setVersionUpdate] = useState<{ latest: string, current: string, release_url: string } | null>(null);
   const [systemEvents, setSystemEvents] = useState<any[]>([]);
   const [topBots, setTopBots] = useState<any[]>([]);
+  const [ocInstalled, setOcInstalled] = useState<boolean | null>(null);
 
   // Hooks
   const { status, history, fetching, refreshCountdown } = useStatusPolling(
@@ -127,9 +129,24 @@ const Dashboard = () => {
     
     // 首次加载检查版本更新
     checkVersionUpdate();
+    checkOpenClawStatus();
     
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
+
+  const checkOpenClawStatus = async () => {
+    try {
+      const res = await api.get('/v1/openclaw/version');
+      // 增加 800ms 的感知延迟，确保环境监测动画能被肉眼看到，增加专业感
+      setTimeout(() => {
+        setOcInstalled(res.data.installed);
+      }, 800);
+    } catch (err) {
+      setTimeout(() => {
+        setOcInstalled(false);
+      }, 800);
+    }
+  };
 
   const handleCommandAction = (action: string, params?: any) => {
     if (action === 'nav') {
@@ -500,6 +517,7 @@ const Dashboard = () => {
           ), 
           icon: <Zap size={14} /> 
         },
+        { key: 'shell', label: t('common.shell'), icon: <Terminal size={14} /> },
       ]
     },
     {
@@ -559,6 +577,7 @@ const Dashboard = () => {
           onNavigate={setActiveTab}
           systemEvents={systemEvents}
           topBots={topBots}
+          ocInstalled={ocInstalled}
         />
       ),
       'bots-models': (
@@ -591,9 +610,10 @@ const Dashboard = () => {
         />
       ),
       'logs': <LogsViewer wsLogs={wsLogs} />,
-      'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} />,
+      'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} ocInstalled={ocInstalled} />,
       'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} />,
       'tui': <TuiView />,
+      'shell': <ShellView />,
       'skills': <SkillManagement isMobile={isMobile} />
     };
 
@@ -718,22 +738,22 @@ const Dashboard = () => {
           background: '#f8fafc', 
           display: 'flex', 
           flexDirection: 'column',
-          padding: activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' ? 0 : 24,
-          overflow: activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' ? 'hidden' : 'auto'
+          padding: activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell' ? 0 : 24,
+          overflow: activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell' ? 'hidden' : 'auto'
         }}>
           {renderContent()}
         </div>
       ) : isMobile ? (
         <Layout style={{ 
-          height: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui') ? '100vh' : 'auto', 
+          height: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? '100vh' : 'auto', 
           minHeight: '100vh',
           background: '#f8fafc', 
-          overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui') ? 'hidden' : 'auto' 
+          overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? 'hidden' : 'auto' 
         }}>
           {headerEl(() => setMobileMenuOpen(true))}
           <Content style={{ 
-            padding: activeTab === 'tui' || activeTab === 'chat' || activeTab === 'logs' ? 0 : 16, 
-            background: activeTab === 'tui' ? '#0f172a' : '#f8fafc' 
+            padding: activeTab === 'tui' || activeTab === 'shell' || activeTab === 'chat' || activeTab === 'logs' ? 0 : 16, 
+            background: (activeTab === 'tui' || activeTab === 'shell') ? '#0f172a' : '#f8fafc' 
           }}>
             {renderContent()}
           </Content>
@@ -755,10 +775,10 @@ const Dashboard = () => {
         </Layout>
       ) : (
         <Layout style={{ 
-          height: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui') ? '100vh' : 'auto', 
+          height: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? '100vh' : 'auto', 
           minHeight: '100vh',
           background: '#f8fafc', 
-          overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui') ? 'hidden' : 'auto' 
+          overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? 'hidden' : 'auto' 
         }}>
           <Sider
             width={220} collapsedWidth={64} collapsed={collapsed} onCollapse={setCollapsed}
@@ -776,15 +796,15 @@ const Dashboard = () => {
           <Layout style={{ 
             marginLeft: collapsed ? 64 : 220, 
             transition: 'margin-left 0.2s', 
-            height: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui') ? '100vh' : 'auto', 
+            height: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? '100vh' : 'auto', 
             minHeight: 0,
             display: 'flex', 
             flexDirection: 'column', 
-            overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui') ? 'hidden' : 'auto' 
+            overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? 'hidden' : 'auto' 
           }}>
             {headerEl(() => setCollapsed(!collapsed))}
             <Content style={{ 
-              padding: activeTab === 'logs' || activeTab === 'chat' || activeTab === 'tui' ? 0 : 24, 
+              padding: activeTab === 'logs' || activeTab === 'chat' || activeTab === 'tui' || activeTab === 'shell' ? 0 : 24, 
               background: '#f8fafc', 
               flex: 1,
               display: 'flex', 

@@ -2,22 +2,25 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
-import { message, Button, Tooltip, Space, Result, Spin, Typography } from 'antd';
+import { message, Button, Tooltip, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { RotateCcw, XCircle, Terminal as TerminalIcon, Info, Download, RefreshCw } from 'lucide-react';
+import { RotateCcw, XCircle, Server, Monitor, Cpu, Terminal as TerminalIcon } from 'lucide-react';
 
-const { Paragraph, Text } = Typography;
+interface ServerInfo {
+  hostname: string;
+  os: string;
+  arch: string;
+  cpus: number;
+}
 
-const TuiView: React.FC = () => {
+const ShellView: React.FC = () => {
   const { t } = useTranslation();
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const [sessionKey, setSessionKey] = useState(0);
-  const [ocVersion, setOcVersion] = useState<string>('');
-  const [isInstalled, setIsInstalled] = useState<boolean | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
@@ -26,25 +29,18 @@ const TuiView: React.FC = () => {
     return () => window.removeEventListener('resize', handleWinResize);
   }, []);
 
-  const fetchOcStatus = async () => {
-    setIsLoading(true);
+  const fetchServerInfo = async () => {
     try {
       const token = localStorage.getItem('guardian_token');
-      const res = await fetch('/v1/openclaw/version', {
+      const res = await fetch('/v1/system/info', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const json = await res.json();
       if (json.code === 200) {
-        setIsInstalled(json.data.installed);
-        setOcVersion(json.data.version || '');
-      } else {
-        setIsInstalled(false);
+        setServerInfo(json.data);
       }
     } catch (err) {
-      console.error('Failed to fetch openclaw version:', err);
-      setIsInstalled(false);
-    } finally {
-      setIsLoading(false);
+      console.error('Failed to fetch server info:', err);
     }
   };
 
@@ -55,17 +51,27 @@ const TuiView: React.FC = () => {
 
   const handleInterrupt = () => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
+      // 发送 Ctrl+C (\x03) 指令
       socketRef.current.send('\x03');
       message.info(t('common.interruptSent', { defaultValue: '已发送中断信号 (Ctrl+C)' }));
     }
   };
 
+  // 映射操作系统友好名称和颜色
+  const getOSDisplay = (os: string) => {
+    const lowerOS = os.toLowerCase();
+    if (lowerOS === 'darwin') return { name: 'macOS', color: '#cbd5e1', icon: <Monitor size={14} /> };
+    if (lowerOS === 'windows') return { name: 'Windows', color: '#60a5fa', icon: <Monitor size={14} /> };
+    if (lowerOS === 'linux') return { name: 'Linux', color: '#fbbf24', icon: <Monitor size={14} /> };
+    return { name: os, color: '#94a3b8', icon: <Monitor size={14} /> };
+  };
+
   useEffect(() => {
-    fetchOcStatus();
+    fetchServerInfo();
   }, []);
 
   useEffect(() => {
-    if (!isInstalled || !terminalRef.current) return;
+    if (!terminalRef.current) return;
 
     // Initialize xterm.js
     const term = new Terminal({
@@ -85,6 +91,7 @@ const TuiView: React.FC = () => {
     term.open(terminalRef.current);
     term.focus();
     
+    // 给 DOM 渲染留一点时间后再计算尺寸
     const initialFit = setTimeout(() => {
       fitAddon.fit();
       term.focus();
@@ -96,11 +103,13 @@ const TuiView: React.FC = () => {
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
+    // Connection Logic
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     const token = localStorage.getItem('guardian_token');
     
-    const wsUrl = `${protocol}//${host}/v1/ws/tui?token=${token}`;
+    // 连接到 shell 接口
+    const wsUrl = `${protocol}//${host}/v1/ws/shell?token=${token}`;
     
     const socket = new WebSocket(wsUrl);
     socket.binaryType = 'arraybuffer';
@@ -125,12 +134,12 @@ const TuiView: React.FC = () => {
     };
 
     socket.onerror = (error) => {
-      console.error('TUI WebSocket error:', error);
+      console.error('Shell WebSocket error:', error);
       message.error(t('common.connectionError'));
     };
 
     socket.onclose = () => {
-      term.write('\r\n\x1b[31m[Connection Closed]\x1b[0m\r\n');
+      term.write('\r\n\x1b[31m[Session Closed]\x1b[0m\r\n');
     };
 
     term.onData((data) => {
@@ -155,68 +164,9 @@ const TuiView: React.FC = () => {
       term.dispose();
       xtermRef.current = null;
     };
-  }, [isInstalled, sessionKey]);
+  }, [t, sessionKey]);
 
-  if (isLoading) {
-    return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a' }}>
-        <Spin size="large" tip="正在探测系统环境..." />
-      </div>
-    );
-  }
-
-  if (isInstalled === false) {
-    return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a', padding: '40px' }}>
-        <Result
-          status="warning"
-          title={<span style={{ color: '#f8fafc' }}>未检测到 OpenClaw 核心程序</span>}
-          subTitle={
-            <div style={{ color: '#94a3b8', maxWidth: '600px', margin: '0 auto' }}>
-              <Paragraph>
-                在线聊天功能依赖于宿主机的 <Text code style={{ color: '#38bdf8', background: '#1e293b' }}>openclaw</Text> 命令行工具。
-              </Paragraph>
-              <Paragraph>
-                请确保您已完成以下步骤：
-                <ul style={{ textAlign: 'left', marginTop: '16px' }}>
-                  <li>在服务器上下载并解压 OpenClaw 核心。</li>
-                  <li>将执行文件路径加入系统的环境变量（PATH）中。</li>
-                  <li>或者在 Buddy 的配置文件中指定正确的执行路径。</li>
-                </ul>
-              </Paragraph>
-            </div>
-          }
-          extra={[
-            <Button 
-                type="primary" 
-                key="github" 
-                icon={<Download size={16} />} 
-                onClick={() => window.open('https://github.com/RandyChen1985/openclaw-buddy/releases')}
-                className="flex items-center gap-2"
-            >
-              前往 GitHub 下载
-            </Button>,
-            <Button 
-                key="retry" 
-                icon={<RefreshCw size={16} />} 
-                onClick={fetchOcStatus}
-                ghost
-                style={{ color: '#94a3b8', borderColor: '#475569' }}
-            >
-              重新探测
-            </Button>
-          ]}
-          style={{ 
-            background: 'rgba(30, 41, 59, 0.5)', 
-            backdropFilter: 'blur(20px)',
-            borderRadius: '16px',
-            border: '1px solid rgba(255, 255, 255, 0.05)',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
-          }}
-        />
-      </div>
-    );
-  }
+  const osInfo = serverInfo ? getOSDisplay(serverInfo.os) : null;
 
   return (
     <div 
@@ -247,22 +197,32 @@ const TuiView: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8' }}>
             <TerminalIcon size={16} style={{ color: '#312e81' }} />
-            {!isMobile && <span style={{ fontWeight: 600, color: '#f8fafc', fontSize: '13px' }}>TUI 聊天</span>}
+            {!isMobile && <span style={{ fontWeight: 600, color: '#f8fafc', fontSize: '13px' }}>运维终端</span>}
           </div>
 
-          {ocVersion && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', maxWidth: isMobile ? '120px' : 'none' }}>
-              <Info size={14} style={{ color: '#94a3b8' }} />
-              {!isMobile && <span style={{ color: '#cbd5e1' }}>OpenClaw CLI:</span>}
-              <span style={{ 
-                color: '#38bdf8', 
-                fontFamily: 'monospace',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>
-                {isMobile ? ocVersion.split(' ')[0] : ocVersion}
-              </span>
+          {serverInfo && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '16px', fontSize: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', maxWidth: isMobile ? '80px' : 'none' }}>
+                <Server size={14} />
+                <span style={{ 
+                  color: '#cbd5e1', 
+                  overflow: 'hidden', 
+                  textOverflow: 'ellipsis', 
+                  whiteSpace: 'nowrap' 
+                }}>
+                  {serverInfo.hostname.split('.')[0]}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8' }}>
+                {osInfo?.icon}
+                {!isMobile && <span style={{ color: osInfo?.color }}>{osInfo?.name} ({serverInfo.arch})</span>}
+              </div>
+              {!isMobile && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8' }}>
+                  <Cpu size={14} />
+                  <span>{serverInfo.cpus} Cores</span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -291,7 +251,7 @@ const TuiView: React.FC = () => {
             </Button>
           </Tooltip>
 
-          <Tooltip title={t('common.restartTerminal', { defaultValue: '重启终端' })}>
+          <Tooltip title={t('common.restartTerminal', { defaultValue: '重启维护终端' })}>
             <Button 
               size={isMobile ? "middle" : "small"}
               icon={<RotateCcw size={14} />} 
@@ -337,4 +297,4 @@ const TuiView: React.FC = () => {
   );
 };
 
-export default TuiView;
+export default ShellView;

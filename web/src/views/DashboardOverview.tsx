@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Row, Col, Card, Tag, Progress, Button, Skeleton, Spin, Timeline } from 'antd';
+import { Row, Col, Card, Tag, Progress, Button, Skeleton, Spin, Timeline, Tooltip as AntTooltip, Badge } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Server, Activity, Play, Square, RefreshCw, Smartphone, Terminal, History, Trophy, AlertTriangle, Zap, Download } from 'lucide-react';
+import { Server, Activity, Play, Square, RefreshCw, Smartphone, Terminal, History, Trophy, AlertTriangle, Zap, Download, Monitor, AlertCircle } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
 import dayjs from 'dayjs';
 
@@ -14,17 +14,50 @@ interface DashboardOverviewProps {
   onNavigate?: (key: string) => void;
   systemEvents?: any[];
   topBots?: any[];
+  ocInstalled: boolean | null;
+}
+
+interface SystemInfo {
+  hostname: string;
+  os: string;
+  arch: string;
+  cpus: number;
+}
+
+interface OcStatus {
+  installed: boolean;
+  version: string;
+  path: string;
 }
 
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({ 
   status, history, wsLogs, isRunning, onControl, onNavigate,
-  systemEvents = [], topBots = []
+  systemEvents = [], topBots = [], ocInstalled
 }) => {
   const { t } = useTranslation();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const [ocStatus, setOcStatus] = useState<OcStatus | null>(null);
+
+  const fetchData = async () => {
+    try {
+      const token = localStorage.getItem('guardian_token');
+      const [sysRes, ocRes] = await Promise.all([
+        fetch('/v1/system/info', { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch('/v1/openclaw/version', { headers: { 'Authorization': `Bearer ${token}` } })
+      ]);
+      const sysJson = await sysRes.json();
+      const ocJson = await ocRes.json();
+      if (sysJson.code === 200) setSystemInfo(sysJson.data);
+      if (ocJson.code === 200) setOcStatus(ocJson.data);
+    } catch (err) {
+      console.error('Failed to fetch dashboard system info:', err);
+    }
+  };
 
   useEffect(() => {
+    fetchData();
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -59,7 +92,141 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
+      {/* 顶部环境概览条 - 独立渲染层 (亮色版) */}
+      <div 
+        id="dashboard-env-monitor-bar"
+        style={{ 
+          background: 'rgba(255, 255, 255, 0.45)', 
+          backdropFilter: 'blur(10px)',
+          borderRadius: 12, 
+          padding: isMobile ? '16px' : '12px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: isMobile ? 'flex-start' : 'center',
+          minHeight: 64,
+          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)',
+          border: '1px solid #e2e8f0',
+          position: 'relative',
+          zIndex: 10
+        }}
+      >
+        {ocInstalled === null || !systemInfo ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <RefreshCw size={18} style={{ color: '#3b82f6', animation: 'spin 1.5s linear infinite' }} />
+            <span 
+              className="animate-pulse-slow"
+              style={{ 
+                fontSize: 14, 
+                fontWeight: 600, 
+                color: '#3b82f6', 
+                letterSpacing: '0.05em'
+              }}
+            >
+              OpenClaw 环境检测中...
+            </span>
+          </div>
+        ) : (
+          <div style={{ 
+            display: 'flex', 
+            alignItems: isMobile ? 'flex-start' : 'center', 
+            justifyContent: 'space-between',
+            flexDirection: isMobile ? 'column' : 'row',
+            width: '100%',
+            gap: 16,
+            animation: 'fadeIn 0.5s ease-out'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: isMobile ? 'flex-start' : 'center', 
+              gap: isMobile ? '16px' : '32px', 
+              flexDirection: isMobile ? 'column' : 'row',
+              width: isMobile ? '100%' : 'auto' 
+            }}>
+              {/* Hostname */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ background: '#f0f9ff', padding: '8px', borderRadius: '10px' }}>
+                  <Monitor size={18} style={{ color: '#0ea5e9' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>{t('dashboard.hostname', { defaultValue: '主机名' })}</div>
+                  <div style={{ fontSize: 14, color: '#1e293b', fontWeight: 600 }}>{systemInfo?.hostname || '---'}</div>
+                </div>
+              </div>
+
+              {/* OS */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ background: '#f5f3ff', padding: '8px', borderRadius: '10px' }}>
+                  <Server size={18} style={{ color: '#8b5cf6' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>{t('dashboard.os', { defaultValue: '操作系统' })}</div>
+                  <div style={{ fontSize: 14, color: '#1e293b', fontWeight: 600 }}>
+                    {systemInfo ? `${systemInfo.os} (${systemInfo.arch})` : '---'}
+                  </div>
+                </div>
+              </div>
+
+              {!isMobile && <div style={{ width: 1, height: 24, background: '#e2e8f0' }} />}
+
+              {/* CLI Status */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ 
+                  background: ocStatus?.installed ? '#f0fdf4' : '#fef2f2', 
+                  padding: '8px', 
+                  borderRadius: '10px' 
+                }}>
+                  <Zap size={18} style={{ color: ocStatus?.installed ? '#22c55e' : '#ef4444' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>OpenClaw CLI</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {ocStatus?.installed ? (
+                      <Badge status="processing" color="#22c55e" text={<span style={{ fontSize: 14, color: '#1e293b', fontWeight: 700, fontFamily: 'monospace' }}>{ocStatus.version}</span>} />
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 14, color: '#ef4444', fontWeight: 700 }}>未安装</span>
+                        <AntTooltip title="OpenClaw 核心程序未在环境变量中通过检测">
+                          <AlertCircle size={14} style={{ color: '#ef4444', cursor: 'help' }} />
+                        </AntTooltip>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 12, 
+              width: isMobile ? '100%' : 'auto',
+              justifyContent: isMobile ? 'flex-end' : 'flex-start' 
+            }}>
+              {!ocStatus?.installed && (
+                <Button 
+                  type="primary" 
+                  size="small" 
+                  danger 
+                  icon={<Download size={14} />}
+                  onClick={() => window.open('https://github.com/RandyChen1985/openclaw-buddy/releases')}
+                  style={{ borderRadius: 6, fontWeight: 600 }}
+                >
+                  获取下载
+                </Button>
+              )}
+              <Button 
+                type="text" 
+                size="small"
+                icon={<RefreshCw size={14} style={{ color: '#94a3b8' }} />} 
+                onClick={fetchData}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #f1f5f9' }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
       <Row gutter={[20, 20]}>
         {/* 左侧：核心状态与负载 */}
         <Col xs={24} lg={10}>
@@ -67,7 +234,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <Card styles={{ body: { padding: 24 } }} style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: 13, fontWeight: 500 }}>
-                  <Server size={15} color={isRunning ? '#22c55e' : '#ef4444'} />
+                  <Activity size={15} color={isRunning ? '#22c55e' : '#ef4444'} />
                   {t('dashboard.coreStatus')}
                 </div>
                 <Tag color={isRunning ? 'success' : 'error'} style={{ borderRadius: 20, border: 'none', margin: 0, fontWeight: 600, padding: '0 10px' }}>
@@ -77,7 +244,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <div style={{ marginBottom: 24 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
                   <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('dashboard.runtime')}</div>
-                  <div style={{ fontSize: 10, color: '#10b981', fontWeight: 600, fontFamily: 'monospace' }}>{status?.version}</div>
                 </div>
                 <div style={{ 
                   fontSize: isMobile ? 18 : 24, 
@@ -233,19 +399,28 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       {/* 快捷操作 */}
       <Card
         style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
-        title={<span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>{t('dashboard.quickActions')}</span>}
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>{t('dashboard.quickActions')}</span>
+            {ocInstalled === false && (
+              <Tag color="error" icon={<AlertCircle size={12} />} style={{ margin: 0, borderRadius: 4 }}>
+                核心组件未就绪，控制已锁死
+              </Tag>
+            )}
+          </div>
+        }
         styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 52 }, body: { padding: '16px 24px' } }}
       >
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, width: '100%' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, width: '100%', opacity: ocInstalled === false ? 0.6 : 1 }}>
           <Button
             type="primary"
             size="large"
             icon={<Play size={14} />}
             onClick={() => onControl('start')}
-            disabled={isRunning}
+            disabled={isRunning || ocInstalled === false}
             style={{ 
               fontWeight: 600, flex: isMobile ? '1 1 calc(50% - 6px)' : 'none', minWidth: 140, borderRadius: 10,
-              background: isRunning ? '#cbd5e1' : '#22c55e', borderColor: isRunning ? '#cbd5e1' : '#22c55e'
+              background: (isRunning || ocInstalled === false) ? '#cbd5e1' : '#22c55e', borderColor: (isRunning || ocInstalled === false) ? '#cbd5e1' : '#22c55e'
             }}
           >
             {t('dashboard.startGateway')}
@@ -256,7 +431,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<Square size={14} />}
             onClick={() => onControl('stop')}
-            disabled={!isRunning}
+            disabled={!isRunning || ocInstalled === false}
             style={{ fontWeight: 600, flex: isMobile ? '1 1 calc(50% - 6px)' : 'none', minWidth: 140, borderRadius: 10 }}
           >
             {t('dashboard.stopGateway')}
@@ -265,6 +440,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<RefreshCw size={14} />}
             onClick={() => onControl('restart')}
+            disabled={ocInstalled === false}
             style={{ fontWeight: 600, flex: isMobile ? '1 1 100%' : 'none', minWidth: 140, borderRadius: 10, border: '1.5px solid #e2e8f0' }}
           >
             {t('dashboard.asyncRestart')}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Badge, Button, List, Tag, Modal, Spin, message } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Zap, Terminal, FileText, ChevronRight, RefreshCw, Clock, HardDrive } from 'lucide-react';
+import { Zap, Terminal, FileText, ChevronRight, RefreshCw, Clock, HardDrive, AlertCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -16,13 +16,15 @@ interface SelfHealingProps {
   healEvents: any[];
   loadingSets: boolean;
   onToggle: (checked: boolean) => void;
+  ocInstalled: boolean | null;
 }
 
 const SelfHealing: React.FC<SelfHealingProps> = ({ 
   selfHealingEnabled, 
   healEvents, 
   loadingSets, 
-  onToggle 
+  onToggle,
+  ocInstalled
 }) => {
   const { t } = useTranslation();
   const isMobile = window.innerWidth < 768;
@@ -164,6 +166,11 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
               </div>
               <div style={{ color: '#64748b', fontSize: 13, maxWidth: 500, lineHeight: 1.5 }}>
                 {t('heal.description')}
+                {ocInstalled === false && (
+                  <div style={{ marginTop: 8, color: '#ef4444', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <AlertCircle size={12} /> 核心组件 `openclaw` 未安装，功能暂不可用
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -181,18 +188,19 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
               {t('heal.status')}: <span style={{ color: selfHealingEnabled ? '#16a34a' : '#ef4444' }}>{selfHealingEnabled ? t('heal.running') : t('heal.disabled')}</span>
             </div>
             <Button 
-              type={selfHealingEnabled ? "default" : "primary"}
+              type={ocInstalled === null ? "default" : (selfHealingEnabled ? "default" : "primary")}
               size="large"
-              loading={loadingSets}
+              loading={loadingSets || ocInstalled === null}
+              disabled={ocInstalled === false || ocInstalled === null}
               onClick={() => onToggle(!selfHealingEnabled)}
               style={{ 
                 borderRadius: 10, minWidth: 100, fontWeight: 700,
-                background: selfHealingEnabled ? '#ef4444' : '#2563eb',
-                borderColor: selfHealingEnabled ? '#ef4444' : '#2563eb',
+                background: (ocInstalled === false || ocInstalled === null) ? '#cbd5e1' : (selfHealingEnabled ? '#ef4444' : '#2563eb'),
+                borderColor: (ocInstalled === false || ocInstalled === null) ? '#cbd5e1' : (selfHealingEnabled ? '#ef4444' : '#2563eb'),
                 color: '#fff'
               }}
             >
-              {selfHealingEnabled ? t('heal.disableService') : t('heal.enableNow')}
+              {ocInstalled === null ? "正在检测环境..." : (selfHealingEnabled ? t('heal.disableService') : t('heal.enableNow'))}
             </Button>
           </div>
         </div>

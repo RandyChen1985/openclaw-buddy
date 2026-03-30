@@ -8,6 +8,7 @@
 
 ## 2. API 接口 (API V1)
 - [ ] **状态查询**: `GET /v1/openclaw/status` 返回结构化 JSON，包含 PID 和 Runtime。
+- [ ] **版本探测**: `GET /v1/openclaw/version` 应返回 `installed`, `version`, `path` 字段，且在未安装时返回 `installed: false`。
 - [ ] **配置端口检查**: 修改 `env` 中的 `HEALTH_PORT` 后，系统概览应能正确反映该端口的监听状态。
 - [ ] **异步控制**: `POST /v1/gateway/restart` 应立即返回 202 并触发后台进程重启。
 - [ ] **历史统计**: `GET /v1/stats/health` 应返回至少过去 24 小时的 SQLite 记录。
@@ -23,6 +24,8 @@
 - [ ] **流式对话服务**: `POST /v1/openclaw/chat/completions` 应兼容 OpenAI 协议，且在 `stream: true` 时返回标准 SSE 流。
 - [ ] **`chat/completions` 用户标识**: `POST /v1/openclaw/chat/completions` 请求应能接收并透传来自上游的 `user` 参数，且不再硬编码为 `lobster`。
 - [ ] **`chat/completions` 权限容错**: 当后端返回 `missing scope: operator.write` (403/401) 时，前端应弹出友好提示，建议使用 TUI 聊天。
+- [ ] **TUI 安装引导**: 模拟未安装 `openclaw` 时，进入“在线聊天”应显示引导卡片而非空白终端；安装后点击“重新探测”应能正确恢复。
+- [ ] **TUI 版本显示**: TUI 界面顶部信息栏应能正确显示 OpenClaw CLI 版本号。
 - [ ] **`chat/completions` 系统提示注入**: `POST /v1/openclaw/chat/completions` 请求应不再自动注入系统提示到 `messages` 数组中。
 - [ ] **前端用户标识生成**: 聊天界面应能根据 `urlUser` 或 `localStorage` 中的 `session_id`（格式为 `lobster-{session_id}`）生成 `user` 标识并发送，并在清空会话时更新 `session_id`。
 - [ ] **快捷指令管理**: `GET/POST /v1/openclaw/chat/quick-commands` 应能存取用户自定义的对话话术。
@@ -31,6 +34,15 @@
 - [ ] **新增模型**: `POST /v1/openclaw/models/provider/model` 后，对应提供商的 `models` 列表应新增模型项。
 - [ ] **系统事件流**: `GET /v1/system/events` 应按时间倒序返回最近 20 条系统事件（含自愈、更新、手动控制）。
 - [ ] **机器人活跃排行**: `GET /v1/openclaw/bots/top` 应返回活跃会话数前 3 的机器人，并包含名称和 Emoji。
+- [ ] **运维终端接口**: `GET /v1/ws/shell` 应能通过 WebSocket 升级并启动系统 Shell 进程。
+
+## 2.4 运维终端 (Maintenance Terminal)
+- [ ] **菜单展示**: 侧边栏“监控中心”组下应出现“运维终端”菜单项。
+- [ ] **终端初始化**: 点击菜单后应能正确打开 xterm.js 终端并显示 Shell 提示符（如 `$` 或 `%`）。
+- [ ] **交互验证**: 在终端中输入 `ls`, `pwd`, `echo hello` 等命令，应能正确返回执行结果。
+- [ ] **窗口自适应**: 调整浏览器窗口大小，终端应能自动触发 Resize 事件并填满容器。
+- [ ] **快捷指令**: 终端顶部的“Ctrl+C”和“重启终端”按钮应能正常工作。
+- [ ] **全屏体验**: 在在线聊天、实时日志与运维终端之间切换，均应保持全屏（无页边距）的沉浸式体验。
 
 ## 3. Web 界面 (Dashboard)
 - [ ] **登录流**: 未登录用户访问根目录应显示登录框。
@@ -109,6 +121,8 @@
 - [ ] **打包清理**: 检查生成的 .tar.gz 压缩包内是否已彻底排除以 `._` 开头的 macOS 元数据文件，且在 Linux 上解压时不应出现 `LIBARCHIVE.xattr` 警告。
 - [ ] **产物体积**: 检查 Linux 版二进制文件是否已通过 `ldflags` 压缩（约 27MB 左右）。
 - [ ] **环境隔离**: 检查生成的 `env` 文件是否包含新增的 `EXTERNAL_DASHBOARD_URL` 配置项。
+- [ ] **Windows 兼容性**: 在 Windows 环境下执行 `openclaw-buddy.exe`，验证 Shell 终端与 TUI 聊天能够正常启动（ConPTY）。
+- [ ] **跨平台编译**: 执行 `GOOS=windows go build` 应无 `syscall` 相关编译错误。
 
 ## 6. 接口标准协议 (API Schema)
 - [ ] **统一包装格式**: 验证 `/v1/openclaw/status` 等核心接口返回是否包含 `code`, `message`, `data` 顶层字段。
