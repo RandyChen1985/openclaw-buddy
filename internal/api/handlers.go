@@ -48,7 +48,8 @@ func (s *Server) Error(c *gin.Context, httpStatus int, msg string) {
 }
 
 func (s *Server) getDashboardURL(c *gin.Context) {
-	url, err := process.GetDashboardURL(s.cfg.ExternalDashboardURL)
+	// 传入 Request Context，实现前端请求中止时的后端子进程级联取消
+	url, err := process.GetDashboardURL(c.Request.Context(), s.cfg.ExternalDashboardURL)
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
@@ -296,7 +297,7 @@ func (s *Server) getHealthStats(c *gin.Context) {
 }
 
 func (s *Server) getSelfHealingSetting(c *gin.Context) {
-	enabled := utils.GetSetting("self_healing_enabled", "false")
+	enabled := utils.GetSetting("self_healing_enabled", "true")
 	s.Success(c, gin.H{"enabled": enabled == "true"})
 }
 

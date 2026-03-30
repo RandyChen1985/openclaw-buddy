@@ -72,6 +72,8 @@ const Dashboard = () => {
   const [systemEvents, setSystemEvents] = useState<any[]>([]);
   const [topBots, setTopBots] = useState<any[]>([]);
   const [ocInstalled, setOcInstalled] = useState<boolean | null>(null);
+  const [dashboardProcessing, setDashboardProcessing] = useState(false);
+  const [dashboardAbortCtrl, setDashboardAbortCtrl] = useState<AbortController | null>(null);
 
   // Hooks
   const { status, history, fetching, refreshCountdown } = useStatusPolling(
@@ -474,16 +476,26 @@ const Dashboard = () => {
   };
   
   const handleOpenDashboard = async () => {
-    const hide = message.loading(t('common.processing'), 0);
+    if (dashboardProcessing) return; // 防抖：如果已有任务在处理，则忽略新点击
+
+    const ctrl = new AbortController();
+    setDashboardAbortCtrl(ctrl);
+    setDashboardProcessing(true);
+
     try {
-      const res = await api.get('/v1/openclaw/dashboard-url');
+      const res = await api.get('/v1/openclaw/dashboard-url', { signal: ctrl.signal });
       if (res.data.url) {
         window.open(res.data.url, '_blank');
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e.name === 'CanceledError' || e.name === 'AbortError') {
+        console.log('Dashboard URL request cancelled by user');
+        return;
+      }
       message.error(t('chat.getDashboardUrlError'));
     } finally {
-      hide();
+      setDashboardProcessing(false);
+      setDashboardAbortCtrl(null);
     }
   };
 
@@ -626,12 +638,13 @@ const Dashboard = () => {
 
   if (fetching && !status) return <CrayfishLoading />;
 
-  const globalLoadingMask = (isTransitioning || globalLoadingMessage) && (
+  const globalLoadingMask = (isTransitioning || globalLoadingMessage || dashboardProcessing) && (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(8px)',
+      background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(2px)',
       zIndex: 9999, display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', padding: 20
+      alignItems: 'center', justifyContent: 'center', padding: 20,
+      animation: 'fadeIn 0.3s ease-out'
     }}>
       <div style={{
         padding: isMobile ? '24px 20px' : '32px 40px', 
@@ -671,6 +684,26 @@ const Dashboard = () => {
               }}>
                 {globalLoadingCountdown > 0 ? t('common.loadingCountdown', { seconds: globalLoadingCountdown }) : t('common.syncing')}
               </div>
+            </>
+          ) : dashboardProcessing ? (
+            <>
+              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 18, marginBottom: 4 }}>
+                {t('common.lobsterPanel')}
+              </div>
+              <div style={{ color: '#64748b', fontSize: 13, lineHeight: 1.6 }}>
+                正在提取安全管理地址...<br />
+                这可能需要几秒钟时间
+              </div>
+              <Button 
+                danger 
+                style={{ marginTop: 24, borderRadius: 12, height: 40 }}
+                onClick={() => {
+                  dashboardAbortCtrl?.abort();
+                  setDashboardProcessing(false);
+                }}
+              >
+                {t('common.cancel')}
+              </Button>
             </>
           ) : null}
         </div>

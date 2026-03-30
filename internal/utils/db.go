@@ -129,6 +129,7 @@ func createTables(existingToken string) (string, error) {
 	if firstRun == "" {
 		now := time.Now().Format("2006-01-02 15:04:05")
 		_ = SetSetting("first_run_at", now)
+		_ = SetSetting("self_healing_enabled", "true")
 
 		// 首次启动：只有当传入 Token 为空或显式的占位符时，才重新生成随机 Token
 		if existingToken == "" || strings.HasPrefix(existingToken, "sk-replace-me") {

@@ -76,14 +76,16 @@ const ShellView: React.FC = () => {
     // Initialize xterm.js
     const term = new Terminal({
       cursorBlink: true,
-      fontSize: 14,
+      cursorStyle: isMobile ? 'bar' : 'block',
+      fontSize: isMobile ? 12 : 14,
       fontFamily: '"Cascadia Code", "Fira Code", monospace',
       theme: {
         background: '#0f172a',
         foreground: '#f8fafc',
         selectionBackground: 'rgba(255, 255, 255, 0.2)',
       },
-      allowProposedApi: true
+      allowProposedApi: true,
+      screenReaderMode: isMobile
     });
 
     const fitAddon = new FitAddon();
@@ -278,10 +280,21 @@ const ShellView: React.FC = () => {
 
       <div 
         ref={terminalRef} 
-        tabIndex={0}
+        onContextMenu={(e) => isMobile && e.preventDefault()}
         onClick={() => {
           if (xtermRef.current) {
             xtermRef.current.focus();
+            if (isMobile) {
+              setTimeout(() => xtermRef.current?.focus(), 100);
+            }
+            xtermRef.current.scrollToBottom();
+          }
+        }}
+        onTouchEnd={(e) => {
+          if (xtermRef.current) {
+            e.preventDefault();
+            xtermRef.current.focus();
+            setTimeout(() => xtermRef.current?.focus(), 100);
             xtermRef.current.scrollToBottom();
           }
         }}
@@ -290,7 +303,8 @@ const ShellView: React.FC = () => {
           width: '100%', 
           padding: '12px',
           cursor: 'text',
-          outline: 'none'
+          outline: 'none',
+          WebkitOverflowScrolling: 'touch'
         }} 
       />
     </div>

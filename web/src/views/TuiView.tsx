@@ -70,14 +70,16 @@ const TuiView: React.FC = () => {
     // Initialize xterm.js
     const term = new Terminal({
       cursorBlink: true,
-      fontSize: 14,
+      cursorStyle: isMobile ? 'bar' : 'block',
+      fontSize: isMobile ? 13 : 14,
       fontFamily: '"Cascadia Code", "Fira Code", monospace',
       theme: {
         background: '#0f172a',
         foreground: '#f8fafc',
         selectionBackground: 'rgba(255, 255, 255, 0.2)',
       },
-      allowProposedApi: true
+      allowProposedApi: true,
+      screenReaderMode: isMobile
     });
 
     const fitAddon = new FitAddon();
@@ -251,17 +253,20 @@ const TuiView: React.FC = () => {
           </div>
 
           {ocVersion && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', maxWidth: isMobile ? '120px' : 'none' }}>
-              <Info size={14} style={{ color: '#94a3b8' }} />
-              {!isMobile && <span style={{ color: '#cbd5e1' }}>OpenClaw CLI:</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', maxWidth: isMobile ? '160px' : 'none' }}>
+              <Info size={13} style={{ color: '#94a3b8' }} />
+              <span style={{ color: '#cbd5e1', whiteSpace: 'nowrap' }}>
+                {isMobile ? 'v' : 'OpenClaw CLI:'}
+              </span>
               <span style={{ 
                 color: '#38bdf8', 
                 fontFamily: 'monospace',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
+                whiteSpace: 'nowrap',
+                fontWeight: 600
               }}>
-                {isMobile ? ocVersion.split(' ')[0] : ocVersion}
+                {ocVersion}
               </span>
             </div>
           )}
@@ -318,10 +323,21 @@ const TuiView: React.FC = () => {
 
       <div 
         ref={terminalRef} 
-        tabIndex={0}
+        onContextMenu={(e) => isMobile && e.preventDefault()}
         onClick={() => {
           if (xtermRef.current) {
             xtermRef.current.focus();
+            if (isMobile) {
+              setTimeout(() => xtermRef.current?.focus(), 100);
+            }
+            xtermRef.current.scrollToBottom();
+          }
+        }}
+        onTouchEnd={(e) => {
+          if (xtermRef.current) {
+            e.preventDefault(); // 防止触发双击缩放或其他干扰
+            xtermRef.current.focus();
+            setTimeout(() => xtermRef.current?.focus(), 100);
             xtermRef.current.scrollToBottom();
           }
         }}
@@ -330,7 +346,8 @@ const TuiView: React.FC = () => {
           width: '100%', 
           padding: '12px',
           cursor: 'text',
-          outline: 'none'
+          outline: 'none',
+          WebkitOverflowScrolling: 'touch'
         }} 
       />
     </div>
