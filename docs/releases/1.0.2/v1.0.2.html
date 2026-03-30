@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw Buddy v1.0.2 发布公告</title>
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 650px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        }
+        h1 {
+            font-size: 24px;
+            color: #2c3e50;
+            text-align: center;
+            border-bottom: 2px solid #eef2f7;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+        .banner {
+            width: 100%;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .quote-section {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 20px;
+            border-left: 5px solid #3498db;
+            border-radius: 4px;
+            margin-bottom: 30px;
+            font-style: italic;
+            font-size: 15px;
+            line-height: 1.8;
+        }
+        .meta-info {
+            background: #fdfdfd;
+            border: 1px solid #eee;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .meta-info strong {
+            color: #3498db;
+        }
+        section {
+            margin-bottom: 35px;
+        }
+        h2 {
+            font-size: 20px;
+            color: #2980b9;
+            border-left: 4px solid #2980b9;
+            padding-left: 12px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        h3 {
+            font-size: 17px;
+            color: #444;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            background: linear-gradient(90deg, #f0f7ff 0%, #ffffff 100%);
+            border-radius: 4px;
+        }
+        ul {
+            padding-left: 20px;
+            list-style-type: none;
+        }
+        ul li {
+            position: relative;
+            margin-bottom: 10px;
+            padding-left: 5px;
+        }
+        ul li::before {
+            content: "•";
+            color: #3498db;
+            font-weight: bold;
+            display: inline-block; 
+            width: 1em;
+            margin-left: -1em;
+        }
+        .accent-box {
+            background: #fdf2f2;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 25px;
+        }
+        .card-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .feature-item {
+            background: #fff;
+            border: 1px solid #e1e8ed;
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #555;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+            transition: all 0.3s;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 12px;
+            color: #95a5a6;
+        }
+        hr {
+            border: 0;
+            height: 1px;
+            background: #eee;
+            margin: 30px 0;
+        }
+        .tag-pill {
+            display: inline-block;
+            background: #e1f5fe;
+            color: #01579b;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🦞 OpenClaw Buddy v1.0.2<br><span style="font-size: 16px; font-weight: normal; color: #7f8c8d;">所有的相遇，都是久别重逢的“专家”</span></h1>
+        
+        <!-- Banner 占位，用户发布的到时候需替换真实图片链接 -->
+        <img src="https://raw.githubusercontent.com/RandyChen1985/openclaw-buddy/main/docs/releases/1.0.2/banner.png" alt="Release Banner" class="banner">
+
+        <div class="quote-section">
+            “我以前以为，给机器人一个 ID，它就有了灵魂。<br><br>
+            直到 3 月 30 日那天，我看着那些全白色的卡片，突然觉得这个世界有点冷清。我在代码里加了一点淡蓝，一点微紫，还有那些从‘专家市场’里挑选出来的 Emoji。有人讲，这只是颜色。我讲，这是底色。<br><br>
+            我在 Web 端的深处藏了一个沉浸式的终端（TUI），就像是在繁华的仪表盘里，开了一扇通往 2046 年的窗。所有的输入法冲突，所有的 WebSocket 二进制流，最后都变成了一场温柔的对话。<br><br>
+            很多时候，我们其实不需要重新创建一个 Bot，我们只是在寻找一个已经存在的‘专家’。如果所有的路径、所有的命名最后都能对齐，那么在那 50 毫秒的叠影里，我听见的就不再是噪音，而是共鸣。”
+        </div>
+
+        <div class="meta-info">
+            📅 <strong>发布日期</strong>: 2026-03-30<br>
+            ✅ <strong>版本状态</strong>: Enhanced (Stable)<br>
+            🏷️ <strong>核心主题</strong>: 专家市场生态、沉浸式 TUI 交互、全链路视觉美化
+        </div>
+
+        <hr>
+
+        <section>
+            <h2>🚀 新增特性 (New Features)</h2>
+            
+            <h3>1. 专家市场与画像注入 (Expert Market & Injection)</h3>
+            <ul>
+                <li><strong>专家生态</strong>：现已集成“专家市场”模块，支持从数十位预设专家（技术、文案、法务等）一键创建对应的机器人。</li>
+                <li><strong>画像规范化</strong>：修正了 <code>SOUL.md</code> 与 <code>IDENTITY.md</code> 的写入逻辑，完美对齐 OpenClaw CLI 的路径规范与全大写命名协议。</li>
+                <li><strong>一键克隆</strong>：支持在创建时动态选择模型，自动化生成 Bot 独立的 <code>workspace</code> 与环境配置。</li>
+            </ul>
+
+            <h3>2. 沉浸式终端与运维控制 (Dual-Terminal Ops)</h3>
+            <ul>
+                <li><strong>沉浸式 TUI 聊天</strong>：将 OpenClaw 原生 TUI 深度集成，提供全屏对话体验。支持全屏悬浮控制组及自动聚焦。</li>
+                <li><strong>Web 运维终端优化</strong>：仪表盘底层的“实时日志”与“命令终端”现已支持全屏铺满显示。修复了移动端下虚拟键盘遮挡输入行的问题，极大提升了远程运维的便携性。</li>
+                <li><strong>通信稳定性</strong>：修复了 WebSocket 在处理特定二进制大对象时的编码错误，确保极速日志滚动且不丢包。</li>
+            </ul>
+
+            <h3>3. 系统级安全与运营 (Core Ops & Security)</h3>
+            <ul>
+                <li><strong>安全锁死机制 (Lockdown Mode)</strong>：新增环境监控联动的安全锁死逻辑，当核心组件检测到配置风险或外部入侵时，系统将自动挂起高危端口，保护数据安全。</li>
+                <li><strong>渠道与模型同步</strong>：渠道管理现已支持在线编辑，且成功连接后会自动同步全量模型至“默认组”，大幅降低运维心智负担。</li>
+            </ul>
+        </section>
+
+        <hr>
+
+        <section>
+            <h2>🎨 WOW Effect 视觉增强</h2>
+            <ul>
+                <li><strong>卡片底色回归</strong>：修复了机器人卡片与模型卡片的“美颜”功能。现在卡片会根据索引自动应用绚丽的淡彩色渐变底色。</li>
+                <li><strong>Emoji 动态图标</strong>：“虾兵蟹将”管理页面现已支持动态显示机器人自带的 Emoji 标识。</li>
+                <li><strong>3D 悬浮特效</strong>：所有的 Bot 和模型卡片均引入了 <code>card-float</code> 类动效，鼠标悬停时会伴随柔和的阴影及上浮反馈。</li>
+            </ul>
+        </section>
+
+        <hr>
+
+        <section>
+            <h2>🛠️ 性能修复 (Bug Fixes)</h2>
+            <ul>
+                <li><strong>环境监控重构</strong>：仪表盘底层的环境监控逻辑进行了重构，提高了数据的采样精度与安全性。</li>
+                <li><strong>WebSocket 权限容错</strong>：增强了 TUI 模式下的权限验证与 Token 刷新逻辑。</li>
+                <li><strong>沉浸式面板提取 (Drawer UI)</strong>：深度优化了移动端与 Web 端的“侧边栏面板提取”交互，支持平滑的手势划出与一键沉浸。</li>
+                <li><strong>布局精修</strong>：优化了 Dashboard 在平板设备下的显示宽度，解决了表格溢出的遗留问题。</li>
+            </ul>
+        </section>
+
+        <hr>
+
+        <section>
+            <h2>📦 发布产物 (Release Artifacts)</h2>
+            <div style="background: #f1f8ff; padding: 10px 15px; border-radius: 6px; font-family: monospace; font-size: 13px; border: 1px dashed #3498db;">
+                📂 <strong>Linux (amd64)</strong>: openclaw-buddy-linux-1.0.2.tar.gz<br>
+                📂 <strong>macOS (Universal)</strong>: openclaw-buddy-mac-1.0.2.tar.gz<br><br>
+                🔗 <strong>下载地址</strong>: <a href="https://github.com/RandyChen1985/openclaw-buddy/releases/tag/1.0.2" style="color: #3498db; text-decoration: none; font-weight: bold;">GitHub Releases v1.0.2</a>
+            </div>
+        </section>
+
+        <section>
+            <h2>❤️ 特别致谢</h2>
+            <p style="color: #555; font-size: 15px; background: #fff5f5; padding: 15px; border-radius: 8px; border-left: 4px solid #ff7675;">
+                感谢所有在开发过程中提供反馈的小伙伴，每一个 issue 和建议都是我们前进的动力。特别感谢 OpenClaw 社区的每一位开发者，是你们的热忱让 AI 运维变得更有温度。<br><br>
+                <span style="font-style: italic; color: #7f8c8d;">“所有未竟的梦想，都是为了下一次更好的重逢。”</span>
+            </p>
+        </section>
+
+        <div class="footer">
+            <strong>RandyChen1985 / openclaw-buddy</strong><br>
+            <span>© 2026 Powered by OpenClaw Buddy Guardian</span>
+        </div>
+    </div>
+</body>
+</html>

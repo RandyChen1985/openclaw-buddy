@@ -7,7 +7,7 @@
 - [ ] **接口一致性**: `/login` 接口应统一使用 `s.Success` 包装，返回 `status: success` 以兼容前端拦截器。
 
 ## 2. API 接口 (API V1)
-- [ ] **状态查询**: `GET /v1/openclaw/status` 返回结构化 JSON，包含 PID 和 Runtime。
+- [ ] **状态查询**: `GET /v1/openclaw/status` 返回结构化 JSON，包含 PID 和 Runtime (动态获取，不再是硬编码字符串)。
 - [ ] **版本探测**: `GET /v1/openclaw/version` 应返回 `installed`, `version`, `path` 字段，且在未安装时返回 `installed: false`。
 - [ ] **配置端口检查**: 修改 `env` 中的 `HEALTH_PORT` 后，系统概览应能正确反映该端口的监听状态。
 - [ ] **异步控制**: `POST /v1/gateway/restart` 应立即返回 202 并触发后台进程重启。

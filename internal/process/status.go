@@ -71,7 +71,7 @@ func GetStructuredStatus(port int) (OpenClawStatus, error) {
 		status.Gateway.Status = "running"
 		pid, _ := GetPIDByPort(port)
 		status.Gateway.PID = pid
-		status.Gateway.Runtime = "Active (Port Monitored)"
+		status.Gateway.Runtime = GetProcessRuntime(pid)
 	} else {
 		status.Gateway.Status = "stopped"
 		status.Gateway.Runtime = "Inactive"
@@ -82,6 +82,25 @@ func GetStructuredStatus(port int) (OpenClawStatus, error) {
 
 	return status, nil
 }
+
+// GetProcessRuntime 获取指定 PID 进程的已运行时间 (格式: [[dd-]hh:]mm:ss)
+func GetProcessRuntime(pid int) string {
+	if pid <= 0 {
+		return "Unknown"
+	}
+	// 使用 ps -o etime= 获取进程运行时间，兼容 macOS 和 Linux
+	cmd := exec.Command("ps", "-o", "etime=", "-p", strconv.Itoa(pid))
+	out, err := cmd.Output()
+	if err != nil {
+		return "Active (Port Monitored)" // 回退到原有的静态描述
+	}
+	runtimeStr := strings.TrimSpace(string(out))
+	if runtimeStr == "" {
+		return "Active (Port Monitored)"
+	}
+	return runtimeStr
+}
+
 
 func GetSystemMetrics() SystemMetrics {
 	metrics := SystemMetrics{
