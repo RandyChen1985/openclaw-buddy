@@ -86,6 +86,7 @@ func (s *Server) setupRoutes() {
 			oc.POST("/models/test-direct", s.testOpenClawModelDirect)
 			oc.POST("/models/provider", s.addOpenClawProvider)
 			oc.POST("/models/provider/model", s.addOpenClawModelToProvider)
+		oc.DELETE("/models/provider/:provider/model/:id", s.deleteOpenClawModelFromProvider)
 			oc.DELETE("/models/provider/model", s.deleteOpenClawModelFromProvider)
 			oc.POST("/chat/completions", s.chatProxy)
 			oc.GET("/chat/status", s.getChatStatus)

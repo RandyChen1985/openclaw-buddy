@@ -313,7 +313,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                 <h4 style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#1e293b', fontSize: 15, fontWeight: 700, margin: 0 }}>
                   <ShieldCheck size={20} color="#2563eb" /> 
-                  身份定义 (Identity Profile)
+                  {t('experts.identityLabel')}
                 </h4>
                 <Button type="text" size="small" icon={<Copy size={14} />} onClick={() => selectedExpert.identity_md && handleCopySoul(selectedExpert.identity_md)} style={{ color: '#94a3b8' }}>{t('common.copy')}</Button>
               </div>
@@ -334,7 +334,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                 <h4 style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#1e293b', fontSize: 15, fontWeight: 700, margin: 0 }}>
                   <Brain size={20} color="#8b5cf6" /> 
-                  思维之魂 (Core Reasoning)
+                  {t('experts.soulLabel')}
                 </h4>
                 <Button type="text" size="small" icon={<Copy size={14} />} onClick={() => handleCopySoul(selectedExpert.soul)} style={{ color: '#94a3b8' }}>{t('common.copy')}</Button>
               </div>
@@ -402,9 +402,9 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
           size="small" 
           style={{ marginBottom: 32 }}
           items={[
-            { title: '基础配置' },
-            { title: '大脑重塑' },
-            { title: '启动克隆' }
+            { title: t('experts.stepBasic') },
+            { title: t('experts.stepSoul') },
+            { title: t('experts.stepClone') }
           ]}
         />
 
@@ -417,7 +417,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
                   label={<span style={{ fontWeight: 700, color: '#334155' }}>{t('experts.idLabel')}</span>} 
                   name="botId" 
                   rules={[{ required: true, message: t('experts.idPlaceholder') }]}
-                  extra="此 ID 将作为机器人文件系统的工作目录标识"
+                  extra={t('experts.idTip')}
                 >
                   <Input 
                     placeholder={t('experts.idPlaceholder')} 
@@ -471,7 +471,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
                   }}
                   style={{ borderRadius: 12, fontWeight: 600, padding: '0 32px' }}
                 >
-                  下一步：重塑大脑
+                  {t('experts.nextStep')}
                 </Button>
               </div>
             </div>
@@ -535,7 +535,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
                   <div style={{ flex: 1, border: '1px solid #f1f5f9', borderRadius: 16, background: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     <div style={{ padding: '12px 16px', background: '#f8fafc', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Code size={14} color="#64748b" />
-                      <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>实时渲染预览</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>{t('experts.realtimePreview')}</span>
                     </div>
                     <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
                       <div className="expert-md">
@@ -549,15 +549,15 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <Button onClick={() => setCurrentStep(0)} style={{ borderRadius: 10 }}>上一步</Button>
+                  <Button onClick={() => setCurrentStep(0)} style={{ borderRadius: 10 }}>{t('experts.prevStep')}</Button>
                   <div style={{ padding: '4px 12px', background: '#f8fafc', borderRadius: 20, border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: (idTokens + soulTokens) > 3000 ? '#f59e0b' : '#22c55e' }} />
                     <span style={{ fontSize: 12, color: '#64748b' }}>
-                      预计初始消耗：<strong style={{ color: (idTokens + soulTokens) > 3000 ? '#f59e0b' : '#1e293b' }}>{idTokens + soulTokens}</strong> Tokens
+                      {t('experts.estimateTokens')}: <strong style={{ color: (idTokens + soulTokens) > 3000 ? '#f59e0b' : '#1e293b' }}>{idTokens + soulTokens}</strong> Tokens
                     </span>
                   </div>
                 </div>
-                <Button type="primary" onClick={() => setCurrentStep(2)} style={{ borderRadius: 10, padding: '0 24px' }}>确认配置</Button>
+                <Button type="primary" onClick={() => setCurrentStep(2)} style={{ borderRadius: 10, padding: '0 24px' }}>{t('experts.confirmConfig')}</Button>
               </div>
             </div>
           )}
@@ -568,24 +568,24 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
               <div style={{ width: 80, height: 80, background: '#f0fdf4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
                 <CheckCircle2 size={40} color="#22c55e" />
               </div>
-              <h3 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 8 }}>准备绪！</h3>
-              <p style={{ color: '#64748b', marginBottom: 32 }}>系统已准备好将专家“{selectedExpert?.name}”克隆到您的工作区。</p>
+              <h3 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 8 }}>{t('experts.ready')}</h3>
+              <p style={{ color: '#64748b', marginBottom: 32 }}>{t('experts.readyDesc', { name: (currentLang === 'zh' && selectedExpert?.name) ? selectedExpert?.name : (selectedExpert?.name_en || selectedExpert?.name) })}</p>
               
               <div style={{ background: '#f8fafc', padding: 20, borderRadius: 16, textAlign: 'left', marginBottom: 32 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <span style={{ color: '#94a3b8' }}>机器人 ID:</span>
+                  <span style={{ color: '#94a3b8' }}>{t('experts.idLabel')}:</span>
                   <span style={{ fontWeight: 700, color: '#1e293b' }}>{form.getFieldValue('botId')}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94a3b8' }}>核心模型:</span>
+                  <span style={{ color: '#94a3b8' }}>{t('experts.modelLabel')}:</span>
                   <Tag color="geekblue" style={{ borderRadius: 4, margin: 0 }}>{form.getFieldValue('modelId')}</Tag>
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-                <Button size="large" onClick={() => setCurrentStep(1)} style={{ borderRadius: 12 }}>最后调整</Button>
+                <Button size="large" onClick={() => setCurrentStep(1)} style={{ borderRadius: 12 }}>{t('experts.lastAdjust')}</Button>
                 <Button type="primary" size="large" loading={submitting} onClick={handleCreateBot} style={{ borderRadius: 12, padding: '0 40px', fontWeight: 700, background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', border: 'none' }}>
-                  启动克隆
+                  {t('experts.stepClone')}
                 </Button>
               </div>
             </div>

@@ -834,21 +834,13 @@ func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // 写回 body 供后续绑定使用
 
 	var req struct {
-		ProviderName string                 `json:"provider_name"`
-		ModelConfig  map[string]interface{} `json:"model_config"`
+		ProviderName string                 `json:"providerName" binding:"required"`
+		ModelConfig  map[string]interface{} `json:"modelConfig" binding:"required"`
 	}
 	
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fmt.Printf("❌ [ModelAdd] JSON Bind Error: %v | Body: %s\n", err, string(bodyBytes))
-		s.Error(c, http.StatusBadRequest, "JSON 格式错误: "+err.Error())
-		return
-	}
-
-	// 手动校验
-	if req.ProviderName == "" || req.ModelConfig == nil {
-		fmt.Printf("❌ [ModelAdd] Missing Fields | Provider: '%s', ConfigExist: %v | Body: %s\n",
-			req.ProviderName, req.ModelConfig != nil, string(bodyBytes))
-		s.Error(c, http.StatusBadRequest, "参数缺失：请确保选择了提供商并填写了模型配置")
+		s.Error(c, http.StatusBadRequest, "参数错误，请提供提供商名称和模型配置")
 		return
 	}
 
@@ -864,16 +856,15 @@ func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 }
 
 func (s *Server) deleteOpenClawModelFromProvider(c *gin.Context) {
-	var req struct {
-		ProviderName string `json:"provider_name" binding:"required"`
-		ModelID      string `json:"model_id" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	providerName := c.Param("provider")
+	modelID := c.Param("id")
+	
+	if providerName == "" || modelID == "" {
 		s.Error(c, http.StatusBadRequest, "参数错误，请提供提供商名称和模型ID")
 		return
 	}
 
-	if err := process.DeleteOpenClawModelFromProvider(s.cfg.OpenClawConfigDir, req.ProviderName, req.ModelID); err != nil {
+	if err := process.DeleteOpenClawModelFromProvider(s.cfg.OpenClawConfigDir, providerName, modelID); err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}

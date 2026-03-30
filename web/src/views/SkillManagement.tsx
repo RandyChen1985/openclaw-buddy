@@ -158,16 +158,14 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
       width: 80,
       render: (_: any, record: Skill) => (
         !record.bundled && (
-          <Tooltip title={t('skills.uninstall')}>
-            <Button 
-              type="text" 
-              danger 
-              size="small" 
-              icon={<Trash2 size={14} />} 
-              onClick={() => handleUninstall(record.name)}
-              style={{ borderRadius: 6 }}
-            />
-          </Tooltip>
+          <Button 
+            type="text" 
+            danger 
+            size="small" 
+            icon={<Trash2 size={14} />} 
+            onClick={() => handleUninstall(record.name)}
+            style={{ borderRadius: 6 }}
+          />
         )
       )
     }

@@ -590,7 +590,24 @@ func AddOpenClawModelToProvider(configDir, providerName string, modelConfig map[
 		}
 	}
 
-	provider["models"] = append(providerModels, modelConfig)
+	// [Hardening] 检查是否存在相同 ID 的模型，如有则更新
+	modelID, _ := modelConfig["id"].(string)
+	foundIdx := -1
+	for i, m := range providerModels {
+		if model, isMap := m.(map[string]interface{}); isMap {
+			if id, idOk := model["id"].(string); idOk && id == modelID {
+				foundIdx = i
+				break
+			}
+		}
+	}
+
+	if foundIdx >= 0 {
+		providerModels[foundIdx] = modelConfig
+	} else {
+		providerModels = append(providerModels, modelConfig)
+	}
+	provider["models"] = providerModels
 
 	// --- 2. 处理 agents.defaults.models 注册部分 ---
 	agents, ok := fullCfg["agents"].(map[string]interface{})
@@ -612,7 +629,6 @@ func AddOpenClawModelToProvider(configDir, providerName string, modelConfig map[
 	}
 
 	// 注册格式: "provider/id": {}
-	modelID, _ := modelConfig["id"].(string)
 	if modelID != "" {
 		registrationKey := fmt.Sprintf("%s/%s", providerName, modelID)
 		if _, exists := registeredModels[registrationKey]; !exists {
@@ -731,6 +747,17 @@ func GetOpenClawExperts() ([]Expert, error) {
 }
 
 func CreateBotFromExpert(expertID, newBotID, modelID, customSoul, customIdentityMD string) error {
+	// [Hardening] 预检 BotID 是否已占用，防止覆盖 SOUL.md 和误操作
+	// 这里通过尝试列出机器人来实现，如果 GetOpenClawBotsModels 返回了该 ID，则拦截
+	currentBots, err := GetOpenClawBotsModels("") 
+	if err == nil {
+		for _, b := range currentBots.Bots {
+			if b.ID == newBotID {
+				return fmt.Errorf("bot ID '%s' already exists, please use another ID", newBotID)
+			}
+		}
+	}
+
 	// 1. 获取专家模板内容
 	experts, err := GetOpenClawExperts()
 	if err != nil {

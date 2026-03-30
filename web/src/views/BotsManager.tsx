@@ -169,15 +169,15 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       onShowGlobalLoading(t('bots.appendingModel'), 0);
 
       const submitData = {
-        provider_name: values.provider_name,
-        model_config: {
+        providerName: values.provider_name,
+        modelConfig: {
           id: values.id,
           name: values.name || values.id,
           api: values.api,
           reasoning: !!values.reasoning,
           input: values.input,
-          maxTokens: values.maxTokens || 2000000,
-          contextWindow: values.contextWindow || 2000000,
+          maxTokens: parseInt(values.maxTokens) || 2000000,
+          contextWindow: parseInt(values.contextWindow) || 2000000,
         }
       };
 
@@ -200,7 +200,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     setTestingModelId(fullId);
     try {
       const startTime = Date.now();
-      await api.post('/v1/openclaw/models/test', { provider, modelId });
+      await api.post('/v1/openclaw/models/test-direct', { providerName: provider, modelId });
       const latency = Date.now() - startTime;
       setTestLatencyMap(prev => ({ ...prev, [fullId]: { latency } }));
       message.success(t('bots.testSuccess', { id: modelId, latency }));
@@ -215,7 +215,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const handleDeleteModel = (provider: string, modelId: string) => {
     Modal.confirm({
       title: t('bots.removeModelTitle'),
-      content: t('bots.removeModelWarning', { id: modelId }),
+      content: t('bots.removeModelWarning', { id: modelId, provider }),
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
       okButtonProps: { danger: true },
@@ -285,16 +285,24 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     }
   };
 
-  const handleSetDefaultModel = async (model: any) => {
-    try {
-       onShowGlobalLoading(t('bots.settingDefault'), 0);
-       await onSetDefaultModel(model.id);
-       await onRefresh();
-       onShowGlobalLoading(t('bots.defaultSet'), 3000);
-    } catch (err: any) {
-       onShowGlobalLoading('', 1);
-       message.error(err.message || 'Failed to set default model');
-    }
+  const handleSetDefaultModel = (fullId: string) => {
+    Modal.confirm({
+      title: t('bots.confirmSwitchDefault'),
+      content: t('bots.switchDefaultContent', { name: fullId }),
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      onOk: async () => {
+        try {
+          onShowGlobalLoading(t('bots.settingDefault'), 0);
+          await onSetDefaultModel(fullId);
+          await onRefresh();
+          onShowGlobalLoading(t('bots.defaultSet'), 3000);
+        } catch (err: any) {
+          onShowGlobalLoading('', 1);
+          message.error(err.message || 'Failed to set default model');
+        }
+      }
+    });
   };
 
   return (
@@ -394,12 +402,10 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                              )}
                            </div>
                           <div style={{ display: 'flex', gap: 4 }}>
-                            <Tooltip title={t('common.edit')}>
-                              <Button type="text" size="small" icon={<Pencil size={16} />} onClick={() => handleEditClick(bot)} style={{ color: '#94a3b8' }} />
-                            </Tooltip>
-                            <Tooltip title={t('common.delete')}>
+                            <Button type="text" size="small" icon={<Pencil size={16} />} onClick={() => handleEditClick(bot)} style={{ color: '#94a3b8' }} />
+                            {bot.id !== 'main' && (
                               <Button type="text" size="small" icon={<Trash2 size={16} />} onClick={() => showDeleteConfirm(bot.id)} style={{ color: '#94a3b8' }} className="delete-hover" />
-                            </Tooltip>
+                            )}
                           </div>
                         </div>
 
@@ -455,13 +461,23 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   pagination={false}
                   rowKey="id"
                   columns={[
-                    { title: t('bots.botId'), dataIndex: 'id', key: 'id', render: (id: string, record: any) => <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><ProviderIcon provider={record.provider || (id === 'main' ? 'openai' : '')} size={20} /><span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{id}</span></div> },
+                    { title: t('bots.botId'), dataIndex: 'id', key: 'id', render: (id: string, record: any) => {
+                      const modelProvider = record.model?.includes('/') ? record.model.split('/')[0] : (record.provider || (id === 'main' ? 'openai' : ''));
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <ProviderIcon provider={modelProvider} size={20} />
+                          <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{id}</span>
+                        </div>
+                      );
+                    }},
                     { title: t('bots.displayName'), dataIndex: 'name', key: 'name', render: (name: string, record: any) => name || record.id },
                     { title: t('bots.currentModel'), dataIndex: 'model', key: 'model', render: (m: string) => <Tag color="blue" style={{ borderRadius: 6 }}>{m}</Tag> },
                     { title: t('common.action'), key: 'action', width: 120, render: (_, record: any) => (
                       <div style={{ display: 'flex', gap: 8 }}>
                         <Button size="small" type="text" icon={<Pencil size={14} />} onClick={() => handleEditClick(record)} />
-                        <Button size="small" type="text" danger icon={<Trash2 size={14} />} onClick={() => showDeleteConfirm(record.id)} />
+                        {record.id !== 'main' && (
+                          <Button size="small" type="text" danger icon={<Trash2 size={14} />} onClick={() => showDeleteConfirm(record.id)} />
+                        )}
                       </div>
                     )}
                   ]}
@@ -541,18 +557,16 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                         <span style={{ fontWeight: 800, color: '#475569', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                           {providerName} ({providerModels.length})
                         </span>
-                        <Tooltip title={t('common.edit')}>
-                          <Button 
-                            type="text" 
-                            size="small" 
-                            icon={<Pencil size={12} />} 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditProvider(providerName, providerData);
-                            }}
-                            style={{ color: '#94a3b8', padding: 0, height: 18, width: 18, marginLeft: -4 }}
-                          />
-                        </Tooltip>
+                        <Button 
+                          type="text" 
+                          size="small" 
+                          icon={<Pencil size={12} />} 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditProvider(providerName, providerData);
+                          }}
+                          style={{ color: '#94a3b8', padding: 0, height: 18, width: 18, marginLeft: -4 }}
+                        />
                         {collapsedProviders.has(providerName) ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
                         <div style={{ height: 1, flex: 1, background: '#f1f5f9', marginLeft: 8 }}></div>
                       </div>
@@ -627,26 +641,22 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                          )} 
                                       </div>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                        <Tooltip title="测试连通性 (hello)" placement="bottom">
-                                            <Button
-                                                type="text"
-                                                size="small"
-                                                icon={<Zap size={14} className={testingModelId === `${providerName}/${m.id}` ? 'animate-pulse' : ''} />}
-                                                loading={testingModelId === `${providerName}/${m.id}`}
-                                                onClick={() => handleTestModel(providerName, m.id)}
-                                                style={{ color: testingModelId === `${providerName}/${m.id}` ? '#f59e0b' : '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                            />
-                                        </Tooltip>
+                                        <Button
+                                            type="text"
+                                            size="small"
+                                            icon={<Zap size={14} className={testingModelId === `${providerName}/${m.id}` ? 'animate-pulse' : ''} />}
+                                            loading={testingModelId === `${providerName}/${m.id}`}
+                                            onClick={() => handleTestModel(providerName, m.id)}
+                                            style={{ color: testingModelId === `${providerName}/${m.id}` ? '#f59e0b' : '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        />
                                         {!isDefault && (
-                                          <Tooltip title="设为全局默认" placement="bottom">
-                                            <Button 
-                                              type="text" 
-                                              size="small" 
-                                              icon={<Star size={14} />} 
-                                              onClick={() => handleSetDefaultModel(m)}
-                                              style={{ color: '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                            />
-                                          </Tooltip>
+                                          <Button 
+                                            type="text" 
+                                            size="small" 
+                                            icon={<Star size={14} />} 
+                                            onClick={() => handleSetDefaultModel(`${providerName}/${m.id}`)}
+                                            style={{ color: '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                          />
                                         )}
                                         <Button
                                             type="text"
@@ -681,7 +691,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                               { title: t('common.action'), key: 'action', width: 150, render: (_, r: any) => (
                                 <div style={{ display: 'flex', gap: 4 }}>
                                   <Button size="small" type="text" icon={<Zap size={14} />} onClick={() => handleTestModel(providerName, r.id)} loading={testingModelId === `${providerName}/${r.id}`} />
-                                  <Button size="small" type="text" icon={<Star size={14} />} onClick={() => handleSetDefaultModel(r)} />
+                                  <Button size="small" type="text" icon={<Star size={14} />} onClick={() => handleSetDefaultModel(`${providerName}/${r.id}`)} />
                                   <Button size="small" type="text" danger icon={<Trash2 size={14} />} onClick={() => handleDeleteModel(providerName, r.id)} />
                                 </div>
                               )}
