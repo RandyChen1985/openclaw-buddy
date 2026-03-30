@@ -79,7 +79,10 @@
     "modelLabel": "默认模型",
     "modelPlaceholder": "选择该机器人的首选模型",
     "creating": "正在克隆专家大脑...",
-    "createSuccess": "机器人 {{id}} 已基于模板成功创建"
+    "createSuccess": "机器人 {{id}} 已基于模板成功创建",
+    "advancedConfig": "高级配置 (自定义心智与身份)",
+    "soulLabel": "思维之魂 (SOUL.md)",
+    "identityLabel": "身份定义 (IDENTITY.md)"
   },
   "login": {
     "title": "OpenClaw Buddy",

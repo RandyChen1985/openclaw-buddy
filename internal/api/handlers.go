@@ -1125,16 +1125,18 @@ func (s *Server) getOpenClawExperts(c *gin.Context) {
 
 func (s *Server) createBotFromExpert(c *gin.Context) {
 	var req struct {
-		ExpertID string `json:"expertId" binding:"required"`
-		BotID    string `json:"botId" binding:"required"`
-		ModelID  string `json:"modelId" binding:"required"`
+		ExpertID   string `json:"expertId" binding:"required"`
+		BotID      string `json:"botId" binding:"required"`
+		ModelID    string `json:"modelId" binding:"required"`
+		Soul       string `json:"soul"`
+		IdentityMD string `json:"identity_md"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		s.Error(c, http.StatusBadRequest, "Invalid request parameters")
 		return
 	}
 
-	if err := process.CreateBotFromExpert(req.ExpertID, req.BotID, req.ModelID); err != nil {
+	if err := process.CreateBotFromExpert(req.ExpertID, req.BotID, req.ModelID, req.Soul, req.IdentityMD); err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}

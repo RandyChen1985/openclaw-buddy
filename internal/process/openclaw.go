@@ -81,7 +81,8 @@ type Expert struct {
 		Name string `json:"name"`
 		Bio  string `json:"bio"`
 	} `json:"identity"`
-	Skills []string `json:"skills"`
+	IdentityMD string   `json:"identity_md"` // 新增字段：支持全量身份 Markdown
+	Skills     []string `json:"skills"`
 }
 
 func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error) {
@@ -729,7 +730,7 @@ func GetOpenClawExperts() ([]Expert, error) {
 	return experts, nil
 }
 
-func CreateBotFromExpert(expertID, newBotID, modelID string) error {
+func CreateBotFromExpert(expertID, newBotID, modelID, customSoul, customIdentityMD string) error {
 	// 1. 获取专家模板内容
 	experts, err := GetOpenClawExperts()
 	if err != nil {
@@ -769,22 +770,47 @@ func CreateBotFromExpert(expertID, newBotID, modelID string) error {
 
 	fmt.Printf("🔍 [Expert] Initializing bot config in: %s\n", workspaceDir)
 
-	// 5. 写入 SOUL.md (注意全大写)
+	// 5. 写入 SOUL.md (优先使用自定义内容)
+	var soulContent string
+	if customSoul != "" {
+		soulContent = customSoul
+	} else {
+		soulContent = targetExpert.Soul
+	}
+
 	soulPath := filepath.Join(workspaceDir, "SOUL.md")
-	if err := os.WriteFile(soulPath, []byte(targetExpert.Soul), 0644); err != nil {
+	if err := os.WriteFile(soulPath, []byte(soulContent), 0644); err != nil {
 		return fmt.Errorf("failed to write SOUL.md: %v", err)
 	}
-	fmt.Printf("✅ [Expert] Successfully wrote SOUL.md (%d bytes)\n", len(targetExpert.Soul))
+	fmt.Printf("✅ [Expert] Successfully wrote SOUL.md (Custom: %v)\n", customSoul != "")
 
-	// 6. 写入 IDENTITY.md (格式化为 Markdown 而非 JSON)
-	identityContent := fmt.Sprintf("# IDENTITY.md - Who Am I?\n\n- **Name:** %s\n- **Bio:** %s\n- **Emoji:** %s\n",
-		targetExpert.Identity.Name, targetExpert.Identity.Bio, targetExpert.Emoji)
-	
+	// 6. 写入 IDENTITY.md (优先使用自定义内容)
+	var identityContent string
+	if customIdentityMD != "" {
+		identityContent = customIdentityMD
+	} else if targetExpert.IdentityMD != "" {
+		identityContent = targetExpert.IdentityMD
+	} else {
+		// 降级渲染逻辑：将旧版 JSON 属性转换为结构化的专业 Markdown
+		identityContent = fmt.Sprintf("# 🆔 Identity: %s\n\n## 👤 角色定义\n- **Name:** %s\n- **Role:** %s\n\n## 📝 个人简介\n%s\n",
+			targetExpert.Name,
+			targetExpert.Identity.Name,
+			targetExpert.Description,
+			targetExpert.Identity.Bio)
+
+		if len(targetExpert.Skills) > 0 {
+			identityContent += "\n## 🛠️ 具备技能\n"
+			for _, skill := range targetExpert.Skills {
+				identityContent += fmt.Sprintf("- [x] %s\n", skill)
+			}
+		}
+	}
+
 	identityPath := filepath.Join(workspaceDir, "IDENTITY.md")
 	if err := os.WriteFile(identityPath, []byte(identityContent), 0644); err != nil {
 		return fmt.Errorf("failed to write IDENTITY.md: %v", err)
 	}
-	fmt.Printf("✅ [Expert] Successfully wrote IDENTITY.md\n")
+	fmt.Printf("✅ [Expert] Successfully wrote IDENTITY.md (Rich Content: %v)\n", targetExpert.IdentityMD != "")
 
 	return nil
 }

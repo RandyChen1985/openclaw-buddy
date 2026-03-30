@@ -79,7 +79,10 @@
     "modelLabel": "Default Model",
     "modelPlaceholder": "Select the preferred model for this bot",
     "creating": "Cloning expert brain...",
-    "createSuccess": "Bot {{id}} has been created from template"
+    "createSuccess": "Bot {{id}} has been created from template",
+    "advancedConfig": "Advanced Config (Custom Soul & Identity)",
+    "soulLabel": "Expert Soul (SOUL.md)",
+    "identityLabel": "Identity Profile (IDENTITY.md)"
   },
   "login": {
     "title": "OpenClaw Buddy",
