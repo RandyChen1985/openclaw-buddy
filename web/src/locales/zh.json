@@ -269,6 +269,7 @@
   },
   "bots": {
     "title": "虾兵蟹将",
+    "description": "管理并配置您的 OpenClaw 机器人节点，分配 AI 核心并监控运行状态。",
     "lastSynced": "上次同步",
     "addBot": "添加 Bot",
     "editName": "修改名称",

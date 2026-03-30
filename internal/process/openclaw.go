@@ -748,39 +748,43 @@ func CreateBotFromExpert(expertID, newBotID, modelID string) error {
 		return fmt.Errorf("expert template %s not found", expertID)
 	}
 
-	// 2. 确定初始名称 (优先使用中文名)
-	botName := targetExpert.Name
-	if botName == "" {
-		botName = targetExpert.NameEn
-	}
-
 	// 3. 创建基础 Bot (AddOpenClawBot 会处理基础目录创建)
-	if err := AddOpenClawBot(newBotID, modelID, botName); err != nil {
+	// 使用空字符串作为 workspace，AddOpenClawBot 会自动生成 ~/.openclaw/workspace_[ID]
+	if err := AddOpenClawBot(newBotID, modelID, ""); err != nil {
 		return err
 	}
 
-	// 4. 获取 Bot 的工作目录 (~/.openclaw/agents/id)
+	// 4. 获取 Bot 的工作目录 (~/.openclaw/workspace_[id])
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get home directory: %v", err)
 	}
-	agentDir := filepath.Join(homeDir, ".openclaw", "agents", newBotID)
+	// 对齐实际目录结构：直接写入 workspace 根目录
+	workspaceDir := filepath.Join(homeDir, ".openclaw", "workspace_"+newBotID)
 
-	// 5. 写入 soul.md
-	soulPath := filepath.Join(agentDir, "soul.md")
+	// 确保目录存在 (由 AddOpenClawBot 或手动逻辑保障)
+	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+		return fmt.Errorf("failed to create workspace directory: %v", err)
+	}
+
+	fmt.Printf("🔍 [Expert] Initializing bot config in: %s\n", workspaceDir)
+
+	// 5. 写入 SOUL.md (注意全大写)
+	soulPath := filepath.Join(workspaceDir, "SOUL.md")
 	if err := os.WriteFile(soulPath, []byte(targetExpert.Soul), 0644); err != nil {
-		return fmt.Errorf("failed to write soul: %v", err)
+		return fmt.Errorf("failed to write SOUL.md: %v", err)
 	}
+	fmt.Printf("✅ [Expert] Successfully wrote SOUL.md (%d bytes)\n", len(targetExpert.Soul))
 
-	// 6. 写入 identity.json (如果专家模板中有 Identity 信息)
-	identityData, err := json.MarshalIndent(targetExpert.Identity, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal identity: %v", err)
+	// 6. 写入 IDENTITY.md (格式化为 Markdown 而非 JSON)
+	identityContent := fmt.Sprintf("# IDENTITY.md - Who Am I?\n\n- **Name:** %s\n- **Bio:** %s\n- **Emoji:** %s\n",
+		targetExpert.Identity.Name, targetExpert.Identity.Bio, targetExpert.Emoji)
+	
+	identityPath := filepath.Join(workspaceDir, "IDENTITY.md")
+	if err := os.WriteFile(identityPath, []byte(identityContent), 0644); err != nil {
+		return fmt.Errorf("failed to write IDENTITY.md: %v", err)
 	}
-	identityPath := filepath.Join(agentDir, "identity.json")
-	if err := os.WriteFile(identityPath, identityData, 0644); err != nil {
-		return fmt.Errorf("failed to write identity: %v", err)
-	}
+	fmt.Printf("✅ [Expert] Successfully wrote IDENTITY.md\n")
 
 	return nil
 }

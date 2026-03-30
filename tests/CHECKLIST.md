@@ -38,7 +38,7 @@
 - [ ] **机器人活跃排行**: `GET /v1/openclaw/bots/top` 应返回活跃会话数前 3 的机器人，并包含名称和 Emoji。
 - [ ] **运维终端接口**: `GET /v1/ws/shell` 应能通过 WebSocket 升级并启动系统 Shell 进程。
 - [x] **专家市场列表**: `GET /v1/openclaw/experts` 应返回全量专家模板（含自媒体、财务等 20+ 个场景）。
-- [ ] **基于模板创建 Bot**: `POST /v1/openclaw/bots/template` 应能根据专家画像正确初始化机器人目录及配置文件。
+- [ ] **基于模板创建 Bot**: `POST /v1/openclaw/bots/template` 应能根据专家画像正确初始化机器人目录及配置文件，且其 `--workspace` 参数应统一默认为 `~/.openclaw/workspace_[ID]` 而非专家名称；且在写入 `soul.md` 前必须验证 `agents/[ID]` 目录是否已由系统正确创建。
 
 ## 2.4 运维终端 (Maintenance Terminal)
 - [ ] **菜单展示**: 侧边栏“监控中心”组下应出现“运维终端”菜单项。
