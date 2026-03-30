@@ -3,7 +3,7 @@ import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QR
 import { useTranslation } from 'react-i18next';
 import {
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
-  Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone
+  Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone, Rocket
 } from 'lucide-react';
 import api from './api';
 
@@ -19,6 +19,7 @@ import SelfHealing from './views/SelfHealing';
 import OnlineChat from './views/OnlineChat';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import SkillManagement from './views/SkillManagement';
+import ExpertMarket from './views/ExpertMarket';
 import TuiView from './views/TuiView';
 import ShellView from './views/ShellView';
 import CrayfishLoading from './components/common/CrayfishLoading';
@@ -541,6 +542,7 @@ const Dashboard = () => {
         { key: 'tui', label: t('common.tuiChat'), icon: <Terminal size={14} /> },
         { key: 'bots-models', label: t('common.bots'), icon: <Boxes size={14} /> },
         { key: 'skills', label: t('common.skills'), icon: <Puzzle size={14} /> },
+        { key: 'experts', label: t('common.expertMarket'), icon: <Rocket size={14} /> },
       ]
     },
     {
@@ -626,7 +628,8 @@ const Dashboard = () => {
       'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} />,
       'tui': <TuiView />,
       'shell': <ShellView />,
-      'skills': <SkillManagement isMobile={isMobile} />
+      'skills': <SkillManagement isMobile={isMobile} />,
+      'experts': <ExpertMarket isMobile={isMobile} onShowGlobalLoading={onShowGlobalLoading} onNavigate={setActiveTab} />
     };
 
     return (

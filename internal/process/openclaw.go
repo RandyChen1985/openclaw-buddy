@@ -2,6 +2,7 @@ package process
 
 import (
 	"bufio"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,6 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 )
+
+//go:embed experts
+var expertTemplates embed.FS
 
 type OpenClawBot struct {
 	ID           string `json:"id"`
@@ -61,6 +65,23 @@ type OpenClawGatewayConfig struct {
 			} `json:"chatCompletions"`
 		} `json:"endpoints"`
 	} `json:"http"`
+}
+
+type Expert struct {
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	NameEn        string   `json:"name_en"`
+	Description   string   `json:"description"`
+	DescriptionEn string   `json:"description_en"`
+	Emoji         string   `json:"emoji"`
+	Category      string   `json:"category"`
+	CategoryZh    string   `json:"category_zh"`
+	Soul          string   `json:"soul"`
+	Identity      struct {
+		Name string `json:"name"`
+		Bio  string `json:"bio"`
+	} `json:"identity"`
+	Skills []string `json:"skills"`
 }
 
 func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error) {
@@ -683,4 +704,83 @@ func DeleteOpenClawModelFromProvider(configDir, providerName, modelID string) er
 	}
 
 	return os.WriteFile(configPath, newData, 0644)
+}
+
+func GetOpenClawExperts() ([]Expert, error) {
+	files, err := expertTemplates.ReadDir("experts")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read embedded experts directory: %v", err)
+	}
+
+	var experts []Expert
+	for _, f := range files {
+		if !f.IsDir() && strings.HasSuffix(f.Name(), ".json") {
+			data, err := expertTemplates.ReadFile("experts/" + f.Name())
+			if err != nil {
+				continue
+			}
+			var expert Expert
+			if err := json.Unmarshal(data, &expert); err != nil {
+				continue
+			}
+			experts = append(experts, expert)
+		}
+	}
+	return experts, nil
+}
+
+func CreateBotFromExpert(expertID, newBotID, modelID string) error {
+	// 1. 获取专家模板内容
+	experts, err := GetOpenClawExperts()
+	if err != nil {
+		return err
+	}
+
+	var targetExpert *Expert
+	for _, e := range experts {
+		if e.ID == expertID {
+			targetExpert = &e
+			break
+		}
+	}
+
+	if targetExpert == nil {
+		return fmt.Errorf("expert template %s not found", expertID)
+	}
+
+	// 2. 确定初始名称 (优先使用中文名)
+	botName := targetExpert.Name
+	if botName == "" {
+		botName = targetExpert.NameEn
+	}
+
+	// 3. 创建基础 Bot (AddOpenClawBot 会处理基础目录创建)
+	if err := AddOpenClawBot(newBotID, modelID, botName); err != nil {
+		return err
+	}
+
+	// 4. 获取 Bot 的工作目录 (~/.openclaw/agents/id)
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %v", err)
+	}
+	agentDir := filepath.Join(homeDir, ".openclaw", "agents", newBotID)
+
+	// 5. 写入 soul.md
+	soulPath := filepath.Join(agentDir, "soul.md")
+	if err := os.WriteFile(soulPath, []byte(targetExpert.Soul), 0644); err != nil {
+		return fmt.Errorf("failed to write soul: %v", err)
+	}
+
+	// 6. 写入 identity.json (如果专家模板中有 Identity 信息)
+	identityData, err := json.MarshalIndent(targetExpert.Identity, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal identity: %v", err)
+	}
+	identityPath := filepath.Join(agentDir, "identity.json")
+	if err := os.WriteFile(identityPath, identityData, 0644); err != nil {
+		return fmt.Errorf("failed to write identity: %v", err)
+	}
+
+	return nil
 }

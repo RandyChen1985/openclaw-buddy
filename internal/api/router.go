@@ -96,6 +96,8 @@ func (s *Server) setupRoutes() {
 			oc.GET("/skills", s.getOpenClawSkills)
 			oc.DELETE("/skills/:name", s.uninstallSkill)
 			oc.POST("/skills/reload", s.reloadSkills)
+			oc.GET("/experts", s.getOpenClawExperts)
+			oc.POST("/bots/template", s.createBotFromExpert)
 			oc.GET("/sessions", s.getSessions)
 		}
 		

@@ -1113,3 +1113,34 @@ func (s *Server) getOpenClawVersion(c *gin.Context) {
 		"path":      path,
 	})
 }
+
+func (s *Server) getOpenClawExperts(c *gin.Context) {
+	experts, err := process.GetOpenClawExperts()
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, experts)
+}
+
+func (s *Server) createBotFromExpert(c *gin.Context) {
+	var req struct {
+		ExpertID string `json:"expertId" binding:"required"`
+		BotID    string `json:"botId" binding:"required"`
+		ModelID  string `json:"modelId" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "Invalid request parameters")
+		return
+	}
+
+	if err := process.CreateBotFromExpert(req.ExpertID, req.BotID, req.ModelID); err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// 同步缓存
+	process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
+
+	s.Success(c, gin.H{"status": "success", "message": "Bot created from expert template"})
+}
