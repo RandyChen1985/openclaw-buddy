@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox, Segmented } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star, ChevronDown, ChevronUp, Activity, ZapOff, Bot, LayoutGrid, List } from 'lucide-react';
+import { Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star, ChevronDown, ChevronUp, Activity, ZapOff, Bot, LayoutGrid, List, FolderOpen } from 'lucide-react';
+import dayjs from 'dayjs';
 import api from '../api';
 import { message } from 'antd';
 
@@ -59,8 +60,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const [testLatencyMap, setTestLatencyMap] = useState<Record<string, { latency: number, error?: string }>>({});
 
   // 视图模式切换
-  const [botsViewMode, setBotsViewMode] = useState<'card' | 'list'>(isMobile ? 'list' : 'card');
-  const [modelsViewMode, setModelsViewMode] = useState<'card' | 'list'>(isMobile ? 'list' : 'card');
+  const [botsViewMode, setBotsViewMode] = useState<'card' | 'list'>('card');
+  const [modelsViewMode, setModelsViewMode] = useState<'card' | 'list'>('card');
 
   // --- Provider Icon Component ---
   const ProviderIcon = ({ provider, size = 28 }: { provider: string, size?: number }) => {
@@ -235,9 +236,9 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
+      setIsModalOpen(false); // 立即关闭弹窗
       setAdding(true);
       await onAddBot(values.id, values.model);
-      setIsModalOpen(false);
       form.resetFields();
     } catch (err) {
     } finally {
@@ -254,6 +255,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const handleEditOk = async () => {
     try {
       const values = await editForm.validateFields();
+      setIsEditModalOpen(false); // 立即关闭弹窗
       setProcessing(true);
       if (editingBot && values.name !== editingBot.name) {
         await onSetIdentity(editingBot.id, values.name);
@@ -261,7 +263,6 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       if (editingBot && values.model !== editingBot.model) {
         await onSetBotModel(editingBot.id, values.model);
       }
-      setIsEditModalOpen(false);
       onRefresh();
     } catch (err) {
     } finally {
@@ -276,9 +277,9 @@ const BotsManager: React.FC<BotsManagerProps> = ({
 
   const handleConfirmDelete = async () => {
     if (deletingBotId) {
+      setIsDeleteModalOpen(false); // 立即关闭弹窗
       setProcessing(true);
       await onDeleteBot(deletingBotId);
-      setIsDeleteModalOpen(false);
       setDeletingBotId(null);
       setProcessing(false);
     }
@@ -299,13 +300,40 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   return (
     <div style={{ padding: isMobile ? '0' : '8px' }}>
       <div style={{ marginBottom: 24, padding: isMobile ? '0 8px' : '0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Boxes size={isMobile ? 24 : 28} color="#2563eb" />
-            {t('bots.title')}
-          </h2>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div>
+            <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, color: '#1e293b', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Boxes size={isMobile ? 24 : 28} color="#2563eb" />
+              {t('bots.title')}
+            </h2>
+            <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>{t('bots.description')}</p>
+          </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {!isMobile && botsModels?.updated_at && (
+                <span style={{ fontSize: 13, color: '#94a3b8', marginRight: 4 }}>
+                  {t('bots.lastSynced')}: {dayjs(botsModels.updated_at).format('HH:mm:ss')}
+                </span>
+              )}
+              <Button 
+                icon={<RefreshCw size={16} className={loadingBots ? 'animate-spin' : ''} />} 
+                onClick={onRefresh} 
+                loading={loadingBots}
+                style={{ borderRadius: 10, background: '#f1f5f9', border: 'none', color: '#64748b', fontWeight: 600 }}
+              >
+                {isMobile ? '' : t('common.refresh')}
+              </Button>
+              <Button 
+                type="primary" 
+                icon={<Plus size={18} />} 
+                onClick={() => setIsModalOpen(true)}
+                style={{ borderRadius: 10, height: 32, padding: isMobile ? '0 12px' : '0 20px', fontWeight: 600, boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)' }}
+              >
+                {isMobile ? '' : t('bots.addBot')}
+              </Button>
+            </div>
+            
             {!isMobile && (
               <Segmented 
                 value={botsViewMode} 
@@ -317,17 +345,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 style={{ borderRadius: 8, background: '#f1f5f9' }}
               />
             )}
-            <Button 
-              type="primary" 
-              icon={<Plus size={18} />} 
-              onClick={() => setIsModalOpen(true)}
-              style={{ borderRadius: 10, height: 40, padding: isMobile ? '0 12px' : '0 20px', fontWeight: 600, boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)' }}
-            >
-              {isMobile ? '' : t('bots.addBot')}
-            </Button>
           </div>
         </div>
-        <p style={{ color: '#64748b', fontSize: 13 }}>{t('bots.description')}</p>
       </div>
 
       {loadingBots && !botsModels ? (
@@ -337,7 +356,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       ) : (
         <Row gutter={[20, 20]}>
           <Col span={24}>
-            {botsViewMode === 'card' ? (
+            {(botsViewMode === 'card' || isMobile) ? (
               <Row gutter={[20, 20]}>
                 {botsModels?.data?.bots?.map((bot: any, index: number) => {
                   const color = cardColors[index % cardColors.length];
@@ -345,30 +364,35 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                     <Col xs={24} sm={12} md={12} lg={8} xl={6} key={bot.id}>
                       <Card
                         hoverable
-                        styles={{ body: { padding: 20 } }}
+                        styles={{ body: { padding: 24 } }}
                         style={{ 
-                          borderRadius: 20, 
+                          borderRadius: 24, 
                           border: `1px solid ${color.border}`,
-                          background: '#fff',
+                          background: `linear-gradient(135deg, ${color.bg} 0%, #ffffff 100%)`, // 渐变底色
                           height: '100%',
-                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                          transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
                           position: 'relative',
-                          overflow: 'hidden'
+                          overflow: 'hidden',
+                          boxShadow: `0 10px 25px -12px ${color.theme}40` // 主题色阴影
                         }}
-                        className="bot-card"
+                        className="bot-card card-float"
                       >
                         <div style={{ position: 'absolute', top: 0, right: 0, width: 80, height: 80, background: `linear-gradient(135deg, transparent 50%, ${color.bg} 100%)`, opacity: 0.5, zIndex: 0 }}></div>
                         
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, position: 'relative', zIndex: 1 }}>
-                          <div style={{ 
-                            width: 52, height: 52, borderRadius: 16, 
-                            background: color.bg, display: 'flex', 
-                            alignItems: 'center', justifyContent: 'center',
-                            boxShadow: `0 8px 16px -4px ${color.theme}20`,
-                            border: `1px solid ${color.border}`
-                          }}>
-                            <Bot size={28} color={color.theme} />
-                          </div>
+                           <div style={{ 
+                             width: 52, height: 52, borderRadius: 16, 
+                             background: '#ffffff', display: 'flex', 
+                             alignItems: 'center', justifyContent: 'center',
+                             boxShadow: `0 8px 20px -6px ${color.theme}30`,
+                             border: `1.5px solid #ffffff`
+                           }}>
+                             {bot.emoji ? (
+                               <span style={{ fontSize: 28, lineHeight: 1 }}>{bot.emoji}</span>
+                             ) : (
+                               <Bot size={28} color={color.theme} />
+                             )}
+                           </div>
                           <div style={{ display: 'flex', gap: 4 }}>
                             <Tooltip title={t('common.edit')}>
                               <Button type="text" size="small" icon={<Pencil size={16} />} onClick={() => handleEditClick(bot)} style={{ color: '#94a3b8' }} />
@@ -386,15 +410,36 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                           </h3>
                           <div style={{ fontSize: 12, color: '#94a3b8', fontFamily: 'monospace', marginBottom: 16 }}>ID: {bot.id}</div>
                           
-                          <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 14, border: '1px solid #f1f5f9' }}>
-                            <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 700 }}>
-                              {t('bots.currentModel')}
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <Cpu size={14} color="#64748b" />
-                              <span style={{ fontSize: 13, fontWeight: 700, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {bot.model}
-                              </span>
+                          <div style={{ background: 'rgba(255, 255, 255, 0.5)', backdropFilter: 'blur(8px)', padding: '14px', borderRadius: 18, border: `1px solid ${color.border}60` }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                              <div>
+                                <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, fontWeight: 800 }}>
+                                  {t('bots.currentModel')}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <div style={{ padding: 4, background: `${color.theme}15`, borderRadius: 6 }}>
+                                      <Cpu size={12} color={color.theme} />
+                                  </div>
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {bot.model}
+                                  </span>
+                                </div>
+                              </div>
+                              <div style={{ paddingTop: 10, borderTop: `1px dashed ${color.border}` }}>
+                                <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, fontWeight: 800 }}>
+                                  {t('bots.workspace')}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <div style={{ padding: 4, background: '#f1f5f9', borderRadius: 6 }}>
+                                      <FolderOpen size={12} color="#64748b" />
+                                  </div>
+                                  <Tooltip title={bot.workspace}>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
+                                      {bot.workspace || '-'}
+                                    </span>
+                                  </Tooltip>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -512,26 +557,31 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                         <div style={{ height: 1, flex: 1, background: '#f1f5f9', marginLeft: 8 }}></div>
                       </div>
                       {!collapsedProviders.has(providerName) && (
-                        modelsViewMode === 'card' ? (
+                        (modelsViewMode === 'card' || isMobile) ? (
                           <Row gutter={[16, 16]}>
-                            {providerModels.map((m: any) => {
+                            {providerModels.map((m: any, mIdx: number) => {
                               const isDefault = botsModels?.data?.models?.find((dm: any) => dm.id === `${providerName}/${m.id}`)?.isDefault;
+                              const color = cardColors[mIdx % cardColors.length];
                               
                               return (
                                 <Col xs={24} sm={12} md={12} lg={8} xl={6} key={m.id}>
                                   <div style={{
-                                    background: isDefault ? '#f5f3ff' : '#fff',
+                                    background: isDefault 
+                                      ? `linear-gradient(135deg, #f5f3ff 0%, #ffffff 100%)` 
+                                      : `linear-gradient(135deg, ${color.bg} 0%, #ffffff 100%)`,
                                     padding: '18px',
                                     borderRadius: 18,
-                                    border: isDefault ? '2px solid #a78bfa' : '1px solid #e2e8f0',
+                                    border: isDefault ? '2px solid #a78bfa' : `1px solid ${color.border}`,
                                     display: 'flex',
                                     flexDirection: 'column',
                                     gap: 12,
                                     position: 'relative',
                                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                    boxShadow: isDefault ? '0 10px 15px -3px rgba(139, 92, 246, 0.12), 0 4px 6px -4px rgba(139, 92, 246, 0.1)' : '0 1px 3px rgba(0,0,0,0.02)',
+                                    boxShadow: isDefault 
+                                      ? '0 10px 20px -5px rgba(139, 92, 246, 0.2)' 
+                                      : `0 4px 12px -4px ${color.theme}20`,
                                     cursor: 'default'
-                                  }} className="model-card">
+                                  }} className="model-card card-float">
                                     {isDefault && (
                                       <div style={{
                                         position: 'absolute', top: -10, right: 12,

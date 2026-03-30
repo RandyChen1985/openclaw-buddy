@@ -221,7 +221,35 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
         <div style={{ padding: '8px 0' }}>
           <Form form={form} layout="vertical">
             <Form.Item label={t('experts.idLabel')} name="botId" rules={[{ required: true, message: t('experts.idPlaceholder') }]}><Input placeholder={t('experts.idPlaceholder')} /></Form.Item>
-            <Form.Item label={t('experts.modelLabel')} name="modelId" rules={[{ required: true, message: t('experts.modelPlaceholder') }]}><Select placeholder={t('experts.modelPlaceholder')}>{models.map(m => <Select.Option key={m.id} value={m.id}>{m.name || m.id}</Select.Option>)}</Select></Form.Item>
+            <Form.Item label={t('experts.modelLabel')} name="modelId" rules={[{ required: true, message: t('experts.modelPlaceholder') }]}>
+              <Select 
+                placeholder={t('experts.modelPlaceholder')}
+                dropdownStyle={{ borderRadius: 12 }}
+                showSearch
+                optionFilterProp="label"
+              >
+                {/* 按 Provider 分组展示 */}
+                {Object.entries(
+                  (models || []).reduce((acc: any, m: any) => {
+                    const p = m.id.includes('/') ? m.id.split('/')[0] : (m.provider || 'Others');
+                    if (!acc[p]) acc[p] = [];
+                    acc[p].push(m);
+                    return acc;
+                  }, {})
+                ).map(([provider, providerModels]: [string, any]) => (
+                  <Select.OptGroup key={provider} label={provider.toUpperCase()}>
+                    {providerModels.map((m: any) => (
+                      <Select.Option key={m.id} value={m.id} label={m.name || m.id}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span>{m.name || m.id}</span>
+                          <span style={{ fontSize: 10, color: '#94a3b8' }}>{m.id}</span>
+                        </div>
+                      </Select.Option>
+                    ))}
+                  </Select.OptGroup>
+                ))}
+              </Select>
+            </Form.Item>
             <Form.Item name="expertId" hidden><Input /></Form.Item>
           </Form>
         </div>
