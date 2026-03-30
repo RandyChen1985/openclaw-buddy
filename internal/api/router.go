@@ -71,6 +71,7 @@ func (s *Server) setupRoutes() {
 		oc := v1.Group("/openclaw")
 		{
 			oc.GET("/status", s.getOpenClawStatus)
+			oc.GET("/version", s.getOpenClawVersion)
 			oc.GET("/dashboard-url", s.getDashboardURL)
 			oc.GET("/bots-models", s.getOpenClawBotsModels)
 			oc.GET("/devices", s.getOpenClawDevices)
@@ -95,6 +96,8 @@ func (s *Server) setupRoutes() {
 			oc.GET("/skills", s.getOpenClawSkills)
 			oc.DELETE("/skills/:name", s.uninstallSkill)
 			oc.POST("/skills/reload", s.reloadSkills)
+			oc.GET("/experts", s.getOpenClawExperts)
+			oc.POST("/bots/template", s.createBotFromExpert)
 			oc.GET("/sessions", s.getSessions)
 		}
 		
@@ -111,6 +114,8 @@ func (s *Server) setupRoutes() {
 		v1.GET("/wechat/config/status", s.getWeChatConfigStatus)
 		v1.POST("/wechat/install", s.installWeChatPlugin)
 		v1.GET("/ws/logs", s.streamLogs)
+		v1.GET("/ws/tui", s.handleTUI)
+		v1.GET("/ws/shell", s.handleShell)
 
 		// Self-healing management
 		v1.GET("/settings/self-healing", s.getSelfHealingSetting)
@@ -121,6 +126,7 @@ func (s *Server) setupRoutes() {
 		v1.GET("/tasks/status", s.getTasksStatus)
 		v1.GET("/system/events", s.getSystemEvents)
 		v1.GET("/system/version", s.getSystemVersion)
+		v1.GET("/system/info", s.getServerInfo)
 
 		// Proxy for external dashboard
 		v1.Any("/proxy/*path", s.proxyLobsterDashboard)

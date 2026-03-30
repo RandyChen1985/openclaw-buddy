@@ -2,6 +2,7 @@ package process
 
 import (
 	"bufio"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,6 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 )
+
+//go:embed experts
+var expertTemplates embed.FS
 
 type OpenClawBot struct {
 	ID           string `json:"id"`
@@ -61,6 +65,23 @@ type OpenClawGatewayConfig struct {
 			} `json:"chatCompletions"`
 		} `json:"endpoints"`
 	} `json:"http"`
+}
+
+type Expert struct {
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	NameEn        string   `json:"name_en"`
+	Description   string   `json:"description"`
+	DescriptionEn string   `json:"description_en"`
+	Emoji         string   `json:"emoji"`
+	Category      string   `json:"category"`
+	CategoryZh    string   `json:"category_zh"`
+	Soul          string   `json:"soul"`
+	Identity      struct {
+		Name string `json:"name"`
+		Bio  string `json:"bio"`
+	} `json:"identity"`
+	Skills []string `json:"skills"`
 }
 
 func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error) {
@@ -475,6 +496,38 @@ func AddOpenClawProvider(configDir, name string, config map[string]interface{}) 
 
 	providers[name] = config
 
+	// --- 3. 处理 agents.defaults.models 注册部分 (同步该 Provider 下所有已定义模型) ---
+	agents, ok := fullCfg["agents"].(map[string]interface{})
+	if !ok {
+		agents = make(map[string]interface{})
+		fullCfg["agents"] = agents
+	}
+
+	defaults, ok := agents["defaults"].(map[string]interface{})
+	if !ok {
+		defaults = make(map[string]interface{})
+		agents["defaults"] = defaults
+	}
+
+	registeredModels, ok := defaults["models"].(map[string]interface{})
+	if !ok {
+		registeredModels = make(map[string]interface{})
+		defaults["models"] = registeredModels
+	}
+
+	if providerModels, ok := config["models"].([]interface{}); ok {
+		for _, m := range providerModels {
+			if model, isMap := m.(map[string]interface{}); isMap {
+				if modelID, idOk := model["id"].(string); idOk && modelID != "" {
+					registrationKey := fmt.Sprintf("%s/%s", name, modelID)
+					if _, exists := registeredModels[registrationKey]; !exists {
+						registeredModels[registrationKey] = make(map[string]interface{})
+					}
+				}
+			}
+		}
+	}
+
 	newData, err := json.MarshalIndent(fullCfg, "", "  ")
 	if err != nil {
 		return err
@@ -651,4 +704,87 @@ func DeleteOpenClawModelFromProvider(configDir, providerName, modelID string) er
 	}
 
 	return os.WriteFile(configPath, newData, 0644)
+}
+
+func GetOpenClawExperts() ([]Expert, error) {
+	files, err := expertTemplates.ReadDir("experts")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read embedded experts directory: %v", err)
+	}
+
+	var experts []Expert
+	for _, f := range files {
+		if !f.IsDir() && strings.HasSuffix(f.Name(), ".json") {
+			data, err := expertTemplates.ReadFile("experts/" + f.Name())
+			if err != nil {
+				continue
+			}
+			var expert Expert
+			if err := json.Unmarshal(data, &expert); err != nil {
+				continue
+			}
+			experts = append(experts, expert)
+		}
+	}
+	return experts, nil
+}
+
+func CreateBotFromExpert(expertID, newBotID, modelID string) error {
+	// 1. 获取专家模板内容
+	experts, err := GetOpenClawExperts()
+	if err != nil {
+		return err
+	}
+
+	var targetExpert *Expert
+	for _, e := range experts {
+		if e.ID == expertID {
+			targetExpert = &e
+			break
+		}
+	}
+
+	if targetExpert == nil {
+		return fmt.Errorf("expert template %s not found", expertID)
+	}
+
+	// 3. 创建基础 Bot (AddOpenClawBot 会处理基础目录创建)
+	// 使用空字符串作为 workspace，AddOpenClawBot 会自动生成 ~/.openclaw/workspace_[ID]
+	if err := AddOpenClawBot(newBotID, modelID, ""); err != nil {
+		return err
+	}
+
+	// 4. 获取 Bot 的工作目录 (~/.openclaw/workspace_[id])
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %v", err)
+	}
+	// 对齐实际目录结构：直接写入 workspace 根目录
+	workspaceDir := filepath.Join(homeDir, ".openclaw", "workspace_"+newBotID)
+
+	// 确保目录存在 (由 AddOpenClawBot 或手动逻辑保障)
+	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+		return fmt.Errorf("failed to create workspace directory: %v", err)
+	}
+
+	fmt.Printf("🔍 [Expert] Initializing bot config in: %s\n", workspaceDir)
+
+	// 5. 写入 SOUL.md (注意全大写)
+	soulPath := filepath.Join(workspaceDir, "SOUL.md")
+	if err := os.WriteFile(soulPath, []byte(targetExpert.Soul), 0644); err != nil {
+		return fmt.Errorf("failed to write SOUL.md: %v", err)
+	}
+	fmt.Printf("✅ [Expert] Successfully wrote SOUL.md (%d bytes)\n", len(targetExpert.Soul))
+
+	// 6. 写入 IDENTITY.md (格式化为 Markdown 而非 JSON)
+	identityContent := fmt.Sprintf("# IDENTITY.md - Who Am I?\n\n- **Name:** %s\n- **Bio:** %s\n- **Emoji:** %s\n",
+		targetExpert.Identity.Name, targetExpert.Identity.Bio, targetExpert.Emoji)
+	
+	identityPath := filepath.Join(workspaceDir, "IDENTITY.md")
+	if err := os.WriteFile(identityPath, []byte(identityContent), 0644); err != nil {
+		return fmt.Errorf("failed to write IDENTITY.md: %v", err)
+	}
+	fmt.Printf("✅ [Expert] Successfully wrote IDENTITY.md\n")
+
+	return nil
 }

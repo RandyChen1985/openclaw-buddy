@@ -3,7 +3,7 @@ import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QR
 import { useTranslation } from 'react-i18next';
 import {
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
-  Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone
+  Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone, Rocket
 } from 'lucide-react';
 import api from './api';
 
@@ -19,6 +19,9 @@ import SelfHealing from './views/SelfHealing';
 import OnlineChat from './views/OnlineChat';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import SkillManagement from './views/SkillManagement';
+import ExpertMarket from './views/ExpertMarket';
+import TuiView from './views/TuiView';
+import ShellView from './views/ShellView';
 import CrayfishLoading from './components/common/CrayfishLoading';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import CommandPalette from './components/common/CommandPalette';
@@ -69,6 +72,9 @@ const Dashboard = () => {
   const [versionUpdate, setVersionUpdate] = useState<{ latest: string, current: string, release_url: string } | null>(null);
   const [systemEvents, setSystemEvents] = useState<any[]>([]);
   const [topBots, setTopBots] = useState<any[]>([]);
+  const [ocInstalled, setOcInstalled] = useState<boolean | null>(null);
+  const [dashboardProcessing, setDashboardProcessing] = useState(false);
+  const [dashboardAbortCtrl, setDashboardAbortCtrl] = useState<AbortController | null>(null);
 
   // Hooks
   const { status, history, fetching, refreshCountdown } = useStatusPolling(
@@ -126,9 +132,24 @@ const Dashboard = () => {
     
     // 首次加载检查版本更新
     checkVersionUpdate();
+    checkOpenClawStatus();
     
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
+
+  const checkOpenClawStatus = async () => {
+    try {
+      const res = await api.get('/v1/openclaw/version');
+      // 增加 800ms 的感知延迟，确保环境监测动画能被肉眼看到，增加专业感
+      setTimeout(() => {
+        setOcInstalled(res.data.installed);
+      }, 800);
+    } catch (err) {
+      setTimeout(() => {
+        setOcInstalled(false);
+      }, 800);
+    }
+  };
 
   const handleCommandAction = (action: string, params?: any) => {
     if (action === 'nav') {
@@ -456,16 +477,26 @@ const Dashboard = () => {
   };
   
   const handleOpenDashboard = async () => {
-    const hide = message.loading(t('common.processing'), 0);
+    if (dashboardProcessing) return; // 防抖：如果已有任务在处理，则忽略新点击
+
+    const ctrl = new AbortController();
+    setDashboardAbortCtrl(ctrl);
+    setDashboardProcessing(true);
+
     try {
-      const res = await api.get('/v1/openclaw/dashboard-url');
+      const res = await api.get('/v1/openclaw/dashboard-url', { signal: ctrl.signal });
       if (res.data.url) {
         window.open(res.data.url, '_blank');
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e.name === 'CanceledError' || e.name === 'AbortError') {
+        console.log('Dashboard URL request cancelled by user');
+        return;
+      }
       message.error(t('chat.getDashboardUrlError'));
     } finally {
-      hide();
+      setDashboardProcessing(false);
+      setDashboardAbortCtrl(null);
     }
   };
 
@@ -499,6 +530,7 @@ const Dashboard = () => {
           ), 
           icon: <Zap size={14} /> 
         },
+        { key: 'shell', label: t('common.shell'), icon: <Terminal size={14} /> },
       ]
     },
     {
@@ -507,8 +539,10 @@ const Dashboard = () => {
       type: 'group',
       children: [
         { key: 'chat', label: t('common.chat'), icon: <MessageSquare size={14} /> },
+        { key: 'tui', label: t('common.tuiChat'), icon: <Terminal size={14} /> },
         { key: 'bots-models', label: t('common.bots'), icon: <Boxes size={14} /> },
         { key: 'skills', label: t('common.skills'), icon: <Puzzle size={14} /> },
+        { key: 'experts', label: t('common.expertMarket'), icon: <Rocket size={14} /> },
       ]
     },
     {
@@ -557,6 +591,7 @@ const Dashboard = () => {
           onNavigate={setActiveTab}
           systemEvents={systemEvents}
           topBots={topBots}
+          ocInstalled={ocInstalled}
         />
       ),
       'bots-models': (
@@ -589,9 +624,12 @@ const Dashboard = () => {
         />
       ),
       'logs': <LogsViewer wsLogs={wsLogs} />,
-      'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} />,
+      'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} ocInstalled={ocInstalled} />,
       'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} />,
-      'skills': <SkillManagement isMobile={isMobile} />
+      'tui': <TuiView />,
+      'shell': <ShellView />,
+      'skills': <SkillManagement isMobile={isMobile} />,
+      'experts': <ExpertMarket isMobile={isMobile} onShowGlobalLoading={onShowGlobalLoading} onNavigate={setActiveTab} />
     };
 
     return (
@@ -603,12 +641,13 @@ const Dashboard = () => {
 
   if (fetching && !status) return <CrayfishLoading />;
 
-  const globalLoadingMask = (isTransitioning || globalLoadingMessage) && (
+  const globalLoadingMask = (isTransitioning || globalLoadingMessage || dashboardProcessing) && (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(8px)',
+      background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(2px)',
       zIndex: 9999, display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', padding: 20
+      alignItems: 'center', justifyContent: 'center', padding: 20,
+      animation: 'fadeIn 0.3s ease-out'
     }}>
       <div style={{
         padding: isMobile ? '24px 20px' : '32px 40px', 
@@ -648,6 +687,26 @@ const Dashboard = () => {
               }}>
                 {globalLoadingCountdown > 0 ? t('common.loadingCountdown', { seconds: globalLoadingCountdown }) : t('common.syncing')}
               </div>
+            </>
+          ) : dashboardProcessing ? (
+            <>
+              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 18, marginBottom: 4 }}>
+                {t('common.lobsterPanel')}
+              </div>
+              <div style={{ color: '#64748b', fontSize: 13, lineHeight: 1.6 }}>
+                正在提取安全管理地址...<br />
+                这可能需要几秒钟时间
+              </div>
+              <Button 
+                danger 
+                style={{ marginTop: 24, borderRadius: 12, height: 40 }}
+                onClick={() => {
+                  dashboardAbortCtrl?.abort();
+                  setDashboardProcessing(false);
+                }}
+              >
+                {t('common.cancel')}
+              </Button>
             </>
           ) : null}
         </div>
@@ -715,20 +774,23 @@ const Dashboard = () => {
           background: '#f8fafc', 
           display: 'flex', 
           flexDirection: 'column',
-          padding: activeTab === 'chat' || activeTab === 'logs' ? 0 : 24,
-          overflow: activeTab === 'chat' || activeTab === 'logs' ? 'hidden' : 'auto'
+          padding: activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell' ? 0 : 24,
+          overflow: activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell' ? 'hidden' : 'auto'
         }}>
           {renderContent()}
         </div>
       ) : isMobile ? (
         <Layout style={{ 
-          height: (activeTab === 'chat' || activeTab === 'logs') ? '100vh' : 'auto', 
+          height: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? '100vh' : 'auto', 
           minHeight: '100vh',
           background: '#f8fafc', 
-          overflow: (activeTab === 'chat' || activeTab === 'logs') ? 'hidden' : 'auto' 
+          overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? 'hidden' : 'auto' 
         }}>
           {headerEl(() => setMobileMenuOpen(true))}
-          <Content style={{ padding: 16, background: '#f8fafc' }}>
+          <Content style={{ 
+            padding: activeTab === 'tui' || activeTab === 'shell' || activeTab === 'chat' || activeTab === 'logs' ? 0 : 16, 
+            background: (activeTab === 'tui' || activeTab === 'shell') ? '#0f172a' : '#f8fafc' 
+          }}>
             {renderContent()}
           </Content>
           <Drawer
@@ -749,10 +811,10 @@ const Dashboard = () => {
         </Layout>
       ) : (
         <Layout style={{ 
-          height: (activeTab === 'chat' || activeTab === 'logs') ? '100vh' : 'auto', 
+          height: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? '100vh' : 'auto', 
           minHeight: '100vh',
           background: '#f8fafc', 
-          overflow: (activeTab === 'chat' || activeTab === 'logs') ? 'hidden' : 'auto' 
+          overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? 'hidden' : 'auto' 
         }}>
           <Sider
             width={220} collapsedWidth={64} collapsed={collapsed} onCollapse={setCollapsed}
@@ -770,15 +832,15 @@ const Dashboard = () => {
           <Layout style={{ 
             marginLeft: collapsed ? 64 : 220, 
             transition: 'margin-left 0.2s', 
-            height: (activeTab === 'chat' || activeTab === 'logs') ? '100vh' : 'auto', 
+            height: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? '100vh' : 'auto', 
             minHeight: 0,
             display: 'flex', 
             flexDirection: 'column', 
-            overflow: (activeTab === 'chat' || activeTab === 'logs') ? 'hidden' : 'auto' 
+            overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? 'hidden' : 'auto' 
           }}>
             {headerEl(() => setCollapsed(!collapsed))}
             <Content style={{ 
-              padding: activeTab === 'logs' || activeTab === 'chat' ? 0 : 24, 
+              padding: activeTab === 'logs' || activeTab === 'chat' || activeTab === 'tui' || activeTab === 'shell' ? 0 : 24, 
               background: '#f8fafc', 
               flex: 1,
               display: 'flex', 

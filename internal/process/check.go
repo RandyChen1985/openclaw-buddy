@@ -99,9 +99,9 @@ func CheckConfig() (bool, string, error) {
 	return true, "", nil
 }
 
-func GetDashboardURL(externalPrefix string) (string, error) {
-	// 使用 context 增加超时控制，将超时增加到 30 秒
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func GetDashboardURL(ctx context.Context, externalPrefix string) (string, error) {
+	// 将外部 Context 与 30 秒超时控制合并，支持前端主动中断及后端安全超时
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	log.Printf("[Dashboard] 执行命令: openclaw dashboard --no-open")

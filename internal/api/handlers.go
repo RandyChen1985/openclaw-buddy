@@ -9,8 +9,10 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -46,7 +48,8 @@ func (s *Server) Error(c *gin.Context, httpStatus int, msg string) {
 }
 
 func (s *Server) getDashboardURL(c *gin.Context) {
-	url, err := process.GetDashboardURL(s.cfg.ExternalDashboardURL)
+	// 传入 Request Context，实现前端请求中止时的后端子进程级联取消
+	url, err := process.GetDashboardURL(c.Request.Context(), s.cfg.ExternalDashboardURL)
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
@@ -294,7 +297,7 @@ func (s *Server) getHealthStats(c *gin.Context) {
 }
 
 func (s *Server) getSelfHealingSetting(c *gin.Context) {
-	enabled := utils.GetSetting("self_healing_enabled", "false")
+	enabled := utils.GetSetting("self_healing_enabled", "true")
 	s.Success(c, gin.H{"enabled": enabled == "true"})
 }
 
@@ -1069,4 +1072,75 @@ func (s *Server) getTopBots(c *gin.Context) {
 	}
 
 	s.Success(c, ranks)
+}
+
+func (s *Server) getServerInfo(c *gin.Context) {
+	hostname, _ := os.Hostname()
+	s.Success(c, gin.H{
+		"hostname": hostname,
+		"os":       runtime.GOOS,
+		"arch":     runtime.GOARCH,
+		"cpus":     runtime.NumCPU(),
+	})
+}
+
+func (s *Server) getOpenClawVersion(c *gin.Context) {
+	path, err := exec.LookPath("openclaw")
+	if err != nil {
+		s.Success(c, gin.H{
+			"installed": false,
+			"version":   "",
+			"path":      "",
+			"error":     "openclaw terminal command not found",
+		})
+		return
+	}
+
+	out, err := exec.Command(path, "--version").Output()
+	if err != nil {
+		// 尝试不带 -- 
+		out, err = exec.Command(path, "version").Output()
+	}
+
+	version := "Unknown"
+	if err == nil {
+		version = strings.TrimSpace(string(out))
+	}
+
+	s.Success(c, gin.H{
+		"installed": true,
+		"version":   version,
+		"path":      path,
+	})
+}
+
+func (s *Server) getOpenClawExperts(c *gin.Context) {
+	experts, err := process.GetOpenClawExperts()
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, experts)
+}
+
+func (s *Server) createBotFromExpert(c *gin.Context) {
+	var req struct {
+		ExpertID string `json:"expertId" binding:"required"`
+		BotID    string `json:"botId" binding:"required"`
+		ModelID  string `json:"modelId" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "Invalid request parameters")
+		return
+	}
+
+	if err := process.CreateBotFromExpert(req.ExpertID, req.BotID, req.ModelID); err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// 同步缓存
+	process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
+
+	s.Success(c, gin.H{"status": "success", "message": "Bot created from expert template"})
 }

@@ -2,6 +2,7 @@ package process
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"time"
 )
@@ -35,6 +36,13 @@ func StopGateway(port int) error {
 	if IsPortListening(port) {
 		pid, err := GetPIDByPort(port)
 		if err == nil && pid > 0 {
+			// 安全防护：检查是否是 Buddy 进程自身 (Self-kill Prevention)
+			myPid := os.Getpid()
+			if pid == myPid {
+				fmt.Printf("⚠️ Averted self-kill! Target port %d is listening by Buddy process (PID: %d). Skipping kill.\n", port, pid)
+				return nil
+			}
+
 			killCmd := exec.Command("kill", "-9", fmt.Sprintf("%d", pid))
 			_ = killCmd.Run()
 		}
