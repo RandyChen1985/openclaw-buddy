@@ -387,7 +387,8 @@
     "removeSuccess": "Bot {{id}} removed successfully",
     "removeFailed": "Failed to remove bot",
     "setDefaultSuccess": "{{id}} set as global default model",
-    "setDefaultFailed": "Failed to set default model"
+    "setDefaultFailed": "Failed to set default model",
+    "settingDefault": "Syncing configuration..."
   },
   "logs": {
     "searchPlaceholder": "Search log keywords...",

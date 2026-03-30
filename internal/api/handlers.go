@@ -297,7 +297,7 @@ func (s *Server) getHealthStats(c *gin.Context) {
 }
 
 func (s *Server) getSelfHealingSetting(c *gin.Context) {
-	enabled := utils.GetSetting("self_healing_enabled", "true")
+	enabled := utils.GetSetting("self_healing_enabled", "false")
 	s.Success(c, gin.H{"enabled": enabled == "true"})
 }
 
@@ -971,8 +971,8 @@ func (s *Server) testOpenClawModelDirect(c *gin.Context) {
 	})
 }
 func (s *Server) getSystemVersion(c *gin.Context) {
-	current := config.Version
-	latest := utils.GetSetting("latest_version", current)
+	current := strings.TrimPrefix(config.Version, "v")
+	latest := strings.TrimPrefix(utils.GetSetting("latest_version", current), "v")
 	
 	s.Success(c, gin.H{
 		"current":     current,

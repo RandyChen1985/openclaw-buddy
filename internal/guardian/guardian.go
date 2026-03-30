@@ -71,7 +71,7 @@ func (g *Guardian) Run(ctx context.Context) {
 	log.Printf("🛡️ OpenClaw Buddy 监控服务巡检循环已启动. Every %d seconds.", g.config.CheckIntervalSeconds)
 
 	// 启动时检查：如果服务正常，根据开关状态决定是否备份
-	isSelfHealingEnabled := utils.GetSetting("self_healing_enabled", "true") == "true"
+	isSelfHealingEnabled := utils.GetSetting("self_healing_enabled", "false") == "true"
 	if process.IsPortListening(g.config.HealthPort) {
 		if _, err := process.CheckHealth(); err == nil {
 			if isSelfHealingEnabled {
@@ -109,7 +109,7 @@ func (g *Guardian) check() {
 	var lastErr error
 	var reason string
 
-	isSelfHealingEnabled := utils.GetSetting("self_healing_enabled", "true") == "true"
+	isSelfHealingEnabled := utils.GetSetting("self_healing_enabled", "false") == "true"
 	if !isSelfHealingEnabled {
 		log.Printf("🔍 [巡检] 自愈服务开关目前处于【关闭】状态，本次巡检将仅记录监控数据，不触发自动修复。")
 	}
@@ -389,7 +389,7 @@ func (g *Guardian) checkVersionUpdate() {
 		return
 	}
 
-	latestVersion := strings.TrimSpace(string(body))
+	latestVersion := strings.TrimPrefix(strings.TrimSpace(string(body)), "v")
 	if latestVersion == "" {
 		return
 	}

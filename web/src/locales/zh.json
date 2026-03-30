@@ -388,7 +388,8 @@
     "removeSuccess": "机器人 {{id}} 已被移除",
     "removeFailed": "删除机器人失败",
     "setDefaultSuccess": "已将 {{id}} 设为全局默认模型",
-    "setDefaultFailed": "设置默认模型失败"
+    "setDefaultFailed": "设置默认模型失败",
+    "settingDefault": "正在同步配置..."
   },
   "logs": {
     "searchPlaceholder": "搜索日志关键词...",
