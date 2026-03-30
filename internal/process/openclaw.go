@@ -475,6 +475,38 @@ func AddOpenClawProvider(configDir, name string, config map[string]interface{}) 
 
 	providers[name] = config
 
+	// --- 3. 处理 agents.defaults.models 注册部分 (同步该 Provider 下所有已定义模型) ---
+	agents, ok := fullCfg["agents"].(map[string]interface{})
+	if !ok {
+		agents = make(map[string]interface{})
+		fullCfg["agents"] = agents
+	}
+
+	defaults, ok := agents["defaults"].(map[string]interface{})
+	if !ok {
+		defaults = make(map[string]interface{})
+		agents["defaults"] = defaults
+	}
+
+	registeredModels, ok := defaults["models"].(map[string]interface{})
+	if !ok {
+		registeredModels = make(map[string]interface{})
+		defaults["models"] = registeredModels
+	}
+
+	if providerModels, ok := config["models"].([]interface{}); ok {
+		for _, m := range providerModels {
+			if model, isMap := m.(map[string]interface{}); isMap {
+				if modelID, idOk := model["id"].(string); idOk && modelID != "" {
+					registrationKey := fmt.Sprintf("%s/%s", name, modelID)
+					if _, exists := registeredModels[registrationKey]; !exists {
+						registeredModels[registrationKey] = make(map[string]interface{})
+					}
+				}
+			}
+		}
+	}
+
 	newData, err := json.MarshalIndent(fullCfg, "", "  ")
 	if err != nil {
 		return err

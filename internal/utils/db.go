@@ -145,13 +145,15 @@ func createTables(existingToken string) (string, error) {
 		{"🧠我的 Memory", "我们今天都聊了啥，看看记忆的内容", "Brain"},
 		{"🤖我当前的模型", "我当前使用的什么模型", "Bot"},
 		{"🖥️系统模型列表", "系统目前配置了哪些模型", "Cpu"},
+		{"📊会话状态", "/status", "Activity"},
+		{"🔄重置会话", "/reset", "RotateCcw"},
+		{"🛑终止会话", "/stop", "StopCircle"},
 	}
+	
+	// 先移除旧的系统指令，确保按 defaults 数组顺序重新插入 (维持前端显示顺序)
+	_, _ = DB.Exec("DELETE FROM quick_commands WHERE is_system = 1")
 	for _, d := range defaults {
-		var exists int
-		_ = DB.QueryRow("SELECT COUNT(*) FROM quick_commands WHERE label = ?", d.Label).Scan(&exists)
-		if exists == 0 {
-			_, _ = DB.Exec("INSERT INTO quick_commands (label, prompt, icon, is_system) VALUES (?, ?, ?, 1)", d.Label, d.Prompt, d.Icon)
-		}
+		_, _ = DB.Exec("INSERT INTO quick_commands (label, prompt, icon, is_system) VALUES (?, ?, ?, 1)", d.Label, d.Prompt, d.Icon)
 	}
 
 	return activeToken, nil

@@ -411,16 +411,16 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         }
         styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 52 }, body: { padding: '16px 24px' } }}
       >
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, width: '100%', opacity: ocInstalled === false ? 0.6 : 1 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, width: '100%', opacity: (ocInstalled === false || ocInstalled === null) ? 0.6 : 1 }}>
           <Button
             type="primary"
             size="large"
             icon={<Play size={14} />}
             onClick={() => onControl('start')}
-            disabled={isRunning || ocInstalled === false}
+            disabled={isRunning || ocInstalled === false || ocInstalled === null}
             style={{ 
               fontWeight: 600, flex: isMobile ? '1 1 calc(50% - 6px)' : 'none', minWidth: 140, borderRadius: 10,
-              background: (isRunning || ocInstalled === false) ? '#cbd5e1' : '#22c55e', borderColor: (isRunning || ocInstalled === false) ? '#cbd5e1' : '#22c55e'
+              background: (isRunning || ocInstalled === false || ocInstalled === null) ? '#cbd5e1' : '#22c55e', borderColor: (isRunning || ocInstalled === false || ocInstalled === null) ? '#cbd5e1' : '#22c55e'
             }}
           >
             {t('dashboard.startGateway')}
@@ -431,7 +431,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<Square size={14} />}
             onClick={() => onControl('stop')}
-            disabled={!isRunning || ocInstalled === false}
+            disabled={!isRunning || ocInstalled === false || ocInstalled === null}
             style={{ fontWeight: 600, flex: isMobile ? '1 1 calc(50% - 6px)' : 'none', minWidth: 140, borderRadius: 10 }}
           >
             {t('dashboard.stopGateway')}
@@ -440,7 +440,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<RefreshCw size={14} />}
             onClick={() => onControl('restart')}
-            disabled={ocInstalled === false}
+            disabled={ocInstalled === false || ocInstalled === null}
             style={{ fontWeight: 600, flex: isMobile ? '1 1 100%' : 'none', minWidth: 140, borderRadius: 10, border: '1.5px solid #e2e8f0' }}
           >
             {t('dashboard.asyncRestart')}
@@ -450,7 +450,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<Smartphone size={14} />}
             onClick={() => onNavigate?.('components')}
-            style={{ fontWeight: 600, flex: isMobile ? '1 1 100%' : 'none', minWidth: 140, borderRadius: 10, background: '#f8fafc', border: '1.5px solid #e2e8f0' }}
+            disabled={ocInstalled === null}
+            style={{ fontWeight: 600, flex: isMobile ? '1 1 100%' : 'none', minWidth: 140, borderRadius: 10, background: ocInstalled === null ? '#f1f5f9' : '#f8fafc', border: '1.5px solid #e2e8f0' }}
           >
             {t('dashboard.wechatChannel')}
           </Button>

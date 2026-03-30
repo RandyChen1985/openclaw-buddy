@@ -502,9 +502,8 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
     Modal.confirm({
       title: t('chat.confirmClear'),
       content: t('chat.confirmClearContent'),
-      okText: t('common.clear'),
+      okText: t('chat.newSession'),
       cancelText: t('common.cancel'),
-      okButtonProps: { danger: true },
       centered: true,
       onOk: () => {
         setMessages([]);
@@ -760,7 +759,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                 }}
             />
             )}
-            <Button danger icon={<Trash2 size={14} />} onClick={clearHistory} disabled={messages.length === 0}>{isMobile ? '' : t('common.clear')}</Button>
+            <Button icon={<Plus size={14} />} onClick={clearHistory} disabled={messages.length === 0}>{isMobile ? '' : t('chat.newSession')}</Button>
           </div>
         </div>
       </Card>

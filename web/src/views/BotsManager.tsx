@@ -49,6 +49,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [isProviderModalOpen, setIsProviderModalOpen] = useState(false);
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
+  const [isEditingProvider, setIsEditingProvider] = useState(false);
+  const [editingProviderName, setEditingProviderName] = useState<string | null>(null);
   const [configForm] = Form.useForm();
   const [modelForm] = Form.useForm();
   const [submittingConfig, setSubmittingConfig] = useState(false);
@@ -120,7 +122,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           onShowGlobalLoading(t('bots.syncingProvider'), 0); 
           
           await api.post('/v1/openclaw/models/provider', {
-              name: values.name,
+              name: isEditingProvider ? editingProviderName : values.name,
               config: {
                   baseUrl: values.baseUrl,
                   apiKey: values.apiKey,
@@ -130,6 +132,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           });
           
           configForm.resetFields();
+          setIsEditingProvider(false);
+          setEditingProviderName(null);
           await fetchModelsConfig();
           onShowGlobalLoading(t('bots.providerSynced'), 3000);
       } catch (err: any) {
@@ -141,6 +145,19 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       } finally {
           setSubmittingConfig(false);
       }
+  };
+
+  const handleEditProvider = (name: string, config: any) => {
+    setEditingProviderName(name);
+    setIsEditingProvider(true);
+    configForm.setFieldsValue({
+      name: name,
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      auth: config.auth || 'api-key',
+      api: config.api || 'openai-completions'
+    });
+    setIsProviderModalOpen(true);
   };
   const handleAddModelToProvider = async () => {
     try {
@@ -532,6 +549,18 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                         <span style={{ fontWeight: 800, color: '#475569', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                           {providerName} ({providerModels.length})
                         </span>
+                        <Tooltip title={t('common.edit')}>
+                          <Button 
+                            type="text" 
+                            size="small" 
+                            icon={<Pencil size={12} />} 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditProvider(providerName, providerData);
+                            }}
+                            style={{ color: '#94a3b8', padding: 0, height: 18, width: 18, marginLeft: -4 }}
+                          />
+                        </Tooltip>
                         {collapsedProviders.has(providerName) ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
                         <div style={{ height: 1, flex: 1, background: '#f1f5f9', marginLeft: 8 }}></div>
                       </div>
@@ -820,11 +849,16 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ padding: 6, background: '#f5f3ff', borderRadius: 8 }}><ShieldCheck size={18} color="#7c3aed" /></div>
-            <span>{t('bots.addProviderTitle')}</span>
+            <span>{isEditingProvider ? `${t('common.edit')} ${editingProviderName}` : t('bots.addProviderTitle')}</span>
           </div>
         }
         open={isProviderModalOpen}
-        onCancel={() => setIsProviderModalOpen(false)}
+        onCancel={() => {
+          setIsProviderModalOpen(false);
+          setIsEditingProvider(false);
+          setEditingProviderName(null);
+          configForm.resetFields();
+        }}
         footer={null}
         width={550}
         centered
@@ -834,7 +868,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
             <Form form={configForm} layout="vertical">
               <Row gutter={16}>
                 <Col span={24}>
-                  <Form.Item label={t('bots.providerId')} name="name" rules={[{ required: true, message: t('bots.providerIdRequired') }]} extra={t('bots.providerIdTip')}>
+                  <Form.Item label={t('bots.providerId')} name="name" rules={[{ required: true, message: t('bots.providerIdRequired') }]} extra={t('bots.providerIdTip')} hidden={isEditingProvider}>
                     <Input placeholder={t('bots.providerIdPlaceholder')} />
                   </Form.Item>
                 </Col>
@@ -859,7 +893,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   </Form.Item>
                 </Col>
               </Row>
-              <Button type="primary" block onClick={handleAddProvider} loading={submittingConfig} icon={<Plus size={16} />} style={{ marginTop: 8, height: 40, borderRadius: 10 }}>
+              <Button type="primary" block onClick={handleAddProvider} loading={submittingConfig} icon={isEditingProvider ? <Pencil size={16} /> : <Plus size={16} />} style={{ marginTop: 8, height: 40, borderRadius: 10 }}>
                 {t('bots.saveConfig')}
               </Button>
             </Form>

@@ -29,8 +29,9 @@ stop_and_clean() {
     fi
     
     if [ -d "$DEV_ROOT" ]; then
-        echo "🧹 正在清理隔离目录: $DEV_ROOT"
-        rm -rf "$DEV_ROOT"
+        echo "🧹 正在清理隔离任务环境 (保留数据目录: $DEV_ROOT/data)..."
+        # 排除 data 目录，清理其余所有内容
+        find "$DEV_ROOT" -mindepth 1 -maxdepth 1 ! -name 'data' -exec rm -rf {} +
     fi
 }
 
