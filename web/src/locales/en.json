@@ -460,6 +460,16 @@
     "uninstallSuccess": "Skill {{name}} removed successfully",
     "uninstallFailed": "Uninstallation failed",
     "noSkills": "No matching skills found",
-    "source": "Source"
+    "source": "Source",
+    "help": {
+      "title": "How to install new skills?",
+      "subtitle": "Official Skill Market Guide",
+      "description": "You can find and install more powerful extensions from the official community.",
+      "step1": "Visit official skill market at https://skills.sh/",
+      "step2": "Search for skills (e.g., 'Web Search', 'Database')",
+      "step3": "Enter detail page, copy it from the 'Copy Install Command' button",
+      "step4": "Return to OpenClaw Buddy, use \"Maintenance Terminal\" or **simply send it to the AI Chat**",
+      "step5": "Once installed, click 'Refresh' here to update the list"
+    }
   }
 }
