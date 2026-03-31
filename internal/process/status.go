@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -63,10 +64,10 @@ func GetStructuredStatus(port int) (OpenClawStatus, error) {
 	verOut, _ := verCmd.CombinedOutput()
 	status.Version = strings.TrimSpace(StripANSI(string(verOut)))
 
-	// 0.1 获取系统负载 (针对 Mac 优化)
+	// 0.1 获取系统负载 (支持 Mac/Linux)
 	status.Metrics = GetSystemMetrics()
 
-	// 1. 解析网关状态：仅使用端口监听判断，确保最快响应速度
+	// 1. 解析网关状态
 	if IsPortListening(port) {
 		status.Gateway.Status = "running"
 		pid, _ := GetPIDByPort(port)
@@ -77,22 +78,18 @@ func GetStructuredStatus(port int) (OpenClawStatus, error) {
 		status.Gateway.Runtime = "Inactive"
 	}
 
-	// 2. 解析插件/渠道/Agent 表格：移除依赖项扫描逻辑，直接返回空列表以提升性能
-	// 已按用户要求关闭 openclaw status 调用
-
 	return status, nil
 }
 
-// GetProcessRuntime 获取指定 PID 进程的已运行时间 (格式: [[dd-]hh:]mm:ss)
+// GetProcessRuntime 获取指定 PID 进程的已运行时间
 func GetProcessRuntime(pid int) string {
 	if pid <= 0 {
 		return "Unknown"
 	}
-	// 使用 ps -o etime= 获取进程运行时间，兼容 macOS 和 Linux
 	cmd := exec.Command("ps", "-o", "etime=", "-p", strconv.Itoa(pid))
 	out, err := cmd.Output()
 	if err != nil {
-		return "Active (Port Monitored)" // 回退到原有的静态描述
+		return "Active (Port Monitored)"
 	}
 	runtimeStr := strings.TrimSpace(string(out))
 	if runtimeStr == "" {
@@ -101,7 +98,6 @@ func GetProcessRuntime(pid int) string {
 	return runtimeStr
 }
 
-
 func GetSystemMetrics() SystemMetrics {
 	metrics := SystemMetrics{
 		CPUUsage:    0,
@@ -109,28 +105,42 @@ func GetSystemMetrics() SystemMetrics {
 		DiskUsage:   0,
 	}
 
-	// 1. CPU Usage (from top)
-	cpuCmd := exec.Command("sh", "-c", "top -l 1 | grep 'CPU usage'")
-	cpuOut, _ := cpuCmd.Output()
-	cpuStr := string(cpuOut)
-	idleMatch := regexp.MustCompile(`([\d.]+)% idle`).FindStringSubmatch(cpuStr)
-	if len(idleMatch) > 1 {
-		idle, _ := strconv.ParseFloat(idleMatch[1], 64)
-		metrics.CPUUsage = 100.0 - idle
+	// 1. CPU Usage (平台差异化适配)
+	if runtime.GOOS == "darwin" {
+		// macOS: top -l 1 并匹配 "idle"
+		cpuCmd := exec.Command("sh", "-c", "top -l 1 | grep 'CPU usage'")
+		cpuOut, _ := cpuCmd.Output()
+		cpuStr := string(cpuOut)
+		idleMatch := regexp.MustCompile(`([\d.]+)% idle`).FindStringSubmatch(cpuStr)
+		if len(idleMatch) > 1 {
+			idle, _ := strconv.ParseFloat(idleMatch[1], 64)
+			metrics.CPUUsage = 100.0 - idle
+		}
+	} else if runtime.GOOS == "linux" {
+		// Linux: top -b -n 1 (批处理模式单次采样) 并匹配 "id"
+		cpuCmd := exec.Command("sh", "-c", "top -b -n 1 | grep \"Cpu(s)\"")
+		cpuOut, _ := cpuCmd.Output()
+		cpuStr := string(cpuOut)
+		// Linux 示例: %Cpu(s):  5.0 us,  2.0 sy,  0.0 ni, 93.0 id, ...
+		idleMatch := regexp.MustCompile(`([\d.]+)\s+id`).FindStringSubmatch(cpuStr)
+		if len(idleMatch) > 1 {
+			idle, _ := strconv.ParseFloat(idleMatch[1], 64)
+			metrics.CPUUsage = 100.0 - idle
+		}
 	}
 
-	// 2. Memory Usage (Rough estimate using ps)
+	// 2. Memory Usage (Rough estimate using ps, 跨平台通用)
 	memCmd := exec.Command("sh", "-c", "ps -A -o %mem | awk '{s+=$1} END {print s}'")
 	memOut, _ := memCmd.Output()
 	memRaw := strings.TrimSpace(string(memOut))
 	if memRaw != "" {
 		metrics.MemoryUsage, _ = strconv.ParseFloat(memRaw, 64)
 		if metrics.MemoryUsage > 100 {
-			metrics.MemoryUsage = 95.5
+			metrics.MemoryUsage = 95.5 // 封顶保护
 		}
 	}
 
-	// 3. Disk Usage (Root partition)
+	// 3. Disk Usage (Root partition, df 指令跨平台语义一致)
 	diskCmd := exec.Command("sh", "-c", "df / | tail -1 | awk '{print $5}' | sed 's/%//'")
 	diskOut, _ := diskCmd.Output()
 	diskRaw := strings.TrimSpace(string(diskOut))

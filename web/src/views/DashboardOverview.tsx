@@ -15,6 +15,7 @@ interface DashboardOverviewProps {
   systemEvents?: any[];
   topBots?: any[];
   ocInstalled: boolean | null;
+  loading?: boolean;
 }
 
 interface SystemInfo {
@@ -32,7 +33,7 @@ interface OcStatus {
 
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({ 
   status, history, wsLogs, isRunning, onControl, onNavigate,
-  systemEvents = [], topBots = [], ocInstalled
+  systemEvents = [], topBots = [], ocInstalled, loading
 }) => {
   const { t } = useTranslation();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
@@ -290,10 +291,16 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             {/* 机器人活跃榜 (Bot Top) */}
             <Card 
               styles={{ body: { padding: '20px 24px' } }} 
-              style={{ borderRadius: 12, border: '1px solid #e2e8f0', flex: 1 }}
+              style={{ borderRadius: 12, border: '1px solid #e2e8f0', flex: 1, minHeight: 180 }}
               title={<span style={{ fontSize: 13, fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}><Trophy size={14} color="#f59e0b" /> {t('dashboard.topBots')}</span>}
             >
-              {topBots.length === 0 ? (
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: '32px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                  <Spin size="small" />
+                  <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{t('dashboard.analyzing')}</div>
+                  <div style={{ fontSize: 10, color: '#cbd5e1' }}>{t('dashboard.syncing')}</div>
+                </div>
+              ) : topBots.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '20px 0', color: '#94a3b8', fontSize: 12 }}>
                   {t('dashboard.noActiveBots')}
                 </div>

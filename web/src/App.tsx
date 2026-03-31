@@ -72,6 +72,7 @@ const Dashboard = () => {
   const [versionUpdate, setVersionUpdate] = useState<{ latest: string, current: string, release_url: string } | null>(null);
   const [systemEvents, setSystemEvents] = useState<any[]>([]);
   const [topBots, setTopBots] = useState<any[]>([]);
+  const [loadingTopBots, setLoadingTopBots] = useState(false);
   const [ocInstalled, setOcInstalled] = useState<boolean | null>(null);
   const [dashboardProcessing, setDashboardProcessing] = useState(false);
   const [dashboardAbortCtrl, setDashboardAbortCtrl] = useState<AbortController | null>(null);
@@ -86,7 +87,8 @@ const Dashboard = () => {
     }
   );
 
-  const { wsLogs } = useWebSocketLogs(localStorage.getItem('guardian_token'));
+  const [logSource, setLogSource] = useState('buddy');
+  const { wsLogs } = useWebSocketLogs(localStorage.getItem('guardian_token'), logSource);
 
   // Side Effects
   useEffect(() => {
@@ -247,10 +249,14 @@ const Dashboard = () => {
   };
 
   const fetchTopBots = async () => {
+    setLoadingTopBots(true);
     try {
       const res = await api.get('/v1/openclaw/bots/top');
       setTopBots(res.data);
-    } catch (err) {}
+    } catch (err) {
+    } finally {
+      setLoadingTopBots(false);
+    }
   };
 
   const onShowGlobalLoading = (message: string, duration: number = 3000) => {
@@ -583,6 +589,7 @@ const Dashboard = () => {
     const viewMap: Record<string, React.ReactNode> = {
       'dashboard': (
         <DashboardOverview 
+          loading={loadingTopBots}
           status={status} 
           history={history} 
           wsLogs={wsLogs} 
@@ -623,7 +630,7 @@ const Dashboard = () => {
           isMobile={isMobile}
         />
       ),
-      'logs': <LogsViewer wsLogs={wsLogs} />,
+      'logs': <LogsViewer wsLogs={wsLogs} activeSource={logSource} onSourceChange={setLogSource} />,
       'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} ocInstalled={ocInstalled} />,
       'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} />,
       'tui': <TuiView />,

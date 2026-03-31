@@ -1,13 +1,15 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
-import { Spin, Input, Tag, Space, Button } from 'antd';
+import { Spin, Input, Tag, Space, Button, Segmented } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Search, Filter, AlertCircle, Info, AlertTriangle } from 'lucide-react';
+import { Search, Filter, AlertCircle, Info, AlertTriangle, Shield, Terminal } from 'lucide-react';
 
 interface LogsViewerProps {
   wsLogs: string[];
+  activeSource: string;
+  onSourceChange: (source: string) => void;
 }
 
-const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs }) => {
+const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceChange }) => {
   const { t } = useTranslation();
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [searchText, setSearchText] = useState('');
@@ -64,8 +66,47 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs }) => {
         gap: 12,
         flexShrink: 0 
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 200 }}>
-          <span style={{ color: '#8b949e', fontSize: 13, fontWeight: 600, fontFamily: 'monospace', marginRight: 8 }}>guardian.log</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 200 }}>
+          <Segmented
+            value={activeSource}
+            onChange={(val) => onSourceChange(val as string)}
+            options={[
+              { 
+                label: (
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 6, 
+                    color: activeSource === 'buddy' ? '#161b22' : '#8b949e',
+                    transition: 'color 0.3s'
+                  }}>
+                    <Shield size={14} /> Buddy
+                  </div>
+                ), 
+                value: 'buddy' 
+              },
+              { 
+                label: (
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 6, 
+                    color: activeSource === 'gateway' ? '#161b22' : '#8b949e',
+                    transition: 'color 0.3s'
+                  }}>
+                    <Terminal size={14} /> OpenClaw
+                  </div>
+                ), 
+                value: 'gateway' 
+              }
+            ]}
+            style={{ 
+              background: '#0d1117', 
+              border: '1px solid #30363d', 
+              padding: 2,
+              borderRadius: 6 
+            }}
+          />
           <Input
             placeholder={t('logs.searchPlaceholder')}
             variant="borderless"
@@ -79,7 +120,7 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs }) => {
               color: '#c9d1d9',
               height: 32,
               flex: 1,
-              maxWidth: 300
+              maxWidth: 250
             }}
           />
         </div>

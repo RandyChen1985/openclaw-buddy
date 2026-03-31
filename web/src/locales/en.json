@@ -137,6 +137,8 @@
     "cpuLoad": "CPU Load",
     "memLoad": "Memory Load",
     "topBots": "Top Active Bots",
+    "analyzing": "Analyzing real-time data...",
+    "syncing": "Syncing OpenClaw runtime assets...",
     "noActiveBots": "No active session data",
     "activeSessions": "Active Sessions",
     "diagnosticLab": "Diagnostic Laboratory",
