@@ -64,7 +64,9 @@ const Dashboard = () => {
   const [checkWeixinSeconds, setCheckWeixinSeconds] = useState(0);
   const [botsModels, setBotsModels] = useState<any>(null);
   const [loadingBots, setLoadingBots] = useState(false);
-  const [healEvents, setHealEvents] = useState<any[]>([]);// Global loading for custom messages
+  const [modelsConfig, setModelsConfig] = useState<any>(null);
+  const [loadingModelsConfig, setLoadingModelsConfig] = useState(false);
+  const [healEvents, setHealEvents] = useState<any[]>([]);
   const [globalLoadingMessage, setGlobalLoadingMessage] = useState<string | null>(null);
   const [globalLoadingCountdown, setGlobalLoadingCountdown] = useState<number>(0);
   const [devices, setDevices] = useState<any>(null);
@@ -122,7 +124,14 @@ const Dashboard = () => {
         } else if (task.module === 'plugins') {
           fetchPlugins();
         } else if (task.module === 'bots') {
-          // 针对删除任务进行乐观离群处理，确保 UI 瞬间响应
+          // 如果是模型相关变更（添加、删除、设置默认、新增渠道），触发物理对账
+          const modelActions = ['delete-model', 'add-model', 'add-provider', 'set-default-model'];
+          if (modelActions.includes(task.action || '')) {
+            console.log('🔄 [Task Observer] 模型变更任务完成，正在物理刷新模型规格...');
+            fetchModelsConfig(); // 按用户建议，物理刷新模型规格
+            fetchBotsModels(true); // 同步刷新机器人资产
+          }
+          
           if (task.action === 'delete' && task.status === 'Completed' && task.target) {
             setBotsModels((prev: any) => {
               if (!prev?.data?.bots) return prev;
@@ -135,7 +144,6 @@ const Dashboard = () => {
               };
             });
           }
-          fetchBotsModels(true);
         }
       }
     });
@@ -169,7 +177,10 @@ const Dashboard = () => {
       fetchSystemEvents();
       fetchTopBots();
     }
-    if (activeTab === 'bots-models' || activeTab === 'chat') fetchBotsModels();
+    if (activeTab === 'bots' || activeTab === 'bots-models' || activeTab === 'chat') {
+      fetchBotsModels();
+      if (activeTab === 'bots' || activeTab === 'bots-models') fetchModelsConfig();
+    }
     if (activeTab === 'components') {
       fetchChatChannels();
       // 仅在状态未知时重置并触发检测
@@ -249,11 +260,22 @@ const Dashboard = () => {
     try {
       const res = await api.get(`/v1/openclaw/bots-models${force ? '?refresh=true' : ''}`);
       setBotsModels(res.data);
-      if (force) message.success(t('chat.syncAssetsSuccess'));
     } catch (e) {
       message.error(t('chat.syncAssetsError'));
     } finally {
       setLoadingBots(false);
+    }
+  };
+
+  const fetchModelsConfig = async () => {
+    setLoadingModelsConfig(true);
+    try {
+      const res = await api.get('/v1/openclaw/models/config');
+      setModelsConfig(res.data);
+    } catch (err) {
+      console.error('Failed to fetch models config:', err);
+    } finally {
+      setLoadingModelsConfig(false);
     }
   };
 
@@ -812,13 +834,17 @@ const Dashboard = () => {
       ),
       'bots-models': (
         <BotsManager 
-          botsModels={botsModels} loadingBots={loadingBots} isMobile={isMobile} 
-          onRefresh={() => fetchBotsModels(true)}
+          modelsConfig={modelsConfig}
+          loadingConfig={loadingModelsConfig}
+          onRefresh={fetchModelsConfig}
+          botsModels={botsModels} 
+          loadingBots={loadingBots} 
+          isMobile={isMobile} 
+          onRefreshBots={() => fetchBotsModels(true)}
           onAddBot={handleAddBot}
           onUpdateBot={handleUpdateBot}
           onDeleteBot={handleDeleteBot}
           onSetDefaultModel={handleSetDefaultModel}
-          onShowGlobalLoading={onShowGlobalLoading}
           activeTasks={activeTasks}
         />
       ),

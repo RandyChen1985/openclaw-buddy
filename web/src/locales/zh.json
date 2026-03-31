@@ -429,7 +429,17 @@
     "setDefaultFailed": "设置默认模型失败",
     "settingDefault": "正在同步配置...",
     "updatingConfig": "正在更新机器人配置...",
-    "saveSuccess": "成功更新机器人核心配置文件"
+    "saveSuccess": "成功更新机器人核心配置文件",
+    "markdownSource": "Markdown 源码",
+    "api": "API 协议",
+    "protocolOpenAICompletions": "OpenAI Completions",
+    "protocolOpenAIResponses": "OpenAI Responses",
+    "protocolOpenAICodexResponses": "OpenAI Codex Responses",
+    "protocolAnthropicMessages": "Anthropic Messages",
+    "protocolGoogleGenerativeAI": "Google Generative AI",
+    "protocolGitHubCopilot": "GitHub Copilot",
+    "protocolBedrockConverseStream": "Bedrock Converse Stream",
+    "protocolOllama": "Ollama"
   },
   "logs": {
     "searchPlaceholder": "搜索日志关键词...",

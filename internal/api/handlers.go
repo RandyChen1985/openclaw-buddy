@@ -917,18 +917,37 @@ func (s *Server) addOpenClawProvider(c *gin.Context) {
 	}
 
 	log.Printf("🎮 [控制] 用户请求: 【添加/更新模型提供商】 (Provider: %s)", req.Name)
-	if err := process.AddOpenClawProvider(s.cfg.OpenClawConfigDir, req.Name, req.Config); err != nil {
-		s.Error(c, http.StatusInternalServerError, err.Error())
-		return
+	
+	// 动态检测是【添加】还是【更新】，以优化任务中心日志语义
+	taskName := fmt.Sprintf("添加渠道: %s", req.Name)
+	if providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir); err == nil {
+		if _, exists := providers[req.Name]; exists {
+			taskName = fmt.Sprintf("更新渠道: %s", req.Name)
+		}
 	}
 
-	s.Success(c, gin.H{"status": "success", "message": "提供商已成功添加/更新"})
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   taskName,
+		Module: "bots",
+		Action: "add-provider",
+		Target: req.Name,
+	}
+
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.AddOpenClawProvider(s.cfg.OpenClawConfigDir, req.Name, req.Config); err != nil {
+			return "", err
+		}
+		// 自动刷新模型列表缓存
+		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
+		return "Provider Synced", nil
+	})
 }
 
 func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 	// 读取原始 body 用于调试
 	bodyBytes, _ := io.ReadAll(c.Request.Body)
-	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // 写回 body 供后续绑定使用
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	var req struct {
 		ProviderName string                 `json:"providerName" binding:"required"`
@@ -936,21 +955,46 @@ func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 	}
 	
 	if err := c.ShouldBindJSON(&req); err != nil {
-		fmt.Printf("❌ [ModelAdd] JSON Bind Error: %v | Body: %s\n", err, string(bodyBytes))
 		s.Error(c, http.StatusBadRequest, "参数错误，请提供提供商名称和模型配置")
 		return
 	}
 
-	log.Printf("🎮 [控制] 用户请求: 【向渠道追加模型】 (Provider: %s)", req.ProviderName)
-	if err := process.AddOpenClawModelToProvider(s.cfg.OpenClawConfigDir, req.ProviderName, req.ModelConfig); err != nil {
-		s.Error(c, http.StatusInternalServerError, err.Error())
-		return
+	modelID, _ := req.ModelConfig["id"].(string)
+	log.Printf("🎮 [控制] 用户请求: 【向渠道追加/更新模型】 (Provider: %s, ModelID: %s)", req.ProviderName, modelID)
+	
+	// 动态检测是【追加】还是【更新】
+	taskName := fmt.Sprintf("渠道 %s 追加模型: %s", req.ProviderName, modelID)
+	if providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir); err == nil {
+		if provider, ok := providers[req.ProviderName].(map[string]interface{}); ok {
+			if models, ok := provider["models"].([]interface{}); ok {
+				for _, m := range models {
+					if modelObj, ok := m.(map[string]interface{}); ok {
+						if id, ok := modelObj["id"].(string); ok && id == modelID {
+							taskName = fmt.Sprintf("更新渠道 %s 的模型: %s", req.ProviderName, modelID)
+							break
+						}
+					}
+				}
+			}
+		}
 	}
 
-	// 成功后强制同步 bots_models 缓存，让前端能刷出新模型
-	process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   taskName,
+		Module: "bots",
+		Action: "add-model",
+		Target: req.ProviderName,
+	}
 
-	s.Success(c, gin.H{"status": "success", "message": "模型已成功添加至提供商"})
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.AddOpenClawModelToProvider(s.cfg.OpenClawConfigDir, req.ProviderName, req.ModelConfig); err != nil {
+			return "", err
+		}
+		// 成功后强制同步 bots_models 缓存
+		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
+		return "Model Appended", nil
+	})
 }
 
 func (s *Server) deleteOpenClawModelFromProvider(c *gin.Context) {
@@ -963,15 +1007,22 @@ func (s *Server) deleteOpenClawModelFromProvider(c *gin.Context) {
 	}
 
 	log.Printf("🎮 [控制] 用户请求: 【从渠道移除模型】 (Provider: %s, ModelID: %s)", providerName, modelID)
-	if err := process.DeleteOpenClawModelFromProvider(s.cfg.OpenClawConfigDir, providerName, modelID); err != nil {
-		s.Error(c, http.StatusInternalServerError, err.Error())
-		return
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   fmt.Sprintf("从渠道 %s 移除模型: %s", providerName, modelID),
+		Module: "bots",
+		Action: "delete-model",
+		Target: fmt.Sprintf("%s/%s", providerName, modelID),
 	}
 
-	// 成功后强制同步 bots_models 缓存
-	process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-
-	s.Success(c, gin.H{"status": "success", "message": "模型已成功从提供商移除"})
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.DeleteOpenClawModelFromProvider(s.cfg.OpenClawConfigDir, providerName, modelID); err != nil {
+			return "", err
+		}
+		// 成功后强制同步 bots_models 缓存
+		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
+		return "Model Removed", nil
+	})
 }
 
 func (s *Server) testOpenClawModelDirect(c *gin.Context) {

@@ -13,20 +13,23 @@ import api from '../api';
 import { message } from 'antd';
 
 interface BotsManagerProps {
-  botsModels: any; // 结构: { data: { bots: [], models: [] }, updated_at: string }
+  botsModels: any; 
   loadingBots: boolean;
   isMobile: boolean;
-  onRefresh: () => void;
+  onRefresh: () => void; // 现在对应 fetchModelsConfig
+  onRefreshBots: () => void; // 现在对应 fetchBotsModels
+  modelsConfig: any;
+  loadingConfig: boolean;
   onAddBot: (id: string, model: string) => Promise<void>;
   onUpdateBot: (id: string, name?: string, model?: string) => Promise<void>;
   onDeleteBot: (id: string) => Promise<void>;
   onSetDefaultModel: (id: string) => Promise<void>;
-  onShowGlobalLoading: (message: string, duration?: number) => void; 
   activeTasks?: any[];
 }
 
 const BotsManager: React.FC<BotsManagerProps> = ({ 
-  botsModels, loadingBots, isMobile, onRefresh, onAddBot, onUpdateBot, onDeleteBot, onSetDefaultModel, onShowGlobalLoading,
+  botsModels, loadingBots, isMobile, onRefresh, onRefreshBots, modelsConfig, loadingConfig,
+  onAddBot, onUpdateBot, onDeleteBot, onSetDefaultModel,
   activeTasks = []
 }) => {
   const { t } = useTranslation();
@@ -50,10 +53,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const [sessions, setSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   
-  // 模型管理相关状态
-  const [modelsConfig, setModelsConfig] = useState<any>(null);
   const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(new Set());
-  const [loadingConfig, setLoadingConfig] = useState(false);
   const [isProviderModalOpen, setIsProviderModalOpen] = useState(false);
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
   const [isEditingProvider, setIsEditingProvider] = useState(false);
@@ -87,7 +87,6 @@ const BotsManager: React.FC<BotsManagerProps> = ({
 
   useEffect(() => {
     fetchSessions();
-    fetchModelsConfig();
   }, []);
   
   const isBotProcessing = (botId: string) => {
@@ -95,8 +94,24 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   };
 
   const isModelProcessing = (modelFullId: string) => {
-     return activeTasks.some(t => t.module === 'bots' && t.action === 'set-default-model' && t.target === modelFullId && t.status === 'Running');
+    return activeTasks.some(t => 
+      t.module === 'bots' && 
+      (t.action === 'set-default-model' || t.action === 'delete-model') && 
+      t.target === modelFullId && 
+      t.status === 'Running'
+    );
   };
+
+  const isProviderProcessing = (providerName: string) => {
+    return activeTasks.some(t => 
+      t.module === 'bots' && 
+      (t.action === 'add-provider' || t.action === 'add-model') && 
+      t.target === providerName && 
+      t.status === 'Running'
+    );
+  };
+
+  // --- 自动刷新闭环：监测后台任务完成情况 ---
 
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editorType, setEditorType] = useState<'soul' | 'identity'>('soul');
@@ -105,17 +120,6 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const [isEditorLoading, setIsEditorLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  const fetchModelsConfig = async () => {
-    setLoadingConfig(true);
-    try {
-      const res = await api.get('/v1/openclaw/models/config');
-      setModelsConfig(res.data);
-    } catch (err) {
-      console.error('Failed to fetch models config:', err);
-    } finally {
-      setLoadingConfig(false);
-    }
-  };
 
   const fetchSessions = async (force = false) => {
     setLoadingSessions(true);
@@ -138,35 +142,34 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   };
 
   const handleAddProvider = async () => {
-      try {
-          const values = await configForm.validateFields();
-          setSubmittingConfig(true);
-          setIsProviderModalOpen(false);
-          onShowGlobalLoading(t('bots.syncingProvider'), 0); 
-          
-          await api.post('/v1/openclaw/models/provider', {
-              name: isEditingProvider ? editingProviderName : values.name,
-              config: {
-                  baseUrl: values.baseUrl,
-                  apiKey: values.apiKey,
-                  auth: values.auth || 'api-key',
-                  api: values.api || 'openai-completions'
-              }
-          });
-          
-          configForm.resetFields();
-          setIsEditingProvider(false);
-          setEditingProviderName(null);
-          await fetchModelsConfig();
-          onShowGlobalLoading(t('bots.providerSynced'), 3000);
-      } catch (err: any) {
-          onShowGlobalLoading('', 1);
-          if (!err.errorFields) {
-              message.error(t('bots.saveFailed') + ': ' + ((err as any).response?.data?.error || (err as any).message));
-          }
-      } finally {
-          setSubmittingConfig(false);
+    try {
+      const values = await configForm.validateFields();
+      setSubmittingConfig(true);
+      setIsProviderModalOpen(false);
+      
+      // 物理调用渠道保存接口
+      await api.post('/v1/openclaw/models/provider', {
+        name: isEditingProvider ? editingProviderName : values.name,
+        config: {
+          baseUrl: values.baseUrl,
+          apiKey: values.apiKey,
+          auth: values.auth || 'api-key',
+          api: values.api || 'openai-completions'
+        }
+      });
+      
+      configForm.resetFields();
+      setIsEditingProvider(false);
+      setEditingProviderName(null);
+      message.success(t('common.waitingGateway'));
+      // 此处不再手动调刷新，App.tsx 监听到任务完成后会自动执行 fetchModelsConfig 物理对账
+    } catch (err: any) {
+      if (!err.errorFields) {
+        message.error(t('bots.saveFailed') + ': ' + (err.response?.data?.error || err.message));
       }
+    } finally {
+      setSubmittingConfig(false);
+    }
   };
 
   const handleEditProvider = (name: string, config: any) => {
@@ -188,7 +191,6 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       const values = modelForm.getFieldsValue(true);
       setSubmittingConfig(true);
       setIsModelModalOpen(false);
-      onShowGlobalLoading(t('bots.appendingModel'), 0);
 
       const submitData = {
         providerName: values.provider_name,
@@ -203,12 +205,12 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         }
       };
 
+      // 物理发起模型添加请求
       await api.post('/v1/openclaw/models/provider/model', submitData);
       modelForm.resetFields();
-      await fetchModelsConfig();
-      onShowGlobalLoading(t('bots.modelAppended'), 3000);
+      message.success(t('common.waitingGateway'));
+      // 同上，UI 对账动作已由 App.tsx 全局观察器承包
     } catch (err: any) {
-      onShowGlobalLoading('', 1);
       if (!err.errorFields) {
         message.error(t('bots.saveFailed') + ': ' + (err.response?.data?.error || err.message));
       }
@@ -243,13 +245,12 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          onShowGlobalLoading(t('bots.deletingModel'), 0);
+          // 物理调用模型删除接口 (任务 ID 会被全局 App.tsx 捕捉并自动重刷)
           await api.delete(`/v1/openclaw/models/provider/${provider}/model/${modelId}`);
-          await fetchModelsConfig();
-          onShowGlobalLoading(t('bots.modelDeleted'), 3000);
+          message.success(t('common.waitingGateway'));
         } catch (err: any) {
-          onShowGlobalLoading('', 1);
           message.error(t('bots.deleteFailed') + ': ' + (err.response?.data?.error || err.message));
+          onRefresh(); // 失败回退对账
         }
       }
     });
@@ -365,12 +366,10 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         // 在弹窗销毁后立刻执行异步业务
         (async () => {
           try {
-            onShowGlobalLoading(t('bots.settingDefault'), 0);
             await onSetDefaultModel(fullId);
             await onRefresh();
-            onShowGlobalLoading(t('bots.defaultSet'), 3000);
+            message.success(t('common.waitingGateway'));
           } catch (err: any) {
-            onShowGlobalLoading('', 1);
             message.error(err.message || 'Failed to set default model');
           }
         })();
@@ -399,7 +398,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
               )}
               <Button 
                 icon={<RefreshCw size={16} className={loadingBots ? 'animate-spin' : ''} />} 
-                onClick={onRefresh} 
+                onClick={onRefreshBots} 
                 loading={loadingBots}
                 style={{ borderRadius: 10, background: '#f1f5f9', border: 'none', color: '#64748b', fontWeight: 600 }}
               >
@@ -673,10 +672,12 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                         <span style={{ fontWeight: 800, color: '#475569', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                           {providerName} ({providerModels.length})
                         </span>
+                        {isProviderProcessing(providerName) && <Spin size="small" style={{ marginLeft: 4 }} />}
                         <Button 
                           type="text" 
                           size="small" 
                           icon={<Pencil size={12} />} 
+                          disabled={isProviderProcessing(providerName)}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleEditProvider(providerName, providerData);
@@ -710,8 +711,20 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                     boxShadow: isDefault 
                                       ? '0 10px 20px -5px rgba(139, 92, 246, 0.2)' 
                                       : `0 4px 12px -4px ${color.theme}20`,
-                                    cursor: 'default'
+                                    cursor: 'default',
+                                    opacity: isModelProcessing(`${providerName}/${m.id}`) ? 0.7 : 1,
+                                    pointerEvents: isModelProcessing(`${providerName}/${m.id}`) ? 'none' : 'auto'
                                   }} className="model-card card-float">
+                                    {isModelProcessing(`${providerName}/${m.id}`) && (
+                                      <div style={{ 
+                                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, 
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                        background: 'rgba(255,255,255,0.4)', zIndex: 10, backdropFilter: 'blur(2px)',
+                                        borderRadius: 18
+                                      }}>
+                                        <Spin size="small" />
+                                      </div>
+                                    )}
                                     {isDefault && (
                                       <div style={{
                                         position: 'absolute', top: -10, right: 12,
@@ -799,11 +812,11 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                             columns={[
                               { title: 'ID', dataIndex: 'id', key: 'id', render: (id: string) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{id}</span> },
                               { title: t('bots.displayName'), dataIndex: 'name', key: 'name', render: (name: string, r: any) => name || r.id },
-                              { title: 'API', dataIndex: 'api', key: 'api', render: (api: string) => <Tag style={{ borderRadius: 4, fontSize: 10 }}>{api}</Tag> },
+                              { title: t('bots.api'), dataIndex: 'api', key: 'api', render: (api: string) => <Tag style={{ borderRadius: 4, fontSize: 10 }}>{api}</Tag> },
                               { title: t('bots.latency'), key: 'latency', width: 100, render: (_, r: any) => {
                                 const lat = testLatencyMap[providerName + '/' + r.id]?.latency;
                                 if (lat === undefined) return '-';
-                                return <Tag color={lat > 0 ? 'success' : 'error'}>{lat > 0 ? `${lat}ms` : 'FAIL'}</Tag>;
+                                return <Tag color={lat > 0 ? 'success' : 'error'}>{lat > 0 ? `${lat}ms` : t('bots.fail')}</Tag>;
                               }},
                               { title: t('common.action'), key: 'action', width: 150, render: (_, r: any) => (
                                 <div style={{ display: 'flex', gap: 4 }}>
@@ -951,7 +964,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 { required: true, message: t('bots.botIdRequired') },
                 { pattern: /^[a-zA-Z0-9_]+$/, message: t('bots.botIdPattern') }
               ]}
-              extra={<span style={{ fontSize: 11, color: '#94a3b8' }}>{t('bots.idFormatTip')}: <code style={{ background: '#f1f5f9', padding: '1px 4px' }}>dev_bot</code>。{t('bots.workspaceAutoTip')} <code style={{ background: '#f1f5f9', padding: '1px 4px' }}>~/.openclaw/workspace_[id]</code></span>}
+              extra={<span style={{ fontSize: 11, color: '#94a3b8' }}>{t('bots.idFormatTip')}: <code style={{ background: '#f1f5f9', padding: '1px 4px' }}>dev_bot</code>. {t('bots.workspaceAutoTip')} <code style={{ background: '#f1f5f9', padding: '1px 4px' }}>~/.openclaw/workspace_[id]</code></span>}
             >
               <Input placeholder={t('bots.botIdPlaceholder')} />
             </Form.Item>
@@ -1039,7 +1052,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 </Col>
                 <Col span={12}>
                   <Form.Item label={t('bots.apiProtocol')} name="api" initialValue="openai-completions">
-                    <Select options={[{ label: 'OpenAI Completions', value: 'openai-completions' }]} />
+                    <Select options={[{ label: t('bots.protocolOpenAICompletions'), value: 'openai-completions' }]} />
                   </Form.Item>
                 </Col>
               </Row>
@@ -1101,14 +1114,14 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 <Col span={12}>
                   <Form.Item label={t('bots.apiProtocol')} name="api">
                     <Select options={[
-                      { label: 'OpenAI Completions', value: 'openai-completions' },
-                      { label: 'OpenAI Responses', value: 'openai-responses' },
-                      { label: 'OpenAI Codex Responses', value: 'openai-codex-responses' },
-                      { label: 'Anthropic Messages', value: 'anthropic-messages' },
-                      { label: 'Google Generative AI', value: 'google-generative-ai' },
-                      { label: 'GitHub Copilot', value: 'github-copilot' },
-                      { label: 'Bedrock Converse Stream', value: 'bedrock-converse-stream' },
-                      { label: 'Ollama', value: 'ollama' }
+                      { label: t('bots.protocolOpenAICompletions'), value: 'openai-completions' },
+                      { label: t('bots.protocolOpenAIResponses'), value: 'openai-responses' },
+                      { label: t('bots.protocolOpenAICodexResponses'), value: 'openai-codex-responses' },
+                      { label: t('bots.protocolAnthropicMessages'), value: 'anthropic-messages' },
+                      { label: t('bots.protocolGoogleGenerativeAI'), value: 'google-generative-ai' },
+                      { label: t('bots.protocolGitHubCopilot'), value: 'github-copilot' },
+                      { label: t('bots.protocolBedrockConverseStream'), value: 'bedrock-converse-stream' },
+                      { label: t('bots.protocolOllama'), value: 'ollama' }
                     ]} />
                   </Form.Item>
                 </Col>
@@ -1296,7 +1309,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
               <div style={{ flex: 1, borderRight: isMobile ? 'none' : '1px solid #f1f5f9', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#f8fafc' }}>
                   <Edit3 size={14} color="#64748b" />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Markdown Source</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{t('bots.markdownSource')}</span>
                 </div>
                 <div style={{ flex: 1, padding: 0 }}>
                   <Input.TextArea

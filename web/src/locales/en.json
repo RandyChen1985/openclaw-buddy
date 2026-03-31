@@ -424,7 +424,17 @@
     "settingDefault": "Syncing configuration...",
     "updatingConfig": "Updating bot configuration...",
     "saveSuccess": "Bot core file updated successfully",
-    "saveFailed": "Failed to save bot configuration"
+    "saveFailed": "Failed to save bot configuration",
+    "markdownSource": "Markdown Source",
+    "api": "API",
+    "protocolOpenAICompletions": "OpenAI Completions",
+    "protocolOpenAIResponses": "OpenAI Responses",
+    "protocolOpenAICodexResponses": "OpenAI Codex Responses",
+    "protocolAnthropicMessages": "Anthropic Messages",
+    "protocolGoogleGenerativeAI": "Google Generative AI",
+    "protocolGitHubCopilot": "GitHub Copilot",
+    "protocolBedrockConverseStream": "Bedrock Converse Stream",
+    "protocolOllama": "Ollama"
   },
   "logs": {
     "searchPlaceholder": "Search log keywords...",
