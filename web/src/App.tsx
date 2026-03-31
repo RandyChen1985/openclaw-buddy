@@ -84,7 +84,7 @@ const Dashboard = () => {
   const [dashboardAbortCtrl, setDashboardAbortCtrl] = useState<AbortController | null>(null);
 
   // Hooks
-  const { tasks: activeTasks, updateTask: baseUpdateTask } = useTaskCenter();
+  const { tasks: activeTasks, updateTask: baseUpdateTask, loading: tasksLoading, fetchActiveTasks } = useTaskCenter();
   const { status, history, fetching, refreshCountdown, fetchData } = useStatusPolling(
     isTransitioning, targetStatus, () => {
       setIsTransitioning(false);
@@ -1020,7 +1020,12 @@ const Dashboard = () => {
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, flexShrink: 0 }}>
-        <TaskTray tasks={activeTasks} isMobile={isMobile} />
+        <TaskTray 
+          tasks={activeTasks} 
+          isMobile={isMobile} 
+          loading={tasksLoading} 
+          onRefresh={() => fetchActiveTasks(false, true)}
+        />
         <LanguageSwitcher isMobile={isMobile} />
         <Badge
           status={isRunning ? 'success' : 'error'}

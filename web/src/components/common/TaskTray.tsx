@@ -1,6 +1,6 @@
 import React from 'react';
 import { Popover, Badge, List, Progress, Button, Typography, Space, Drawer } from 'antd';
-import { ListTodo, CheckCircle2, XCircle, Clock, Loader2, AlertCircle } from 'lucide-react';
+import { Bell, CheckCircle2, XCircle, Clock, Loader2, AlertCircle, RotateCw } from 'lucide-react';
 import type { Task } from '../../hooks/useTaskCenter';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
@@ -8,9 +8,11 @@ import dayjs from 'dayjs';
 interface TaskTrayProps {
   tasks: Task[];
   isMobile?: boolean;
+  loading?: boolean;
+  onRefresh?: () => void;
 }
 
-const TaskTray: React.FC<TaskTrayProps> = ({ tasks, isMobile }) => {
+const TaskTray: React.FC<TaskTrayProps> = ({ tasks, isMobile, loading, onRefresh }) => {
   const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
   
@@ -61,7 +63,7 @@ const TaskTray: React.FC<TaskTrayProps> = ({ tasks, isMobile }) => {
         <Badge count={activeTasks.length} size="small" offset={[-2, 2]}>
           <Button 
             type="text" 
-            icon={<ListTodo size={20} color={hasActive ? '#2563eb' : '#64748b'} />} 
+            icon={<Bell size={20} color={hasActive ? '#2563eb' : '#64748b'} />} 
             onClick={() => setOpen(true)}
           />
         </Badge>
@@ -73,8 +75,15 @@ const TaskTray: React.FC<TaskTrayProps> = ({ tasks, isMobile }) => {
           height="70vh"
           styles={{ body: { padding: 0 } }}
         >
-          <div style={{ padding: '8px 16px', background: '#f8fafc', fontSize: 12, color: '#64748b' }}>
-            {hasActive ? `${activeTasks.length} 个任务正在后台处理` : '历史任务轨迹'}
+          <div style={{ padding: '8px 16px', background: '#f8fafc', fontSize: 12, color: '#64748b', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{hasActive ? `${activeTasks.length} 个任务正在后台处理` : '历史任务轨迹'}</span>
+            <Button 
+              type="text" 
+              size="small" 
+              icon={<RotateCw size={14} className={loading ? 'animate-spin' : ''} />} 
+              onClick={(e) => { e.stopPropagation(); onRefresh?.(); }}
+              style={{ color: '#3b82f6' }}
+            />
           </div>
           {listContent}
         </Drawer>
@@ -87,7 +96,15 @@ const TaskTray: React.FC<TaskTrayProps> = ({ tasks, isMobile }) => {
       content={(
         <div style={{ width: 320, maxHeight: 480, overflowY: 'auto' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography.Text strong>{t('common.monitor_center')}</Typography.Text>
+            <Space size={8}>
+              <Typography.Text strong>{t('common.monitor_center')}</Typography.Text>
+              <Button 
+                type="text" 
+                size="small" 
+                icon={<RotateCw size={14} className={loading ? 'animate-spin' : ''} style={{ color: '#3b82f6' }} />} 
+                onClick={(e) => { e.stopPropagation(); onRefresh?.(); }}
+              />
+            </Space>
             {hasActive && <Badge status="processing" text={`${activeTasks.length} 个进行中`} />}
           </div>
           {listContent}
@@ -101,7 +118,7 @@ const TaskTray: React.FC<TaskTrayProps> = ({ tasks, isMobile }) => {
       <Badge count={activeTasks.length} size="small" offset={[-2, 2]}>
         <Button 
           type="text" 
-          icon={<ListTodo size={20} color={hasActive ? '#2563eb' : '#64748b'} />} 
+          icon={<Bell size={20} color={hasActive ? '#2563eb' : '#64748b'} />} 
           style={{ background: hasActive ? 'rgba(37, 99, 235, 0.05)' : 'transparent' }}
         />
       </Badge>

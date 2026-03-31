@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sort"
 )
 
 type SystemMetrics struct {
@@ -44,6 +45,13 @@ type Device struct {
 	Status      string   `json:"status"` // "pending" 或 "paired"
 	CreatedAtMs int64    `json:"createdAtMs"`
 	ApprovedAtMs int64   `json:"approvedAtMs"`
+}
+
+type BotRank struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Emoji    string `json:"emoji"`
+	Sessions int    `json:"sessions"`
 }
 
 type ServiceStatus struct {
@@ -232,4 +240,59 @@ func splitTableLine(line string) []string {
 		}
 	}
 	return result
+}
+
+// GetBotRanking 聚合计算机器人活跃榜 (前 3 名)
+func GetBotRanking(configDir string) ([]BotRank, error) {
+	sessions, err := GetOpenClawSessions()
+	if err != nil {
+		return nil, err
+	}
+
+	// 聚合分析：统计每个 Agent 的活跃会话
+	stats := make(map[string]int)
+	for _, sess := range sessions {
+		stats[sess.AgentID]++
+	}
+
+	// 获取所有机器人名称信息以丰富结果
+	botsData, _ := GetOpenClawBotsModels(configDir)
+	botNames := make(map[string]string)
+	botEmojis := make(map[string]string)
+	if botsData != nil {
+		for _, b := range botsData.Bots {
+			botNames[b.ID] = b.Name
+			botEmojis[b.ID] = b.Emoji
+		}
+	}
+
+	ranks := []BotRank{}
+	for id, count := range stats {
+		name := id
+		if n, ok := botNames[id]; ok {
+			name = n
+		}
+		emoji := "🤖"
+		if e, ok := botEmojis[id]; ok {
+			emoji = e
+		}
+		ranks = append(ranks, BotRank{
+			ID:       id,
+			Name:     name,
+			Emoji:    emoji,
+			Sessions: count,
+		})
+	}
+
+	// 按会话数倒序排序
+	sort.Slice(ranks, func(i, j int) bool {
+		return ranks[i].Sessions > ranks[j].Sessions
+	})
+
+	// 仅返回前 3 名
+	if len(ranks) > 3 {
+		ranks = ranks[:3]
+	}
+
+	return ranks, nil
 }

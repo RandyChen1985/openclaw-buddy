@@ -52,33 +52,34 @@ export const useTaskCenter = () => {
     // --- 逻辑：决定是否需要弹窗 ---
     if (!skipNotify) {
       if (isNew) {
-      // 只有真正的全新任务才弹出一个“已开始”通知
-      if (updatedTask.status === 'Running') {
-        notification.info({ ...notifyConfig, message: updatedTask.name, description: t('common.waitingGateway') });
-      } else if (updatedTask.status === 'Completed') {
-        notification.success({ ...notifyConfig, message: updatedTask.name, description: t('common.success') });
-      } else if (updatedTask.status === 'Failed' || updatedTask.status === 'Timeout') {
-        notification.error({ ...notifyConfig, message: updatedTask.name, description: `${t('common.error')}: ${updatedTask.error || 'Unknown Error'}` });
-      }
-    } else {
-      // 对于已有任务（或接力任务），只有状态发生实质改变时才弹窗
-      const effectiveOldTask = oldTask || handoverPendingTask;
-      if (effectiveOldTask && effectiveOldTask.status !== updatedTask.status) {
-        if (updatedTask.status === 'Completed') {
+        // 只有真正的全新任务才弹出一个“已开始”通知
+        if (updatedTask.status === 'Running') {
+          notification.info({ ...notifyConfig, message: updatedTask.name, description: t('common.waitingGateway') });
+        } else if (updatedTask.status === 'Completed') {
           notification.success({ ...notifyConfig, message: updatedTask.name, description: t('common.success') });
         } else if (updatedTask.status === 'Failed' || updatedTask.status === 'Timeout') {
           notification.error({ ...notifyConfig, message: updatedTask.name, description: `${t('common.error')}: ${updatedTask.error || 'Unknown Error'}` });
         }
+      } else {
+        // 对于已有任务（或接力任务），只有状态发生实质改变时才弹窗
+        const effectiveOldTask = oldTask || handoverPendingTask;
+        if (effectiveOldTask && effectiveOldTask.status !== updatedTask.status) {
+          if (updatedTask.status === 'Completed') {
+            notification.success({ ...notifyConfig, message: updatedTask.name, description: t('common.success') });
+          } else if (updatedTask.status === 'Failed' || updatedTask.status === 'Timeout') {
+            notification.error({ ...notifyConfig, message: updatedTask.name, description: `${t('common.error')}: ${updatedTask.error || 'Unknown Error'}` });
+          }
+        }
       }
     }
-  }
 
     setTasks(prev => {
-      const index = prev.findIndex(t => t.id === updatedTask.id);
-      const isNewInner = index === -1;
+      const taskMap = new Map<string, Task>();
+      prev.forEach(t => taskMap.set(t.id, t));
 
-      // --- 核心更新：执行接力替换 ---
-      if (isNewInner && !updatedTask.id.startsWith('pending-')) {
+      // 处理接力替换
+      const index = prev.findIndex(t => t.id === updatedTask.id);
+      if (index === -1 && !updatedTask.id.startsWith('pending-')) {
         const pendingIndex = prev.findIndex(t => 
           t.id.startsWith('pending-') && 
           t.module === updatedTask.module && 
@@ -87,21 +88,22 @@ export const useTaskCenter = () => {
         );
         if (pendingIndex > -1) {
           const pendingTask = prev[pendingIndex];
-          const newTasks = [...prev];
-          // 接力时：优先保持前端已翻译的名称（并去掉“加载中”后缀），防止后端直出的英文名称造成文字跳变
+          taskMap.delete(pendingTask.id);
           const cleanedName = pendingTask.name.split(' (')[0];
-          const mergedTask = { ...updatedTask, name: cleanedName || updatedTask.name };
-          newTasks.splice(pendingIndex, 1, mergedTask);
-          return newTasks;
+          taskMap.set(updatedTask.id, { ...updatedTask, name: cleanedName || updatedTask.name });
+        } else {
+          taskMap.set(updatedTask.id, updatedTask);
         }
+      } else {
+        taskMap.set(updatedTask.id, updatedTask);
       }
 
-      if (isNewInner) return [updatedTask, ...prev];
-      const newTasks = [...prev];
-      newTasks[index] = updatedTask;
-      return newTasks;
+      // 始终按开始时间倒序排列
+      return Array.from(taskMap.values()).sort((a, b) => 
+        new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+      );
     });
-  }, [t]); // 移除 tasks 依赖，解除无限循环
+  }, [t]); 
 
   const fetchActiveTasks = useCallback(async (isSilent = false, skipNotify = false) => {
     if (!isSilent) setLoading(true);

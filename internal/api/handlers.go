@@ -1087,64 +1087,23 @@ func (s *Server) getSystemEvents(c *gin.Context) {
 }
 
 func (s *Server) getTopBots(c *gin.Context) {
-	sessions, err := process.GetOpenClawSessions()
+	// 1. 优先尝试从缓存获取 (10 分钟自动更新一次)
+	data, _, err := process.GetCachedData("ranking")
+	if err == nil && data != nil {
+		s.Success(c, data)
+		return
+	}
+
+	// 2. 降级逻辑：如果缓存失效或不存在，执行实时计算并异步存入缓存
+	ranks, err := process.GetBotRanking(s.cfg.OpenClawConfigDir)
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-
-	// 聚合分析：统计每个 Agent 的活跃会话
-	stats := make(map[string]int)
-	for _, sess := range sessions {
-		stats[sess.AgentID]++
-	}
-
-	// 获取所有机器人名称信息以丰富结果
-	botsData, _ := process.GetOpenClawBotsModels(s.cfg.OpenClawConfigDir)
-	botNames := make(map[string]string)
-	botEmojis := make(map[string]string)
-	if botsData != nil {
-		for _, b := range botsData.Bots {
-			botNames[b.ID] = b.Name
-			botEmojis[b.ID] = b.Emoji
-		}
-	}
-
-	type BotRank struct {
-		ID       string `json:"id"`
-		Name     string `json:"name"`
-		Emoji    string `json:"emoji"`
-		Sessions int    `json:"sessions"`
-	}
-
-	ranks := []BotRank{}
-	for id, count := range stats {
-		name := id
-		if n, ok := botNames[id]; ok {
-			name = n
-		}
-		emoji := "🤖"
-		if e, ok := botEmojis[id]; ok {
-			emoji = e
-		}
-		ranks = append(ranks, BotRank{
-			ID:       id,
-			Name:     name,
-			Emoji:    emoji,
-			Sessions: count,
-		})
-	}
-
-	// 按会话数倒序排序
-	sort.Slice(ranks, func(i, j int) bool {
-		return ranks[i].Sessions > ranks[j].Sessions
-	})
-
-	// 仅返回前 3 名
-	if len(ranks) > 3 {
-		ranks = ranks[:3]
-	}
-
+	
+	// 异步更新缓存以供下次使用
+	go process.SyncKeySingle("ranking", s.cfg.OpenClawConfigDir)
+	
 	s.Success(c, ranks)
 }
 
