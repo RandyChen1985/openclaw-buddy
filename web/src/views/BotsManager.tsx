@@ -23,10 +23,12 @@ interface BotsManagerProps {
   onDeleteBot: (id: string) => Promise<void>;
   onSetDefaultModel: (id: string) => Promise<void>;
   onShowGlobalLoading: (message: string, duration?: number) => void; 
+  activeTasks?: any[];
 }
 
 const BotsManager: React.FC<BotsManagerProps> = ({ 
-  botsModels, loadingBots, isMobile, onRefresh, onAddBot, onSetIdentity, onSetBotModel, onDeleteBot, onSetDefaultModel, onShowGlobalLoading
+  botsModels, loadingBots, isMobile, onRefresh, onAddBot, onSetIdentity, onSetBotModel, onDeleteBot, onSetDefaultModel, onShowGlobalLoading,
+  activeTasks = []
 }) => {
   const { t } = useTranslation();
   const cardColors = [
@@ -88,6 +90,14 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     fetchSessions();
     fetchModelsConfig();
   }, []);
+  
+  const isBotProcessing = (botId: string) => {
+    return activeTasks.some(t => t.module === 'bots' && t.target === botId && t.status === 'Running');
+  };
+
+  const isModelProcessing = (modelFullId: string) => {
+     return activeTasks.some(t => t.module === 'bots' && t.action === 'set-default-model' && t.target === modelFullId && t.status === 'Running');
+  };
 
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editorType, setEditorType] = useState<'soul' | 'identity'>('soul');
@@ -440,10 +450,21 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                           transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
                           position: 'relative',
                           overflow: 'hidden',
-                          boxShadow: `0 10px 25px -12px ${color.theme}40` // 主题色阴影
+                          boxShadow: `0 10px 25px -12px ${color.theme}40`, // 主题色阴影
+                          opacity: isBotProcessing(bot.id) ? 0.7 : 1,
+                          pointerEvents: isBotProcessing(bot.id) ? 'none' : 'auto'
                         }}
                         className="bot-card card-float"
                       >
+                        {isBotProcessing(bot.id) && (
+                          <div style={{ 
+                            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, 
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                            background: 'rgba(255,255,255,0.4)', zIndex: 10, backdropFilter: 'blur(2px)' 
+                          }}>
+                            <Spin tip={t('common.processing')} />
+                          </div>
+                        )}
                         <div style={{ position: 'absolute', top: 0, right: 0, width: 80, height: 80, background: `linear-gradient(135deg, transparent 50%, ${color.bg} 100%)`, opacity: 0.5, zIndex: 0 }}></div>
                         
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, position: 'relative', zIndex: 1 }}>
@@ -744,7 +765,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                           <Button 
                                             type="text" 
                                             size="small" 
-                                            icon={<Star size={14} />} 
+                                            icon={<Star size={14} className={isModelProcessing(`${providerName}/${m.id}`) ? 'animate-spin' : ''} />} 
+                                            loading={isModelProcessing(`${providerName}/${m.id}`)}
                                             onClick={() => handleSetDefaultModel(`${providerName}/${m.id}`)}
                                             style={{ color: '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                           />

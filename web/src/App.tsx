@@ -357,9 +357,20 @@ const Dashboard = () => {
     }
 
     try {
-      await api.post(`/v1/gateway/${action}`);
-      // 成功触发任务后，提示用户并滚动到顶部看状态
-      message.info(t('chat.asyncCommandTip', { title }));
+      const res = await api.post(`/v1/gateway/${action}`);
+      const taskID = res.data?.data?.taskID;
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: title,
+          module: 'gateway',
+          action: action,
+          target: '',
+          status: 'Running',
+          progress: 0,
+          startTime: new Date().toISOString()
+        });
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       message.error(err.response?.data?.error || t('common.commandFailed'));
@@ -368,9 +379,20 @@ const Dashboard = () => {
 
   const restartGateway = async () => {
     try {
-      await api.post('/v1/gateway/restart');
-      // 成功触发任务后，提示用户并滚动到顶部看状态
-      message.info(t('chat.asyncCommandTip', { title: t('common.restart') }));
+      const res = await api.post('/v1/gateway/restart');
+      const taskID = res.data?.data?.taskID;
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: t('common.restart'),
+          module: 'gateway',
+          action: 'restart',
+          target: '',
+          status: 'Running',
+          progress: 0,
+          startTime: new Date().toISOString()
+        });
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       message.error(err.response?.data?.error || t('common.restartFailed'));
@@ -381,9 +403,20 @@ const Dashboard = () => {
   const handleInstallWeixin = async () => {
     setLoadingWeixin(true);
     try {
-      await api.post('/v1/wechat/install');
-      // 成功触发任务后，提示已开始安装并滚动到顶部看状态
-      message.info(t('chat.asyncCommandTip', { title: t('channels.weixinPlugin') }));
+      const res = await api.post('/v1/wechat/install');
+      const taskID = res.data?.data?.taskID;
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: t('channels.weixinPlugin'),
+          module: 'wechat',
+          action: 'install',
+          target: '',
+          status: 'Running',
+          progress: 0,
+          startTime: new Date().toISOString()
+        });
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       message.error(err.response?.data?.error || t('common.error'));
@@ -416,8 +449,20 @@ const Dashboard = () => {
 
   const handleAddBot = async (id: string, model: string) => {
     try {
-      await api.post('/v1/openclaw/bots/add', { id, model });
-      // 后端已改为异步并返回 202
+      const res = await api.post('/v1/openclaw/bots/add', { id, model });
+      const taskID = res.data?.data?.taskID;
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: `${t('bots.addBot')}: ${id}`,
+          module: 'bots',
+          action: 'add',
+          target: id,
+          status: 'Running',
+          progress: 0,
+          startTime: new Date().toISOString()
+        });
+      }
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.createFailed');
       message.error(msg);
@@ -427,7 +472,20 @@ const Dashboard = () => {
 
   const handleSetBotIdentity = async (id: string, name: string) => {
     try {
-      await api.post('/v1/openclaw/bots/set-identity', { id, name });
+      const res = await api.post('/v1/openclaw/bots/set-identity', { id, name });
+      const taskID = res.data?.data?.taskID;
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: `${t('bots.editName')}: ${id} -> ${name}`,
+          module: 'bots',
+          action: 'set-identity',
+          target: id,
+          status: 'Running',
+          progress: 0,
+          startTime: new Date().toISOString()
+        });
+      }
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.updateFailed');
       message.error(msg);
@@ -437,7 +495,20 @@ const Dashboard = () => {
 
   const handleSetBotModel = async (id: string, model: string) => {
     try {
-      await api.post('/v1/openclaw/bots/set-model', { id, model });
+      const res = await api.post('/v1/openclaw/bots/set-model', { id, model });
+      const taskID = res.data?.data?.taskID;
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: `${t('bots.currentModel')}: ${id} -> ${model}`,
+          module: 'bots',
+          action: 'set-model',
+          target: id,
+          status: 'Running',
+          progress: 0,
+          startTime: new Date().toISOString()
+        });
+      }
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.modelUpdateFailed');
       message.error(msg);
@@ -447,7 +518,20 @@ const Dashboard = () => {
 
   const handleDeleteBot = async (id: string) => {
     try {
-      await api.post('/v1/openclaw/bots/delete', { id });
+      const res = await api.post('/v1/openclaw/bots/delete', { id });
+      const taskID = res.data?.data?.taskID;
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: `${t('bots.removeBotTitle')}: ${id}`,
+          module: 'bots',
+          action: 'delete',
+          target: id,
+          status: 'Running',
+          progress: 0,
+          startTime: new Date().toISOString()
+        });
+      }
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.removeFailed');
       message.error(msg);
@@ -457,7 +541,20 @@ const Dashboard = () => {
 
   const handleSetDefaultModel = async (modelId: string) => {
     try {
-      await api.post('/v1/openclaw/models/set-default', { modelId });
+      const res = await api.post('/v1/openclaw/models/set-default', { modelId });
+      const taskID = res.data?.data?.taskID;
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: `${t('bots.defaultModel')}: ${modelId}`,
+          module: 'bots',
+          action: 'set-default-model',
+          target: modelId,
+          status: 'Running',
+          progress: 0,
+          startTime: new Date().toISOString()
+        });
+      }
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.setDefaultFailed');
       message.error(msg);
@@ -602,6 +699,7 @@ const Dashboard = () => {
           onDeleteBot={handleDeleteBot}
           onSetDefaultModel={handleSetDefaultModel}
           onShowGlobalLoading={onShowGlobalLoading}
+          activeTasks={activeTasks}
         />
       ),
       'components': (

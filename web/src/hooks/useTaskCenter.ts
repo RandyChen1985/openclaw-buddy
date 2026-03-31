@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api';
-import { message } from 'antd';
+import { notification } from 'antd';
+import { useTranslation } from 'react-i18next';
 
 export interface Task {
   id: string;
@@ -17,6 +18,7 @@ export interface Task {
 }
 
 export const useTaskCenter = () => {
+  const { t } = useTranslation();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -35,20 +37,63 @@ export const useTaskCenter = () => {
   const updateTask = useCallback((updatedTask: Task) => {
     setTasks(prev => {
       const index = prev.findIndex(t => t.id === updatedTask.id);
-      if (index === -1) {
+      const isNew = index === -1;
+      const oldTask = isNew ? null : prev[index];
+
+      // 集中处理通知反馈 (卡片式通知)
+      const notifyConfig = {
+        placement: 'bottomRight' as const,
+        duration: 4.5,
+      };
+
+      // 1. 如果是新任务
+      if (isNew) {
+        if (updatedTask.status === 'Running') {
+          notification.info({
+            ...notifyConfig,
+            message: updatedTask.name,
+            description: t('common.waitingGateway'), // 指令已确认，正在等待反馈...
+          });
+        } else if (updatedTask.status === 'Completed') {
+          notification.success({
+            ...notifyConfig,
+            message: updatedTask.name,
+            description: t('common.success'),
+          });
+        } else if (updatedTask.status === 'Failed' || updatedTask.status === 'Timeout') {
+          notification.error({
+            ...notifyConfig,
+            message: updatedTask.name,
+            description: `${t('common.error')}: ${updatedTask.error || 'Unknown Error'}`,
+          });
+        }
+      } 
+      // 2. 如果是已知任务的状态变更
+      else if (oldTask && oldTask.status !== updatedTask.status) {
+        if (updatedTask.status === 'Completed') {
+          notification.success({
+            ...notifyConfig,
+            message: updatedTask.name,
+            description: t('common.success'),
+          });
+        } else if (updatedTask.status === 'Failed' || updatedTask.status === 'Timeout') {
+          notification.error({
+            ...notifyConfig,
+            message: updatedTask.name,
+            description: `${t('common.error')}: ${updatedTask.error || 'Unknown Error'}`,
+          });
+        }
+      }
+
+      // 更新状态列表
+      if (isNew) {
         return [updatedTask, ...prev];
       }
       const newTasks = [...prev];
       newTasks[index] = updatedTask;
       return newTasks;
     });
-
-    if (updatedTask.status === 'Completed') {
-      message.success(`${updatedTask.name} 已完成`);
-    } else if (updatedTask.status === 'Failed' || updatedTask.status === 'Timeout') {
-      message.error(`${updatedTask.name} 执行失败: ${updatedTask.error || '未知错误'}`);
-    }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetchActiveTasks();
