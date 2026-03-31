@@ -500,5 +500,24 @@
       "step4": "Return to OpenClaw Buddy, use \"Maintenance Terminal\" or **simply send it to the AI Chat**",
       "step5": "Once installed, click 'Refresh' here to update the list"
     }
+  },
+  "plugins": {
+    "title": "Plugins",
+    "fullTitle": "Plugin List & Status",
+    "description": "Plugins are low-level system extensions (e.g. WeChat adapter, API providers). Monitor their loading and enabled status here.",
+    "pluginName": "Plugin Name",
+    "version": "Version",
+    "status": "Status",
+    "origin": "Origin",
+    "loaded": "Loaded",
+    "disabled": "Disabled",
+    "error": "Error",
+    "syncSuccess": "Plugins synced",
+    "fetchFailed": "Failed to fetch plugins",
+    "noPlugins": "No plugin data found",
+    "count": "{{count}} plugins total",
+    "search": "Search plugin name or ID...",
+    "syncedAt": "Synced at",
+    "functionDesc": "Function Description"
   }
 }

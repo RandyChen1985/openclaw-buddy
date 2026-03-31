@@ -496,6 +496,93 @@ func EnableChatCompletions(configDir string) error {
 	return os.WriteFile(configPath, newData, 0644)
 }
 
+type OpenClawPlugin struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Version     string   `json:"version"`
+	Enabled     bool     `json:"enabled"`
+	Status      string   `json:"status"`
+	Origin      string   `json:"origin"`
+	RootDir     string   `json:"rootDir"`
+	Source      string   `json:"source"`
+	Error       string   `json:"error,omitempty"`
+	ChannelIds  []string `json:"channelIds"`
+	ProviderIds []string `json:"providerIds"`
+}
+
+func GetOpenClawPlugins() (any, error) {
+	cmd := exec.Command("openclaw", "plugins", "list", "--json")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list plugins: %v. Output: %s", err, string(out))
+	}
+
+	// 清理 ANSI 颜色代码
+	cleanOut := StripANSI(string(out))
+
+	// 找到第一个 '{'，跳过前面的日志行
+	index := strings.Index(cleanOut, "{")
+	if index == -1 {
+		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
+	}
+	cleanOut = cleanOut[index:]
+
+	var data struct {
+		Plugins []OpenClawPlugin `json:"plugins"`
+	}
+	decoder := json.NewDecoder(strings.NewReader(cleanOut))
+	if err := decoder.Decode(&data); err != nil {
+		return nil, fmt.Errorf("failed to parse plugins json: %v", err)
+	}
+	return data.Plugins, nil
+}
+
+func ReloadOpenClawPlugins() error {
+	cmd := exec.Command("openclaw", "plugins", "reload")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to reload plugins: %v. Output: %s", err, string(out))
+	}
+	return nil
+}
+
+func EnableOpenClawPlugin(id string) error {
+	cmd := exec.Command("openclaw", "plugins", "enable", id)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to enable plugin %s: %v. Output: %s", id, err, string(out))
+	}
+	return nil
+}
+
+func DisableOpenClawPlugin(id string) error {
+	cmd := exec.Command("openclaw", "plugins", "disable", id)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to disable plugin %s: %v. Output: %s", id, err, string(out))
+	}
+	return nil
+}
+
+func UninstallOpenClawPlugin(id string) error {
+	cmd := exec.Command("openclaw", "plugins", "uninstall", id)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to uninstall plugin %s: %v. Output: %s", id, err, string(out))
+	}
+	return nil
+}
+
+func UpdateOpenClawPlugins() error {
+	cmd := exec.Command("openclaw", "plugins", "update")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to update plugins: %v. Output: %s", err, string(out))
+	}
+	return nil
+}
+
 func GetOpenClawSkills() (any, error) {
 	cmd := exec.Command("openclaw", "skills", "list", "--json")
 	out, err := cmd.CombinedOutput()

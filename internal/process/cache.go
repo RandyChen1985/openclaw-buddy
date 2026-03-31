@@ -32,8 +32,13 @@ func SyncAll(configDir string) {
 	syncKey("skills", func() (any, error) {
 		return GetOpenClawSkills()
 	})
+
+	// 5. Plugins
+	syncKey("plugins", func() (any, error) {
+		return GetOpenClawPlugins()
+	})
 	
-	// 5. Sessions
+	// 6. Sessions
 	syncKey("sessions", func() (any, error) {
 		return GetOpenClawSessions()
 	})

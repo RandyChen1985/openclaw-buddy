@@ -773,6 +773,7 @@ func (s *Server) reloadSkills(c *gin.Context) {
 
 	// 重新加载后清理缓存，确保列表是最新的
 	process.SyncKeySingle("skills", s.cfg.OpenClawConfigDir)
+	process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
 
 	s.Success(c, gin.H{"status": "success", "message": "规则与技能已重新加载"})
 }
@@ -1104,6 +1105,99 @@ func (s *Server) getOpenClawVersion(c *gin.Context) {
 		"version":   version,
 		"path":      path,
 	})
+}
+
+func (s *Server) getOpenClawPlugins(c *gin.Context) {
+	refresh := c.Query("refresh") == "true"
+	if refresh {
+		if err := process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir); err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+
+	data, updatedAt, err := process.GetCachedData("plugins")
+	if err != nil {
+		// 如果缓存没有，尝试同步一次
+		if err := process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir); err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		data, updatedAt, _ = process.GetCachedData("plugins")
+	}
+
+	s.Success(c, gin.H{
+		"data":       data,
+		"updated_at": updatedAt,
+	})
+}
+
+func (s *Server) reloadPlugins(c *gin.Context) {
+	err := process.ReloadOpenClawPlugins()
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	// 重新加载后触发一次同步
+	_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
+	s.Success(c, gin.H{"status": "success"})
+}
+
+func (s *Server) enablePlugin(c *gin.Context) {
+	var req struct {
+		ID string `json:"id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "plugin id is required")
+		return
+	}
+
+	if err := process.EnableOpenClawPlugin(req.ID); err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
+	s.Success(c, gin.H{"status": "success"})
+}
+
+func (s *Server) disablePlugin(c *gin.Context) {
+	var req struct {
+		ID string `json:"id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "plugin id is required")
+		return
+	}
+
+	if err := process.DisableOpenClawPlugin(req.ID); err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
+	s.Success(c, gin.H{"status": "success"})
+}
+
+func (s *Server) uninstallPlugin(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		s.Error(c, http.StatusBadRequest, "plugin id is required")
+		return
+	}
+
+	if err := process.UninstallOpenClawPlugin(id); err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
+	s.Success(c, gin.H{"status": "success"})
+}
+
+func (s *Server) updatePlugins(c *gin.Context) {
+	utils.RecordSystemEvent("CONTROL", "用户手动请求【更新插件】")
+	s.runAsyncCommand(c, "更新插件", "plugins", "update")
 }
 
 func (s *Server) getOpenClawExperts(c *gin.Context) {

@@ -20,6 +20,7 @@ import OnlineChat from './views/OnlineChat';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import SkillManagement from './views/SkillManagement';
 import ExpertMarket from './views/ExpertMarket';
+import PluginManagement from './views/PluginManagement';
 import TuiView from './views/TuiView';
 import ShellView from './views/ShellView';
 import CrayfishLoading from './components/common/CrayfishLoading';
@@ -73,6 +74,9 @@ const Dashboard = () => {
   const [systemEvents, setSystemEvents] = useState<any[]>([]);
   const [topBots, setTopBots] = useState<any[]>([]);
   const [loadingTopBots, setLoadingTopBots] = useState(false);
+  const [plugins, setPlugins] = useState<any[]>([]);
+  const [loadingPlugins, setLoadingPlugins] = useState(false);
+  const [pluginsUpdatedAt, setPluginsUpdatedAt] = useState('');
   const [ocInstalled, setOcInstalled] = useState<boolean | null>(null);
   const [dashboardProcessing, setDashboardProcessing] = useState(false);
   const [dashboardAbortCtrl, setDashboardAbortCtrl] = useState<AbortController | null>(null);
@@ -120,6 +124,7 @@ const Dashboard = () => {
       }
     }
     if (activeTab === 'devices') fetchDevices();
+    if (activeTab === 'skills' || activeTab === 'plugins') fetchPlugins();
     if (activeTab === 'tools') fetchSelfHealing();
   }, [activeTab]);
 
@@ -256,6 +261,20 @@ const Dashboard = () => {
     } catch (err) {
     } finally {
       setLoadingTopBots(false);
+    }
+  };
+
+  const fetchPlugins = async () => {
+    setLoadingPlugins(true);
+    try {
+      const res = await api.get('/v1/openclaw/plugins');
+      const data = res.data.data || res.data || [];
+      setPlugins(data);
+      // 记录同步时间
+      setPluginsUpdatedAt(new Date().toLocaleString());
+    } catch (err) {
+    } finally {
+      setLoadingPlugins(false);
     }
   };
 
@@ -548,6 +567,7 @@ const Dashboard = () => {
         { key: 'tui', label: t('common.tuiChat'), icon: <Terminal size={14} /> },
         { key: 'bots-models', label: t('common.bots'), icon: <Boxes size={14} /> },
         { key: 'skills', label: t('common.skills'), icon: <Puzzle size={14} /> },
+        { key: 'plugins', label: t('plugins.title'), icon: <Zap size={14} /> },
         { key: 'experts', label: t('common.expertMarket'), icon: <Rocket size={14} /> },
       ]
     },
@@ -636,6 +656,13 @@ const Dashboard = () => {
       'tui': <TuiView />,
       'shell': <ShellView />,
       'skills': <SkillManagement isMobile={isMobile} />,
+      'plugins': <PluginManagement 
+        isMobile={isMobile} 
+        plugins={plugins} 
+        loading={loadingPlugins} 
+        onRefresh={fetchPlugins} 
+        updatedAt={pluginsUpdatedAt} 
+      />,
       'experts': <ExpertMarket isMobile={isMobile} onShowGlobalLoading={onShowGlobalLoading} onNavigate={setActiveTab} />
     };
 

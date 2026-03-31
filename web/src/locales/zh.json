@@ -1,5 +1,6 @@
 {
   "common": {
+    "all": "全部",
     "dashboard": "运行状态",
     "logs": "实时日志",
     "tools": "自愈管理",
@@ -498,5 +499,35 @@
       "step4": "回到 OpenClaw Buddy，进入“运维终端”或**直接粘贴给 AI 助手**执行安装",
       "step5": "安装成功后，返回此处点击“刷新”即可生效"
     }
+  },
+  "plugins": {
+    "title": "插件管理",
+    "fullTitle": "插件列表与状态",
+    "description": "插件是系统底层功能的扩展（如微信适配、API 提供商等）。您可以在此处监控插件的加载状态与启用情况。",
+    "pluginName": "插件名称",
+    "version": "版本",
+    "status": "加载状态",
+    "origin": "来源",
+    "loaded": "已加载",
+    "disabled": "未启用",
+    "error": "加载失败",
+    "syncSuccess": "插件列表已同步",
+    "fetchFailed": "获取插件列表失败",
+    "noPlugins": "暂无插件数据",
+    "count": "共 {{count}} 个插件",
+    "search": "搜索插件名称或 ID...",
+    "syncedAt": "同步于",
+    "functionDesc": "功能描述",
+    "enable": "启用",
+    "disable": "禁用",
+    "uninstall": "卸载",
+    "update": "检查更新",
+    "uninstallConfirmTitle": "确认卸载插件",
+    "uninstallConfirmContent": "您确定要卸载插件 {{name}} 吗？此操作不可逆。",
+    "uninstallSuccess": "插件卸载成功",
+    "enableSuccess": "插件已启用",
+    "disableSuccess": "插件已禁用",
+    "updateStarted": "已开始后台更新插件，请稍后查看任务状态",
+    "reload": "重载引擎"
   }
 }
