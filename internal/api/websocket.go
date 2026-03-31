@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -20,12 +19,12 @@ import (
 
 var (
 	clients   = make(map[*websocket.Conn]bool)
-	clientsMu sync.Mutex
+	clientsMu sync.RWMutex // 使用读写锁提升性能
 )
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return true // Simplified for this project
+		return true
 	},
 }
 
@@ -37,35 +36,45 @@ func (s *Server) StartWebSocketBroadcaster() {
 			"data": task,
 		})
 
-		clientsMu.Lock()
+		clientsMu.RLock()
+		// 复制一份活跃连接，避免在发送时长期占用锁
+		activeClients := make([]*websocket.Conn, 0, len(clients))
 		for conn := range clients {
+			activeClients = append(activeClients, conn)
+		}
+		clientsMu.RUnlock()
+
+		for _, conn := range activeClients {
+			// 设置写入超时，防止慢客户端阻塞整个广播
+			_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 			err := conn.WriteMessage(websocket.TextMessage, msg)
 			if err != nil {
-				log.Printf("⚠️ [WS] Failed to send task update to client: %v", err)
+				log.Printf("⚠️ [WS] Failed to send task update, connection might be closed.")
+				// 这里不手动 delete，由 streamLogs 的 defer 负责清理
 			}
 		}
-		clientsMu.Unlock()
 	}
 }
 
 func (s *Server) streamLogs(c *gin.Context) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
+		log.Printf("❌ [WS] Upgrade failed: %v", err)
 		return
 	}
-	defer conn.Close()
-
+	
 	// 注册客户端
 	clientsMu.Lock()
 	clients[conn] = true
 	clientsMu.Unlock()
 
-	// 注销客户端
+	// 注销并彻底关闭
 	defer func() {
 		clientsMu.Lock()
 		delete(clients, conn)
 		clientsMu.Unlock()
+		conn.Close()
+		log.Printf("🔌 [WS] Client disconnected.")
 	}()
 
 	source := c.DefaultQuery("source", "buddy")
@@ -77,7 +86,7 @@ func (s *Server) streamLogs(c *gin.Context) {
 		})
 	}
 
-	// 监听客户端主动关闭连接
+	// 监听断开
 	go func() {
 		for {
 			if _, _, err := conn.ReadMessage(); err != nil {
@@ -88,24 +97,20 @@ func (s *Server) streamLogs(c *gin.Context) {
 	}()
 
 	if source == "gateway" {
-		// --- 模式 A: 实时获取小龙虾网关日志 ---
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		log.Printf("📡 [WS] Starting gateway log streaming (openclaw logs --follow)...")
+		log.Printf("📡 [WS] Starting gateway log streaming...")
 		cmd := exec.CommandContext(ctx, "openclaw", "logs", "--follow")
-		
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
-			log.Printf("❌ Failed to get stdout pipe: %v", err)
 			return
 		}
 		cmd.Stderr = cmd.Stdout
 
 		if err := cmd.Start(); err != nil {
-			log.Printf("❌ Failed to start openclaw logs: %v", err)
 			return
 		}
 
@@ -121,28 +126,15 @@ func (s *Server) streamLogs(c *gin.Context) {
 		}()
 
 		<-stopChan
-		
 		pgid, err := syscall.Getpgid(cmd.Process.Pid)
 		if err == nil {
 			syscall.Kill(-pgid, syscall.SIGKILL)
 		}
-		
 		_ = cmd.Wait()
-		
-		log.Println("👋 [WS] Stopped gateway log streaming.")
 		return
 	}
 
-	// --- 模式 B: 实时获取 Buddy 自身日志 ---
-	// [优化] 连接建立时，先行推送最后 50 行日志，提供即时上下文
-	preLogCmd := exec.Command("tail", "-n", "50", s.cfg.LogFile)
-	if preLogOut, err := preLogCmd.Output(); err == nil {
-		scanner := bufio.NewScanner(strings.NewReader(string(preLogOut)))
-		for scanner.Scan() {
-			_ = conn.WriteMessage(websocket.TextMessage, []byte(scanner.Text()))
-		}
-	}
-
+	// 默认 Buddy 日志
 	t, err := tail.TailFile(s.cfg.LogFile, tail.Config{
 		Follow:    true,
 		ReOpen:    true,
@@ -151,7 +143,6 @@ func (s *Server) streamLogs(c *gin.Context) {
 		Location:  &tail.SeekInfo{Offset: 0, Whence: 2},
 	})
 	if err != nil {
-		log.Printf("TailFile failed: %v", err)
 		return
 	}
 	defer t.Stop()
@@ -168,6 +159,7 @@ func (s *Server) streamLogs(c *gin.Context) {
 		case <-stopChan:
 			return
 		case <-time.After(30 * time.Second):
+			// 心跳保持
 			if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(time.Second)); err != nil {
 				return
 			}

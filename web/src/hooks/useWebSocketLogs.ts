@@ -1,7 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export const useWebSocketLogs = (token: string | null, source: string = 'buddy', onTaskUpdate?: (task: any) => void) => {
   const [wsLogs, setWsLogs] = useState<string[]>([]);
+  const onTaskUpdateRef = useRef(onTaskUpdate);
+
+  // 始终保持 ref 是最新的，但不触发 useEffect 重连
+  useEffect(() => {
+    onTaskUpdateRef.current = onTaskUpdate;
+  }, [onTaskUpdate]);
 
   useEffect(() => {
     if (!token) return;
@@ -20,12 +26,12 @@ export const useWebSocketLogs = (token: string | null, source: string = 'buddy',
     socket.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
-        if (msg.type === 'TASK_UPDATE' && onTaskUpdate) {
-          onTaskUpdate(msg.data);
-          return; // 任务更新不计入普通日志流
+        if (msg.type === 'TASK_UPDATE' && onTaskUpdateRef.current) {
+          onTaskUpdateRef.current(msg.data);
+          return;
         }
       } catch (e) {
-        // 非 JSON 消息，按普通日志处理
+        // 非 JSON 消息
       }
       setWsLogs((prev) => [...prev.slice(-200), event.data]);
     };
@@ -37,7 +43,7 @@ export const useWebSocketLogs = (token: string | null, source: string = 'buddy',
     return () => {
       socket.close();
     };
-  }, [token, source, onTaskUpdate]);
+  }, [token, source]); // 移除 onTaskUpdate 依赖
 
   return { wsLogs, setWsLogs };
 };

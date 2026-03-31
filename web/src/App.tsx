@@ -358,8 +358,9 @@ const Dashboard = () => {
 
     try {
       await api.post(`/v1/gateway/${action}`);
-      // 成功触发任务后，提示用户
+      // 成功触发任务后，提示用户并滚动到顶部看状态
       message.info(t('chat.asyncCommandTip', { title }));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       message.error(err.response?.data?.error || t('common.commandFailed'));
     }
@@ -368,8 +369,9 @@ const Dashboard = () => {
   const restartGateway = async () => {
     try {
       await api.post('/v1/gateway/restart');
-      // 成功触发任务后，提示用户
+      // 成功触发任务后，提示用户并滚动到顶部看状态
       message.info(t('chat.asyncCommandTip', { title: t('common.restart') }));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       message.error(err.response?.data?.error || t('common.restartFailed'));
       throw err;
@@ -380,8 +382,9 @@ const Dashboard = () => {
     setLoadingWeixin(true);
     try {
       await api.post('/v1/wechat/install');
-      // 成功触发任务后，提示已开始安装
+      // 成功触发任务后，提示已开始安装并滚动到顶部看状态
       message.info(t('chat.asyncCommandTip', { title: t('channels.weixinPlugin') }));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       message.error(err.response?.data?.error || t('common.error'));
     } finally {
@@ -573,18 +576,20 @@ const Dashboard = () => {
   const renderContent = () => {
     const viewMap: Record<string, React.ReactNode> = {
       'dashboard': (
-        <DashboardOverview 
-          loading={loadingTopBots}
-          status={status} 
-          history={history} 
+        <DashboardOverview
+          status={status}
+          history={history}
+ 
           wsLogs={wsLogs} 
           isRunning={isRunning} 
           onControl={handleControl} 
           onNavigate={setActiveTab}
           systemEvents={systemEvents}
           topBots={topBots}
+          loading={loadingTopBots}
           ocInstalled={ocInstalled}
           activeTasks={activeTasks}
+          isTransitioning={isTransitioning}
         />
       ),
       'bots-models': (

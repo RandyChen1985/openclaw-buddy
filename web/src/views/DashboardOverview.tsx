@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Row, Col, Card, Tag, Progress, Button, Timeline, Badge, Spin } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Row, Col, Card, Tag, Progress, Button, Timeline, Badge, Spin, Empty } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Server, Activity, Play, Square, RefreshCw, Smartphone, Terminal, History, Trophy, AlertTriangle, Zap, Download, Monitor, AlertCircle } from 'lucide-react';
+import { Server, Activity, Play, Square, RefreshCw, Trophy, Zap, Monitor } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
 import dayjs from 'dayjs';
 
@@ -15,8 +15,9 @@ interface DashboardOverviewProps {
   systemEvents?: any[];
   topBots?: any[];
   ocInstalled: boolean | null;
-  loading?: boolean;
   activeTasks?: any[];
+  isTransitioning?: boolean; // 新增：正在执行过渡动作
+  loading?: boolean;
 }
 
 interface SystemInfo {
@@ -33,17 +34,16 @@ interface OcStatus {
 }
 
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({ 
-  status, history, wsLogs, isRunning, onControl, onNavigate,
-  systemEvents = [], topBots = [], ocInstalled, activeTasks = []
+  status, history, isRunning, onControl, onNavigate,
+  systemEvents = [], topBots = [], ocInstalled, activeTasks = [], isTransitioning = false, loading = false
 }) => {
   const { t } = useTranslation();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [ocStatus, setOcStatus] = useState<OcStatus | null>(null);
-  const logsEndRef = useRef<HTMLDivElement>(null);
 
-  // 检查是否有正在运行的网关任务
-  const isGatewayProcessing = activeTasks.some(t => t.module === 'gateway' && t.status === 'Running');
+  // 综合判断是否处于处理中：1. 异步任务在跑 2. 前端正在等待请求响应
+  const isGatewayProcessing = isTransitioning || activeTasks.some(t => t.module === 'gateway' && t.status === 'Running');
 
   const fetchData = async () => {
     try {
@@ -67,8 +67,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-
 
   const renderChart = (data: any[], dataKey: string, color: string, label: string, unit: string) => (
     <div style={{ height: 120 }}>
@@ -203,15 +201,24 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               style={{ borderRadius: 12, border: '1px solid #e2e8f0', flex: 1 }}
               title={<span style={{ fontSize: 13, fontWeight: 600 }}><Trophy size={14} color="#f59e0b" /> {t('dashboard.topBots')}</span>}
             >
-              {topBots.map((bot, idx) => (
-                <div key={bot.id} style={{ marginBottom: 16 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{bot.emoji} {bot.name}</span>
-                    <Tag color="blue" style={{ fontSize: 10 }}>{bot.sessions} {t('dashboard.activeSessions')}</Tag>
-                  </div>
-                  <Progress percent={Math.min(100, bot.sessions * 10)} showInfo={false} strokeColor={idx === 0 ? '#f59e0b' : '#3b82f6'} strokeWidth={6} />
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
+                  <Spin size="small" />
+                  <div style={{ marginTop: 12, fontSize: 12 }}>{t('dashboard.analyzing')}</div>
                 </div>
-              ))}
+              ) : topBots.length > 0 ? (
+                topBots.map((bot, idx) => (
+                  <div key={bot.id} style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{bot.emoji} {bot.name}</span>
+                      <Tag color="blue" style={{ fontSize: 10 }}>{bot.sessions} {t('dashboard.activeSessions')}</Tag>
+                    </div>
+                    <Progress percent={Math.min(100, bot.sessions * 10)} showInfo={false} strokeColor={idx === 0 ? '#f59e0b' : '#3b82f6'} strokeWidth={6} />
+                  </div>
+                ))
+              ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('dashboard.noActiveBots')} />
+              )}
             </Card>
           </div>
         </Col>
@@ -236,10 +243,10 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               </div>
             </div>
 
-            {/* 巡检事件轨迹 (Terminal Style Timeline) */}
+            {/* 巡检事件轨迹 */}
             <div style={{ marginTop: 24, borderTop: '1px solid #f1f5f9', paddingTop: 24 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 20 }}>
-                <History size={15} color="#64748b" /> {t('dashboard.timeline')}
+                <Zap size={15} color="#64748b" /> {t('dashboard.timeline')}
               </div>
               <div style={{ 
                 height: 260, 
@@ -252,32 +259,12 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <Timeline
                   items={systemEvents.map(ev => ({
                     color: ev.event_type === 'HEAL' ? '#f43f5e' : ev.event_type === 'UPDATE' ? '#3b82f6' : ev.event_type === 'CONTROL' ? '#10b981' : '#64748b',
-                    children: (
-                      <div style={{ 
-                        fontSize: 11, 
-                        display: 'flex', 
-                        justifyContent: 'space-between', 
-                        alignItems: 'center', 
-                        gap: 12, 
-                        color: '#64748b',
-                        fontFamily: '"JetBrains Mono", monospace'
-                      }}>
-                        <span style={{ color: ev.event_type === 'HEAL' ? '#e11d48' : '#334155', display: 'flex', alignItems: 'center', gap: 6, flex: 1, fontWeight: 500 }}>
-                          {ev.event_type === 'HEAL' && <AlertTriangle size={11} />}
-                          {ev.event_type === 'UPDATE' && <Download size={11} />}
-                          {ev.event_type === 'CONTROL' && <Zap size={11} />}
-                          {ev.message}
-                        </span>
-                        <span style={{ opacity: 0.5, flexShrink: 0 }}>
-                          {dayjs(ev.timestamp).format('HH:mm:ss')}
-                        </span>
-                      </div>
-                    ),
+                    children: ev.message,
                   }))}
                   style={{ paddingTop: 8 }}
                 />
                 {systemEvents.length === 0 && (
-                  <div style={{ textAlign: 'center', color: '#475569', fontSize: 12, padding: '40px 0', fontFamily: 'monospace' }}>
+                  <div style={{ textAlign: 'center', color: '#475569', fontSize: 12, padding: '40px 0' }}>
                     {t('dashboard.noEvents')}
                   </div>
                 )}
@@ -290,30 +277,18 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       {/* 快捷操作 */}
       <Card
         style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>{t('dashboard.quickActions')}</span>
-            {ocInstalled === false && (
-              <Tag color="error" icon={<AlertCircle size={12} />} style={{ margin: 0, borderRadius: 4 }}>
-                核心组件未就绪，控制已锁死
-              </Tag>
-            )}
-          </div>
-        }
+        title={<span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>{t('dashboard.quickActions')}</span>}
         styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 52 }, body: { padding: '16px 24px' } }}
       >
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, width: '100%', opacity: (ocInstalled === false || ocInstalled === null) ? 0.6 : 1 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
           <Button
             type="primary"
             size="large"
             icon={<Play size={14} />}
             onClick={() => onControl('start')}
-            disabled={isRunning || ocInstalled === false || ocInstalled === null || (isGatewayProcessing && !isRunning)}
+            disabled={isRunning || ocInstalled === false || isGatewayProcessing}
             loading={isGatewayProcessing && !isRunning}
-            style={{ 
-              fontWeight: 600, flex: isMobile ? '1 1 calc(50% - 6px)' : 'none', minWidth: 140, borderRadius: 10,
-              background: (isRunning || ocInstalled === false || ocInstalled === null) ? '#cbd5e1' : '#22c55e', borderColor: (isRunning || ocInstalled === false || ocInstalled === null) ? '#cbd5e1' : '#22c55e'
-            }}
+            style={{ borderRadius: 10, background: (isRunning || isGatewayProcessing) ? '#cbd5e1' : '#22c55e', borderColor: (isRunning || isGatewayProcessing) ? '#cbd5e1' : '#22c55e' }}
           >
             {t('dashboard.startGateway')}
           </Button>
@@ -323,9 +298,9 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<Square size={14} />}
             onClick={() => onControl('stop')}
-            disabled={!isRunning || ocInstalled === false || ocInstalled === null || (isGatewayProcessing && isRunning)}
+            disabled={!isRunning || ocInstalled === false || isGatewayProcessing}
             loading={isGatewayProcessing && isRunning}
-            style={{ fontWeight: 600, flex: isMobile ? '1 1 calc(50% - 6px)' : 'none', minWidth: 140, borderRadius: 10 }}
+            style={{ borderRadius: 10 }}
           >
             {t('dashboard.stopGateway')}
           </Button>
@@ -333,51 +308,21 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<RefreshCw size={14} />}
             onClick={() => onControl('restart')}
-            disabled={ocInstalled === false || ocInstalled === null || isGatewayProcessing}
+            disabled={ocInstalled === false || isGatewayProcessing}
             loading={isGatewayProcessing}
-            style={{ fontWeight: 600, flex: isMobile ? '1 1 100%' : 'none', minWidth: 140, borderRadius: 10, border: '1.5px solid #e2e8f0' }}
+            style={{ borderRadius: 10, border: '1.5px solid #e2e8f0' }}
           >
             {t('dashboard.asyncRestart')}
           </Button>
           <div style={{ flex: 1 }} />
           <Button
             size="large"
-            icon={<Smartphone size={14} />}
+            icon={<Zap size={14} />}
             onClick={() => onNavigate?.('components')}
-            disabled={ocInstalled === null}
-            style={{ fontWeight: 600, flex: isMobile ? '1 1 100%' : 'none', minWidth: 140, borderRadius: 10, background: ocInstalled === null ? '#f1f5f9' : '#f8fafc', border: '1.5px solid #e2e8f0' }}
+            style={{ borderRadius: 10, background: '#f8fafc', border: '1.5px solid #e2e8f0' }}
           >
             {t('dashboard.wechatChannel')}
           </Button>
-        </div>
-      </Card>
-
-      {/* 实时监控日志 */}
-      <Card
-        title={<span style={{ fontSize: 13, fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}><Terminal size={15} color="#64748b" /> {t('dashboard.realtimeLogs')}</span>}
-        styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 52 }, body: { padding: 0, overflow: 'hidden' } }}
-        style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
-      >
-        <div style={{ height: 300, background: '#0d1117', padding: '16px 20px', fontFamily: '"JetBrains Mono", "Fira Code", monospace', fontSize: 12, color: '#c9d1d9', overflowY: 'auto', lineHeight: 1.8 }}>
-          {wsLogs.length === 0 ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#484f58', height: '100%', justifyContent: 'center' }}>
-              <Spin size="small" /> {t('dashboard.listeningLogs')}
-            </div>
-          ) : wsLogs.map((log, i) => (
-            <div key={i} style={{ display: 'flex', gap: 16 }}>
-              <span style={{ color: '#30363d', width: 32, textAlign: 'right', flexShrink: 0, userSelect: 'none', fontSize: 11 }}>
-                {(i + 1).toString().padStart(3, '0')}
-              </span>
-              <span style={{ 
-                whiteSpace: 'pre-wrap', 
-                wordBreak: 'break-all',
-                color: log.toLowerCase().includes('error') ? '#f87171' : log.toLowerCase().includes('warn') ? '#fbbf24' : '#c9d1d9'
-              }}>
-                {log}
-              </span>
-            </div>
-          ))}
-          <div ref={logsEndRef} style={{ height: 10 }} />
         </div>
       </Card>
     </div>

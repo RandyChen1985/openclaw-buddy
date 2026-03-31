@@ -106,7 +106,7 @@ REPORT_DIR="./reports"
 
 # [监控策略]
 # 监控轮询间隔 (秒)
-CHECK_INTERVAL_SECONDS=120
+CHECK_INTERVAL_SECONDS=60
 # 网关健康检查端口
 HEALTH_PORT=18789
 # 最大容错重试次数
