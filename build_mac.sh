@@ -10,25 +10,37 @@ RELEASE_ROOT="release"
 PKG_PREFIX="openclaw-buddy-mac"
 BASE_VERSION="1.0.0"
 
-# 自动检测并递增版本号
-LATEST_VERSION=$(ls "${RELEASE_ROOT}"/"${PKG_PREFIX}"-*.tar.gz 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -n1)
-
-if [ -z "$LATEST_VERSION" ]; then
-    VERSION="$BASE_VERSION"
+# 1. 识别版本逻辑 (优先使用参数)
+if [ -n "$1" ]; then
+    VERSION="$1"
+    echo "📌 使用手动指定版本: ${VERSION}"
 else
-    major=$(echo "$LATEST_VERSION" | cut -d. -f1)
-    minor=$(echo "$LATEST_VERSION" | cut -d. -f2)
-    patch=$(echo "$LATEST_VERSION" | cut -d. -f3)
-    VERSION="$major.$minor.$((patch + 1))"
+    # 自动检测并递增版本号
+    LATEST_VERSION=$(ls "${RELEASE_ROOT}"/"${PKG_PREFIX}"-*.tar.gz 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -n1)
+    if [ -z "$LATEST_VERSION" ]; then
+        VERSION="$BASE_VERSION"
+    else
+        major=$(echo "$LATEST_VERSION" | cut -d. -f1)
+        minor=$(echo "$LATEST_VERSION" | cut -d. -f2)
+        patch=$(echo "$LATEST_VERSION" | cut -d. -f3)
+        VERSION="$major.$minor.$((patch + 1))"
+    fi
+    echo "🤖 自动计算下一个版本: ${VERSION}"
 fi
-
-# 同步版本号到前端与根目录 VERSION 文件 (自动化同步)
-echo "export const APP_VERSION = '${VERSION}';" > web/src/version.ts
-echo "${VERSION}" > VERSION
-echo "✅ 版本号已同步至 web/src/version.ts 和 VERSION 文件"
 
 PKG_NAME="${PKG_PREFIX}-${VERSION}"
 PKG_DIR="${RELEASE_ROOT}/${PKG_NAME}"
+TAR_FILE="${PKG_NAME}.tar.gz"
+
+# 2. 强力清理旧产物
+echo "🧹 正在清理旧版产物 [${VERSION}]..."
+rm -rf "${PKG_DIR}"
+rm -f "${RELEASE_ROOT}/${TAR_FILE}"
+
+# 同步版本号到前端与根目录 VERSION 文件
+echo "export const APP_VERSION = '${VERSION}';" > web/src/version.ts
+echo "${VERSION}" > VERSION
+echo "✅ 版本号已同步至 web/src/version.ts 和 VERSION 文件"
 
 echo "🚀 开始 macOS 版本打包 (版本: ${VERSION})..."
 
