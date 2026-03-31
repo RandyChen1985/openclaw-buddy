@@ -119,7 +119,15 @@ export const useTaskCenter = () => {
   }, [updateTask]);
 
   useEffect(() => {
-    fetchActiveTasks(false, true); // 首次加载静默同步，不弹窗
+    fetchActiveTasks(false, true); // 首次加载同步，不弹窗
+    
+    // --- 逻辑：自动巡检兜底 (Auto-Sync Polling) ---
+    // 每 8 秒静默检查一次后端任务状态，防止 WS 丢包导致的 UI 卡死
+    const poller = setInterval(() => {
+      fetchActiveTasks(true, false); // 静默加载，但允许状态变更触发 UI 成功的通知
+    }, 8000);
+
+    return () => clearInterval(poller);
   }, [fetchActiveTasks]);
 
   return { tasks, loading, fetchActiveTasks, updateTask };

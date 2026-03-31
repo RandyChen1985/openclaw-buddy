@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 	"openclaw-buddy/internal/config"
+	"openclaw-buddy/internal/scheduler"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -36,6 +37,8 @@ func NewServer(cfg *config.Config) *Server {
 	}
 
 	s.setupRoutes()
+	// 显式拉起全局任务调度器，确保串行队列就绪
+	_ = scheduler.GetScheduler()
 	return s
 }
 

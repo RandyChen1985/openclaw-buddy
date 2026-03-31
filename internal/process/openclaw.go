@@ -390,57 +390,64 @@ func SetOpenClawBotModel(configDir, botID, modelID string) error {
 // UpdateOpenClawBotConfig 统一更新机器人的基本配置 (名称、模型等)
 // 采用一次性读写模式，防止并发修改 openclaw.json 产生冲突
 func UpdateOpenClawBotConfig(configDir, botID string, name, model *string) error {
-	configPath := filepath.Join(configDir, "openclaw.json")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return fmt.Errorf("failed to read openclaw.json: %v", err)
+	// 1. 如果传入了名称，调用官方命令执行 Identity 设置 (不要手动改文件中的 name)
+	if name != nil {
+		if err := SetOpenClawBotIdentity(botID, *name); err != nil {
+			return fmt.Errorf("failed to set identity via CLI: %v", err)
+		}
 	}
 
-	var fullCfg map[string]interface{}
-	if err := json.Unmarshal(data, &fullCfg); err != nil {
-		return fmt.Errorf("failed to unmarshal config: %v", err)
-	}
+	// 2. 只有在修改模型时，才执行磁盘 JSON 物理重写逻辑
+	if model != nil {
+		configPath := filepath.Join(configDir, "openclaw.json")
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to read openclaw.json: %v", err)
+		}
 
-	agents, ok := fullCfg["agents"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("invalid config: agents key not found")
-	}
+		var fullCfg map[string]interface{}
+		if err := json.Unmarshal(data, &fullCfg); err != nil {
+			return fmt.Errorf("failed to unmarshal config: %v", err)
+		}
 
-	list, ok := agents["list"].([]interface{})
-	if !ok {
-		return fmt.Errorf("invalid config: agents.list not found or not an array")
-	}
-
-	found := false
-	for i := range list {
-		bot, ok := list[i].(map[string]interface{})
+		agents, ok := fullCfg["agents"].(map[string]interface{})
 		if !ok {
-			continue
+			return fmt.Errorf("invalid config: agents key not found")
 		}
-		if id, ok := bot["id"].(string); ok && id == botID {
-			// 如果传入了名称，则执行赋值
-			if name != nil {
-				bot["name"] = *name
+
+		list, ok := agents["list"].([]interface{})
+		if !ok {
+			return fmt.Errorf("invalid config: agents.list not found or not an array")
+		}
+
+		found := false
+		for i := range list {
+			bot, ok := list[i].(map[string]interface{})
+			if !ok {
+				continue
 			}
-			// 如果传入了模型，则执行赋值
-			if model != nil {
+			if id, ok := bot["id"].(string); ok && id == botID {
+				// 修改模型
 				bot["model"] = *model
+				found = true
+				break
 			}
-			found = true
-			break
+		}
+
+		if !found {
+			return fmt.Errorf("bot with ID '%s' not found", botID)
+		}
+
+		newData, err := json.MarshalIndent(fullCfg, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal config: %v", err)
+		}
+		if err := os.WriteFile(configPath, newData, 0644); err != nil {
+			return fmt.Errorf("failed to write openclaw.json: %v", err)
 		}
 	}
 
-	if !found {
-		return fmt.Errorf("bot with ID '%s' not found", botID)
-	}
-
-	newData, err := json.MarshalIndent(fullCfg, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %v", err)
-	}
-
-	return os.WriteFile(configPath, newData, 0644)
+	return nil
 }
 
 func GetOpenClawGatewayConfig(configDir string) (*OpenClawGatewayConfig, error) {

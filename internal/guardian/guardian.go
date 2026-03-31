@@ -11,6 +11,7 @@ import (
 	"openclaw-buddy/internal/analyzer"
 	"openclaw-buddy/internal/config"
 	"openclaw-buddy/internal/process"
+	"openclaw-buddy/internal/scheduler"
 	"openclaw-buddy/internal/utils"
 	"crypto/md5"
 	"encoding/hex"
@@ -159,9 +160,10 @@ func (g *Guardian) check() {
 	
 	// Only trigger healing if switch is enabled
 	if isSelfHealingEnabled {
-		// [加固] 检查是否正在执行手动网关任务，防止自愈干扰用户操作
-		if process.IsModuleLocked("gateway") {
-			log.Printf("ℹ️ [自愈服务] 检测到网关模块已被用户锁定（可能正在手动重启），本次自愈流程将主动跳过以防冲突。")
+		// [加固] 优先级检测：如果用户任务队列中有 gateway 相关的任务 (排队中或执行中)，自愈彻底跳过
+		if scheduler.GetScheduler().IsModuleBusy("gateway") {
+			log.Printf("⚠️  [自愈服务] 检测到用户队列中有活跃或排队中的网关控制任务，系统将彻底跳过自愈，由用户手动完成恢复。")
+			utils.RecordSystemEvent("WARN", "检测到用户网关操作排队中，自愈逻辑已主动跳过")
 			return
 		}
 

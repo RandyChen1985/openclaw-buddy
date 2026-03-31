@@ -20,6 +20,7 @@ import (
 	"openclaw-buddy/internal/config"
 	"openclaw-buddy/internal/process"
 	"openclaw-buddy/internal/utils"
+	"openclaw-buddy/internal/scheduler"
 
 	"github.com/gin-gonic/gin"
 )
@@ -193,44 +194,27 @@ func (s *Server) getWeChatQRCode(c *gin.Context) {
 }
 
 func (s *Server) runAsyncTask(c *gin.Context, task *process.Task, run func() (string, error)) {
-	if !process.LockModule(task.Module) {
-		s.Error(c, http.StatusConflict, fmt.Sprintf("模块 %s 当前有正在运行的任务", task.Module))
-		return
-	}
+	// 默认使用普通优先级，除非明确指定（如网关操作）
+	s.runAsyncTaskWithPriority(c, task, scheduler.PriorityNormal, run)
+}
 
+func (s *Server) runAsyncTaskWithPriority(c *gin.Context, task *process.Task, priority scheduler.Priority, run func() (string, error)) {
+	// 在串行模式下，RegisterTask 仅负责登记任务开始
 	if err := process.RegisterTask(task); err != nil {
-		process.UnlockModule(task.Module)
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	go func() {
-		defer process.UnlockModule(task.Module)
-		
-		done := make(chan struct{})
-		var result string
-		var err error
-		
-		go func() {
-			result, err = run()
-			close(done)
-		}()
-		
-		select {
-		case <-done:
-			if err != nil {
-				process.UpdateTaskStatus(task.ID, process.TaskStatusFailed, "", err.Error())
-			} else {
-				process.UpdateTaskStatus(task.ID, process.TaskStatusCompleted, result, "")
-			}
-		case <-time.After(3 * time.Minute):
-			process.UpdateTaskStatus(task.ID, process.TaskStatusTimeout, "", "任务执行超时 (3分钟)")
-		}
-	}()
+	// 提交到调度器排队执行
+	scheduler.GetScheduler().Submit(scheduler.TaskRequest{
+		Task:     task,
+		Execute:  run,
+		Priority: priority,
+	})
 
 	c.JSON(http.StatusAccepted, APIResponse{
 		Code:    202,
-		Message: "Task accepted",
+		Message: "Task accepted and queued",
 		Data: gin.H{
 			"taskID": task.ID,
 		},
@@ -246,7 +230,7 @@ func (s *Server) startGateway(c *gin.Context) {
 		Module: "gateway",
 		Action: "start",
 	}
-	s.runAsyncTask(c, task, func() (string, error) {
+	s.runAsyncTaskWithPriority(c, task, scheduler.PriorityHigh, func() (string, error) {
 		res, err := process.RunCommandWithTimeout(60*time.Second, "openclaw", "gateway", "start")
 		if err != nil {
 			return "", err
@@ -265,7 +249,7 @@ func (s *Server) stopGateway(c *gin.Context) {
 		Action:  "stop",
 		Command: "openclaw gateway stop",
 	}
-	s.runAsyncTask(c, task, func() (string, error) {
+	s.runAsyncTaskWithPriority(c, task, scheduler.PriorityHigh, func() (string, error) {
 		err := process.StopGateway(s.cfg.HealthPort)
 		if err != nil {
 			return "", err
@@ -284,7 +268,7 @@ func (s *Server) restartGateway(c *gin.Context) {
 		Action:  "restart",
 		Command: "openclaw gateway restart",
 	}
-	s.runAsyncTask(c, task, func() (string, error) {
+	s.runAsyncTaskWithPriority(c, task, scheduler.PriorityHigh, func() (string, error) {
 		err := process.RestartGateway(s.cfg.HealthPort)
 		if err != nil {
 			return "", err
