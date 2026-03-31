@@ -254,6 +254,135 @@ func SetOpenClawDefaultModel(modelID string) error {
 	return nil
 }
 
+func GetOpenClawBotFileContent(configDir, id, fileType, workspace string) (string, error) {
+	// 如果 workspace 已经传入，直接使用，避免执行耗时的 openclaw agents list
+	botWorkspace := workspace
+	if botWorkspace == "" {
+		// 降级逻辑：如果 workspace 没传，则尝试全量获取并寻找 (旧逻辑兼容)
+		res, err := GetOpenClawBotsModels(configDir)
+		if err != nil {
+			return "", err
+		}
+
+		for _, bot := range res.Bots {
+			if bot.ID == id {
+				botWorkspace = bot.Workspace
+				break
+			}
+		}
+	}
+
+	if botWorkspace == "" {
+		return "", fmt.Errorf("bot %s not found and no workspace provided", id)
+	}
+
+	if strings.HasPrefix(botWorkspace, "~") {
+		home, _ := os.UserHomeDir()
+		if botWorkspace == "~" {
+			botWorkspace = home
+		} else if strings.HasPrefix(botWorkspace, "~/") {
+			botWorkspace = filepath.Join(home, botWorkspace[2:])
+		}
+	}
+
+	fileName := ""
+	switch strings.ToLower(fileType) {
+	case "soul":
+		fileName = "SOUL.md"
+	case "identity":
+		fileName = "IDENTITY.md"
+	case "tools":
+		fileName = "TOOLS.md"
+	case "user":
+		fileName = "USER.md"
+	default:
+		return "", fmt.Errorf("unsupported file type: %s", fileType)
+	}
+
+	filePath := filepath.Join(botWorkspace, fileName)
+	// 尝试探测大小写
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		lowerPath := filepath.Join(botWorkspace, strings.ToLower(fileName))
+		if _, err := os.Stat(lowerPath); err == nil {
+			filePath = lowerPath
+		}
+	}
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil // 文件不存在返回空
+		}
+		return "", err
+	}
+
+	return string(data), nil
+}
+
+// SaveOpenClawBotFileContent 保存机器人工作区文件的内容
+func SaveOpenClawBotFileContent(configDir, id, fileType, content, workspace string) error {
+	// 如果 workspace 已经传入，直接使用
+	botWorkspace := workspace
+	if botWorkspace == "" {
+		res, err := GetOpenClawBotsModels(configDir)
+		if err != nil {
+			return err
+		}
+
+		for _, bot := range res.Bots {
+			if bot.ID == id {
+				botWorkspace = bot.Workspace
+				break
+			}
+		}
+	}
+
+	if botWorkspace == "" {
+		return fmt.Errorf("bot %s not found and no workspace provided", id)
+	}
+
+	if strings.HasPrefix(botWorkspace, "~") {
+		home, _ := os.UserHomeDir()
+		if botWorkspace == "~" {
+			botWorkspace = home
+		} else if strings.HasPrefix(botWorkspace, "~/") {
+			botWorkspace = filepath.Join(home, botWorkspace[2:])
+		}
+	}
+
+	fileName := ""
+	switch strings.ToLower(fileType) {
+	case "soul":
+		fileName = "SOUL.md"
+	case "identity":
+		fileName = "IDENTITY.md"
+	case "tools":
+		fileName = "TOOLS.md"
+	case "user":
+		fileName = "USER.md"
+	default:
+		return fmt.Errorf("unsupported file type: %s", fileType)
+	}
+
+	filePath := filepath.Join(botWorkspace, fileName)
+	// 如果存在小写形式，则遵循原有命名进行覆盖
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		lowerPath := filepath.Join(botWorkspace, strings.ToLower(fileName))
+		if _, err := os.Stat(lowerPath); err == nil {
+			filePath = lowerPath
+		}
+	}
+
+	err := os.WriteFile(filePath, []byte(content), 0644)
+	if err != nil {
+		return err
+	}
+
+	// 异步触发同步逻辑，避免阻塞 API 响应
+	go SyncKeySingle("bots_models", configDir)
+	return nil
+}
+
 func SetOpenClawBotModel(configDir, botID, modelID string) error {
 	configPath := filepath.Join(configDir, "openclaw.json")
 	data, err := os.ReadFile(configPath)

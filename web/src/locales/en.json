@@ -33,6 +33,8 @@
     "close": "Close",
     "delete": "Delete",
     "edit": "Edit",
+    "save": "Save",
+    "noContent": "No Content",
     "add": "Add",
     "action": "Action",
     "console": "Console",
@@ -90,10 +92,13 @@
     "nextStep": "Next: Reshape Brain",
     "prevStep": "Previous",
     "realtimePreview": "Real-time Preview",
-    "estimateTokens": "Estimated Cost",
-    "confirmConfig": "Confirm Config",
-    "ready": "Ready to Clone!",
-    "readyDesc": "System is ready to clone '{{name}}' to your workspace.",
+    "estimateTokens": "Estimate Consumed",
+    "confirmConfig": "Ready Check",
+    "preview": "Preview",
+    "soulPlaceholder": "Enter the thinking essence and core logic for this bot. SOUL.md is the heart of system prompts, determining how the AI processes ideas.",
+    "identityPlaceholder": "Enter the role identity setting and behavioral guidelines. IDENTITY.md defines the AI's external self-awareness.",
+    "ready": "Ready!",
+    "readyDesc": "System is ready to clone expert \"{{name}}\" to your workspace.",
     "lastAdjust": "Last Adjust"
   },
   "login": {
@@ -238,7 +243,8 @@
       "stopped_desc": "Safely shutting down service process, please wait...",
       "syncing": "Syncing Status"
     },
-    "userLabel": "User"
+    "userLabel": "User",
+    "requestReceived": "Request received, thinking..."
   },
   "channels": {
     "boundChannels": "Bound Channels",
@@ -283,6 +289,9 @@
     "approveSuccess": "Device approved successfully"
   },
   "bots": {
+    "editSoul": "Edit Personality (SOUL)",
+    "editIdentity": "Edit Background (IDENTITY)",
+    "editorTitle": "Bot Core Features Editor",
     "title": "Lobster Bots",
     "lastSynced": "Last synced",
     "addBot": "Add Bot",
@@ -386,7 +395,6 @@
     "removeModelWarning": "Are you sure you want to remove model [{{id}}] from provider [{{provider}}]? This action cannot be undone.",
     "syncingProvider": "Syncing provider config...",
     "providerSynced": "Config synced, reloading...",
-    "saveFailed": "Save failed",
     "appendingModel": "Appending model config...",
     "modelAdded": "Model added, reloading assets...",
     "modelAppended": "Model appended successfully, asset inventory synced",
@@ -411,7 +419,9 @@
     "setDefaultSuccess": "{{id}} set as global default model",
     "defaultSet": "Global default model updated",
     "setDefaultFailed": "Failed to set default model",
-    "settingDefault": "Syncing configuration..."
+    "settingDefault": "Syncing configuration...",
+    "saveSuccess": "Bot core file updated successfully",
+    "saveFailed": "Failed to save bot configuration"
   },
   "logs": {
     "searchPlaceholder": "Search log keywords...",

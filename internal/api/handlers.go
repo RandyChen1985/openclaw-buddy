@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -1123,7 +1124,8 @@ func (s *Server) createBotFromExpert(c *gin.Context) {
 		IdentityMD string `json:"identity_md"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		s.Error(c, http.StatusBadRequest, "Invalid request parameters")
+		log.Printf("[ExpertClone] Binding error for bot %s: %v", req.BotID, err)
+		s.Error(c, http.StatusBadRequest, "Invalid request parameters: "+err.Error())
 		return
 	}
 
@@ -1136,4 +1138,42 @@ func (s *Server) createBotFromExpert(c *gin.Context) {
 	process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
 
 	s.Success(c, gin.H{"status": "success", "message": "Bot created from expert template"})
+}
+
+func (s *Server) getOpenClawBotFile(c *gin.Context) {
+	botID := c.Query("id")
+	fileType := c.Query("type")
+	workspace := c.Query("workspace")
+
+	if botID == "" || fileType == "" {
+		s.Error(c, http.StatusBadRequest, "Missing id or type")
+		return
+	}
+
+	content, err := process.GetOpenClawBotFileContent(s.cfg.OpenClawConfigDir, botID, fileType, workspace)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"content": content})
+}
+
+func (s *Server) updateOpenClawBotFile(c *gin.Context) {
+	var req struct {
+		ID        string `json:"id" binding:"required"`
+		Type      string `json:"type" binding:"required"`
+		Content   string `json:"content" binding:"required"`
+		Workspace string `json:"workspace"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "Invalid request parameters")
+		return
+	}
+
+	err := process.SaveOpenClawBotFileContent(s.cfg.OpenClawConfigDir, req.ID, req.Type, req.Content, req.Workspace)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success"})
 }

@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox, Segmented } from 'antd';
+import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox, Segmented, Empty } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star, ChevronDown, ChevronUp, Activity, ZapOff, Bot, LayoutGrid, List, FolderOpen } from 'lucide-react';
+import { 
+  Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star, 
+  ChevronDown, ChevronUp, Activity, ZapOff, Bot, LayoutGrid, List, FolderOpen,
+  Eye, Save, Brain, Edit3
+} from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import dayjs from 'dayjs';
 import api from '../api';
 import { message } from 'antd';
@@ -82,6 +88,13 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     fetchSessions();
     fetchModelsConfig();
   }, []);
+
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [editorType, setEditorType] = useState<'soul' | 'identity'>('soul');
+  const [editorContent, setEditorContent] = useState('');
+  const [editorBotId, setEditorBotId] = useState('');
+  const [isEditorLoading, setIsEditorLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const fetchModelsConfig = async () => {
     setLoadingConfig(true);
@@ -285,6 +298,48 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     }
   };
 
+  const handleOpenFileEditor = async (botId: string, type: 'soul' | 'identity') => {
+    try {
+      setEditorBotId(botId);
+      setEditorType(type);
+      setEditorContent('');
+      setIsEditorLoading(true);
+      setIsEditorOpen(true);
+      
+      const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
+      const workspaceParam = bot?.workspace ? `&workspace=${encodeURIComponent(bot.workspace)}` : '';
+      
+      const res = await api.get(`/v1/openclaw/bots/file?id=${botId}&type=${type}${workspaceParam}`);
+      setEditorContent(res.data.content || '');
+    } catch (err: any) {
+      if (isEditorOpen) {
+        message.error(t('common.loadFailed') + ': ' + (err.response?.data?.error || err.message));
+      }
+    } finally {
+      setIsEditorLoading(false);
+    }
+  };
+
+  const handleSaveFileContent = async () => {
+    try {
+      setIsSaving(true);
+      
+      const bot = botsModels?.data?.bots?.find((b: any) => b.id === editorBotId);
+      await api.post('/v1/openclaw/bots/file', {
+        id: editorBotId,
+        type: editorType,
+        content: editorContent,
+        workspace: bot?.workspace
+      });
+      message.success(t('bots.saveSuccess'));
+      setIsEditorOpen(false); // 隐藏对话框
+    } catch (err: any) {
+      message.error(t('bots.saveFailed') + ': ' + (err.response?.data?.error || err.message));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSetDefaultModel = (fullId: string) => {
     const confirmInstance = Modal.confirm({
       title: t('bots.confirmSwitchDefault'),
@@ -414,10 +469,40 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                         </div>
 
                         <div style={{ position: 'relative', zIndex: 1 }}>
-                          <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                            {bot.name || bot.id}
-                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} className="status-pulse"></div>
-                          </h3>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', marginBottom: 4 }}>
+                            <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.5px' }}>{bot.name || bot.id}</div>
+                            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', border: '2px solid #fff', boxShadow: '0 0 10px rgba(34, 197, 94, 0.4)', flexShrink: 0 }} className="status-pulse" />
+                            
+                            {/* 基于用户图片更新的图标组 - 靠右对齐 */}
+                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                              <Tooltip title={t('bots.editSoul')}>
+                                <Button 
+                                  type="text" 
+                                  size="small" 
+                                  icon={<Brain size={16} color="#8b5cf6" />} 
+                                  onClick={() => handleOpenFileEditor(bot.id, 'soul')}
+                                  style={{ 
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 28, height: 28, borderRadius: 8, background: '#f5f3ff', 
+                                    border: '1px solid #ddd6fe'
+                                  }}
+                                />
+                              </Tooltip>
+                              <Tooltip title={t('bots.editIdentity')}>
+                                <Button 
+                                  type="text" 
+                                  size="small" 
+                                  icon={<ShieldCheck size={16} color="#2563eb" />} 
+                                  onClick={() => handleOpenFileEditor(bot.id, 'identity')}
+                                  style={{ 
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 28, height: 28, borderRadius: 8, background: '#eff6ff', 
+                                    border: '1px solid #dbeafe'
+                                  }}
+                                />
+                              </Tooltip>
+                            </div>
+                          </div>
                           <div style={{ fontSize: 12, color: '#94a3b8', fontFamily: 'monospace', marginBottom: 16 }}>ID: {bot.id}</div>
                           
                           <div style={{ background: 'rgba(255, 255, 255, 0.5)', backdropFilter: 'blur(8px)', padding: '14px', borderRadius: 18, border: `1px solid ${color.border}60` }}>
@@ -435,19 +520,21 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                   </span>
                                 </div>
                               </div>
-                              <div style={{ paddingTop: 10, borderTop: `1px dashed ${color.border}` }}>
-                                <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, fontWeight: 800 }}>
-                                  {t('bots.workspace')}
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <div style={{ padding: 4, background: '#f1f5f9', borderRadius: 6 }}>
-                                      <FolderOpen size={12} color="#64748b" />
+                              <div style={{ paddingTop: 10, borderTop: `1px dashed ${color.border}`, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                                <div style={{ flex: 1, overflow: 'hidden' }}>
+                                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, fontWeight: 800 }}>
+                                    {t('bots.workspace')}
                                   </div>
-                                  <Tooltip title={bot.workspace}>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
-                                      {bot.workspace || '-'}
-                                    </span>
-                                  </Tooltip>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <div style={{ padding: 4, background: '#f1f5f9', borderRadius: 6 }}>
+                                        <FolderOpen size={12} color="#64748b" />
+                                    </div>
+                                    <Tooltip title={bot.workspace}>
+                                      <span style={{ fontSize: 12, fontWeight: 700, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontFamily: 'monospace' }}>
+                                        {bot.workspace?.length > 24 ? bot.workspace.substring(0, 10) + '...' + bot.workspace.substring(bot.workspace.length - 10) : bot.workspace}
+                                      </span>
+                                    </Tooltip>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -1128,7 +1215,108 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           <p style={{ color: '#64748b', fontSize: 13 }}>{t('bots.irreversible')}</p>
         </div>
       </Modal>
-      <style>{`
+
+      {/* 机器人核心人格/身份编辑器 (分屏预览模式) */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ 
+              padding: 8, 
+              background: editorType === 'soul' ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' : 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)', 
+              borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
+            }}>
+              {editorType === 'soul' ? <Brain size={18} color="#fff" /> : <ShieldCheck size={18} color="#fff" />}
+            </div>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b', marginBottom: 2 }}>
+                {editorType === 'soul' ? t('bots.editSoul') : t('bots.editIdentity')}
+              </div>
+              <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
+                {editorBotId} · {editorType === 'soul' ? 'SOUL.md' : 'IDENTITY.md'}
+              </div>
+            </div>
+          </div>
+        }
+        open={isEditorOpen}
+        onCancel={() => setIsEditorOpen(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setIsEditorOpen(false)} style={{ borderRadius: 8 }}>
+            {t('common.cancel')}
+          </Button>,
+          <Button 
+            key="save" 
+            type="primary" 
+            loading={isSaving} 
+            icon={<Save size={14} />} 
+            onClick={handleSaveFileContent} 
+            style={{ borderRadius: 8, background: editorType === 'soul' ? '#8b5cf6' : '#2563eb', border: 'none' }}
+          >
+            {t('common.save')}
+          </Button>
+        ]}
+        width={isMobile ? '100%' : 1100}
+        centered
+        bodyStyle={{ padding: '0', height: isMobile ? 'calc(100vh - 120px)' : '75vh', overflow: 'hidden' }}
+      >
+        <Spin spinning={isEditorLoading || isSaving} tip={isSaving ? t('common.processing') : t('common.loading')}>
+          {isEditorLoading ? (
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
+              <div style={{ marginTop: 16, color: '#94a3b8', fontSize: 14 }}>{t('common.loading')}</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', height: '100%', flexDirection: isMobile ? 'column' : 'row' }}>
+              {/* 左侧编辑器 */}
+              <div style={{ flex: 1, borderRight: isMobile ? 'none' : '1px solid #f1f5f9', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#f8fafc' }}>
+                  <Edit3 size={14} color="#64748b" />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Markdown Source</span>
+                </div>
+                <div style={{ flex: 1, padding: 0 }}>
+                  <Input.TextArea
+                    value={editorContent}
+                    onChange={(e) => setEditorContent(e.target.value)}
+                    placeholder={editorType === 'soul' ? t('experts.soulPlaceholder') : t('experts.identityPlaceholder')}
+                    style={{ 
+                      height: '100%', border: 'none', background: 'transparent',
+                      padding: 20, resize: 'none', fontSize: 14, fontFamily: 'monospace',
+                      lineHeight: 1.6, borderRadius: 0
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* 右侧预览 */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa' }}>
+                <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#fff' }}>
+                  <Eye size={14} color="#64748b" />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{t('experts.preview')}</span>
+                </div>
+                <div style={{ flex: 1, padding: 30, overflowY: 'auto', backgroundColor: '#fff' }}>
+                  {editorContent ? (
+                    <div className="markdown-body" style={{ fontSize: 15 }}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>
+                      <Empty description={t('common.noContent')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </Spin>
+      </Modal>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .markdown-body h1 { font-size: 1.4em; margin-bottom: 16px; color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+        .markdown-body h2 { font-size: 1.25em; margin-top: 24px; margin-bottom: 12px; color: #334155; }
+        .markdown-body p { margin-bottom: 16px; line-height: 1.7; color: #475569; }
+        .markdown-body ul, .markdown-body ol { margin-bottom: 16px; padding-left: 20px; }
+        .markdown-body li { margin-bottom: 6px; color: #475569; }
+        .markdown-body code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; color: #2563eb; }
+        .markdown-body blockquote { border-left: 4px solid #e2e8f0; padding-left: 16px; color: #64748b; font-style: italic; margin: 16px 0; }
         @keyframes pulse-green {
           0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
           70% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
@@ -1137,7 +1325,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         .status-pulse {
           animation: pulse-green 2s infinite;
         }
-      `}</style>
+      ` }} />
     </div>
   );
 };

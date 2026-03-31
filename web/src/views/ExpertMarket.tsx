@@ -140,12 +140,13 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
 
   const handleCreateBot = async () => {
     try {
-      const values = await form.validateFields();
+      await form.validateFields(); // 基础校验
+      const values = form.getFieldsValue(true); // 强力提取所有步骤的数据
       setSubmitting(true);
       setIsModalOpen(false);
       onShowGlobalLoading(t('experts.creating'), 5000);
       await api.post('/v1/openclaw/bots/template', {
-        expertId: values.expertId,
+        expertId: values.expertId || selectedExpert?.id, // 增加显式兜底
         botId: values.botId,
         modelId: values.modelId,
         soul: values.soul,
@@ -480,7 +481,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
           {/* Step 1: 编辑器与分屏预览 */}
           {currentStep === 1 && (
             <div className="animate-in">
-              <div style={{ display: 'flex', gap: 24, height: 650, flexDirection: isMobile ? 'column' : 'row' }}>
+              <div style={{ display: 'flex', gap: 24, height: 520, flexDirection: isMobile ? 'column' : 'row' }}>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   <Tabs 
                     defaultActiveKey="identity" 
@@ -501,7 +502,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
                           <Form.Item name="identity_md" style={{ marginBottom: 0 }}>
                             <Input.TextArea 
                               onChange={(e) => setIdTokens(estimateTokens(e.target.value))}
-                              style={{ height: 520, borderRadius: '0 0 12px 12px', fontFamily: 'monospace', fontSize: 13, background: '#f8fafc', border: '1px solid #e2e8f0', borderTop: 'none', resize: 'none', padding: '16px' }} 
+                              style={{ height: 380, borderRadius: '0 0 12px 12px', fontFamily: 'monospace', fontSize: 13, background: '#f8fafc', border: '1px solid #e2e8f0', borderTop: 'none', resize: 'none', padding: '16px' }} 
                             />
                           </Form.Item>
                         )
@@ -521,7 +522,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
                           <Form.Item name="soul" style={{ marginBottom: 0 }}>
                             <Input.TextArea 
                               onChange={(e) => setSoulTokens(estimateTokens(e.target.value))}
-                              style={{ height: 520, borderRadius: '0 0 12px 12px', fontFamily: 'monospace', fontSize: 13, background: '#f8fafc', border: '1px solid #e2e8f0', borderTop: 'none', resize: 'none', padding: '16px' }} 
+                              style={{ height: 380, borderRadius: '0 0 12px 12px', fontFamily: 'monospace', fontSize: 13, background: '#f8fafc', border: '1px solid #e2e8f0', borderTop: 'none', resize: 'none', padding: '16px' }} 
                             />
                           </Form.Item>
                         )

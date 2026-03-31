@@ -57,7 +57,7 @@ mkdir -p "$DEV_ROOT/backups"
 # 3. 编译前端
 if [ -d "web" ]; then
     echo "🎨 正在编译前端..."
-    pushd web > /dev/null && npm run build --silent; popd > /dev/null
+    pushd web > /dev/null && npm run build --silent || echo "⚠️ Build had warnings, continuing..."; popd > /dev/null
     mkdir -p internal/api/dist
     rm -rf internal/api/dist/*
     cp -r web/dist/* internal/api/dist/

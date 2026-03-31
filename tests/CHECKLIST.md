@@ -39,6 +39,10 @@
 - [ ] **运维终端接口**: `GET /v1/ws/shell` 应能通过 WebSocket 升级并启动系统 Shell 进程。
 - [x] **专家市场列表**: `GET /v1/openclaw/experts` 应返回全量专家模板（含自媒体、财务等 20+ 个场景）。
 - [ ] **基于模板创建 Bot**: `POST /v1/openclaw/bots/template` 应能根据专家画像正确初始化机器人目录及配置文件，且其 `--workspace` 参数应统一默认为 `~/.openclaw/workspace_[ID]` 而非专家名称；且在写入 `soul.md` 前必须验证 `agents/[ID]` 目录是否已由系统正确创建。
+- [ ] **机器人文件读取**: `GET /v1/openclaw/bots/file?id=<id>&type=soul` 应能自动定位工作区并返回 `SOUL.md` 或 `IDENTITY.md` 的内容。
+- [ ] **机器人内容保存**: `POST /v1/openclaw/bots/file` 应支持原子化覆盖写入，并触发 `SyncKeySingle` 缓存同步。
+- [ ] **原子化读写安全**: 验证接口是否无法通过 `../` 等手段绕过机器人工作区目录。
+- [ ] **心智编辑器预览**: 点击 ✨ / 🆔 图标后弹出的编辑器应具备左侧源码编辑、右侧 Markdown 实时预览的分屏布局。
 
 ## 2.4 运维终端 (Maintenance Terminal)
 - [ ] **菜单展示**: 侧边栏“监控中心”组下应出现“运维终端”菜单项。

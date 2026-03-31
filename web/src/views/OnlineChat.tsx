@@ -401,11 +401,12 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       if (!reader) throw new Error(t('chat.streamError'));
 
       const assistantTimestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const assistantMessage: Message = { role: 'assistant', content: '', timestamp: assistantTimestamp };
+      const assistantMessage: Message = { role: 'assistant', content: t('chat.requestReceived'), timestamp: assistantTimestamp };
       setMessages(prev => [...prev, assistantMessage]);
 
       const decoder = new TextDecoder();
       let accumulatedContent = '';
+      let isFirstChunk = true; // 新增状态位
       let firstTokenTime: number | null = null;
       const startTime = Date.now();
       let totalLength = 0;
@@ -428,7 +429,12 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                 const data = JSON.parse(dataStr);
                 const content = data.choices[0]?.delta?.content || '';
                 if (content) {
-                  accumulatedContent += content;
+                  if (isFirstChunk) {
+                    accumulatedContent = content; // 替换“已收到...”的占位文案
+                    isFirstChunk = false;
+                  } else {
+                    accumulatedContent += content;
+                  }
                   totalLength += content.length;
                   setMessages(prev => {
                       const last = prev[prev.length - 1];
