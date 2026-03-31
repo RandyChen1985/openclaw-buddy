@@ -428,6 +428,7 @@
     "setDefaultSuccess": "已将 {{id}} 设为全局默认模型",
     "setDefaultFailed": "设置默认模型失败",
     "settingDefault": "正在同步配置...",
+    "updatingConfig": "正在更新机器人配置...",
     "saveSuccess": "成功更新机器人核心配置文件"
   },
   "logs": {

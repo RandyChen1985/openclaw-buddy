@@ -506,6 +506,38 @@ func (s *Server) addOpenClawBot(c *gin.Context) {
 	})
 }
 
+func (s *Server) updateOpenClawBot(c *gin.Context) {
+	var req struct {
+		ID    string  `json:"id" binding:"required"`
+		Name  *string `json:"name"`
+		Model *string `json:"model"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【更新机器人配置】 (ID: %s)", req.ID)
+	utils.RecordSystemEvent("CONTROL", fmt.Sprintf("用户手动请求 【更新机器人配置】 (ID: %s)", req.ID))
+
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   fmt.Sprintf("修改机器人配置: %s", req.ID),
+		Module: "bots",
+		Action: "update",
+		Target: req.ID,
+	}
+
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.UpdateOpenClawBotConfig(s.cfg.OpenClawConfigDir, req.ID, req.Name, req.Model); err != nil {
+			return "", err
+		}
+		// 成功后强制同步缓存
+		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
+		return "Config Updated", nil
+	})
+}
+
 func (s *Server) setOpenClawBotIdentity(c *gin.Context) {
 	var req struct {
 		ID   string `json:"id" binding:"required"`
@@ -527,7 +559,7 @@ func (s *Server) setOpenClawBotIdentity(c *gin.Context) {
 	}
 
 	s.runAsyncTask(c, task, func() (string, error) {
-		if err := process.SetOpenClawBotIdentity(req.ID, req.Name); err != nil {
+		if err := process.UpdateOpenClawBotConfig(s.cfg.OpenClawConfigDir, req.ID, &req.Name, nil); err != nil {
 			return "", err
 		}
 		// 成功后强制同步缓存

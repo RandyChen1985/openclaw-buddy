@@ -422,6 +422,7 @@
     "defaultSet": "Global default model updated",
     "setDefaultFailed": "Failed to set default model",
     "settingDefault": "Syncing configuration...",
+    "updatingConfig": "Updating bot configuration...",
     "saveSuccess": "Bot core file updated successfully",
     "saveFailed": "Failed to save bot configuration"
   },

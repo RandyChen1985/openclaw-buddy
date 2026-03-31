@@ -542,13 +542,13 @@ const Dashboard = () => {
     }
   };
 
-  const handleSetBotIdentity = async (id: string, name: string) => {
-    const pendingId = `pending-set-identity-${id}`;
+  const handleUpdateBot = async (id: string, name?: string, model?: string) => {
+    const pendingId = `pending-update-${id}`;
     baseUpdateTask({
       id: pendingId,
-      name: `${t('bots.settingIdentity')}: ${id} -> ${name} (${t('common.waiting')})`,
+      name: `${t('bots.updatingConfig')}: ${id} (${t('common.waiting')})`,
       module: 'bots',
-      action: 'set-identity',
+      action: 'update',
       target: id,
       status: 'Running',
       progress: 0,
@@ -556,14 +556,14 @@ const Dashboard = () => {
     });
 
     try {
-      const res = await api.post('/v1/openclaw/bots/set-identity', { id, name });
+      const res = await api.post('/v1/openclaw/bots/update', { id, name, model });
       const taskID = res.data?.taskID;
       if (taskID) {
         baseUpdateTask({
           id: taskID,
-          name: `${t('bots.settingIdentity')}: ${id} -> ${name}`,
+          name: `${t('bots.updatingConfig')}: ${id}`,
           module: 'bots',
-          action: 'set-identity',
+          action: 'update',
           target: id,
           status: 'Running',
           progress: 5,
@@ -574,55 +574,9 @@ const Dashboard = () => {
       const msg = err.response?.data?.error || t('bots.updateFailed');
       baseUpdateTask({
         id: pendingId,
-        name: `${t('bots.editName')}: ${id} -> ${name}`,
+        name: `${t('bots.updatingConfig')}: ${id}`,
         module: 'bots',
-        action: 'set-identity',
-        target: id,
-        status: 'Failed',
-        error: msg,
-        progress: 0,
-        startTime: new Date().toISOString()
-      });
-      message.error(msg);
-      throw err;
-    }
-  };
-
-  const handleSetBotModel = async (id: string, model: string) => {
-    const pendingId = `pending-set-model-${id}`;
-    baseUpdateTask({
-      id: pendingId,
-      name: `${t('bots.settingModel')}: ${id} -> ${model} (${t('common.waiting')})`,
-      module: 'bots',
-      action: 'set-model',
-      target: id,
-      status: 'Running',
-      progress: 0,
-      startTime: new Date().toISOString()
-    });
-
-    try {
-      const res = await api.post('/v1/openclaw/bots/set-model', { id, model });
-      const taskID = res.data?.taskID;
-      if (taskID) {
-        baseUpdateTask({
-          id: taskID,
-          name: `${t('bots.settingModel')}: ${id} -> ${model}`,
-          module: 'bots',
-          action: 'set-model',
-          target: id,
-          status: 'Running',
-          progress: 5,
-          startTime: new Date().toISOString()
-        });
-      }
-    } catch (err: any) {
-      const msg = err.response?.data?.error || t('bots.modelUpdateFailed');
-      baseUpdateTask({
-        id: pendingId,
-        name: `${t('bots.currentModel')}: ${id} -> ${model}`,
-        module: 'bots',
-        action: 'set-model',
+        action: 'update',
         target: id,
         status: 'Failed',
         error: msg,
@@ -861,8 +815,7 @@ const Dashboard = () => {
           botsModels={botsModels} loadingBots={loadingBots} isMobile={isMobile} 
           onRefresh={() => fetchBotsModels(true)}
           onAddBot={handleAddBot}
-          onSetIdentity={handleSetBotIdentity}
-          onSetBotModel={handleSetBotModel}
+          onUpdateBot={handleUpdateBot}
           onDeleteBot={handleDeleteBot}
           onSetDefaultModel={handleSetDefaultModel}
           onShowGlobalLoading={onShowGlobalLoading}

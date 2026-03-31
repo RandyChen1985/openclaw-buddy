@@ -384,15 +384,21 @@ func SaveOpenClawBotFileContent(configDir, id, fileType, content, workspace stri
 }
 
 func SetOpenClawBotModel(configDir, botID, modelID string) error {
+	return UpdateOpenClawBotConfig(configDir, botID, nil, &modelID)
+}
+
+// UpdateOpenClawBotConfig 统一更新机器人的基本配置 (名称、模型等)
+// 采用一次性读写模式，防止并发修改 openclaw.json 产生冲突
+func UpdateOpenClawBotConfig(configDir, botID string, name, model *string) error {
 	configPath := filepath.Join(configDir, "openclaw.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read openclaw.json: %v", err)
 	}
 
 	var fullCfg map[string]interface{}
 	if err := json.Unmarshal(data, &fullCfg); err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal config: %v", err)
 	}
 
 	agents, ok := fullCfg["agents"].(map[string]interface{})
@@ -412,19 +418,26 @@ func SetOpenClawBotModel(configDir, botID, modelID string) error {
 			continue
 		}
 		if id, ok := bot["id"].(string); ok && id == botID {
-			bot["model"] = modelID
+			// 如果传入了名称，则执行赋值
+			if name != nil {
+				bot["name"] = *name
+			}
+			// 如果传入了模型，则执行赋值
+			if model != nil {
+				bot["model"] = *model
+			}
 			found = true
 			break
 		}
 	}
 
 	if !found {
-		return fmt.Errorf("bot with ID '%s' not found in agents.list", botID)
+		return fmt.Errorf("bot with ID '%s' not found", botID)
 	}
 
 	newData, err := json.MarshalIndent(fullCfg, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal config: %v", err)
 	}
 
 	return os.WriteFile(configPath, newData, 0644)

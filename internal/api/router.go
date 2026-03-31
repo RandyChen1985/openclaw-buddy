@@ -79,6 +79,7 @@ func (s *Server) setupRoutes() {
 			oc.POST("/bots/add", s.addOpenClawBot)
 			oc.POST("/bots/set-identity", s.setOpenClawBotIdentity)
 			oc.POST("/bots/set-model", s.setOpenClawBotModel)
+			oc.POST("/bots/update", s.updateOpenClawBot)
 			oc.POST("/bots/delete", s.deleteOpenClawBot)
 			oc.GET("/bots/top", s.getTopBots)
 			oc.GET("/bots/file", s.getOpenClawBotFile)

@@ -18,8 +18,7 @@ interface BotsManagerProps {
   isMobile: boolean;
   onRefresh: () => void;
   onAddBot: (id: string, model: string) => Promise<void>;
-  onSetIdentity: (id: string, name: string) => Promise<void>;
-  onSetBotModel: (id: string, model: string) => Promise<void>;
+  onUpdateBot: (id: string, name?: string, model?: string) => Promise<void>;
   onDeleteBot: (id: string) => Promise<void>;
   onSetDefaultModel: (id: string) => Promise<void>;
   onShowGlobalLoading: (message: string, duration?: number) => void; 
@@ -27,7 +26,7 @@ interface BotsManagerProps {
 }
 
 const BotsManager: React.FC<BotsManagerProps> = ({ 
-  botsModels, loadingBots, isMobile, onRefresh, onAddBot, onSetIdentity, onSetBotModel, onDeleteBot, onSetDefaultModel, onShowGlobalLoading,
+  botsModels, loadingBots, isMobile, onRefresh, onAddBot, onUpdateBot, onDeleteBot, onSetDefaultModel, onShowGlobalLoading,
   activeTasks = []
 }) => {
   const { t } = useTranslation();
@@ -280,11 +279,16 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       const values = await editForm.validateFields();
       setIsEditModalOpen(false); // 立即关闭弹窗
       setProcessing(true);
-      if (editingBot && values.name !== editingBot.name) {
-        await onSetIdentity(editingBot.id, values.name);
-      }
-      if (editingBot && values.model !== editingBot.model) {
-        await onSetBotModel(editingBot.id, values.model);
+      
+      const nameChanged = editingBot && values.name !== editingBot.name;
+      const modelChanged = editingBot && values.model !== editingBot.model;
+      
+      if (editingBot && (nameChanged || modelChanged)) {
+        await onUpdateBot(
+          editingBot.id, 
+          nameChanged ? values.name : undefined, 
+          modelChanged ? values.model : undefined
+        );
       }
       onRefresh();
     } catch (err) {
