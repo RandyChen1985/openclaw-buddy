@@ -184,8 +184,8 @@ func GetAllTasks() []*Task {
 		all = append(all, t)
 	}
 
-	// 如果内存不足，从数据库加载最近的 20 条
-	if len(all) < 10 && utils.DB != nil {
+	// 无论内存有多少，始终尝试从数据库加载最近的 20 条历史记录进行合并
+	if utils.DB != nil {
 		rows, err := utils.DB.Query(`
 			SELECT id, name, module, action, target, command, status, progress, result, error, start_time, end_time 
 			FROM tasks 
@@ -203,6 +203,7 @@ func GetAllTasks() []*Task {
 					t.EndTime = &endTime.Time
 				}
 				
+				// 去重：如果内存里已经有了（可能是正在运行的），就不要用数据库里的老数据覆盖
 				if _, exists := tasks[t.ID]; !exists {
 					all = append(all, &t)
 				}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
@@ -93,19 +93,57 @@ const Dashboard = () => {
     }
   );
 
+  const processedTaskIds = useRef<Set<string>>(new Set());
+  const isInitialProcessed = useRef(false);
+
+  // --- 核心：任务副作用中控台 (Task Side Effect Orchestrator) ---
+  // 无论任务是从 WS 还是 Polling 回来的，只要状态变为完成，就触发业务刷新
+  useEffect(() => {
+    if (activeTasks.length > 0 && !isInitialProcessed.current) {
+      // 页面首次加载/同步时，将现有已完成的任务直接标记为处理过，避免旧任务触发业务刷新风暴
+      activeTasks.forEach(task => {
+        if (task.status === 'Completed' || task.status === 'Failed') {
+          processedTaskIds.current.add(task.id);
+        }
+      });
+      isInitialProcessed.current = true;
+      return;
+    }
+
+    activeTasks.forEach(task => {
+      if ((task.status === 'Completed' || task.status === 'Failed') && !processedTaskIds.current.has(task.id)) {
+        processedTaskIds.current.add(task.id);
+        
+        console.log(`🎯 [Task Observer] 侦测到任务完成: ${task.id} (${task.module}/${task.action})`);
+
+        if (task.module === 'gateway') {
+          fetchData();
+          fetchSystemEvents();
+        } else if (task.module === 'plugins') {
+          fetchPlugins();
+        } else if (task.module === 'bots') {
+          // 针对删除任务进行乐观离群处理，确保 UI 瞬间响应
+          if (task.action === 'delete' && task.status === 'Completed' && task.target) {
+            setBotsModels((prev: any) => {
+              if (!prev?.data?.bots) return prev;
+              return {
+                ...prev,
+                data: {
+                  ...prev.data,
+                  bots: prev.data.bots.filter((b: any) => b.id !== task.target)
+                }
+              };
+            });
+          }
+          fetchBotsModels(true);
+        }
+      }
+    });
+  }, [activeTasks]);
+
   const handleTaskUpdate = (task: Task) => {
     baseUpdateTask(task);
-    // 监听任务完成/失败事件，触发相关数据的即时刷新
-    if (task.status === 'Completed' || task.status === 'Failed') {
-      if (task.module === 'gateway') {
-        fetchData();
-        fetchSystemEvents();
-      } else if (task.module === 'plugins') {
-        fetchPlugins();
-      } else if (task.module === 'bots') {
-        fetchBotsModels();
-      }
-    }
+    // 业务刷新逻辑已移至全局 useEffect 监听，此处仅负责分发任务状态更新
   };
 
   const [logSource, setLogSource] = useState('buddy');
@@ -358,7 +396,14 @@ const Dashboard = () => {
 
     try {
       const res = await api.post(`/v1/gateway/${action}`);
-      const taskID = res.data?.data?.taskID;
+      const taskID = res.data?.taskID;
+      
+      // 设置过渡状态以确保 UI 立即响应
+      if (action !== 'wechat') {
+        setIsTransitioning(true);
+        setTargetStatus(action === 'start' ? 'running' : 'stopped');
+      }
+
       if (taskID) {
         baseUpdateTask({
           id: taskID,
@@ -380,7 +425,11 @@ const Dashboard = () => {
   const restartGateway = async () => {
     try {
       const res = await api.post('/v1/gateway/restart');
-      const taskID = res.data?.data?.taskID;
+      const taskID = res.data?.taskID;
+      
+      setIsTransitioning(true);
+      // 重启通常先变 stopped 再变 running，这里我们先设为过渡态，由 polling 最终恢复
+
       if (taskID) {
         baseUpdateTask({
           id: taskID,
@@ -404,7 +453,7 @@ const Dashboard = () => {
     setLoadingWeixin(true);
     try {
       const res = await api.post('/v1/wechat/install');
-      const taskID = res.data?.data?.taskID;
+      const taskID = res.data?.taskID;
       if (taskID) {
         baseUpdateTask({
           id: taskID,
@@ -448,115 +497,233 @@ const Dashboard = () => {
   };
 
   const handleAddBot = async (id: string, model: string) => {
+    const pendingId = `pending-add-${id}`;
+    baseUpdateTask({
+      id: pendingId,
+      name: `${t('bots.addingBot')}: ${id} (${t('common.waiting')})`,
+      module: 'bots',
+      action: 'add',
+      target: id,
+      status: 'Running',
+      progress: 0,
+      startTime: new Date().toISOString()
+    });
+
     try {
       const res = await api.post('/v1/openclaw/bots/add', { id, model });
-      const taskID = res.data?.data?.taskID;
+      const taskID = res.data?.taskID;
       if (taskID) {
         baseUpdateTask({
           id: taskID,
-          name: `${t('bots.addBot')}: ${id}`,
+          name: `${t('bots.addingBot')}: ${id}`,
           module: 'bots',
           action: 'add',
           target: id,
           status: 'Running',
-          progress: 0,
+          progress: 5,
           startTime: new Date().toISOString()
         });
       }
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.createFailed');
+      baseUpdateTask({
+        id: pendingId,
+        name: `${t('bots.addBot')}: ${id}`,
+        module: 'bots',
+        action: 'add',
+        target: id,
+        status: 'Failed',
+        error: msg,
+        progress: 0,
+        startTime: new Date().toISOString()
+      });
       message.error(msg);
       throw err;
     }
   };
 
   const handleSetBotIdentity = async (id: string, name: string) => {
+    const pendingId = `pending-set-identity-${id}`;
+    baseUpdateTask({
+      id: pendingId,
+      name: `${t('bots.settingIdentity')}: ${id} -> ${name} (${t('common.waiting')})`,
+      module: 'bots',
+      action: 'set-identity',
+      target: id,
+      status: 'Running',
+      progress: 0,
+      startTime: new Date().toISOString()
+    });
+
     try {
       const res = await api.post('/v1/openclaw/bots/set-identity', { id, name });
-      const taskID = res.data?.data?.taskID;
+      const taskID = res.data?.taskID;
       if (taskID) {
         baseUpdateTask({
           id: taskID,
-          name: `${t('bots.editName')}: ${id} -> ${name}`,
+          name: `${t('bots.settingIdentity')}: ${id} -> ${name}`,
           module: 'bots',
           action: 'set-identity',
           target: id,
           status: 'Running',
-          progress: 0,
+          progress: 5,
           startTime: new Date().toISOString()
         });
       }
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.updateFailed');
+      baseUpdateTask({
+        id: pendingId,
+        name: `${t('bots.editName')}: ${id} -> ${name}`,
+        module: 'bots',
+        action: 'set-identity',
+        target: id,
+        status: 'Failed',
+        error: msg,
+        progress: 0,
+        startTime: new Date().toISOString()
+      });
       message.error(msg);
       throw err;
     }
   };
 
   const handleSetBotModel = async (id: string, model: string) => {
+    const pendingId = `pending-set-model-${id}`;
+    baseUpdateTask({
+      id: pendingId,
+      name: `${t('bots.settingModel')}: ${id} -> ${model} (${t('common.waiting')})`,
+      module: 'bots',
+      action: 'set-model',
+      target: id,
+      status: 'Running',
+      progress: 0,
+      startTime: new Date().toISOString()
+    });
+
     try {
       const res = await api.post('/v1/openclaw/bots/set-model', { id, model });
-      const taskID = res.data?.data?.taskID;
+      const taskID = res.data?.taskID;
       if (taskID) {
         baseUpdateTask({
           id: taskID,
-          name: `${t('bots.currentModel')}: ${id} -> ${model}`,
+          name: `${t('bots.settingModel')}: ${id} -> ${model}`,
           module: 'bots',
           action: 'set-model',
           target: id,
           status: 'Running',
-          progress: 0,
+          progress: 5,
           startTime: new Date().toISOString()
         });
       }
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.modelUpdateFailed');
+      baseUpdateTask({
+        id: pendingId,
+        name: `${t('bots.currentModel')}: ${id} -> ${model}`,
+        module: 'bots',
+        action: 'set-model',
+        target: id,
+        status: 'Failed',
+        error: msg,
+        progress: 0,
+        startTime: new Date().toISOString()
+      });
       message.error(msg);
       throw err;
     }
   };
 
   const handleDeleteBot = async (id: string) => {
+    // 1. 立即发起 Pending 任务提供视觉反馈 (0ms 延迟)
+    const pendingId = `pending-delete-${id}`;
+    baseUpdateTask({
+      id: pendingId,
+      name: `${t('bots.removingBot')}: ${id} (${t('common.waiting')})`,
+      module: 'bots',
+      action: 'delete',
+      target: id,
+      status: 'Running',
+      progress: 0,
+      startTime: new Date().toISOString()
+    });
+
     try {
       const res = await api.post('/v1/openclaw/bots/delete', { id });
-      const taskID = res.data?.data?.taskID;
+      const taskID = res.data?.taskID;
       if (taskID) {
+        // 2. 拿到真实 ID 后更新，触发 useTaskCenter 的接力逻辑
         baseUpdateTask({
           id: taskID,
-          name: `${t('bots.removeBotTitle')}: ${id}`,
+          name: `${t('bots.removingBot')}: ${id}`,
           module: 'bots',
           action: 'delete',
           target: id,
           status: 'Running',
-          progress: 0,
+          progress: 5,
           startTime: new Date().toISOString()
         });
       }
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.removeFailed');
+      // 失败清理：将 Pending 任务转为失败状态，触发错误提示
+      baseUpdateTask({
+        id: pendingId,
+        name: `${t('bots.removeBotTitle')}: ${id}`,
+        module: 'bots',
+        action: 'delete',
+        target: id,
+        status: 'Failed',
+        error: msg,
+        progress: 0,
+        startTime: new Date().toISOString()
+      });
       message.error(msg);
       throw err;
     }
   };
 
   const handleSetDefaultModel = async (modelId: string) => {
+    const pendingId = `pending-default-model-${modelId}`;
+    baseUpdateTask({
+      id: pendingId,
+      name: `${t('bots.settingDefaultModel')}: ${modelId} (${t('common.waiting')})`,
+      module: 'bots',
+      action: 'set-default-model',
+      target: modelId,
+      status: 'Running',
+      progress: 0,
+      startTime: new Date().toISOString()
+    });
+
     try {
       const res = await api.post('/v1/openclaw/models/set-default', { modelId });
-      const taskID = res.data?.data?.taskID;
+      const taskID = res.data?.taskID;
       if (taskID) {
         baseUpdateTask({
           id: taskID,
-          name: `${t('bots.defaultModel')}: ${modelId}`,
+          name: `${t('bots.settingDefaultModel')}: ${modelId}`,
           module: 'bots',
           action: 'set-default-model',
           target: modelId,
           status: 'Running',
-          progress: 0,
+          progress: 5,
           startTime: new Date().toISOString()
         });
       }
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.setDefaultFailed');
+      baseUpdateTask({
+        id: pendingId,
+        name: `${t('bots.defaultModel')}: ${modelId}`,
+        module: 'bots',
+        action: 'set-default-model',
+        target: modelId,
+        status: 'Failed',
+        error: msg,
+        progress: 0,
+        startTime: new Date().toISOString()
+      });
       message.error(msg);
     }
   };
@@ -744,7 +911,7 @@ const Dashboard = () => {
 
   if (fetching && !status) return <CrayfishLoading />;
 
-  const globalLoadingMask = (isTransitioning || globalLoadingMessage || dashboardProcessing) && (
+  const globalLoadingMask = (globalLoadingMessage || dashboardProcessing) && (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
       background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(2px)',
