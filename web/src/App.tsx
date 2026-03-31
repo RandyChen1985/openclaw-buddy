@@ -81,6 +81,32 @@ const Dashboard = () => {
   const [plugins, setPlugins] = useState<any[]>([]);
   const [loadingPlugins, setLoadingPlugins] = useState(false);
   const [pluginsUpdatedAt, setPluginsUpdatedAt] = useState('');
+  const [loadingSkills, setLoadingSkills] = useState(false);
+  const [skills, setSkills] = useState<any[]>([]);
+
+  const fetchSkills = async (force = false, isSilent = false) => {
+    if (!isSilent) setLoadingSkills(true);
+    try {
+      if (force) {
+        await api.post('/v1/openclaw/skills/reload');
+      }
+      const res = await api.get(`/v1/openclaw/skills${force ? '?refresh=true' : ''}`);
+      const rawData = res.data;
+      
+      let skillsList = [];
+      if (rawData.data) {
+          skillsList = Array.isArray(rawData.data.skills) ? rawData.data.skills : [];
+      } else {
+          skillsList = Array.isArray(rawData.skills) ? rawData.skills : [];
+      }
+      setSkills(skillsList);
+      if (force && !isSilent) message.success(t('skills.syncSuccess'));
+    } catch (err) {
+      if (!isSilent) message.error(t('skills.fetchFailed'));
+    } finally {
+      setLoadingSkills(false);
+    }
+  };
   const [ocInstalled, setOcInstalled] = useState<boolean | null>(null);
   const [dashboardProcessing, setDashboardProcessing] = useState(false);
   const [dashboardAbortCtrl, setDashboardAbortCtrl] = useState<AbortController | null>(null);
@@ -125,11 +151,13 @@ const Dashboard = () => {
           fetchPlugins();
         } else if (task.module === 'bots') {
           // 如果是模型相关变更（添加、删除、设置默认、新增渠道），触发物理对账
-          const modelActions = ['delete-model', 'add-model', 'add-provider', 'set-default-model'];
+          const modelActions = ['delete-model', 'add-model', 'add-provider', 'set-default-model', 'clone-expert'];
           if (modelActions.includes(task.action || '')) {
-            console.log('🔄 [Task Observer] 模型变更任务完成，正在物理刷新模型规格...');
-            fetchModelsConfig(); // 按用户建议，物理刷新模型规格
-            fetchBotsModels(true); // 同步刷新机器人资产
+            console.log('🔄 [Task Observer] 机器人/模型变更任务完成，正在物理刷新...');
+            fetchModelsConfig(); 
+            fetchBotsModels(true); 
+            // 如果存在全局遮罩，则物理重置
+            onShowGlobalLoading && onShowGlobalLoading('', 1);
           }
           
           if (task.action === 'delete' && task.status === 'Completed' && task.target) {
@@ -143,6 +171,14 @@ const Dashboard = () => {
                 }
               };
             });
+          }
+        } else if (task.module === 'skills' || task.module === 'plugins') {
+          // 4. 技能或插件任务落地后，触发全系统对账
+          const syncActions = ['delete-skill', 'sync-skills', 'install-plugin', 'uninstall-plugin', 'delete-plugin'];
+          if (syncActions.includes(task.action || '')) {
+            console.log('🔄 [Task Observer] 监测到技能/插件任务完成，执行物理对账...');
+            fetchSkills(true, true); // 强制获取最新数据，并静默执行
+            fetchPlugins(); // 同步刷新插件状态
           }
         }
       }
@@ -870,7 +906,12 @@ const Dashboard = () => {
       'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} />,
       'tui': <TuiView />,
       'shell': <ShellView />,
-      'skills': <SkillManagement isMobile={isMobile} />,
+      'skills': <SkillManagement 
+        isMobile={isMobile} 
+        onRefresh={fetchSkills} 
+        loading={loadingSkills} 
+        skills={skills}
+      />,
       'plugins': <PluginManagement 
         isMobile={isMobile} 
         plugins={plugins} 
@@ -878,7 +919,7 @@ const Dashboard = () => {
         onRefresh={fetchPlugins} 
         updatedAt={pluginsUpdatedAt} 
       />,
-      'experts': <ExpertMarket isMobile={isMobile} onShowGlobalLoading={onShowGlobalLoading} onNavigate={setActiveTab} />
+      'experts': <ExpertMarket isMobile={isMobile} onNavigate={setActiveTab} />
     };
 
     return (

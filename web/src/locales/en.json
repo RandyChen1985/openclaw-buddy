@@ -76,6 +76,7 @@
     "usageGuide": "Expert Guide",
     "usagePlaceholder": "Please start a conversation based on this expert template.",
     "createBotTitle": "Create Bot from Expert Template",
+    "cloneFrom": "Clone from Expert: {{name}}",
     "idLabel": "Bot ID",
     "idPlaceholder": "e.g., dev_expert",
     "modelLabel": "Default Model",
@@ -530,5 +531,35 @@
     "search": "Search plugin name or ID...",
     "syncedAt": "Synced at",
     "functionDesc": "Function Description"
+  },
+  "tasks": {
+    "empty": "No task records",
+    "clone_expert": "Clone from Expert: {{id}}",
+    "add_bot": "Add Bot: {{id}}",
+    "update_bot": "Update Bot Config: {{id}}",
+    "set_identity": "Set Bot Identity: {{id}}",
+    "set_model": "Switch Bot Model: {{id}}",
+    "delete_bot": "Remove Bot: {{id}}",
+    "set_default_model": "Set Global Default Model: {{id}}",
+    "stop_gateway": "Stop Gateway",
+    "restart_gateway": "Restart Gateway",
+    "install_plugin": "Install Plugin: {{id}}",
+    "uninstall_plugin": "Uninstall Plugin: {{id}}",
+    "reload_plugins": "Reload Plugin Engine",
+    "update_plugins": "Update All Plugins",
+    "results": {
+      "cloned": "Cloned",
+      "created": "Created",
+      "updated": "Updated",
+      "identity_updated": "Identity Updated",
+      "model_updated": "Model Updated",
+      "removed": "Removed",
+      "default_model_updated": "Default Model Updated",
+      "stopped": "Stopped",
+      "restarted": "Restarted",
+      "installed": "Installed",
+      "uninstalled": "Uninstalled",
+      "reloaded": "Reloaded"
+    }
   }
 }

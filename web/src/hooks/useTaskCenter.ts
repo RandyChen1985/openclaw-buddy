@@ -47,6 +47,19 @@ export const useTaskCenter = () => {
       }
     }
 
+    const translateTaskName = (name: string) => {
+      if (!name) return '';
+      if (name.startsWith('tasks.')) {
+        const parts = name.split(':');
+        const key = parts[0];
+        const id = parts.slice(1).join(':');
+        return t(key, { id, name: id });
+      }
+      return name;
+    };
+
+    const taskDisplayName = translateTaskName(updatedTask.name);
+
     const notifyConfig = { placement: 'bottomRight' as const, duration: 4.5 };
 
     // --- 逻辑：决定是否需要弹窗 ---
@@ -54,20 +67,20 @@ export const useTaskCenter = () => {
       if (isNew) {
         // 只有真正的全新任务才弹出一个“已开始”通知
         if (updatedTask.status === 'Running') {
-          notification.info({ ...notifyConfig, message: updatedTask.name, description: t('common.waitingGateway') });
+          notification.info({ ...notifyConfig, message: taskDisplayName, description: t('common.waitingGateway') });
         } else if (updatedTask.status === 'Completed') {
-          notification.success({ ...notifyConfig, message: updatedTask.name, description: t('common.success') });
+          notification.success({ ...notifyConfig, message: taskDisplayName, description: t('common.success') });
         } else if (updatedTask.status === 'Failed' || updatedTask.status === 'Timeout') {
-          notification.error({ ...notifyConfig, message: updatedTask.name, description: `${t('common.error')}: ${updatedTask.error || 'Unknown Error'}` });
+          notification.error({ ...notifyConfig, message: taskDisplayName, description: `${t('common.error')}: ${updatedTask.error || 'Unknown Error'}` });
         }
       } else {
         // 对于已有任务（或接力任务），只有状态发生实质改变时才弹窗
         const effectiveOldTask = oldTask || handoverPendingTask;
         if (effectiveOldTask && effectiveOldTask.status !== updatedTask.status) {
           if (updatedTask.status === 'Completed') {
-            notification.success({ ...notifyConfig, message: updatedTask.name, description: t('common.success') });
+            notification.success({ ...notifyConfig, message: taskDisplayName, description: t('common.success') });
           } else if (updatedTask.status === 'Failed' || updatedTask.status === 'Timeout') {
-            notification.error({ ...notifyConfig, message: updatedTask.name, description: `${t('common.error')}: ${updatedTask.error || 'Unknown Error'}` });
+            notification.error({ ...notifyConfig, message: taskDisplayName, description: `${t('common.error')}: ${updatedTask.error || 'Unknown Error'}` });
           }
         }
       }

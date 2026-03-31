@@ -23,21 +23,34 @@ interface Skill {
 
 interface SkillManagementProps {
   isMobile?: boolean;
+  onRefresh?: (force?: boolean, isSilent?: boolean) => Promise<void>;
+  loading?: boolean;
+  skills?: any[];
 }
 
-const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
+const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, loading: globalLoading, skills: globalSkills }) => {
   const { t } = useTranslation();
-  const [skills, setSkills] = useState<Skill[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [localSkills, setLocalSkills] = useState<Skill[]>([]);
+  const [localLoading, setLocalLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
   const [updatedAt, setUpdatedAt] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | number>('ready');
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
+  const loading = globalLoading !== undefined ? globalLoading : localLoading;
+  const skills = globalSkills !== undefined ? globalSkills : localSkills;
+
   const fetchSkills = async (force = false) => {
-    setLoading(true);
+    // 如果存在父级分发的 onRefresh，优先使用 (同步阻塞)
+    if (onRefresh) {
+      await onRefresh(force, false);
+      return;
+    }
+    
+    setLocalLoading(true);
     try {
       if (force) {
+          // 这个接口现在是同步返回的，物理阻塞直到重载完成
           await api.post('/v1/openclaw/skills/reload');
       }
       const res = await api.get(`/v1/openclaw/skills${force ? '?refresh=true' : ''}`);
@@ -46,23 +59,25 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
       let skillsList: Skill[] = [];
       if (rawData.data) {
           skillsList = Array.isArray(rawData.data.skills) ? rawData.data.skills : [];
-          // 统一格式化时间
-          setUpdatedAt(rawData.updated_at ? dayjs(rawData.updated_at).format('YYYY-MM-DD HH:mm:ss') : '');
+          const updateTime = rawData.data.updated_at || rawData.data.updatedAt || rawData.updated_at;
+          setUpdatedAt(updateTime ? dayjs(updateTime).format('YYYY-MM-DD HH:mm:ss') : '');
       } else {
           skillsList = Array.isArray(rawData.skills) ? rawData.skills : [];
       }
       
-      setSkills(skillsList);
+      setLocalSkills(skillsList);
       if (force) message.success(t('skills.syncSuccess'));
     } catch (err) {
       message.error(t('skills.fetchFailed'));
     } finally {
-      setLoading(false);
+      setLocalLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchSkills();
+    if (!onRefresh) {
+      fetchSkills();
+    }
   }, []);
 
   const filteredSkills = skills.filter(skill => {
@@ -82,15 +97,18 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
       centered: true,
       onOk: async () => {
         try {
-          setLoading(true);
-          await api.delete(`/v1/openclaw/skills/${name}`);
-          message.loading(t('skills.reloadingEngine'), 1.5);
-          await api.post('/v1/openclaw/skills/reload');
-          message.success(t('skills.uninstallSuccess', { name }));
-          fetchSkills();
+          // 物理接入异步任务机制：卸载逻辑走异步
+          const res = await api.delete(`/v1/openclaw/skills/${name}`);
+          if (res.data.taskId) {
+            // 后端返回 TaskID，前端只需提示。数据拉取由 App.tsx 的 Task Observer 在任务完成后自动触发。
+            message.info(t('chat.waitingGatewaySync'));
+          } else {
+            // 兜底逻辑
+            message.success(t('skills.uninstallSuccess', { name }));
+            fetchSkills();
+          }
         } catch (err: any) {
           message.error(err.response?.data?.error || t('skills.uninstallFailed'));
-          setLoading(false);
         }
       }
     });

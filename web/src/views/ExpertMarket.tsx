@@ -31,11 +31,10 @@ interface Expert {
 
 interface ExpertMarketProps {
   isMobile?: boolean;
-  onShowGlobalLoading: (msg: string, duration?: number) => void;
   onNavigate: (tab: string) => void;
 }
 
-const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoading, onNavigate }) => {
+const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => {
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language.split('-')[0]; // 处理 zh-CN 等情况
 
@@ -143,8 +142,6 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
       await form.validateFields(); // 基础校验
       const values = form.getFieldsValue(true); // 强力提取所有步骤的数据
       setSubmitting(true);
-      setIsModalOpen(false);
-      onShowGlobalLoading(t('experts.creating'), 5000);
       await api.post('/v1/openclaw/bots/template', {
         expertId: values.expertId || selectedExpert?.id, // 增加显式兜底
         botId: values.botId,
@@ -152,10 +149,10 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
         soul: values.soul,
         identity_md: values.identity_md
       });
+      setIsModalOpen(false);
       message.success(t('experts.createSuccess', { id: values.botId }));
       onNavigate('bots-models');
     } catch (err: any) {
-      onShowGlobalLoading('', 1);
       if (!err.errorFields) {
         message.error(t('bots.createFailed') + ': ' + (err.response?.data?.error || err.message));
       }
@@ -387,7 +384,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onShowGlobalLoadi
             </div>
             <div>
               <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>{t('experts.createBotTitle')}</div>
-              <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>{selectedExpert?.name} · {t('experts.templateType')}</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>{t('experts.cloneFrom', { name: (currentLang === 'zh' && selectedExpert?.name) ? selectedExpert?.name : (selectedExpert?.name_en || selectedExpert?.name) })} · {t('experts.templateType')}</div>
             </div>
           </div>
         } 

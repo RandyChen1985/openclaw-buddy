@@ -55,13 +55,31 @@ sequenceDiagram
 - **避让**：如果检测到用户有手动操作网关的意图（排队中或执行中），`Guardian` 将 **跳过本次自愈**，防止与用户的手动操作产生资源抢占或状态回退。
 - **审计**：避让情况会记录进系统事件流中，供运维回溯。
 
-## 5. 模块触发器与业务刷新 (Module Triggers)
+## 5. 模块触发器与业务刷新标准 (Standardized Triggers)
 
-| 模块名称 (`module`) | 优先级 | 常见任务场景 | 触发的业务刷新 |
+本项目遵循“任务落地即物理对账”原则。`App.tsx` 中的 **全局任务观察器 (Global Observer)** 负责在任务状态变为 `Completed` 时静默触发以下业务刷新：
+
+| 模块名称 (`module`) | 优先级 | 常见任务动作 (`action`) | 自动触发的业务刷新 (Fetch Action) |
 | :--- | :--- | :--- | :--- |
-| **`gateway`** | **High** | 重启、停止、启动 | `fetchData()`, `fetchSystemEvents()` |
-| **`bots`** | Normal | 修改名称、模型、专家克隆 | `fetchBotsModels(true)` |
-| **`plugins`** | Normal | 安装/卸载插件 | `fetchPlugins()` |
+| **`gateway`** | **High** | `start`, `stop`, `restart` | `fetchData()`, `fetchSystemEvents()` |
+| **`bots`** | Normal | `add-model`, `delete-model`, `set-default-model`, `add-provider`, `clone-expert` | **`fetchModelsConfig()`**, **`fetchBotsModels(true)`** |
+| **`plugins`** | Normal | `install`, `uninstall`, `update` | `fetchPlugins()` |
+| **`skills`** | Normal | `delete-skill`, `sync-skills` | **`fetchSkills(true, true)`** (静默对账) |
+
+## 6. 前端闭环：静默对账机制 (Silent Reconciliation)
+
+为了提供极致流畅的交互体验，本项目在 v1.3 更新中确立了以下 UI 准则：
+
+1. **乐观响应 (Optimistic UI)**：删除/禁用类操作应在请求发出后立即通过本地 State 进行视觉隐藏，无需等待任务完成。
+2. **任务静默 (Silent Success)**：异步任务成功后，系统执行静默数据拉取（不弹出“资产同步成功”提示），除非发生物理错误。
+3. **全局对账 (Top-Down Sync)**：所有的业务刷新指令由顶层 `App.tsx` 统一分发，子组件（如 `SkillManagement`）不再自行维护任务监听，确保全系统 **最终一致性**。
+
+## 7. 后端实现指南 (Implementation Reference)
+
+为了避免项目重构导致的坐标迷失，开发者应优先参考以下核心路径：
+- **API 路由器**: `internal/api/router.go` (负责路由分发与任务注入)
+- **业务处理器**: `internal/api/handlers.go` (所有的 `runAsyncTask` 逻辑均在此物理固化)
+- **任务定义**: 技能相关任务必须使用 `skills` 模块标识，以触发 `App.tsx` 的全局副作用。
 
 ---
-*文档更新日期: 2026-03-31 (v1.1 Arch Update)*
+*文档更新日期: 2026-03-31 (v1.3 Skill Sync standardization Update)*

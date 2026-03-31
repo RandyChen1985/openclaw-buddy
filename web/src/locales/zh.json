@@ -77,6 +77,7 @@
     "usageGuide": "使用指南 (Expert Guide)",
     "usagePlaceholder": "请基于该专家模板的设计目标进行对话测试。",
     "createBotTitle": "基于专家模板创建机器人",
+    "cloneFrom": "克隆自专家: {{name}}",
     "idLabel": "机器人 ID",
     "idPlaceholder": "例如: dev_expert",
     "modelLabel": "默认模型",
@@ -545,5 +546,35 @@
     "disableSuccess": "插件已禁用",
     "updateStarted": "已开始后台更新插件，请稍后查看任务状态",
     "reload": "重载引擎"
+  },
+  "tasks": {
+    "empty": "暂无任务记录",
+    "clone_expert": "从专家模板克隆: {{id}}",
+    "add_bot": "添加机器人: {{id}}",
+    "update_bot": "修改机器人配置: {{id}}",
+    "set_identity": "修改机器人名称: {{id}}",
+    "set_model": "切换机器人模型: {{id}}",
+    "delete_bot": "删除机器人: {{id}}",
+    "set_default_model": "设置全局默认模型: {{id}}",
+    "stop_gateway": "停止网关",
+    "restart_gateway": "重启网关",
+    "install_plugin": "安装插件: {{id}}",
+    "uninstall_plugin": "卸载插件: {{id}}",
+    "reload_plugins": "重载插件引擎",
+    "update_plugins": "更新全部插件",
+    "results": {
+      "cloned": "已克隆",
+      "created": "已创建",
+      "updated": "已更新",
+      "identity_updated": "身份已更新",
+      "model_updated": "模型已更新",
+      "removed": "已移除",
+      "default_model_updated": "默认模型已更新",
+      "stopped": "已停止",
+      "restarted": "已重启",
+      "installed": "已安装",
+      "uninstalled": "已卸载",
+      "reloaded": "已重载"
+    }
   }
 }

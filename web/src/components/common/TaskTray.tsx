@@ -29,16 +29,37 @@ const TaskTray: React.FC<TaskTrayProps> = ({ tasks, isMobile, loading, onRefresh
     }
   };
 
+  const translateTaskName = (name: string) => {
+    if (!name) return '';
+    if (name.startsWith('tasks.')) {
+      const parts = name.split(':');
+      const key = parts[0];
+      const id = parts.slice(1).join(':'); // 处理 ID 中可能含有冒号的情况
+      return t(key, { id, name: id });
+    }
+    return name;
+  };
+
+  const translateResult = (result: string) => {
+    if (!result) return '';
+    if (result.startsWith('tasks.')) {
+      return t(result);
+    }
+    return result;
+  };
+
   const listContent = (
     <List
       dataSource={tasks.slice(0, 15)}
-      locale={{ emptyText: t('tasks.empty', '暂无任务记录') }}
+      locale={{ emptyText: t('tasks.empty') }}
       renderItem={(item) => (
         <List.Item style={{ padding: isMobile ? '16px' : '12px 16px', display: 'block' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
             <Space size={8}>
               {getStatusIcon(item.status)}
-              <Typography.Text style={{ fontSize: isMobile ? 14 : 13, fontWeight: 500 }}>{item.name}</Typography.Text>
+              <Typography.Text style={{ fontSize: isMobile ? 14 : 13, fontWeight: 500 }}>
+                {translateTaskName(item.name)}
+              </Typography.Text>
             </Space>
             <Typography.Text type="secondary" style={{ fontSize: 11 }}>
               {dayjs(item.startTime).format('HH:mm:ss')}
@@ -49,7 +70,7 @@ const TaskTray: React.FC<TaskTrayProps> = ({ tasks, isMobile, loading, onRefresh
             <Progress percent={item.progress} size="small" status="active" />
           ) : (
             <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-              {item.error || item.result || 'Finished'}
+              {item.error || translateResult(item.result || '') || 'Finished'}
             </Typography.Text>
           )}
         </List.Item>

@@ -244,7 +244,7 @@ func (s *Server) stopGateway(c *gin.Context) {
 	utils.RecordSystemEvent("CONTROL", "用户手动请求【停止网关】")
 	task := &process.Task{
 		ID:      fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:    "停止网关",
+		Name:    "tasks.stop_gateway",
 		Module:  "gateway",
 		Action:  "stop",
 		Command: "openclaw gateway stop",
@@ -254,7 +254,7 @@ func (s *Server) stopGateway(c *gin.Context) {
 		if err != nil {
 			return "", err
 		}
-		return "Stopped", nil
+		return "tasks.results.stopped", nil
 	})
 }
 
@@ -263,7 +263,7 @@ func (s *Server) restartGateway(c *gin.Context) {
 	utils.RecordSystemEvent("CONTROL", "用户手动请求【重启网关】")
 	task := &process.Task{
 		ID:      fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:    "重启网关",
+		Name:    "tasks.restart_gateway",
 		Module:  "gateway",
 		Action:  "restart",
 		Command: "openclaw gateway restart",
@@ -273,7 +273,7 @@ func (s *Server) restartGateway(c *gin.Context) {
 		if err != nil {
 			return "", err
 		}
-		return "Restarted", nil
+		return "tasks.results.restarted", nil
 	})
 }
 
@@ -602,7 +602,7 @@ func (s *Server) deleteOpenClawBot(c *gin.Context) {
 
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("Delete Bot: %s", req.ID),
+		Name:   "tasks.delete_bot:" + req.ID,
 		Module: "bots",
 		Action: "delete",
 		Target: req.ID,
@@ -614,7 +614,7 @@ func (s *Server) deleteOpenClawBot(c *gin.Context) {
 		}
 		// 成功后强制同步缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Removed", nil
+		return "tasks.results.removed", nil
 	})
 }
 
@@ -847,15 +847,21 @@ func (s *Server) uninstallSkill(c *gin.Context) {
 	}
 
 	log.Printf("🎮 [控制] 用户请求: 【卸载技能/插件】 (Name: %s)", name)
-	if err := process.UninstallOpenClawSkill(name); err != nil {
-		s.Error(c, http.StatusInternalServerError, err.Error())
-		return
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   fmt.Sprintf("卸载技能插件: %s", name),
+		Module: "skills",
+		Action: "delete-skill",
+		Target: name,
 	}
-
-	// 自动清理缓存，让下一次获取触发同步
-	process.SyncKeySingle("skills", s.cfg.OpenClawConfigDir)
-
-	s.Success(c, gin.H{"status": "success", "message": "技能卸载成功"})
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.UninstallOpenClawSkill(name); err != nil {
+			return "", err
+		}
+		// 自动清理缓存，让下一次获取触发同步
+		process.SyncKeySingle("skills", s.cfg.OpenClawConfigDir)
+		return "Uninstalled", nil
+	})
 }
 
 func (s *Server) reloadSkills(c *gin.Context) {
@@ -1351,7 +1357,7 @@ func (s *Server) createBotFromExpert(c *gin.Context) {
 	utils.RecordSystemEvent("CONTROL", fmt.Sprintf("用户手动从专家模板克隆机器人 (专家: %s, 目标 ID: %s)", req.ExpertID, req.BotID))
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("Clone from Expert: %s", req.BotID),
+		Name:   "tasks.clone_expert:" + req.BotID,
 		Module: "bots",
 		Action: "clone",
 		Target: req.BotID,
@@ -1364,7 +1370,7 @@ func (s *Server) createBotFromExpert(c *gin.Context) {
 
 		// 同步缓存
 		process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Cloned", nil
+		return "tasks.results.cloned", nil
 	})
 }
 
@@ -1405,5 +1411,5 @@ func (s *Server) updateOpenClawBotFile(c *gin.Context) {
 		return
 	}
 	s.Success(c, gin.H{"status": "success"})
-	}
+}
 
