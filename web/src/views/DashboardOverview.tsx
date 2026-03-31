@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Row, Col, Card, Tag, Progress, Button, Skeleton, Spin, Timeline, Tooltip as AntTooltip, Badge } from 'antd';
+import { Row, Col, Card, Tag, Progress, Button, Timeline, Badge, Spin } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Server, Activity, Play, Square, RefreshCw, Smartphone, Terminal, History, Trophy, AlertTriangle, Zap, Download, Monitor, AlertCircle } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
@@ -16,6 +16,7 @@ interface DashboardOverviewProps {
   topBots?: any[];
   ocInstalled: boolean | null;
   loading?: boolean;
+  activeTasks?: any[];
 }
 
 interface SystemInfo {
@@ -33,13 +34,16 @@ interface OcStatus {
 
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({ 
   status, history, wsLogs, isRunning, onControl, onNavigate,
-  systemEvents = [], topBots = [], ocInstalled, loading
+  systemEvents = [], topBots = [], ocInstalled, activeTasks = []
 }) => {
   const { t } = useTranslation();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
-  const logsEndRef = useRef<HTMLDivElement>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [ocStatus, setOcStatus] = useState<OcStatus | null>(null);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
+  // 检查是否有正在运行的网关任务
+  const isGatewayProcessing = activeTasks.some(t => t.module === 'gateway' && t.status === 'Running');
 
   const fetchData = async () => {
     try {
@@ -63,6 +67,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+
 
   const renderChart = (data: any[], dataKey: string, color: string, label: string, unit: string) => (
     <div style={{ height: 120 }}>
@@ -94,7 +100,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
-      {/* 顶部环境概览条 - 独立渲染层 (亮色版) */}
+      {/* 顶部环境概览条 */}
       <div 
         id="dashboard-env-monitor-bar"
         style={{ 
@@ -115,121 +121,43 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         {ocInstalled === null || !systemInfo ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <RefreshCw size={18} style={{ color: '#3b82f6', animation: 'spin 1.5s linear infinite' }} />
-            <span 
-              className="animate-pulse-slow"
-              style={{ 
-                fontSize: 14, 
-                fontWeight: 600, 
-                color: '#3b82f6', 
-                letterSpacing: '0.05em'
-              }}
-            >
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#3b82f6', letterSpacing: '0.05em' }}>
               OpenClaw 环境检测中...
             </span>
           </div>
         ) : (
-          <div style={{ 
-            display: 'flex', 
-            alignItems: isMobile ? 'flex-start' : 'center', 
-            justifyContent: 'space-between',
-            flexDirection: isMobile ? 'column' : 'row',
-            width: '100%',
-            gap: 16,
-            animation: 'fadeIn 0.5s ease-out'
-          }}>
-            <div style={{ 
-              display: 'flex', 
-              alignItems: isMobile ? 'flex-start' : 'center', 
-              gap: isMobile ? '16px' : '32px', 
-              flexDirection: isMobile ? 'column' : 'row',
-              width: isMobile ? '100%' : 'auto' 
-            }}>
-              {/* Hostname */}
+          <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', flexDirection: isMobile ? 'column' : 'row', width: '100%', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '16px' : '32px', flexDirection: isMobile ? 'column' : 'row', width: isMobile ? '100%' : 'auto' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ background: '#f0f9ff', padding: '8px', borderRadius: '10px' }}>
-                  <Monitor size={18} style={{ color: '#0ea5e9' }} />
-                </div>
+                <div style={{ background: '#f0f9ff', padding: '8px', borderRadius: '10px' }}><Monitor size={18} style={{ color: '#0ea5e9' }} /></div>
                 <div>
-                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>{t('dashboard.hostname', { defaultValue: '主机名' })}</div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>HOST</div>
                   <div style={{ fontSize: 14, color: '#1e293b', fontWeight: 600 }}>{systemInfo?.hostname || '---'}</div>
                 </div>
               </div>
-
-              {/* OS */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ background: '#f5f3ff', padding: '8px', borderRadius: '10px' }}>
-                  <Server size={18} style={{ color: '#8b5cf6' }} />
-                </div>
+                <div style={{ background: '#f5f3ff', padding: '8px', borderRadius: '10px' }}><Server size={18} style={{ color: '#8b5cf6' }} /></div>
                 <div>
-                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>{t('dashboard.os', { defaultValue: '操作系统' })}</div>
-                  <div style={{ fontSize: 14, color: '#1e293b', fontWeight: 600 }}>
-                    {systemInfo ? `${systemInfo.os} (${systemInfo.arch})` : '---'}
-                  </div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>OS</div>
+                  <div style={{ fontSize: 14, color: '#1e293b', fontWeight: 600 }}>{systemInfo ? `${systemInfo.os} (${systemInfo.arch})` : '---'}</div>
                 </div>
               </div>
-
               {!isMobile && <div style={{ width: 1, height: 24, background: '#e2e8f0' }} />}
-
-              {/* CLI Status */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ 
-                  background: ocStatus?.installed ? '#f0fdf4' : '#fef2f2', 
-                  padding: '8px', 
-                  borderRadius: '10px' 
-                }}>
-                  <Zap size={18} style={{ color: ocStatus?.installed ? '#22c55e' : '#ef4444' }} />
-                </div>
+                <div style={{ background: ocStatus?.installed ? '#f0fdf4' : '#fef2f2', padding: '8px', borderRadius: '10px' }}><Zap size={18} style={{ color: ocStatus?.installed ? '#22c55e' : '#ef4444' }} /></div>
                 <div>
                   <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>OpenClaw CLI</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {ocStatus?.installed ? (
-                      <Badge status="processing" color="#22c55e" text={<span style={{ fontSize: 14, color: '#1e293b', fontWeight: 700, fontFamily: 'monospace' }}>{ocStatus.version}</span>} />
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 14, color: '#ef4444', fontWeight: 700 }}>未安装</span>
-                        <AntTooltip title="OpenClaw 核心程序未在环境变量中通过检测">
-                          <AlertCircle size={14} style={{ color: '#ef4444', cursor: 'help' }} />
-                        </AntTooltip>
-                      </div>
-                    )}
+                    {ocStatus?.installed ? <Badge status="processing" color="#22c55e" text={<span style={{ fontSize: 14, color: '#1e293b', fontWeight: 700 }}>{ocStatus.version}</span>} /> : <span style={{ fontSize: 14, color: '#ef4444', fontWeight: 700 }}>未安装</span>}
                   </div>
                 </div>
               </div>
-            </div>
-
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 12, 
-              width: isMobile ? '100%' : 'auto',
-              justifyContent: isMobile ? 'flex-end' : 'flex-start' 
-            }}>
-              {!ocStatus?.installed && (
-                <Button 
-                  type="primary" 
-                  size="small" 
-                  danger 
-                  icon={<Download size={14} />}
-                  onClick={() => window.open('https://github.com/RandyChen1985/openclaw-buddy/releases')}
-                  style={{ borderRadius: 6, fontWeight: 600 }}
-                >
-                  获取下载
-                </Button>
-              )}
-              <Button 
-                type="text" 
-                size="small"
-                icon={<RefreshCw size={14} style={{ color: '#94a3b8' }} />} 
-                onClick={fetchData}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #f1f5f9' }}
-              />
             </div>
           </div>
         )}
       </div>
 
       <Row gutter={[20, 20]}>
-        {/* 左侧：核心状态与负载 */}
         <Col xs={24} lg={10}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20, height: '100%' }}>
             <Card styles={{ body: { padding: 24 } }} style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}>
@@ -243,98 +171,54 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 </Tag>
               </div>
               <div style={{ marginBottom: 24 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
-                  <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('dashboard.runtime')}</div>
-                </div>
-                <div style={{ 
-                  fontSize: isMobile ? 18 : 24, 
-                  fontWeight: 800, 
-                  color: '#1e293b', 
-                  fontFamily: 'monospace', 
-                  wordBreak: 'break-all', 
-                  lineHeight: 1.2,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}>
-                  {status?.gateway?.runtime || <Skeleton.Input active size="small" style={{ height: 28, width: 160 }} />}
+                <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('dashboard.runtime')}</div>
+                <div style={{ fontSize: isMobile ? 18 : 24, fontWeight: 800, color: '#1e293b', fontFamily: 'monospace' }}>
+                  {status?.gateway?.runtime || '---'}
                 </div>
               </div>
-              
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {!status?.metrics ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <Skeleton active paragraph={{ rows: 1 }} />
-                    <Skeleton active paragraph={{ rows: 1 }} />
-                  </div>
-                ) : (
+                {status?.metrics && (
                   <>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
-                        <span style={{ color: '#64748b', fontWeight: 500 }}>{t('dashboard.cpuLoad')}</span>
-                        <span style={{ color: '#1e293b', fontWeight: 700 }}>{status?.metrics?.cpu_usage?.toFixed(1)}%</span>
+                        <span style={{ color: '#64748b' }}>{t('dashboard.cpuLoad')}</span>
+                        <span style={{ fontWeight: 700 }}>{status?.metrics?.cpu_usage?.toFixed(1)}%</span>
                       </div>
-                      <Progress percent={status?.metrics?.cpu_usage} showInfo={false} strokeColor="#3b82f6" trailColor="#eff6ff" strokeWidth={6} />
+                      <Progress percent={status?.metrics?.cpu_usage} showInfo={false} strokeColor="#3b82f6" strokeWidth={6} />
                     </div>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
-                        <span style={{ color: '#64748b', fontWeight: 500 }}>{t('dashboard.memLoad')}</span>
-                        <span style={{ color: '#1e293b', fontWeight: 700 }}>{status?.metrics?.memory_usage?.toFixed(1)}%</span>
+                        <span style={{ color: '#64748b' }}>{t('dashboard.memLoad')}</span>
+                        <span style={{ fontWeight: 700 }}>{status?.metrics?.memory_usage?.toFixed(1)}%</span>
                       </div>
-                      <Progress percent={status?.metrics?.memory_usage} showInfo={false} strokeColor="#8b5cf6" trailColor="#f5f3ff" strokeWidth={6} />
+                      <Progress percent={status?.metrics?.memory_usage} showInfo={false} strokeColor="#8b5cf6" strokeWidth={6} />
                     </div>
                   </>
                 )}
               </div>
             </Card>
 
-            {/* 机器人活跃榜 (Bot Top) */}
             <Card 
               styles={{ body: { padding: '20px 24px' } }} 
-              style={{ borderRadius: 12, border: '1px solid #e2e8f0', flex: 1, minHeight: 180 }}
-              title={<span style={{ fontSize: 13, fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}><Trophy size={14} color="#f59e0b" /> {t('dashboard.topBots')}</span>}
+              style={{ borderRadius: 12, border: '1px solid #e2e8f0', flex: 1 }}
+              title={<span style={{ fontSize: 13, fontWeight: 600 }}><Trophy size={14} color="#f59e0b" /> {t('dashboard.topBots')}</span>}
             >
-              {loading ? (
-                <div style={{ textAlign: 'center', padding: '32px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                  <Spin size="small" />
-                  <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{t('dashboard.analyzing')}</div>
-                  <div style={{ fontSize: 10, color: '#cbd5e1' }}>{t('dashboard.syncing')}</div>
+              {topBots.map((bot, idx) => (
+                <div key={bot.id} style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{bot.emoji} {bot.name}</span>
+                    <Tag color="blue" style={{ fontSize: 10 }}>{bot.sessions} {t('dashboard.activeSessions')}</Tag>
+                  </div>
+                  <Progress percent={Math.min(100, bot.sessions * 10)} showInfo={false} strokeColor={idx === 0 ? '#f59e0b' : '#3b82f6'} strokeWidth={6} />
                 </div>
-              ) : topBots.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '20px 0', color: '#94a3b8', fontSize: 12 }}>
-                  {t('dashboard.noActiveBots')}
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {topBots.map((bot, idx) => (
-                    <div key={bot.id}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 16 }}>{bot.emoji}</span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{bot.name}</span>
-                        </div>
-                        <Tag color="blue" bordered={false} style={{ margin: 0, fontSize: 10, borderRadius: 4 }}>
-                          {bot.sessions} {t('dashboard.activeSessions')}
-                        </Tag>
-                      </div>
-                      <Progress 
-                        percent={Math.min(100, (bot.sessions / 10) * 100)} 
-                        showInfo={false} 
-                        strokeColor={idx === 0 ? '#f59e0b' : idx === 1 ? '#3b82f6' : '#8b5cf6'} 
-                        strokeWidth={6} 
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
+              ))}
             </Card>
           </div>
         </Col>
 
-        {/* 右侧：资源趋势图 */}
         <Col xs={24} lg={14}>
-          <Card
-            title={<span style={{ fontSize: 13, fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}><Activity size={15} color="#3b82f6" /> {t('dashboard.diagnosticLab')}</span>}
+          <Card 
+            title={<span style={{ fontSize: 13, fontWeight: 600 }}><Activity size={15} color="#3b82f6" /> {t('dashboard.diagnosticLab')}</span>}
             styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 52 }, body: { padding: '24px' } }}
             style={{ height: '100%', borderRadius: 12, border: '1px solid #e2e8f0' }}
           >
@@ -424,7 +308,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<Play size={14} />}
             onClick={() => onControl('start')}
-            disabled={isRunning || ocInstalled === false || ocInstalled === null}
+            disabled={isRunning || ocInstalled === false || ocInstalled === null || (isGatewayProcessing && !isRunning)}
+            loading={isGatewayProcessing && !isRunning}
             style={{ 
               fontWeight: 600, flex: isMobile ? '1 1 calc(50% - 6px)' : 'none', minWidth: 140, borderRadius: 10,
               background: (isRunning || ocInstalled === false || ocInstalled === null) ? '#cbd5e1' : '#22c55e', borderColor: (isRunning || ocInstalled === false || ocInstalled === null) ? '#cbd5e1' : '#22c55e'
@@ -438,7 +323,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<Square size={14} />}
             onClick={() => onControl('stop')}
-            disabled={!isRunning || ocInstalled === false || ocInstalled === null}
+            disabled={!isRunning || ocInstalled === false || ocInstalled === null || (isGatewayProcessing && isRunning)}
+            loading={isGatewayProcessing && isRunning}
             style={{ fontWeight: 600, flex: isMobile ? '1 1 calc(50% - 6px)' : 'none', minWidth: 140, borderRadius: 10 }}
           >
             {t('dashboard.stopGateway')}
@@ -447,7 +333,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<RefreshCw size={14} />}
             onClick={() => onControl('restart')}
-            disabled={ocInstalled === false || ocInstalled === null}
+            disabled={ocInstalled === false || ocInstalled === null || isGatewayProcessing}
+            loading={isGatewayProcessing}
             style={{ fontWeight: 600, flex: isMobile ? '1 1 100%' : 'none', minWidth: 140, borderRadius: 10, border: '1.5px solid #e2e8f0' }}
           >
             {t('dashboard.asyncRestart')}

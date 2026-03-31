@@ -55,6 +55,7 @@ func (g *Guardian) Run(ctx context.Context) {
 		if err == nil && rows > 0 {
 			log.Printf("🧹 [DB] 已自动清理超过 7 天的旧监控数据 (共 %d 条).", rows)
 		}
+		process.CleanupOrphanedTasks()
 		process.SyncAll(g.config.OpenClawConfigDir)
 		g.checkVersionUpdate()
 	}()
@@ -158,6 +159,12 @@ func (g *Guardian) check() {
 	
 	// Only trigger healing if switch is enabled
 	if isSelfHealingEnabled {
+		// [加固] 检查是否正在执行手动网关任务，防止自愈干扰用户操作
+		if process.IsModuleLocked("gateway") {
+			log.Printf("ℹ️ [自愈服务] 检测到网关模块已被用户锁定（可能正在手动重启），本次自愈流程将主动跳过以防冲突。")
+			return
+		}
+
 		log.Printf("🛠️ Initiating self-healing process.")
 		g.heal(reason)
 	} else {

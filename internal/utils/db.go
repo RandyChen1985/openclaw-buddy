@@ -86,6 +86,20 @@ func createTables(existingToken string) (string, error) {
 			event_type TEXT, -- 'INFO', 'WARN', 'HEAL', 'UPDATE', 'CONTROL'
 			message TEXT
 		);`,
+		`CREATE TABLE IF NOT EXISTS tasks (
+			id TEXT PRIMARY KEY,
+			name TEXT,
+			module TEXT,
+			action TEXT,
+			target TEXT,
+			status TEXT,
+			progress INTEGER DEFAULT 0,
+			payload TEXT,
+			result TEXT,
+			error TEXT,
+			start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+			end_time DATETIME
+		);`,
 	}
 
 	for _, query := range queries {
@@ -96,32 +110,10 @@ func createTables(existingToken string) (string, error) {
 	}
 	log.Println("✅ [数据库] 基础表结构校验完成")
 
-	// 增量迁移检查：为旧的 health_checks 表添加 cpu_usage / mem_usage 字段
-	log.Println("🔄 [数据库] 检查增量迁移: health_checks (资源指标需求)")
+	// 增量迁移检查
 	_, _ = DB.Exec("ALTER TABLE health_checks ADD COLUMN cpu_usage REAL")
 	_, _ = DB.Exec("ALTER TABLE health_checks ADD COLUMN mem_usage REAL")
-
-	// 增量迁移检查：修复可能存在的损坏的 quick_commands 表 (之前版本可能误删了字段)
-	var hasLabel int
-	_ = DB.QueryRow("SELECT count(*) FROM pragma_table_info('quick_commands') WHERE name='label'").Scan(&hasLabel)
-	if hasLabel == 0 {
-		log.Println("🛠️  [数据库] 修复损坏架构: quick_commands (补全核心字段)")
-		// 如果没有 label 字段，说明是损坏的表，我们需要重建它
-		// 注意：损坏的表通常只有 created_at 字段，没有有效数据，直接重建是安全的
-		_, _ = DB.Exec("DROP TABLE IF EXISTS quick_commands_old")
-		_, _ = DB.Exec("ALTER TABLE quick_commands RENAME TO quick_commands_old")
-		_, _ = DB.Exec(`CREATE TABLE IF NOT EXISTS quick_commands (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			label TEXT NOT NULL,
-			prompt TEXT NOT NULL,
-			icon TEXT,
-			is_system INTEGER DEFAULT 0,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		);`)
-		// 尝试从旧表恢复数据（虽然损坏表通常没数据，但为了保险）
-		// 由于字段完全不匹配，通常无法 INSERT INTO ... SELECT，这里我们选择直接删除旧表
-		_, _ = DB.Exec("DROP TABLE IF EXISTS quick_commands_old")
-	}
+	_, _ = DB.Exec("ALTER TABLE tasks ADD COLUMN command TEXT")
 
 	// 初始化“首次启动时间”
 	firstRun := GetSetting("first_run_at", "")
@@ -131,14 +123,13 @@ func createTables(existingToken string) (string, error) {
 		_ = SetSetting("first_run_at", now)
 		_ = SetSetting("self_healing_enabled", "true")
 
-		// 首次启动：只有当传入 Token 为空或显式的占位符时，才重新生成随机 Token
 		if existingToken == "" || strings.HasPrefix(existingToken, "sk-replace-me") {
 			activeToken = generateRandomToken(16)
 			_ = UpdateEnvToken(activeToken)
 		}
 	}
 
-	// 初始化默认快捷指令 (系统级指令，不可删除)
+	// 初始化默认快捷指令
 	defaults := []struct{ Label, Prompt, Icon string }{
 		{"🍭我的 Soul", "告诉我关于 我的 Soul 的配置信息", "Sparkles"},
 		{"👤我的 Identity", "告诉我关于 我的 Identity 的配置信息", "UserCircle"},
@@ -150,7 +141,6 @@ func createTables(existingToken string) (string, error) {
 		{"🛑终止会话", "/stop", "StopCircle"},
 	}
 	
-	// 先移除旧的系统指令，确保按 defaults 数组顺序重新插入 (维持前端显示顺序)
 	_, _ = DB.Exec("DELETE FROM quick_commands WHERE is_system = 1")
 	for _, d := range defaults {
 		_, _ = DB.Exec("INSERT INTO quick_commands (label, prompt, icon, is_system) VALUES (?, ?, ?, 1)", d.Label, d.Prompt, d.Icon)
@@ -179,7 +169,6 @@ func UpdateEnvToken(newToken string) error {
 	re := regexp.MustCompile(`(?m)^BUDDY_TOKEN\s*=.*$`)
 	newContent := re.ReplaceAllString(string(content), "BUDDY_TOKEN="+newToken)
 
-	// 如果没找到，追加到末尾
 	if !strings.Contains(newContent, "BUDDY_TOKEN=") {
 		newContent += "\nBUDDY_TOKEN=" + newToken
 	}
@@ -240,11 +229,9 @@ func CleanupOldData(days int) (int64, error) {
 	}
 	rowsAffected, _ := res.RowsAffected()
 
-	queryHeal := fmt.Sprintf("DELETE FROM heal_events WHERE timestamp < datetime('now', '-%d days')", days)
-	_, _ = DB.Exec(queryHeal)
-
-	queryEvents := fmt.Sprintf("DELETE FROM system_events WHERE timestamp < datetime('now', '-%d days')", days)
-	_, _ = DB.Exec(queryEvents)
+	_, _ = DB.Exec(fmt.Sprintf("DELETE FROM heal_events WHERE timestamp < datetime('now', '-%d days')", days))
+	_, _ = DB.Exec(fmt.Sprintf("DELETE FROM system_events WHERE timestamp < datetime('now', '-%d days')", days))
+	_, _ = DB.Exec(fmt.Sprintf("DELETE FROM tasks WHERE start_time < datetime('now', '-%d days')", days))
 
 	return rowsAffected, nil
 }
@@ -259,7 +246,6 @@ func RecordSystemEvent(eventType, message string) {
 	}
 }
 
-// NullFloat64 兼容 SQLite 的 NULL 浮点数
 type NullFloat64 struct {
 	Float64 float64
 	Valid   bool

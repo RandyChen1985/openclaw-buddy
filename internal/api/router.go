@@ -172,6 +172,7 @@ func (s *Server) setupStaticFiles() {
 }
 
 func (s *Server) Run() error {
+	go s.StartWebSocketBroadcaster()
 	return s.engine.Run(fmt.Sprintf(":%d", s.cfg.WebPort))
 }
 

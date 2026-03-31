@@ -18,6 +18,7 @@ import LogsViewer from './views/LogsViewer';
 import SelfHealing from './views/SelfHealing';
 import OnlineChat from './views/OnlineChat';
 import LanguageSwitcher from './components/LanguageSwitcher';
+import TaskTray from './components/common/TaskTray';
 import SkillManagement from './views/SkillManagement';
 import ExpertMarket from './views/ExpertMarket';
 import PluginManagement from './views/PluginManagement';
@@ -30,6 +31,7 @@ import CommandPalette from './components/common/CommandPalette';
 // Hooks
 import { useStatusPolling } from './hooks/useStatusPolling';
 import { useWebSocketLogs } from './hooks/useWebSocketLogs';
+import { useTaskCenter, type Task } from './hooks/useTaskCenter';
 
 const { Content, Sider, Header } = Layout;
 
@@ -82,17 +84,32 @@ const Dashboard = () => {
   const [dashboardAbortCtrl, setDashboardAbortCtrl] = useState<AbortController | null>(null);
 
   // Hooks
-  const { status, history, fetching, refreshCountdown } = useStatusPolling(
-    isTransitioning, targetStatus, (status) => {
+  const { tasks: activeTasks, updateTask: baseUpdateTask } = useTaskCenter();
+  const { status, history, fetching, refreshCountdown, fetchData } = useStatusPolling(
+    isTransitioning, targetStatus, () => {
       setIsTransitioning(false);
       setTargetStatus(null);
       setTransitionSeconds(0);
-      message.success(t('chat.gatewayCommandSuccess', { status }));
     }
   );
 
+  const handleTaskUpdate = (task: Task) => {
+    baseUpdateTask(task);
+    // 监听任务完成/失败事件，触发相关数据的即时刷新
+    if (task.status === 'Completed' || task.status === 'Failed') {
+      if (task.module === 'gateway') {
+        fetchData();
+        fetchSystemEvents();
+      } else if (task.module === 'plugins') {
+        fetchPlugins();
+      } else if (task.module === 'bots') {
+        fetchBotsModels();
+      }
+    }
+  };
+
   const [logSource, setLogSource] = useState('buddy');
-  const { wsLogs } = useWebSocketLogs(localStorage.getItem('guardian_token'), logSource);
+  const { wsLogs } = useWebSocketLogs(localStorage.getItem('guardian_token'), logSource, handleTaskUpdate);
 
   // Side Effects
   useEffect(() => {
@@ -321,7 +338,7 @@ const Dashboard = () => {
   };
 
   const executeControl = async () => {
-    const { action } = confirmModal;
+    const { action, title } = confirmModal;
     setConfirmModal(prev => ({ ...prev, open: false }));
 
     if (action === 'wechat') {
@@ -341,9 +358,8 @@ const Dashboard = () => {
 
     try {
       await api.post(`/v1/gateway/${action}`);
-      setIsTransitioning(true);
-      setTargetStatus(action === 'stop' ? 'stopped' : 'running');
-      setTransitionSeconds(0);
+      // 成功触发任务后，提示用户
+      message.info(t('chat.asyncCommandTip', { title }));
     } catch (err: any) {
       message.error(err.response?.data?.error || t('common.commandFailed'));
     }
@@ -352,9 +368,8 @@ const Dashboard = () => {
   const restartGateway = async () => {
     try {
       await api.post('/v1/gateway/restart');
-      setIsTransitioning(true);
-      setTargetStatus('running');
-      setTransitionSeconds(0);
+      // 成功触发任务后，提示用户
+      message.info(t('chat.asyncCommandTip', { title: t('common.restart') }));
     } catch (err: any) {
       message.error(err.response?.data?.error || t('common.restartFailed'));
       throw err;
@@ -365,12 +380,8 @@ const Dashboard = () => {
     setLoadingWeixin(true);
     try {
       await api.post('/v1/wechat/install');
-      message.loading(t('common.processing'), 0);
-      setTimeout(() => {
-        message.destroy();
-        message.success(t('chat.gatewayCommandSuccess', { status: 'Installed' }));
-        checkWeixinPlugin();
-      }, 3000);
+      // 成功触发任务后，提示已开始安装
+      message.info(t('chat.asyncCommandTip', { title: t('channels.weixinPlugin') }));
     } catch (err: any) {
       message.error(err.response?.data?.error || t('common.error'));
     } finally {
@@ -379,18 +390,11 @@ const Dashboard = () => {
   };
 
   const handleApproveDevice = async (requestId: string) => {
-    setTargetStatus('approving_device');
-    setIsTransitioning(true);
-    setTransitionSeconds(0);
     try {
       await api.post('/v1/openclaw/devices/approve', { requestId });
-      message.success(t('devices.approveSuccess'));
-      await fetchDevices();
+      // 不再设置全屏遮罩
     } catch (err: any) {
       message.error(err.response?.data?.error || t('common.error'));
-    } finally {
-      setIsTransitioning(false);
-      setTargetStatus(null);
     }
   };
 
@@ -408,91 +412,52 @@ const Dashboard = () => {
   };
 
   const handleAddBot = async (id: string, model: string) => {
-    setTargetStatus('adding_bot');
-    setIsTransitioning(true);
-    setTransitionSeconds(0);
     try {
       await api.post('/v1/openclaw/bots/add', { id, model });
-      message.success(t('bots.createSuccess', { id }));
-      await fetchBotsModels(true); // 补全 await
+      // 后端已改为异步并返回 202
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.createFailed');
       message.error(msg);
-      throw err; // 继续抛出以阻止 Modal 关闭
-    } finally {
-      setIsTransitioning(false);
-      setTargetStatus(null);
+      throw err;
     }
   };
 
   const handleSetBotIdentity = async (id: string, name: string) => {
-    setTargetStatus('setting_identity');
-    setIsTransitioning(true);
-    setTransitionSeconds(0);
     try {
       await api.post('/v1/openclaw/bots/set-identity', { id, name });
-      message.success(t('bots.updateSuccess', { id, name }));
-      await fetchBotsModels(true); // 补全 await
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.updateFailed');
       message.error(msg);
       throw err;
-    } finally {
-      setIsTransitioning(false);
-      setTargetStatus(null);
     }
   };
 
   const handleSetBotModel = async (id: string, model: string) => {
-    setTargetStatus('setting_bot_model');
-    setIsTransitioning(true);
-    setTransitionSeconds(0);
     try {
       await api.post('/v1/openclaw/bots/set-model', { id, model });
-      message.success(t('bots.modelUpdateSuccess', { id, model }));
-      await fetchBotsModels(true);
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.modelUpdateFailed');
       message.error(msg);
       throw err;
-    } finally {
-      setIsTransitioning(false);
-      setTargetStatus(null);
     }
   };
 
   const handleDeleteBot = async (id: string) => {
-    setTargetStatus('deleting_bot');
-    setIsTransitioning(true);
-    setTransitionSeconds(0);
     try {
       await api.post('/v1/openclaw/bots/delete', { id });
-      message.success(t('bots.removeSuccess', { id }));
-      await fetchBotsModels(true); // 补全 await
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.removeFailed');
       message.error(msg);
       throw err;
-    } finally {
-      setIsTransitioning(false);
-      setTargetStatus(null);
     }
   };
 
   const handleSetDefaultModel = async (modelId: string) => {
-    setTargetStatus('setting_default_model');
-    setIsTransitioning(true);
-    setTransitionSeconds(0);
     try {
       await api.post('/v1/openclaw/models/set-default', { modelId });
-      message.success(t('bots.setDefaultSuccess', { id: modelId }));
-      await fetchBotsModels(true);
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.setDefaultFailed');
       message.error(msg);
-    } finally {
-      setIsTransitioning(false);
-      setTargetStatus(null);
     }
   };
 
@@ -619,6 +584,7 @@ const Dashboard = () => {
           systemEvents={systemEvents}
           topBots={topBots}
           ocInstalled={ocInstalled}
+          activeTasks={activeTasks}
         />
       ),
       'bots-models': (
@@ -784,6 +750,7 @@ const Dashboard = () => {
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, flexShrink: 0 }}>
+        <TaskTray tasks={activeTasks} isMobile={isMobile} />
         <LanguageSwitcher isMobile={isMobile} />
         <Badge
           status={isRunning ? 'success' : 'error'}

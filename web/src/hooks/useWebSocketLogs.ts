@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export const useWebSocketLogs = (token: string | null, source: string = 'buddy') => {
+export const useWebSocketLogs = (token: string | null, source: string = 'buddy', onTaskUpdate?: (task: any) => void) => {
   const [wsLogs, setWsLogs] = useState<string[]>([]);
 
   useEffect(() => {
@@ -18,6 +18,15 @@ export const useWebSocketLogs = (token: string | null, source: string = 'buddy')
     const socket = new WebSocket(wsUrl);
 
     socket.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'TASK_UPDATE' && onTaskUpdate) {
+          onTaskUpdate(msg.data);
+          return; // 任务更新不计入普通日志流
+        }
+      } catch (e) {
+        // 非 JSON 消息，按普通日志处理
+      }
       setWsLogs((prev) => [...prev.slice(-200), event.data]);
     };
 
@@ -28,7 +37,7 @@ export const useWebSocketLogs = (token: string | null, source: string = 'buddy')
     return () => {
       socket.close();
     };
-  }, [token, source]);
+  }, [token, source, onTaskUpdate]);
 
   return { wsLogs, setWsLogs };
 };

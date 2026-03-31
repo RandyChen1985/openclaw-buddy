@@ -191,73 +191,101 @@ func (s *Server) getWeChatQRCode(c *gin.Context) {
 	s.Success(c, qrcode)
 }
 
-func (s *Server) runAsyncCommand(c *gin.Context, taskName string, args ...string) {
-	taskID := fmt.Sprintf("task-%d", time.Now().UnixNano())
-	process.RegisterTask(taskID, taskName)
+func (s *Server) runAsyncTask(c *gin.Context, task *process.Task, run func() (string, error)) {
+	if !process.LockModule(task.Module) {
+		s.Error(c, http.StatusConflict, fmt.Sprintf("模块 %s 当前有正在运行的任务", task.Module))
+		return
+	}
+
+	if err := process.RegisterTask(task); err != nil {
+		process.UnlockModule(task.Module)
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	go func() {
-		_, err := process.RunCommandWithTimeout(60*time.Second, "openclaw", args...)
-		if err != nil {
-			process.UpdateTaskStatus(taskID, process.TaskStatusFailed, err.Error())
-		} else {
-			process.UpdateTaskStatus(taskID, process.TaskStatusCompleted, "")
+		defer process.UnlockModule(task.Module)
+		
+		done := make(chan struct{})
+		var result string
+		var err error
+		
+		go func() {
+			result, err = run()
+			close(done)
+		}()
+		
+		select {
+		case <-done:
+			if err != nil {
+				process.UpdateTaskStatus(task.ID, process.TaskStatusFailed, "", err.Error())
+			} else {
+				process.UpdateTaskStatus(task.ID, process.TaskStatusCompleted, result, "")
+			}
+		case <-time.After(3 * time.Minute):
+			process.UpdateTaskStatus(task.ID, process.TaskStatusTimeout, "", "任务执行超时 (3分钟)")
 		}
 	}()
 
 	c.JSON(http.StatusAccepted, APIResponse{
 		Code:    202,
-		Message: "Command accepted and running in background",
+		Message: "Task accepted",
 		Data: gin.H{
-			"taskID":  taskID,
-			"command": "openclaw " + strings.Join(args, " "),
+			"taskID": task.ID,
 		},
 	})
 }
 
 func (s *Server) startGateway(c *gin.Context) {
 	utils.RecordSystemEvent("CONTROL", "用户手动请求【启动网关】")
-	s.runAsyncCommand(c, "启动网关", "gateway", "start")
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   "启动网关",
+		Module: "gateway",
+		Action: "start",
+	}
+	s.runAsyncTask(c, task, func() (string, error) {
+		res, err := process.RunCommandWithTimeout(60*time.Second, "openclaw", "gateway", "start")
+		if err != nil {
+			return "", err
+		}
+		return res.Output, nil
+	})
 }
 
 func (s *Server) stopGateway(c *gin.Context) {
-	taskID := fmt.Sprintf("task-%d", time.Now().UnixNano())
-	process.RegisterTask(taskID, "停止网关")
-
-	go func() {
+	utils.RecordSystemEvent("CONTROL", "用户手动请求【停止网关】")
+	task := &process.Task{
+		ID:      fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:    "停止网关",
+		Module:  "gateway",
+		Action:  "stop",
+		Command: "openclaw gateway stop",
+	}
+	s.runAsyncTask(c, task, func() (string, error) {
 		err := process.StopGateway(s.cfg.HealthPort)
 		if err != nil {
-			process.UpdateTaskStatus(taskID, process.TaskStatusFailed, err.Error())
-		} else {
-			process.UpdateTaskStatus(taskID, process.TaskStatusCompleted, "")
+			return "", err
 		}
-	}()
-
-	utils.RecordSystemEvent("CONTROL", "用户手动请求【停止网关】")
-	c.JSON(http.StatusAccepted, APIResponse{
-		Code:    202,
-		Message: "Stop command initiated with force fallback",
-		Data:    gin.H{"taskID": taskID},
+		return "Stopped", nil
 	})
 }
 
 func (s *Server) restartGateway(c *gin.Context) {
-	taskID := fmt.Sprintf("task-%d", time.Now().UnixNano())
-	process.RegisterTask(taskID, "重启网关")
-
-	go func() {
+	utils.RecordSystemEvent("CONTROL", "用户手动请求【重启网关】")
+	task := &process.Task{
+		ID:      fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:    "重启网关",
+		Module:  "gateway",
+		Action:  "restart",
+		Command: "openclaw gateway restart",
+	}
+	s.runAsyncTask(c, task, func() (string, error) {
 		err := process.RestartGateway(s.cfg.HealthPort)
 		if err != nil {
-			process.UpdateTaskStatus(taskID, process.TaskStatusFailed, err.Error())
-		} else {
-			process.UpdateTaskStatus(taskID, process.TaskStatusCompleted, "")
+			return "", err
 		}
-	}()
-
-	utils.RecordSystemEvent("CONTROL", "用户手动请求【重启网关】")
-	c.JSON(http.StatusAccepted, APIResponse{
-		Code:    202,
-		Message: "Restart command initiated (Stop + Start)",
-		Data:    gin.H{"taskID": taskID},
+		return "Restarted", nil
 	})
 }
 
@@ -406,22 +434,19 @@ func (s *Server) getHealReportDetail(c *gin.Context) {
 }
 
 func (s *Server) installWeChatPlugin(c *gin.Context) {
-	taskID := fmt.Sprintf("task-%d", time.Now().UnixNano())
-	process.RegisterTask(taskID, "安装微信插件")
-
-	go func() {
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   "安装微信插件",
+		Module: "plugins",
+		Action: "install",
+		Target: "wechat",
+	}
+	s.runAsyncTask(c, task, func() (string, error) {
 		err := process.InstallWeChatPlugin()
 		if err != nil {
-			process.UpdateTaskStatus(taskID, process.TaskStatusFailed, err.Error())
-		} else {
-			process.UpdateTaskStatus(taskID, process.TaskStatusCompleted, "")
+			return "", err
 		}
-	}()
-
-	c.JSON(http.StatusAccepted, APIResponse{
-		Code:    202,
-		Message: "Installation started",
-		Data:    gin.H{"taskID": taskID},
+		return "Installed", nil
 	})
 }
 
@@ -455,18 +480,22 @@ func (s *Server) addOpenClawBot(c *gin.Context) {
 		return
 	}
 
-	// 执行添加
-	if err := process.AddOpenClawBot(req.ID, req.Model, req.Workspace); err != nil {
-		s.Error(c, http.StatusInternalServerError, err.Error())
-		return
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   fmt.Sprintf("添加机器人: %s", req.ID),
+		Module: "bots",
+		Action: "add",
+		Target: req.ID,
 	}
 
-	// 成功后强制同步缓存
-	if err := process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir); err != nil {
-		fmt.Printf("Warning: Failed to sync cache after adding bot: %v\n", err)
-	}
-
-	s.Success(c, gin.H{"status": "success", "message": "小龙虾机器人创建成功"})
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.AddOpenClawBot(req.ID, req.Model, req.Workspace); err != nil {
+			return "", err
+		}
+		// 成功后强制同步缓存
+		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
+		return "Created", nil
+	})
 }
 
 func (s *Server) setOpenClawBotIdentity(c *gin.Context) {
@@ -1197,7 +1226,19 @@ func (s *Server) uninstallPlugin(c *gin.Context) {
 
 func (s *Server) updatePlugins(c *gin.Context) {
 	utils.RecordSystemEvent("CONTROL", "用户手动请求【更新插件】")
-	s.runAsyncCommand(c, "更新插件", "plugins", "update")
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   "更新插件",
+		Module: "plugins",
+		Action: "update",
+	}
+	s.runAsyncTask(c, task, func() (string, error) {
+		res, err := process.RunCommandWithTimeout(120*time.Second, "openclaw", "plugins", "update")
+		if err != nil {
+			return "", err
+		}
+		return res.Output, nil
+	})
 }
 
 func (s *Server) getOpenClawExperts(c *gin.Context) {
@@ -1270,4 +1311,5 @@ func (s *Server) updateOpenClawBotFile(c *gin.Context) {
 		return
 	}
 	s.Success(c, gin.H{"status": "success"})
-}
+	}
+

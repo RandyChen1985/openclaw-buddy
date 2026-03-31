@@ -57,7 +57,22 @@ mkdir -p "$DEV_ROOT/backups"
 # 3. 编译前端
 if [ -d "web" ]; then
     echo "🎨 正在编译前端..."
-    pushd web > /dev/null && npm run build --silent || echo "⚠️ Build had warnings, continuing..."; popd > /dev/null
+    pushd web > /dev/null
+    npm run build
+    if [ $? -ne 0 ]; then
+        echo "❌ 前端项目编译失败！请检查 TypeScript 或 Lint 错误。"
+        popd > /dev/null
+        exit 1
+    fi
+    popd > /dev/null
+
+    # 校验产物目录
+    if [ ! -d "web/dist" ]; then
+        echo "❌ 找不到编译产物目录 (web/dist)，编译可能未完整完成。"
+        exit 1
+    fi
+
+    echo "📦 正在同步前端资产到后端..."
     mkdir -p internal/api/dist
     rm -rf internal/api/dist/*
     cp -r web/dist/* internal/api/dist/
@@ -91,7 +106,7 @@ REPORT_DIR="./reports"
 
 # [监控策略]
 # 监控轮询间隔 (秒)
-CHECK_INTERVAL_SECONDS=30
+CHECK_INTERVAL_SECONDS=120
 # 网关健康检查端口
 HEALTH_PORT=18789
 # 最大容错重试次数

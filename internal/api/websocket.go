@@ -3,9 +3,11 @@ package api
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os/exec"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -13,12 +15,37 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/hpcloud/tail"
+	"openclaw-buddy/internal/process"
+)
+
+var (
+	clients   = make(map[*websocket.Conn]bool)
+	clientsMu sync.Mutex
 )
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true // Simplified for this project
 	},
+}
+
+func (s *Server) StartWebSocketBroadcaster() {
+	log.Println("📡 [WS] WebSocket broadcaster started.")
+	for task := range process.TaskUpdateChan {
+		msg, _ := json.Marshal(map[string]interface{}{
+			"type": "TASK_UPDATE",
+			"data": task,
+		})
+
+		clientsMu.Lock()
+		for conn := range clients {
+			err := conn.WriteMessage(websocket.TextMessage, msg)
+			if err != nil {
+				log.Printf("⚠️ [WS] Failed to send task update to client: %v", err)
+			}
+		}
+		clientsMu.Unlock()
+	}
 }
 
 func (s *Server) streamLogs(c *gin.Context) {
@@ -28,6 +55,18 @@ func (s *Server) streamLogs(c *gin.Context) {
 		return
 	}
 	defer conn.Close()
+
+	// 注册客户端
+	clientsMu.Lock()
+	clients[conn] = true
+	clientsMu.Unlock()
+
+	// 注销客户端
+	defer func() {
+		clientsMu.Lock()
+		delete(clients, conn)
+		clientsMu.Unlock()
+	}()
 
 	source := c.DefaultQuery("source", "buddy")
 	stopChan := make(chan bool)
@@ -51,13 +90,11 @@ func (s *Server) streamLogs(c *gin.Context) {
 	if source == "gateway" {
 		// --- 模式 A: 实时获取小龙虾网关日志 ---
 		ctx, cancel := context.WithCancel(context.Background())
-		// 注意：这里的 cancel 会在函数退出时由 defer 执行
 		defer cancel()
 
 		log.Printf("📡 [WS] Starting gateway log streaming (openclaw logs --follow)...")
 		cmd := exec.CommandContext(ctx, "openclaw", "logs", "--follow")
 		
-		// [加固] 设置进程组，以便后续整体销毁
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		
 		stdout, err := cmd.StdoutPipe()
@@ -72,7 +109,6 @@ func (s *Server) streamLogs(c *gin.Context) {
 			return
 		}
 
-		// 异步读取输出并推送到 WebSocket
 		go func() {
 			scanner := bufio.NewScanner(stdout)
 			for scanner.Scan() {
@@ -84,23 +120,29 @@ func (s *Server) streamLogs(c *gin.Context) {
 			}
 		}()
 
-		// 等待停止信号
 		<-stopChan
 		
-		// [加固] 彻底清理：杀掉整个进程组，而不仅仅是父进程
 		pgid, err := syscall.Getpgid(cmd.Process.Pid)
 		if err == nil {
 			syscall.Kill(-pgid, syscall.SIGKILL)
 		}
 		
-		// [加固] 回收进程资源，防止产生僵尸进程
 		_ = cmd.Wait()
 		
 		log.Println("👋 [WS] Stopped gateway log streaming.")
 		return
 	}
 
-	// --- 模式 B: 实时获取 Buddy 自身日志 (默认) ---
+	// --- 模式 B: 实时获取 Buddy 自身日志 ---
+	// [优化] 连接建立时，先行推送最后 50 行日志，提供即时上下文
+	preLogCmd := exec.Command("tail", "-n", "50", s.cfg.LogFile)
+	if preLogOut, err := preLogCmd.Output(); err == nil {
+		scanner := bufio.NewScanner(strings.NewReader(string(preLogOut)))
+		for scanner.Scan() {
+			_ = conn.WriteMessage(websocket.TextMessage, []byte(scanner.Text()))
+		}
+	}
+
 	t, err := tail.TailFile(s.cfg.LogFile, tail.Config{
 		Follow:    true,
 		ReOpen:    true,
@@ -126,7 +168,6 @@ func (s *Server) streamLogs(c *gin.Context) {
 		case <-stopChan:
 			return
 		case <-time.After(30 * time.Second):
-			// 心跳，防止某些防火墙断开连接
 			if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(time.Second)); err != nil {
 				return
 			}
