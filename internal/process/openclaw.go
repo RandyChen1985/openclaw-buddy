@@ -559,11 +559,8 @@ func GetOpenClawPlugins() (any, error) {
 }
 
 func ReloadOpenClawPlugins() error {
-	cmd := exec.Command("openclaw", "plugins", "reload")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to reload plugins: %v. Output: %s", err, string(out))
-	}
+	// 目前版本的 openclaw CLI (2026.3.24) 不支持 plugins reload 子命令。
+	// 重载操作由上层 Handler 调用 SyncKeySingle("plugins") 通过执行 list 命令来完成实时的列表扫描。
 	return nil
 }
 
@@ -638,11 +635,8 @@ func UninstallOpenClawSkill(name string) error {
 }
 
 func ReloadOpenClawSkills() error {
-	cmd := exec.Command("openclaw", "skills", "reload")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to reload skills: %v. Output: %s", err, string(out))
-	}
+	// 目前版本的 openclaw CLI (2026.3.24) 不支持 skills reload 子命令。
+	// 重载操作由上层 Handler 调用 SyncKeySingle("skills") 通过执行 list 命令来完成实时的列表扫描。
 	return nil
 }
 

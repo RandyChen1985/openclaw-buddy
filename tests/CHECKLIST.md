@@ -17,6 +17,8 @@
 - [ ] **强制刷新**: `GET /v1/openclaw/bots-models?refresh=true` 应绕过数据库缓存直接触发实时爬取并同步。
 - [ ] **解析鲁棒性**: `openclaw models list` 输出中包含插件日志（带 ANSI 颜色、时间戳）时，不应将其误识别为模型。
 - [ ] **外部地址前缀**: 设置 `EXTERNAL_DASHBOARD_URL` 后，龙虾面板跳转链接应包含该前缀。
+- [x] **环境检测状态锁定**: 确认 Dashboard 控制按钮在环境检测期间处于禁用状态。
+- [x] **API 统一重构**: 全站（含 SSE 聊天流）已迁移至 api 实例，各路径均支持自定义 WebRoot 补全。
 - [ ] **Dashboard URL 容错**: `openclaw dashboard` 命令耗时较长（>10s）时，接口应支持 30s 超时控制。
 - [ ] **任务状态追踪**: `GET /v1/tasks/status?task_id=<id>` 应能正确返回异步任务（如重启网关）的 Running/Completed/Failed 状态。
 - [ ] **聊天配置检查**: `GET /v1/openclaw/chat/status` 应返回当前 `chatCompletions` 是否启用。
@@ -142,6 +144,7 @@
 - [ ] **打包清理**: 检查生成的 .tar.gz 压缩包内是否已彻底排除以 `._` 开头的 macOS 元数据文件，且在 Linux 上解压时不应出现 `LIBARCHIVE.xattr` 警告。
 - [ ] **产物体积**: 检查 Linux 版二进制文件是否已通过 `ldflags` 压缩（约 27MB 左右）。
 - [ ] **环境隔离**: 检查生成的 `env` 文件是否包含新增的 `EXTERNAL_DASHBOARD_URL` 配置项。
+- [ ] **配置持久化**: 验证 `dev.sh` 在重启或停止时是否能正确保留 `temp-dev-test/env` 文件，且不再重复覆盖。
 - [ ] **Windows 兼容性**: 在 Windows 环境下执行 `openclaw-buddy.exe`，验证 Shell 终端与 TUI 聊天能够正常启动（ConPTY）。
 - [ ] **跨平台编译**: 执行 `GOOS=windows go build` 应无 `syscall` 相关编译错误。
 

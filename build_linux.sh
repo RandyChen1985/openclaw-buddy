@@ -72,6 +72,8 @@ cat <<EOF > "${PKG_DIR}/env"
 # 🦞 OpenClaw Buddy (Linux 生产环境)
 # Guardian 面板监听端口
 WEB_PORT=3000
+# 基础路径 (默认为 /, 若需配置如 /claw 则改为 /claw)
+WEB_ROOT="/"
 # 访问面板所需的认证令牌 (sk- 开头)
 BUDDY_TOKEN="sk-replace-me-on-first-run"
 

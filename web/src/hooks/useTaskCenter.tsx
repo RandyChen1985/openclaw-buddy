@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api';
-import { notification } from 'antd';
+import { notification, Progress } from 'antd';
+import { Loader2, CheckCircle2, XCircle, AlertCircle, Clock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 export interface Task {
@@ -60,28 +61,83 @@ export const useTaskCenter = () => {
 
     const taskDisplayName = translateTaskName(updatedTask.name);
 
-    const notifyConfig = { placement: 'bottomRight' as const, duration: 4.5 };
+    // --- 自定义通知内容渲染 ---
+    const renderNotification = (task: Task) => {
+      const getIcon = () => {
+        switch (task.status) {
+          case 'Running': return <Loader2 size={16} className="animate-spin" style={{ color: '#3b82f6' }} />;
+          case 'Completed': return <CheckCircle2 size={16} style={{ color: '#22c55e' }} />;
+          case 'Failed': return <XCircle size={16} style={{ color: '#ef4444' }} />;
+          case 'Timeout': return <AlertCircle size={16} style={{ color: '#f59e0b' }} />;
+          default: return <Clock size={16} style={{ color: '#94a3b8' }} />;
+        }
+      };
+
+      const getStatusText = () => {
+        switch (task.status) {
+          case 'Running': return t('common.waitingGateway');
+          case 'Completed': return t('common.success');
+          case 'Failed': return t('common.error');
+          case 'Timeout': return t('common.timeout');
+          default: return '';
+        }
+      };
+
+      return (
+        <div className="notification-content-layout">
+          <div className="notification-status-line">
+            {getIcon()}
+            <span style={{ color: task.status === 'Running' ? '#3b82f6' : 'inherit' }}>
+              {getStatusText()}
+            </span>
+          </div>
+          {task.status === 'Running' && (
+            <Progress 
+              percent={task.progress} 
+              size="small" 
+              showInfo={false} 
+              className="notification-progress-mini"
+              strokeColor="#3b82f6"
+            />
+          )}
+          {(task.status === 'Failed' || task.status === 'Timeout') && task.error && (
+            <div style={{ fontSize: 11, color: '#ef4444', marginTop: 4, opacity: 0.8 }}>
+              {task.error}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const notifyConfig = { 
+      placement: 'bottomRight' as const, 
+      duration: updatedTask.status === 'Running' ? 8 : 4.5,
+      className: `premium-notification premium-notification-${updatedTask.status.toLowerCase()}`,
+      style: { width: 340 }
+    };
 
     // --- 逻辑：决定是否需要弹窗 ---
     if (!skipNotify) {
       if (isNew) {
-        // 只有真正的全新任务才弹出一个“已开始”通知
-        if (updatedTask.status === 'Running') {
-          notification.info({ ...notifyConfig, message: taskDisplayName, description: t('common.waitingGateway') });
-        } else if (updatedTask.status === 'Completed') {
-          notification.success({ ...notifyConfig, message: taskDisplayName, description: t('common.success') });
-        } else if (updatedTask.status === 'Failed' || updatedTask.status === 'Timeout') {
-          notification.error({ ...notifyConfig, message: taskDisplayName, description: `${t('common.error')}: ${updatedTask.error || 'Unknown Error'}` });
-        }
+        // 只有真正的全新任务才弹出一个通知
+        const icon = updatedTask.status === 'Running' ? 'info' : updatedTask.status === 'Completed' ? 'success' : 'error';
+        (notification as any)[updatedTask.status === 'Running' ? 'info' : icon]({
+          ...notifyConfig,
+          message: <span style={{ fontWeight: 600 }}>{taskDisplayName}</span>,
+          description: renderNotification(updatedTask),
+          key: updatedTask.id // 保持 key 一致，支持后续更新同一条通知
+        });
       } else {
-        // 对于已有任务（或接力任务），只有状态发生实质改变时才弹窗
+        // 对于已有任务，只有状态发生实质改变时才更新通知
         const effectiveOldTask = oldTask || handoverPendingTask;
         if (effectiveOldTask && effectiveOldTask.status !== updatedTask.status) {
-          if (updatedTask.status === 'Completed') {
-            notification.success({ ...notifyConfig, message: taskDisplayName, description: t('common.success') });
-          } else if (updatedTask.status === 'Failed' || updatedTask.status === 'Timeout') {
-            notification.error({ ...notifyConfig, message: taskDisplayName, description: `${t('common.error')}: ${updatedTask.error || 'Unknown Error'}` });
-          }
+          const type = updatedTask.status === 'Completed' ? 'success' : (updatedTask.status === 'Failed' || updatedTask.status === 'Timeout') ? 'error' : 'info';
+          (notification as any)[type]({
+            ...notifyConfig,
+            message: <span style={{ fontWeight: 600 }}>{taskDisplayName}</span>,
+            description: renderNotification(updatedTask),
+            key: updatedTask.id
+          });
         }
       }
     }

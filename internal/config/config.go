@@ -28,6 +28,7 @@ type Config struct {
 	DBFile               string
 	Token                string
 	WebPort              int
+	WebRoot              string
 	ExternalDashboardURL string
 }
 
@@ -39,6 +40,19 @@ func LoadConfig() (*Config, error) {
 	healthPort, _ := strconv.Atoi(getEnv("HEALTH_PORT", "18789"))
 	webPort, _ := strconv.Atoi(getEnv("WEB_PORT", "3000"))
 	feishuEnabled, _ := strconv.ParseBool(getEnv("FEISHU_ENABLED", "false"))
+
+	// 规范化 WebRoot
+	webRoot := getEnv("WEB_ROOT", "/")
+	if webRoot == "" || webRoot == "/" {
+		webRoot = "/"
+	} else {
+		if webRoot[0] != '/' {
+			webRoot = "/" + webRoot
+		}
+		if len(webRoot) > 1 && webRoot[len(webRoot)-1] == '/' {
+			webRoot = webRoot[:len(webRoot)-1]
+		}
+	}
 
 	// 日志轮转配置
 	maxSize, _ := strconv.Atoi(getEnv("LOG_MAX_SIZE", "10"))
@@ -65,6 +79,7 @@ func LoadConfig() (*Config, error) {
 		DBFile:               getEnv("DB_FILE", "./data/guardian.db"),
 		Token:                getEnv("BUDDY_TOKEN", "sk-replace-me-on-first-run"),
 		WebPort:              webPort,
+		WebRoot:              webRoot,
 		ExternalDashboardURL: getEnv("EXTERNAL_DASHBOARD_URL", ""),
 	}, nil
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { getWsUrl } from '../utils/url';
 
 export const useWebSocketLogs = (token: string | null, source: string = 'buddy', onTaskUpdate?: (task: any) => void) => {
   const [wsLogs, setWsLogs] = useState<string[]>([]);
@@ -15,11 +16,7 @@ export const useWebSocketLogs = (token: string | null, source: string = 'buddy',
     // 切换源时清空旧日志
     setWsLogs([]);
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const wsUrl = import.meta.env.DEV
-      ? `ws://localhost:3000/v1/ws/logs?token=${token}&source=${source}`
-      : `${protocol}//${host}/v1/ws/logs?token=${token}&source=${source}`;
+    const wsUrl = getWsUrl(`/v1/ws/logs?token=${token}&source=${source}`);
 
     const socket = new WebSocket(wsUrl);
 

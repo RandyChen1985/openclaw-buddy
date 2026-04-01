@@ -12,7 +12,8 @@ import 'katex/dist/katex.min.css';
 import mermaid from 'mermaid';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import api from '../api';
+import api, { getFullUrl } from '../api';
+import { getBaseURL } from '../utils/url';
 
 const { Option } = Select;
 
@@ -370,7 +371,10 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
     }
 
     try {
-      const response = await fetch(`${api.defaults.baseURL || ''}/v1/openclaw/chat/completions`, {
+      // 核心变更：统一使用 api 实例路径补全助手，确保支持自定义 webroot
+      // 虽然流式请求需要 fetch，但 URL 拼接逻辑必须与 axios 实例（api）保持 100% 物理一致
+      const chatUrl = getFullUrl('/v1/openclaw/chat/completions');
+      const response = await fetch(chatUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -821,7 +825,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
             <div style={{ margin: 'auto', textAlign: 'center', maxWidth: 640, padding: isMobile ? '20px' : '40px', width: '100%' }}>
               <div style={{ marginBottom: 24, position: 'relative', display: 'inline-block' }}>
                 <img 
-                  src="/openclaw.png" 
+                  src={`${getBaseURL()}/openclaw.png`} 
                   style={{ width: 80, height: 80, borderRadius: 20, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '4px solid #fff' }} 
                   alt="Mascot"
                 />

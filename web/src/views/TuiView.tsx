@@ -5,6 +5,8 @@ import 'xterm/css/xterm.css';
 import { message, Button, Tooltip, Space, Result, Spin, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { RotateCcw, XCircle, Terminal as TerminalIcon, Info, Download, RefreshCw } from 'lucide-react';
+import api from '../api';
+import { getWsUrl } from '../utils/url';
 
 const { Paragraph, Text } = Typography;
 
@@ -29,17 +31,10 @@ const TuiView: React.FC = () => {
   const fetchOcStatus = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('guardian_token');
-      const res = await fetch('/v1/openclaw/version', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const json = await res.json();
-      if (json.code === 200) {
-        setIsInstalled(json.data.installed);
-        setOcVersion(json.data.version || '');
-      } else {
-        setIsInstalled(false);
-      }
+      const res = await api.get('/v1/openclaw/version');
+      const data = res.data;
+      setIsInstalled(data.installed);
+      setOcVersion(data.version || '');
     } catch (err) {
       console.error('Failed to fetch openclaw version:', err);
       setIsInstalled(false);
@@ -98,11 +93,8 @@ const TuiView: React.FC = () => {
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
     const token = localStorage.getItem('guardian_token');
-    
-    const wsUrl = `${protocol}//${host}/v1/ws/tui?token=${token}`;
+    const wsUrl = getWsUrl(`/v1/ws/tui?token=${token}`);
     
     const socket = new WebSocket(wsUrl);
     socket.binaryType = 'arraybuffer';

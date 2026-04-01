@@ -29,9 +29,9 @@ stop_and_clean() {
     fi
     
     if [ -d "$DEV_ROOT" ]; then
-        echo "🧹 正在清理隔离任务环境 (保留数据目录: $DEV_ROOT/data)..."
-        # 排除 data 目录，清理其余所有内容
-        find "$DEV_ROOT" -mindepth 1 -maxdepth 1 ! -name 'data' -exec rm -rf {} +
+        echo "🧹 正在清理隔离任务环境 (保留数据与配置)..."
+        # 排除 data 目录和 env 文件，清理其余所有内容
+        find "$DEV_ROOT" -mindepth 1 -maxdepth 1 ! -name 'data' ! -name 'env' -exec rm -rf {} +
     fi
 }
 
@@ -86,11 +86,15 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 6. 生成隔离环境配置: $DEV_ROOT/env
-echo "📝 生成隔离环境配置: $DEV_ROOT/env"
-cat <<EOF > "$DEV_ROOT/env"
-# 🦞 OpenClaw Buddy (OpenClaw Buddy) 隔离开发配置
+# 6. 生成隔离环境配置: $DEV_ROOT/env (仅在不存在时生成)
+if [ ! -f "$DEV_ROOT/env" ]; then
+    echo "📝 生成隔离环境配置: $DEV_ROOT/env"
+    cat <<EOF > "$DEV_ROOT/env"
+# [网络与访问]
+# 默认端口 (3000)
 WEB_PORT=3000
+# 基础路径 (默认为 /, 若需配置如 /claw 则改为 /claw)
+WEB_ROOT="/console/claw"
 BUDDY_TOKEN="openclaw-buddy-2026"
 PID_FILE="./openclaw-buddy.pid"
 
@@ -122,6 +126,9 @@ FEISHU_APP_ID=""
 FEISHU_APP_SECRET=""
 FEISHU_CHAT_ID=""
 EOF
+else
+    echo "📝 使用已存在的隔离环境配置: $DEV_ROOT/env"
+fi
 
 # 7. 切换到隔离目录启动服务
 cd "$DEV_ROOT"

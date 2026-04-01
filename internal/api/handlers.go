@@ -74,8 +74,14 @@ func (s *Server) proxyLobsterDashboard(c *gin.Context) {
 		return nil
 	}
 
-	// 统一处理路径：剥离 /v1/proxy 前缀
-	c.Request.URL.Path = strings.TrimPrefix(c.Request.URL.Path, "/v1/proxy")
+	// 统一处理路径：动态剥离前缀 (WebRoot + /v1/proxy)
+	prefix := s.cfg.WebRoot
+	if prefix == "/" {
+		prefix = ""
+	}
+	fullPrefix := prefix + "/v1/proxy"
+	
+	c.Request.URL.Path = strings.TrimPrefix(c.Request.URL.Path, fullPrefix)
 	if c.Request.URL.Path == "" {
 		c.Request.URL.Path = "/"
 	}

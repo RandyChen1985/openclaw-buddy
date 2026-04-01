@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Server, Activity, Play, Square, RefreshCw, Trophy, Zap, Monitor } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
 import dayjs from 'dayjs';
+import api from '../api';
 
 interface DashboardOverviewProps {
   status: any;
@@ -44,18 +45,18 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
   // 综合判断是否处于处理中：1. 异步任务在跑 2. 前端正在等待请求响应
   const isGatewayProcessing = isTransitioning || activeTasks.some(t => t.module === 'gateway' && t.status === 'Running');
+  
+  // 环境检测中锁定：1. OpenClaw 安装状态未知 2. 系统基本信息尚未对账完成
+  const isEnvChecking = ocInstalled === null || !systemInfo;
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem('guardian_token');
       const [sysRes, ocRes] = await Promise.all([
-        fetch('/v1/system/info', { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch('/v1/openclaw/version', { headers: { 'Authorization': `Bearer ${token}` } })
+        api.get('/v1/system/info'),
+        api.get('/v1/openclaw/version')
       ]);
-      const sysJson = await sysRes.json();
-      const ocJson = await ocRes.json();
-      if (sysJson.code === 200) setSystemInfo(sysJson.data);
-      if (ocJson.code === 200) setOcStatus(ocJson.data);
+      if (sysRes.data) setSystemInfo(sysRes.data);
+      if (ocRes.data) setOcStatus(ocRes.data);
     } catch (err) {
       console.error('Failed to fetch dashboard system info:', err);
     }
@@ -116,7 +117,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           zIndex: 10
         }}
       >
-        {ocInstalled === null || !systemInfo ? (
+        {isEnvChecking ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <RefreshCw size={18} style={{ color: '#3b82f6', animation: 'spin 1.5s linear infinite' }} />
             <span style={{ fontSize: 14, fontWeight: 600, color: '#3b82f6', letterSpacing: '0.05em' }}>
@@ -286,9 +287,9 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<Play size={14} />}
             onClick={() => onControl('start')}
-            disabled={isRunning || ocInstalled === false || isGatewayProcessing}
-            loading={isGatewayProcessing && !isRunning}
-            style={{ borderRadius: 10, background: (isRunning || isGatewayProcessing) ? '#cbd5e1' : '#22c55e', borderColor: (isRunning || isGatewayProcessing) ? '#cbd5e1' : '#22c55e' }}
+            disabled={isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking}
+            loading={(isGatewayProcessing && !isRunning) || (isEnvChecking && ocInstalled === null)}
+            style={{ borderRadius: 10, background: (isRunning || isGatewayProcessing || isEnvChecking) ? '#cbd5e1' : '#22c55e', borderColor: (isRunning || isGatewayProcessing || isEnvChecking) ? '#cbd5e1' : '#22c55e' }}
           >
             {t('dashboard.startGateway')}
           </Button>
@@ -298,7 +299,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<Square size={14} />}
             onClick={() => onControl('stop')}
-            disabled={!isRunning || ocInstalled === false || isGatewayProcessing}
+            disabled={!isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking}
             loading={isGatewayProcessing && isRunning}
             style={{ borderRadius: 10 }}
           >
@@ -308,7 +309,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<RefreshCw size={14} />}
             onClick={() => onControl('restart')}
-            disabled={ocInstalled === false || isGatewayProcessing}
+            disabled={ocInstalled === false || isGatewayProcessing || isEnvChecking}
             loading={isGatewayProcessing}
             style={{ borderRadius: 10, border: '1.5px solid #e2e8f0' }}
           >
@@ -319,7 +320,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<Zap size={14} />}
             onClick={() => onNavigate?.('components')}
-            style={{ borderRadius: 10, background: '#f8fafc', border: '1.5px solid #e2e8f0' }}
+            disabled={isEnvChecking}
+            style={{ borderRadius: 10, background: isEnvChecking ? '#f8fafc' : '#f8fafc', border: '1.5px solid #e2e8f0', opacity: isEnvChecking ? 0.6 : 1 }}
           >
             {t('dashboard.wechatChannel')}
           </Button>

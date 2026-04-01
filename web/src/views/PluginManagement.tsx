@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { RefreshCw, Search, Zap, CheckCircle2, XCircle, AlertCircle, Info, ShieldCheck, Globe, ChevronDown, ChevronUp, Trash2, ArrowUpCircle, Settings2 } from 'lucide-react';
 import { Card, Table, Tag, Button, Input, Tooltip, Typography, Segmented, message, Popconfirm, Switch } from 'antd';
 import { useTranslation } from 'react-i18next';
+import api from '../api';
 
 interface Plugin {
   id: string;
@@ -45,28 +46,18 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
   const handleAction = async (id: string, action: 'enable' | 'disable' | 'uninstall') => {
     setActionLoading(prev => ({ ...prev, [id]: true }));
     try {
-      const method = action === 'uninstall' ? 'DELETE' : 'POST';
       const url = action === 'uninstall' ? `/v1/openclaw/plugins/${id}` : `/v1/openclaw/plugins/${action}`;
-      const body = action === 'uninstall' ? undefined : JSON.stringify({ id });
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('guardian_token')}`
-        },
-        body
-      });
-
-      const res = await response.json();
-      if (res.code === 200) {
-        message.success(t(`plugins.${action}Success`));
-        onRefresh(true);
+      
+      if (action === 'uninstall') {
+        await api.delete(url);
       } else {
-        message.error(res.message || t('common.error'));
+        await api.post(url, { id });
       }
-    } catch (err) {
-      message.error(t('common.error'));
+
+      message.success(t(`plugins.${action}Success`));
+      onRefresh(true);
+    } catch (err: any) {
+      message.error(err.message || t('common.error'));
     } finally {
       setActionLoading(prev => ({ ...prev, [id]: false }));
     }
@@ -75,20 +66,10 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
   const handleUpdate = async () => {
     setUpdating(true);
     try {
-      const response = await fetch('/v1/openclaw/plugins/update', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('guardian_token')}`
-        }
-      });
-      const res = await response.json();
-      if (res.code === 202) {
-        message.info(t('plugins.updateStarted'));
-      } else {
-        message.error(res.message || t('common.error'));
-      }
-    } catch (err) {
-      message.error(t('common.error'));
+      await api.post('/v1/openclaw/plugins/update');
+      message.info(t('plugins.updateStarted'));
+    } catch (err: any) {
+      message.error(err.message || t('common.error'));
     } finally {
       setUpdating(false);
     }
@@ -96,21 +77,11 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
 
   const handleReload = async () => {
     try {
-      const response = await fetch('/v1/openclaw/plugins/reload', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('guardian_token')}`
-        }
-      });
-      const res = await response.json();
-      if (res.code === 200) {
-        message.success(t('plugins.syncSuccess'));
-        onRefresh(true);
-      } else {
-        message.error(res.message || t('common.error'));
-      }
-    } catch (err) {
-      message.error(t('common.error'));
+      await api.post('/v1/openclaw/plugins/reload');
+      message.success(t('plugins.syncSuccess'));
+      onRefresh(true);
+    } catch (err: any) {
+      message.error(err.message || t('common.error'));
     }
   };
 

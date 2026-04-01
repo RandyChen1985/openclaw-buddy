@@ -5,6 +5,8 @@ import 'xterm/css/xterm.css';
 import { message, Button, Tooltip, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { RotateCcw, XCircle, Server, Monitor, Cpu, Terminal as TerminalIcon } from 'lucide-react';
+import api from '../api';
+import { getWsUrl } from '../utils/url';
 
 interface ServerInfo {
   hostname: string;
@@ -31,14 +33,8 @@ const ShellView: React.FC = () => {
 
   const fetchServerInfo = async () => {
     try {
-      const token = localStorage.getItem('guardian_token');
-      const res = await fetch('/v1/system/info', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const json = await res.json();
-      if (json.code === 200) {
-        setServerInfo(json.data);
-      }
+      const res = await api.get('/v1/system/info');
+      setServerInfo(res.data);
     } catch (err) {
       console.error('Failed to fetch server info:', err);
     }
@@ -105,13 +101,8 @@ const ShellView: React.FC = () => {
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    // Connection Logic
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
     const token = localStorage.getItem('guardian_token');
-    
-    // 连接到 shell 接口
-    const wsUrl = `${protocol}//${host}/v1/ws/shell?token=${token}`;
+    const wsUrl = getWsUrl(`/v1/ws/shell?token=${token}`);
     
     const socket = new WebSocket(wsUrl);
     socket.binaryType = 'arraybuffer';

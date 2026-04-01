@@ -41,6 +41,7 @@ const Dashboard = () => {
   const queryParams = new URLSearchParams(window.location.search);
   const isEmbed = queryParams.get('embed') === 'true';
   const initialPage = queryParams.get('page');
+  const tag = localStorage.getItem('guardian_tag') || undefined;
 
   const [activeTab, setActiveTab] = useState(initialPage || 'dashboard');
   const [collapsed, setCollapsed] = useState(window.innerWidth < 1200 || isEmbed);
@@ -226,7 +227,8 @@ const Dashboard = () => {
       }
     }
     if (activeTab === 'devices') fetchDevices();
-    if (activeTab === 'skills' || activeTab === 'plugins') fetchPlugins();
+    if (activeTab === 'skills') fetchSkills();
+    if (activeTab === 'plugins') fetchPlugins();
     if (activeTab === 'tools') fetchSelfHealing();
   }, [activeTab]);
 
@@ -1102,6 +1104,7 @@ const Dashboard = () => {
               }} 
               onLogout={handleLogout} navItems={menuItems} 
               versionUpdate={versionUpdate}
+              tag={tag}
             />
           </Drawer>
         </Layout>
@@ -1123,6 +1126,7 @@ const Dashboard = () => {
               }} 
               onLogout={handleLogout} navItems={menuItems} 
               versionUpdate={versionUpdate}
+              tag={tag}
             />
           </Sider>
           <Layout style={{ 
@@ -1272,17 +1276,34 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get('token');
+    const urlTag = params.get('tag');
+
+    // 捕获并持久化身份标签 (Tag)
+    if (urlTag) {
+      if (urlTag === 'none') {
+        localStorage.removeItem('guardian_tag');
+      } else {
+        localStorage.setItem('guardian_tag', urlTag);
+      }
+      params.delete('tag');
+    }
+
     if (urlToken) {
       localStorage.setItem('guardian_token', urlToken);
       setToken(urlToken);
       
-      // 仅移除 token 参数，保留其他参数（如 embed, page 等）
+      // 移除已处理的参数，保持 URL 整洁
       params.delete('token');
       const newSearch = params.toString();
       const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
       window.history.replaceState({}, '', newUrl);
       
       message.success(t('common.autoLogin'));
+    } else if (urlTag) {
+      // 仅有 tag 变更时也清理 URL
+      const newSearch = params.toString();
+      const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
+      window.history.replaceState({}, '', newUrl);
     }
   }, []);
 

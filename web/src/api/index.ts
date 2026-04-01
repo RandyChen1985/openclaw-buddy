@@ -1,8 +1,18 @@
 import axios from 'axios';
+import { getBaseURL } from '../utils/url';
 
 const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || '' });
 
 api.interceptors.request.use((config) => {
+  // Prepend base path to relative URLs starting with /
+  if (config.url && config.url.startsWith('/') && !config.url.startsWith('http')) {
+    const base = getBaseURL();
+    // Only prepend if not already starting with the base path
+    if (base !== '/' && !config.url.startsWith(base + '/')) {
+      config.url = base + config.url;
+    }
+  }
+  
   const token = localStorage.getItem('guardian_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
@@ -30,5 +40,20 @@ api.interceptors.response.use(
     return Promise.reject(new Error(msg));
   }
 );
+
+
+/**
+ * 助手函数：获取经过路径补全后的完整 URL
+ * 用于 fetch (SSE) 等无法直接使用 axios 实例的场景，确保 WebRoot 一致性
+ */
+export const getFullUrl = (url: string) => {
+  const base = getBaseURL();
+  if (url && url.startsWith('/') && !url.startsWith('http')) {
+    if (base !== '/' && !url.startsWith(base + '/')) {
+      return base + url;
+    }
+  }
+  return url;
+};
 
 export default api;

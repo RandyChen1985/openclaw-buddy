@@ -122,3 +122,62 @@ body {
     padding: 8px !important;
   }
 }
+
+/* 高级通知组件 (Premium Notification) */
+.premium-notification {
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  background-color: rgba(255, 255, 255, 0.7) !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1) !important;
+}
+
+.dark .premium-notification {
+  background-color: rgba(17, 25, 40, 0.75) !important;
+  border: 1px solid rgba(255, 255, 255, 0.125) !important;
+}
+
+.premium-notification-running {
+  border-left: 4px solid #3b82f6 !important;
+}
+
+.premium-notification-success {
+  border-left: 4px solid #22c55e !important;
+  animation: glow-success-border 2s infinite;
+}
+
+.premium-notification-error {
+  border-left: 4px solid #ef4444 !important;
+  animation: glow-error-border 2s infinite;
+}
+
+@keyframes glow-success-border {
+  0%, 100% { border-left-color: #22c55e; }
+  50% { border-left-color: #4ade80; }
+}
+
+@keyframes glow-error-border {
+  0%, 100% { border-left-color: #ef4444; }
+  50% { border-left-color: #f87171; }
+}
+
+.notification-content-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notification-status-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.notification-progress-mini {
+  height: 4px !important;
+  margin-top: 4px;
+}
+
