@@ -6,6 +6,7 @@ import { message, Button, Tooltip, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { RotateCcw, XCircle, Server, Monitor, Cpu, Terminal as TerminalIcon } from 'lucide-react';
 import api from '../api';
+import storage from '../utils/storage';
 import { getWsUrl } from '../utils/url';
 
 interface ServerInfo {
@@ -101,7 +102,7 @@ const ShellView: React.FC = () => {
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    const token = localStorage.getItem('guardian_token');
+    const token = storage.getItem('guardian_token');
     const wsUrl = getWsUrl(`/v1/ws/shell?token=${token}`);
     
     const socket = new WebSocket(wsUrl);

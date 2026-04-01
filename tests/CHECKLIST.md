@@ -216,6 +216,11 @@
 - [x] **版本手动刷新交互**: 点击版本号旁的 🔄 图标，应触发旋转动画并根据对比结果（current vs latest）弹出 `message.success` 或 `notification.info`。
 - [x] **发布说明外链校验**: 发现新版本时，通知卡片内应包含指向 `github.com/.../tag/{version}` 的正确超链接。
 
+## 七、多实例隔离测试 (Storage Isolation)
+- [ ] **跨实例对账隔离**: 验证同域名、同端口下，不同 `WEB_ROOT` 的 `guardian_token` 互不干扰。
+- [ ] **聊天记录物理隔离**: 验证 `chat_history` 加载时仅拉取对应实例路径下的内容。
+- [ ] **i18n 配置隔离**: 验证 `i18nextLng` 正确附加了命名空间 Key。
+
 ---
 > [!NOTE]
 > 记录于 2026-04-01：完成了 Dashboard 移动端布局深度优化及 Buddy 版本全链路监控。引入了响应式 Grid 布局，并打通了前端与各端版本号的动态同步及手动对账功能。

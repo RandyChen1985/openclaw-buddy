@@ -6,6 +6,7 @@ import { message, Button, Tooltip, Space, Result, Spin, Typography } from 'antd'
 import { useTranslation } from 'react-i18next';
 import { RotateCcw, XCircle, Terminal as TerminalIcon, Info, Download, RefreshCw } from 'lucide-react';
 import api from '../api';
+import storage from '../utils/storage';
 import { getWsUrl } from '../utils/url';
 
 const { Paragraph, Text } = Typography;
@@ -93,7 +94,7 @@ const TuiView: React.FC = () => {
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    const token = localStorage.getItem('guardian_token');
+    const token = storage.getItem('guardian_token');
     const wsUrl = getWsUrl(`/v1/ws/tui?token=${token}`);
     
     const socket = new WebSocket(wsUrl);

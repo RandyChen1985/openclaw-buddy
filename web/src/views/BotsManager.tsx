@@ -1298,7 +1298,12 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         centered
         bodyStyle={{ padding: '0', height: isMobile ? 'calc(100vh - 120px)' : '75vh', overflow: 'hidden' }}
       >
-        <Spin spinning={isEditorLoading || isSaving} tip={isSaving ? t('common.processing') : t('common.loading')}>
+        <Spin 
+          spinning={isEditorLoading || isSaving} 
+          tip={isSaving ? t('common.processing') : t('common.loading')}
+          style={{ height: '100%' }}
+          wrapperClassName="bot-editor-spin-wrapper"
+        >
           {isEditorLoading ? (
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
               <div style={{ marginTop: 16, color: '#94a3b8', fontSize: 14 }}>{t('common.loading')}</div>
@@ -1311,15 +1316,16 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   <Edit3 size={14} color="#64748b" />
                   <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{t('bots.markdownSource')}</span>
                 </div>
-                <div style={{ flex: 1, padding: 0 }}>
+                <div style={{ flex: 1, padding: 0, position: 'relative', overflow: 'hidden' }}>
                   <Input.TextArea
                     value={editorContent}
                     onChange={(e) => setEditorContent(e.target.value)}
                     placeholder={editorType === 'soul' ? t('experts.soulPlaceholder') : t('experts.identityPlaceholder')}
+                    className="bot-editor-textarea"
                     style={{ 
                       height: '100%', border: 'none', background: 'transparent',
-                      padding: 20, resize: 'none', fontSize: 14, fontFamily: 'monospace',
-                      lineHeight: 1.6, borderRadius: 0
+                      padding: '24px', resize: 'none', fontSize: 14, fontFamily: 'monospace',
+                      lineHeight: 1.7, borderRadius: 0, overflowY: 'auto'
                     }}
                   />
                 </div>
@@ -1363,6 +1369,33 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         }
         .status-pulse {
           animation: pulse-green 2s infinite;
+        }
+        .bot-editor-spin-wrapper, 
+        .bot-editor-spin-wrapper .ant-spin-container,
+        .bot-editor-spin-wrapper .ant-spin-nested-loading {
+          height: 100% !important;
+        }
+        .bot-editor-textarea {
+          height: 100% !important;
+          border-radius: 0 !important;
+        }
+        .bot-editor-textarea textarea {
+          height: 100% !important;
+          overflow-y: auto !important;
+          padding: 24px !important;
+          scrollbar-width: thin;
+          scrollbar-color: #e2e8f0 transparent;
+        }
+        /* 强制滚动条始终可见 (针对 Webkit) */
+        .bot-editor-textarea textarea::-webkit-scrollbar {
+          width: 6px;
+        }
+        .bot-editor-textarea textarea::-webkit-scrollbar-thumb {
+          background: #e2e8f0;
+          border-radius: 3px;
+        }
+        .bot-editor-textarea textarea::-webkit-scrollbar-thumb:hover {
+          background: #cbd5e1;
         }
       ` }} />
     </div>

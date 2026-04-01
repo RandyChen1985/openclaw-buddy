@@ -499,7 +499,13 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
                           <Form.Item name="identity_md" style={{ marginBottom: 0 }}>
                             <Input.TextArea 
                               onChange={(e) => setIdTokens(estimateTokens(e.target.value))}
-                              style={{ height: 380, borderRadius: '0 0 12px 12px', fontFamily: 'monospace', fontSize: 13, background: '#f8fafc', border: '1px solid #e2e8f0', borderTop: 'none', resize: 'none', padding: '16px' }} 
+                              style={{ 
+                                height: 380, borderRadius: '0 0 12px 12px', 
+                                fontFamily: 'monospace', fontSize: 13, 
+                                background: '#f8fafc', border: '1px solid #e2e8f0', 
+                                borderTop: 'none', resize: 'none', padding: '16px 20px',
+                                lineHeight: 1.7, overflowY: 'auto'
+                              }} 
                             />
                           </Form.Item>
                         )
@@ -519,7 +525,13 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
                           <Form.Item name="soul" style={{ marginBottom: 0 }}>
                             <Input.TextArea 
                               onChange={(e) => setSoulTokens(estimateTokens(e.target.value))}
-                              style={{ height: 380, borderRadius: '0 0 12px 12px', fontFamily: 'monospace', fontSize: 13, background: '#f8fafc', border: '1px solid #e2e8f0', borderTop: 'none', resize: 'none', padding: '16px' }} 
+                              style={{ 
+                                height: 380, borderRadius: '0 0 12px 12px', 
+                                fontFamily: 'monospace', fontSize: 13, 
+                                background: '#f8fafc', border: '1px solid #e2e8f0', 
+                                borderTop: 'none', resize: 'none', padding: '16px 20px',
+                                lineHeight: 1.7, overflowY: 'auto'
+                              }} 
                             />
                           </Form.Item>
                         )

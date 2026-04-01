@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { getBaseURL } from '../utils/url';
 
+import storage from '../utils/storage';
+
 const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || '' });
 
 api.interceptors.request.use((config) => {
@@ -13,7 +15,7 @@ api.interceptors.request.use((config) => {
     }
   }
   
-  const token = localStorage.getItem('guardian_token');
+  const token = storage.getItem('guardian_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });

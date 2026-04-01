@@ -14,6 +14,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import api, { getFullUrl } from '../api';
 import { getBaseURL } from '../utils/url';
+import storage from '../utils/storage';
 
 const { Option } = Select;
 
@@ -117,7 +118,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   const [selectedBot, setSelectedBot] = useState<string>('');
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<Message[]>(() => {
-    const saved = localStorage.getItem('chat_history');
+    const saved = storage.getItem('chat_history');
     return saved ? JSON.parse(saved) : [];
   });
   const [quotedMsg, setQuotedMsg] = useState<string | null>(null);
@@ -138,7 +139,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   
   // 持久化存储
   useEffect(() => {
-    localStorage.setItem('chat_history', JSON.stringify(messages));
+    storage.setItem('chat_history', JSON.stringify(messages));
   }, [messages]);
 
   // --- Markdown 预处理逻辑 ---
@@ -175,7 +176,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
   const [showQuickActions, setShowQuickActions] = useState<boolean>(() => {
-    return localStorage.getItem('chat_show_quick_actions') !== 'false';
+    return storage.getItem('chat_show_quick_actions') !== 'false';
   });
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [form] = Form.useForm();
@@ -192,10 +193,10 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
   useEffect(() => {
     if (!urlUser) {
-      let storedSessionId = localStorage.getItem('chat_session_id');
+      let storedSessionId = storage.getItem('chat_session_id');
       if (!storedSessionId) {
         storedSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-        localStorage.setItem('chat_session_id', storedSessionId);
+        storage.setItem('chat_session_id', storedSessionId);
       }
       setGeneratedSessionId(storedSessionId);
     } else {
@@ -410,7 +411,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('guardian_token')}`
+          'Authorization': `Bearer ${storage.getItem('guardian_token')}`
         },
         body: JSON.stringify(requestBody),
         signal: abortControllerRef.current.signal
@@ -547,9 +548,9 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       centered: true,
       onOk: () => {
         setMessages([]);
-        localStorage.removeItem('chat_history');
+        storage.removeItem('chat_history');
         const newSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-        localStorage.setItem('chat_session_id', newSessionId);
+        storage.setItem('chat_session_id', newSessionId);
         setGeneratedSessionId(newSessionId);
         message.success(t('chat.historyCleared'));
       }
@@ -752,7 +753,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                 icon={<ExternalLink size={14} />} 
                 title={t('chat.labDescription')}
                 onClick={() => {
-                  const token = localStorage.getItem('guardian_token');
+                  const token = storage.getItem('guardian_token');
                   const botId = selectedBot.replace('openclaw:', '');
                   const url = `${window.location.origin}/?page=chat&token=${token}&bot=${botId}&embed=true`;
                   window.open(url, '_blank');
@@ -764,7 +765,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                 icon={<Share2 size={14} />} 
                 title={t('chat.shareTitle')}
                 onClick={() => {
-                  const token = localStorage.getItem('guardian_token');
+                  const token = storage.getItem('guardian_token');
                   const botId = selectedBot.replace('openclaw:', '');
                   const url = `${window.location.origin}/?page=chat&token=${token}&bot=${botId}&embed=true`;
                   const iframeCode = `<iframe src="${url}" width="100%" height="600" frameborder="0"></iframe>`;
@@ -1207,7 +1208,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                     style={{ color: '#94a3b8', background: '#f1f5f9', borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onClick={() => {
                         setShowQuickActions(false);
-                        localStorage.setItem('chat_show_quick_actions', 'false');
+                        storage.setItem('chat_show_quick_actions', 'false');
                     }}
                     title={t('chat.collapseQuickCommands')}
                   />
@@ -1222,7 +1223,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                         icon={<ChevronDown size={14} style={{ marginRight: 4 }} />}
                         onClick={() => {
                             setShowQuickActions(true);
-                            localStorage.setItem('chat_show_quick_actions', 'true');
+                            storage.setItem('chat_show_quick_actions', 'true');
                         }}
                         style={{ fontSize: 11, color: '#94a3b8', height: 20, padding: '0 8px', borderRadius: 10, background: '#f8fafc', display: 'flex', alignItems: 'center' }}
                     >

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../api';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import { getBaseURL } from '../utils/url';
+import storage from '../utils/storage';
 
 interface LoginViewProps {
   onLoginSuccess: (token: string) => void;
@@ -70,7 +71,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     try {
       const res = await api.post('/login', { token: values.token });
       if (res.data.status === 'success') {
-        localStorage.setItem('guardian_token', values.token);
+        storage.setItem('guardian_token', values.token);
         onLoginSuccess(values.token);
         message.success(t('login.authSuccess'));
       }

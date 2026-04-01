@@ -6,6 +6,7 @@ import {
   Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone, Rocket
 } from 'lucide-react';
 import api from './api';
+import storage from './utils/storage';
 
 // Components
 import LoginView from './views/LoginView';
@@ -41,7 +42,7 @@ const Dashboard = () => {
   const queryParams = new URLSearchParams(window.location.search);
   const isEmbed = queryParams.get('embed') === 'true';
   const initialPage = queryParams.get('page');
-  const tag = localStorage.getItem('guardian_tag') || undefined;
+  const tag = storage.getItem('guardian_tag') || undefined;
 
   const [activeTab, setActiveTab] = useState(initialPage || 'dashboard');
   const [collapsed, setCollapsed] = useState(window.innerWidth < 1200 || isEmbed);
@@ -192,7 +193,7 @@ const Dashboard = () => {
   };
 
   const [logSource, setLogSource] = useState('buddy');
-  const { wsLogs } = useWebSocketLogs(localStorage.getItem('guardian_token'), logSource, handleTaskUpdate);
+  const { wsLogs } = useWebSocketLogs(storage.getItem('guardian_token'), logSource, handleTaskUpdate);
 
   // Side Effects
   useEffect(() => {
@@ -745,7 +746,7 @@ const Dashboard = () => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('guardian_token');
+    storage.removeItem('guardian_token');
     window.location.reload();
   };
   
@@ -1260,14 +1261,14 @@ const Dashboard = () => {
 // --- App Root ---------------------------------------------------------------------
 export default function App() {
   const { t } = useTranslation();
-  const [token, setToken] = useState<string | null>(localStorage.getItem('guardian_token'));
+  const [token, setToken] = useState<string | null>(storage.getItem('guardian_token'));
 
   useEffect(() => {
     const interceptor = api.interceptors.response.use(
       (response) => response,
       (error) => {
         if (error.response?.status === 401) {
-          localStorage.removeItem('guardian_token');
+          storage.removeItem('guardian_token');
           setToken(null);
           if (token) message.error(t('common.sessionExpired'));
         }
@@ -1285,15 +1286,15 @@ export default function App() {
     // 捕获并持久化身份标签 (Tag)
     if (urlTag) {
       if (urlTag === 'none') {
-        localStorage.removeItem('guardian_tag');
+        storage.removeItem('guardian_tag');
       } else {
-        localStorage.setItem('guardian_tag', urlTag);
+        storage.setItem('guardian_tag', urlTag);
       }
       params.delete('tag');
     }
 
     if (urlToken) {
-      localStorage.setItem('guardian_token', urlToken);
+      storage.setItem('guardian_token', urlToken);
       setToken(urlToken);
       
       // 移除已处理的参数，保持 URL 整洁
