@@ -402,8 +402,10 @@ const Dashboard = () => {
     try {
       const res = await api.get('/v1/system/version');
       if (res.data) setVersionUpdate(res.data);
+      return res.data;
     } catch (e) {
       console.warn(t('common.versionCheckFailed'), e);
+      return null;
     }
   };
 
@@ -868,6 +870,8 @@ const Dashboard = () => {
           ocInstalled={ocInstalled}
           activeTasks={activeTasks}
           isTransitioning={isTransitioning}
+          versionUpdate={versionUpdate}
+          onRefreshVersion={checkVersionUpdate}
         />
       ),
       'bots-models': (

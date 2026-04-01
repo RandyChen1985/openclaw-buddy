@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Tag, Progress, Button, Timeline, Badge, Spin, Empty } from 'antd';
+import { Row, Col, Card, Tag, Progress, Button, Timeline, Badge, Spin, Empty, message, notification } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Server, Activity, Play, Square, RefreshCw, Trophy, Zap, Monitor } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
@@ -19,6 +19,8 @@ interface DashboardOverviewProps {
   activeTasks?: any[];
   isTransitioning?: boolean; // 新增：正在执行过渡动作
   loading?: boolean;
+  versionUpdate?: { latest: string, current: string, release_url: string } | null;
+  onRefreshVersion?: () => Promise<any>;
 }
 
 interface SystemInfo {
@@ -36,10 +38,12 @@ interface OcStatus {
 
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({ 
   status, history, isRunning, onControl, onNavigate,
-  systemEvents = [], topBots = [], ocInstalled, activeTasks = [], isTransitioning = false, loading = false
+  systemEvents = [], topBots = [], ocInstalled, activeTasks = [], isTransitioning = false, loading = false,
+  versionUpdate, onRefreshVersion
 }) => {
   const { t } = useTranslation();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [verLoading, setVerLoading] = useState(false);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [ocStatus, setOcStatus] = useState<OcStatus | null>(null);
 
@@ -59,6 +63,44 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       if (ocRes.data) setOcStatus(ocRes.data);
     } catch (err) {
       console.error('Failed to fetch dashboard system info:', err);
+    }
+  };
+
+  const handleManualRefreshVersion = async () => {
+    if (!onRefreshVersion || verLoading) return;
+    setVerLoading(true);
+    try {
+      const data = await onRefreshVersion();
+      if (data) {
+        if (data.current === data.latest) {
+          message.success('当前已是最新版本');
+        } else {
+          notification.info({
+            message: '发现新版本',
+            description: (
+              <div>
+                已发布新版本 v{data.latest}，建议立即更新以获得最佳体验。
+                <div style={{ marginTop: 8 }}>
+                  <a 
+                    href={`https://github.com/RandyChen1985/openclaw-buddy/releases/tag/${data.latest}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{ color: '#3b82f6', fontWeight: 600 }}
+                  >
+                    🚀 点击查看发布说明 (Releases)
+                  </a>
+                </div>
+              </div>
+            ),
+            placement: 'topRight',
+            duration: 10
+          });
+        }
+      }
+    } catch (err) {
+      message.error('版本检查失败');
+    } finally {
+      setVerLoading(false);
     }
   };
 
@@ -148,6 +190,24 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>OpenClaw CLI</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {ocStatus?.installed ? <Badge status="processing" color="#22c55e" text={<span style={{ fontSize: 14, color: '#1e293b', fontWeight: 700 }}>{ocStatus.version}</span>} /> : <span style={{ fontSize: 14, color: '#ef4444', fontWeight: 700 }}>未安装</span>}
+                  </div>
+                </div>
+              </div>
+              {!isMobile && <div style={{ width: 1, height: 24, background: '#e2e8f0' }} />}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ background: '#ecfdf5', padding: '8px', borderRadius: '10px' }}><Activity size={18} style={{ color: '#059669' }} /></div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>OpenClaw Buddy</div>
+                  <div style={{ fontSize: 14, color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    v{versionUpdate?.current || '---'}
+                    <Button 
+                      type="text" 
+                      size="small" 
+                      onClick={handleManualRefreshVersion}
+                      disabled={verLoading}
+                      icon={<RefreshCw size={10} className={verLoading ? 'animate-spin' : ''} style={{ color: '#94a3b8' }} />} 
+                      style={{ padding: 0, height: 'auto', minWidth: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    />
                   </div>
                 </div>
               </div>
@@ -281,7 +341,12 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         title={<span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>{t('dashboard.quickActions')}</span>}
         styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 52 }, body: { padding: '16px 24px' } }}
       >
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(160px, 1fr))', 
+          gap: 12,
+          width: '100%'
+        }}>
           <Button
             type="primary"
             size="large"
@@ -289,7 +354,12 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             onClick={() => onControl('start')}
             disabled={isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking}
             loading={(isGatewayProcessing && !isRunning) || (isEnvChecking && ocInstalled === null)}
-            style={{ borderRadius: 10, background: (isRunning || isGatewayProcessing || isEnvChecking) ? '#cbd5e1' : '#22c55e', borderColor: (isRunning || isGatewayProcessing || isEnvChecking) ? '#cbd5e1' : '#22c55e' }}
+            style={{ 
+              borderRadius: 10, 
+              width: '100%',
+              background: (isRunning || isGatewayProcessing || isEnvChecking) ? '#cbd5e1' : '#22c55e', 
+              borderColor: (isRunning || isGatewayProcessing || isEnvChecking) ? '#cbd5e1' : '#22c55e' 
+            }}
           >
             {t('dashboard.startGateway')}
           </Button>
@@ -301,7 +371,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             onClick={() => onControl('stop')}
             disabled={!isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking}
             loading={isGatewayProcessing && isRunning}
-            style={{ borderRadius: 10 }}
+            style={{ borderRadius: 10, width: '100%' }}
           >
             {t('dashboard.stopGateway')}
           </Button>
@@ -311,17 +381,22 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             onClick={() => onControl('restart')}
             disabled={ocInstalled === false || isGatewayProcessing || isEnvChecking}
             loading={isGatewayProcessing}
-            style={{ borderRadius: 10, border: '1.5px solid #e2e8f0' }}
+            style={{ borderRadius: 10, border: '1.5px solid #e2e8f0', width: '100%' }}
           >
             {t('dashboard.asyncRestart')}
           </Button>
-          <div style={{ flex: 1 }} />
           <Button
             size="large"
             icon={<Zap size={14} />}
             onClick={() => onNavigate?.('components')}
             disabled={isEnvChecking}
-            style={{ borderRadius: 10, background: isEnvChecking ? '#f8fafc' : '#f8fafc', border: '1.5px solid #e2e8f0', opacity: isEnvChecking ? 0.6 : 1 }}
+            style={{ 
+              borderRadius: 10, 
+              width: '100%',
+              background: isEnvChecking ? '#f8fafc' : '#f8fafc', 
+              border: '1.5px solid #e2e8f0', 
+              opacity: isEnvChecking ? 0.6 : 1 
+            }}
           >
             {t('dashboard.wechatChannel')}
           </Button>
