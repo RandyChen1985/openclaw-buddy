@@ -4,6 +4,8 @@ import { APP_VERSION } from '../../version';
 import { LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import { hasNewVersion } from '../../utils/version';
+
 interface SidebarProps {
   activeTab: string;
   collapsed: boolean;
@@ -83,7 +85,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
                 }}>
                   REL-{APP_VERSION}
                 </span>
-                {versionUpdate && versionUpdate.latest !== versionUpdate.current && (
+                {versionUpdate && hasNewVersion(versionUpdate.current, versionUpdate.latest) && (
                   <span style={{
                     fontSize: 10, padding: '0 5px', borderRadius: 4,
                     background: '#ff4d4f', color: '#fff', fontWeight: 900,

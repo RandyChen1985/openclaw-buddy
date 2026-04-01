@@ -691,6 +691,9 @@ func (s *Server) chatProxy(c *gin.Context) {
 	// 4. 执行请求
 	startTime := time.Now()
 	client := &http.Client{}
+	
+	// 设置上下文，以便在客户端断开时同步取消代理请求，节省网关资源
+	req = req.WithContext(c.Request.Context())
 	resp, err := client.Do(req)
 	duration := time.Since(startTime).Milliseconds()
 
@@ -710,20 +713,38 @@ func (s *Server) chatProxy(c *gin.Context) {
 
 	fmt.Printf("%s ✅ [Chat] Request: Model=%s, Msgs=%d, Stream=%v, Latency=%dms, Status=%d\n", 
 		nowStr, model, msgCount, isStream, duration, resp.StatusCode)
-	// 处理流式响应
-	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+	
+	// 5. 处理流式响应 (WAF 穿透增强)
+	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") || isStream {
 		c.Header("Content-Type", "text/event-stream")
-		c.Header("Cache-Control", "no-cache")
+		c.Header("Cache-Control", "no-cache, no-transform") // 核心：禁止中间缓存和压缩
 		c.Header("Connection", "keep-alive")
-		c.Header("Transfer-Encoding", "chunked")
+		c.Header("X-Accel-Buffering", "no") // 核心：专门针对 Nginx/WAF 的非缓冲指令
+		
 		c.Stream(func(w io.Writer) bool {
-			_, err := io.Copy(w, resp.Body)
-			return err == nil
+			// 使用带 Flush 功能的 Writer 确保实时性
+			reader := resp.Body
+			buffer := make([]byte, 1024)
+			for {
+				n, err := reader.Read(buffer)
+				if n > 0 {
+					_, writeErr := w.Write(buffer[:n])
+					if writeErr != nil {
+						return false // 客户端断开，退出流
+					}
+					// Gin 的 c.Stream 会在每次循环后自动调用 Flush，
+					// 但为了极端情况下的平滑度，手动 Read 确保了更细粒度的控制。
+					return true 
+				}
+				if err != nil {
+					return false // 读取结束或出错
+				}
+			}
 		})
 		return
 	}
 
-	// 非流式响应
+	// 6. 处理非流式响应
 	for k, vv := range resp.Header {
 		for _, v := range vv {
 			c.Header(k, v)
@@ -1273,13 +1294,21 @@ func (s *Server) enablePlugin(c *gin.Context) {
 	}
 
 	log.Printf("🎮 [控制] 用户请求: 【启用指定插件】 (ID: %s)", req.ID)
-	if err := process.EnableOpenClawPlugin(req.ID); err != nil {
-		s.Error(c, http.StatusInternalServerError, err.Error())
-		return
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   fmt.Sprintf("启用插件: %s", req.ID),
+		Module: "plugins",
+		Action: "enable",
+		Target: req.ID,
 	}
 
-	_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
-	s.Success(c, gin.H{"status": "success"})
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.EnableOpenClawPlugin(req.ID); err != nil {
+			return "", err
+		}
+		_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
+		return "Enabled", nil
+	})
 }
 
 func (s *Server) disablePlugin(c *gin.Context) {
@@ -1292,30 +1321,46 @@ func (s *Server) disablePlugin(c *gin.Context) {
 	}
 
 	log.Printf("🎮 [控制] 用户请求: 【禁用指定插件】 (ID: %s)", req.ID)
-	if err := process.DisableOpenClawPlugin(req.ID); err != nil {
-		s.Error(c, http.StatusInternalServerError, err.Error())
-		return
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   fmt.Sprintf("禁用插件: %s", req.ID),
+		Module: "plugins",
+		Action: "disable",
+		Target: req.ID,
 	}
 
-	_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
-	s.Success(c, gin.H{"status": "success"})
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.DisableOpenClawPlugin(req.ID); err != nil {
+			return "", err
+		}
+		_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
+		return "Disabled", nil
+	})
 }
 
 func (s *Server) uninstallPlugin(c *gin.Context) {
 	id := c.Param("id")
-	log.Printf("🎮 [控制] 用户请求: 【卸载指定插件】 (ID: %s)", id)
 	if id == "" {
 		s.Error(c, http.StatusBadRequest, "plugin id is required")
 		return
 	}
 
-	if err := process.UninstallOpenClawPlugin(id); err != nil {
-		s.Error(c, http.StatusInternalServerError, err.Error())
-		return
+	log.Printf("🎮 [控制] 用户请求: 【卸载指定插件】 (ID: %s)", id)
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   fmt.Sprintf("卸载插件: %s", id),
+		Module: "plugins",
+		Action: "uninstall",
+		Target: id,
 	}
 
-	_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
-	s.Success(c, gin.H{"status": "success"})
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.UninstallOpenClawPlugin(id); err != nil {
+			return "", err
+		}
+		_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
+		return "Uninstalled", nil
+	})
 }
 
 func (s *Server) updatePlugins(c *gin.Context) {

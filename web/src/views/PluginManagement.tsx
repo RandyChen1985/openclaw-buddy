@@ -4,6 +4,8 @@ import { Card, Table, Tag, Button, Input, Tooltip, Typography, Segmented, messag
 import { useTranslation } from 'react-i18next';
 import api from '../api';
 
+import type { Task } from '../hooks/useTaskCenter';
+
 interface Plugin {
   id: string;
   name: string;
@@ -25,10 +27,11 @@ interface PluginManagementProps {
   loading: boolean;
   onRefresh: (force?: boolean) => void;
   updatedAt?: string;
+  onTaskUpdate?: (task: Task) => void;
 }
 
 const PluginManagement: React.FC<PluginManagementProps> = ({ 
-  isMobile, plugins, loading, onRefresh, updatedAt 
+  isMobile, plugins: globalPlugins, loading, onRefresh, updatedAt, onTaskUpdate
 }) => {
   const { t } = useTranslation();
   const [searchText, setSearchText] = useState('');
@@ -36,6 +39,14 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
   const [updating, setUpdating] = useState(false);
+  
+  // 本地插件状态列表，用于支持乐观更新
+  const [localPlugins, setLocalPlugins] = useState<Plugin[]>(globalPlugins);
+
+  // 当全局插件列表刷新时，同步到本地
+  React.useEffect(() => {
+    setLocalPlugins(globalPlugins);
+  }, [globalPlugins]);
 
   const toggleExpand = (id: string) => {
     setExpandedIds(prev => 
@@ -44,32 +55,119 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
   };
 
   const handleAction = async (id: string, action: 'enable' | 'disable' | 'uninstall') => {
-    setActionLoading(prev => ({ ...prev, [id]: true }));
+    if (!onTaskUpdate) {
+      // 降级逻辑：如果没有任务中心更新函数，走旧的同步流程（虽然后端已改为异步，但此处仅作兼容）
+      setActionLoading(prev => ({ ...prev, [id]: true }));
+      try {
+        const url = action === 'uninstall' ? `/v1/openclaw/plugins/${id}` : `/v1/openclaw/plugins/${action}`;
+        if (action === 'uninstall') {
+          await api.delete(url);
+        } else {
+          await api.post(url, { id });
+        }
+        message.success(t(`plugins.${action}Success`));
+        onRefresh(true);
+      } catch (err: any) {
+        message.error(err.message || t('common.error'));
+      } finally {
+        setActionLoading(prev => ({ ...prev, [id]: false }));
+      }
+      return;
+    }
+
+    // --- 1. [乐观更新] 立即反馈 UI ---
+    const pendingId = `pending-plugins-${action}-${id}-${Date.now()}`;
+    const startTime = new Date().toISOString();
+    
+    if (action === 'uninstall') {
+      // 卸载操作：立即从本地列表中隐藏
+      setLocalPlugins(prev => prev.filter(p => p.id !== id));
+    } else {
+      // 启用/禁用操作：立即切换本地状态
+      setLocalPlugins(prev => prev.map(p => 
+        p.id === id ? { ...p, enabled: action === 'enable' } : p
+      ));
+    }
+
+    // --- 2. [任务注册] 创建虚拟挂起任务 ---
+    const pendingTask: Task = {
+      id: pendingId,
+      name: t(`plugins.${action}`) + `: ${id}`,
+      module: 'plugins',
+      action: action,
+      target: id,
+      status: 'Running',
+      progress: 10,
+      startTime: startTime
+    };
+    onTaskUpdate(pendingTask);
+
     try {
       const url = action === 'uninstall' ? `/v1/openclaw/plugins/${id}` : `/v1/openclaw/plugins/${action}`;
-      
+      let response;
       if (action === 'uninstall') {
-        await api.delete(url);
+        response = await api.delete(url);
       } else {
-        await api.post(url, { id });
+        response = await api.post(url, { id });
       }
 
-      message.success(t(`plugins.${action}Success`));
-      onRefresh(true);
+      // --- 3. [任务接力] 使用后端返回的真正 TaskID 进行 Handshake ---
+      const realTaskId = response.data.taskId || response.data.data?.taskId;
+      if (realTaskId) {
+        onTaskUpdate({
+          ...pendingTask,
+          id: realTaskId,
+          progress: 20
+        });
+        message.info(t('chat.waitingGatewaySync'));
+      } else {
+        // 如果后端没返回 TaskID（可能是旧版代码），则标记完成并刷新
+        onTaskUpdate({ ...pendingTask, status: 'Completed', progress: 100 });
+        onRefresh(true);
+      }
     } catch (err: any) {
-      message.error(err.message || t('common.error'));
-    } finally {
-      setActionLoading(prev => ({ ...prev, [id]: false }));
+      // 失败回滚乐观更新
+      setLocalPlugins(globalPlugins);
+      onTaskUpdate({ 
+        ...pendingTask, 
+        status: 'Failed', 
+        error: err.response?.data?.error || err.message 
+      });
     }
   };
 
   const handleUpdate = async () => {
     setUpdating(true);
+    const pendingId = `pending-plugins-update-${Date.now()}`;
+    const pendingTask: Task = {
+      id: pendingId,
+      name: t('plugins.update'),
+      module: 'plugins',
+      action: 'update',
+      target: 'all',
+      status: 'Running',
+      progress: 5,
+      startTime: new Date().toISOString()
+    };
+
+    if (onTaskUpdate) onTaskUpdate(pendingTask);
+
     try {
-      await api.post('/v1/openclaw/plugins/update');
-      message.info(t('plugins.updateStarted'));
+      const response = await api.post('/v1/openclaw/plugins/update');
+      const realTaskId = response.data.taskId || response.data.data?.taskId;
+      
+      if (realTaskId && onTaskUpdate) {
+        onTaskUpdate({ ...pendingTask, id: realTaskId, progress: 10 });
+        message.info(t('plugins.updateStarted'));
+      } else {
+        message.success(t('plugins.updateSuccess') || 'Update completed');
+        onRefresh(true);
+      }
     } catch (err: any) {
       message.error(err.message || t('common.error'));
+      if (onTaskUpdate) {
+        onTaskUpdate({ ...pendingTask, status: 'Failed', error: err.message });
+      }
     } finally {
       setUpdating(false);
     }
@@ -85,7 +183,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
     }
   };
 
-  const filteredPlugins = plugins.filter(plugin => {
+  const filteredPlugins = localPlugins.filter((plugin: Plugin) => {
     const matchesSearch = (plugin.name + plugin.id + plugin.description).toLowerCase().includes(searchText.toLowerCase());
     
     let matchesStatus = true;
@@ -295,7 +393,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
             {filteredPlugins.length === 0 ? (
               <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>{t('plugins.noPlugins')}</div>
             ) : (
-              filteredPlugins.map(plugin => {
+              filteredPlugins.map((plugin: Plugin) => {
                 const isExpanded = expandedIds.includes(plugin.id);
                 return (
                   <div key={plugin.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
@@ -385,7 +483,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                                 <div style={{ marginBottom: 8 }}>
                                   <div style={{ fontWeight: 600, color: '#64748b', fontSize: 11, marginBottom: 4 }}>Channels</div>
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                    {plugin.channelIds.map(c => <Tag key={c} style={{ margin: 0, fontSize: 10 }}>{c}</Tag>)}
+                                    {plugin.channelIds.map((c: string) => <Tag key={c} style={{ margin: 0, fontSize: 10 }}>{c}</Tag>)}
                                   </div>
                                 </div>
                               )}
@@ -393,7 +491,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                                 <div>
                                   <div style={{ fontWeight: 600, color: '#64748b', fontSize: 11, marginBottom: 4 }}>Providers</div>
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                    {plugin.providerIds.map(p => <Tag key={p} style={{ margin: 0, fontSize: 10 }}>{p}</Tag>)}
+                                    {plugin.providerIds.map((p: string) => <Tag key={p} style={{ margin: 0, fontSize: 10 }}>{p}</Tag>)}
                                   </div>
                                 </div>
                               )}

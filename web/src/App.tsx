@@ -920,6 +920,7 @@ const Dashboard = () => {
         loading={loadingPlugins} 
         onRefresh={fetchPlugins} 
         updatedAt={pluginsUpdatedAt} 
+        onTaskUpdate={handleTaskUpdate}
       />,
       'experts': <ExpertMarket isMobile={isMobile} onNavigate={setActiveTab} />
     };
