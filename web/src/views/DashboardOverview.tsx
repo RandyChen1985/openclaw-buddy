@@ -5,6 +5,8 @@ import { Server, Activity, Play, Square, RefreshCw, Trophy, Zap, Monitor } from 
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
 import dayjs from 'dayjs';
 import api from '../api';
+import { APP_VERSION } from '../version';
+import { hasNewVersion } from '../utils/version';
 
 interface DashboardOverviewProps {
   status: any;
@@ -19,7 +21,6 @@ interface DashboardOverviewProps {
   activeTasks?: any[];
   isTransitioning?: boolean; // 新增：正在执行过渡动作
   loading?: boolean;
-  versionUpdate?: { latest: string, current: string, release_url: string } | null;
   onRefreshVersion?: () => Promise<any>;
 }
 
@@ -39,7 +40,7 @@ interface OcStatus {
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({ 
   status, history, isRunning, onControl, onNavigate,
   systemEvents = [], topBots = [], ocInstalled, activeTasks = [], isTransitioning = false, loading = false,
-  versionUpdate, onRefreshVersion
+  onRefreshVersion
 }) => {
   const { t } = useTranslation();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
@@ -72,9 +73,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     try {
       const data = await onRefreshVersion();
       if (data) {
-        if (data.current === data.latest) {
-          message.success('当前已是最新版本');
-        } else {
+        // 只有远程版本 > 本地版本时才提示更新
+        if (hasNewVersion(APP_VERSION, data.latest)) {
           notification.info({
             message: '发现新版本',
             description: (
@@ -95,6 +95,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             placement: 'topRight',
             duration: 10
           });
+        } else {
+          message.success('当前已是最新版本');
         }
       }
     } catch (err) {
@@ -199,7 +201,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <div>
                   <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>OpenClaw Buddy</div>
                   <div style={{ fontSize: 14, color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    v{versionUpdate?.current || '---'}
+                    v{APP_VERSION}
                     <Button 
                       type="text" 
                       size="small" 

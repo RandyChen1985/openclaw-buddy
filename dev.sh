@@ -79,8 +79,9 @@ if [ -d "web" ]; then
 fi
 
 # 4. 编译后端到隔离目录
-echo "🏗️  正在编译后端..."
-go build -o "$DEV_ROOT/openclaw-buddy-dev" ./cmd/monitor/main.go
+DEV_VERSION=$(cat VERSION 2>/dev/null || echo "dev")
+echo "🏗️  正在编译后端 (版本: $DEV_VERSION)..."
+go build -ldflags="-X 'openclaw-buddy/internal/config.Version=${DEV_VERSION}'" -o "$DEV_ROOT/openclaw-buddy-dev" ./cmd/monitor/main.go
 if [ $? -ne 0 ]; then
     echo "❌ 编译失败！"
     exit 1

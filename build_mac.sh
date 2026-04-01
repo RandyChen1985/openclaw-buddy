@@ -56,7 +56,7 @@ cp -r web/dist/* internal/api/dist/
 
 # 2. 编译 Go 二进制 (macOS)
 echo "🏗️ 正在编译 Go 程序 (Darwin/amd64): ${BINARY_NAME}..."
-go build -ldflags="-s -w" -o "${BINARY_NAME}" cmd/monitor/main.go
+go build -ldflags="-s -w -X 'openclaw-buddy/internal/config.Version=${VERSION}'" -o "${BINARY_NAME}" cmd/monitor/main.go
 
 # 3. 组织发布包
 mkdir -p "${PKG_DIR}/lib" "${PKG_DIR}/logs" "${PKG_DIR}/reports" "${PKG_DIR}/backups" "${PKG_DIR}/data"

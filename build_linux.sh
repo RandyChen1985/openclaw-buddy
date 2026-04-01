@@ -60,7 +60,7 @@ cp -r web/dist/* internal/api/dist/
 
 # 2. 交叉编译 Go 二进制 (Linux/AMD64)
 echo "🏗️ 正在交叉编译 Go 程序 (Linux/amd64): ${BINARY_NAME}..."
-GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o "${BINARY_NAME}" cmd/monitor/main.go
+GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X 'openclaw-buddy/internal/config.Version=${VERSION}'" -o "${BINARY_NAME}" cmd/monitor/main.go
 
 # 3. 组织发布包结构
 mkdir -p "${PKG_DIR}/lib" "${PKG_DIR}/logs" "${PKG_DIR}/reports" "${PKG_DIR}/backups" "${PKG_DIR}/data"

@@ -870,7 +870,6 @@ const Dashboard = () => {
           ocInstalled={ocInstalled}
           activeTasks={activeTasks}
           isTransitioning={isTransitioning}
-          versionUpdate={versionUpdate}
           onRefreshVersion={checkVersionUpdate}
         />
       ),
