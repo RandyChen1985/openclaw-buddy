@@ -1,26 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox, Segmented } from 'antd';
+import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox, Segmented, Empty } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star, ChevronDown, ChevronUp, Activity, ZapOff, Bot, LayoutGrid, List, FolderOpen } from 'lucide-react';
+import { 
+  Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star, 
+  ChevronDown, ChevronUp, Activity, ZapOff, Bot, LayoutGrid, List, FolderOpen,
+  Eye, Save, Brain, Edit3
+} from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import dayjs from 'dayjs';
 import api from '../api';
 import { message } from 'antd';
 
 interface BotsManagerProps {
-  botsModels: any; // 结构: { data: { bots: [], models: [] }, updated_at: string }
+  botsModels: any; 
   loadingBots: boolean;
   isMobile: boolean;
-  onRefresh: () => void;
+  onRefresh: () => void; // 现在对应 fetchModelsConfig
+  onRefreshBots: () => void; // 现在对应 fetchBotsModels
+  modelsConfig: any;
+  loadingConfig: boolean;
   onAddBot: (id: string, model: string) => Promise<void>;
-  onSetIdentity: (id: string, name: string) => Promise<void>;
-  onSetBotModel: (id: string, model: string) => Promise<void>;
+  onUpdateBot: (id: string, name?: string, model?: string) => Promise<void>;
   onDeleteBot: (id: string) => Promise<void>;
   onSetDefaultModel: (id: string) => Promise<void>;
-  onShowGlobalLoading: (message: string, duration?: number) => void; 
+  activeTasks?: any[];
 }
 
 const BotsManager: React.FC<BotsManagerProps> = ({ 
-  botsModels, loadingBots, isMobile, onRefresh, onAddBot, onSetIdentity, onSetBotModel, onDeleteBot, onSetDefaultModel, onShowGlobalLoading
+  botsModels, loadingBots, isMobile, onRefresh, onRefreshBots, modelsConfig, loadingConfig,
+  onAddBot, onUpdateBot, onDeleteBot, onSetDefaultModel,
+  activeTasks = []
 }) => {
   const { t } = useTranslation();
   const cardColors = [
@@ -43,10 +53,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const [sessions, setSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   
-  // 模型管理相关状态
-  const [modelsConfig, setModelsConfig] = useState<any>(null);
   const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(new Set());
-  const [loadingConfig, setLoadingConfig] = useState(false);
   const [isProviderModalOpen, setIsProviderModalOpen] = useState(false);
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
   const [isEditingProvider, setIsEditingProvider] = useState(false);
@@ -80,20 +87,39 @@ const BotsManager: React.FC<BotsManagerProps> = ({
 
   useEffect(() => {
     fetchSessions();
-    fetchModelsConfig();
   }, []);
-
-  const fetchModelsConfig = async () => {
-    setLoadingConfig(true);
-    try {
-      const res = await api.get('/v1/openclaw/models/config');
-      setModelsConfig(res.data);
-    } catch (err) {
-      console.error('Failed to fetch models config:', err);
-    } finally {
-      setLoadingConfig(false);
-    }
+  
+  const isBotProcessing = (botId: string) => {
+    return activeTasks.some(t => t.module === 'bots' && t.target === botId && t.status === 'Running');
   };
+
+  const isModelProcessing = (modelFullId: string) => {
+    return activeTasks.some(t => 
+      t.module === 'bots' && 
+      (t.action === 'set-default-model' || t.action === 'delete-model') && 
+      t.target === modelFullId && 
+      t.status === 'Running'
+    );
+  };
+
+  const isProviderProcessing = (providerName: string) => {
+    return activeTasks.some(t => 
+      t.module === 'bots' && 
+      (t.action === 'add-provider' || t.action === 'add-model') && 
+      t.target === providerName && 
+      t.status === 'Running'
+    );
+  };
+
+  // --- 自动刷新闭环：监测后台任务完成情况 ---
+
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [editorType, setEditorType] = useState<'soul' | 'identity'>('soul');
+  const [editorContent, setEditorContent] = useState('');
+  const [editorBotId, setEditorBotId] = useState('');
+  const [isEditorLoading, setIsEditorLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
 
   const fetchSessions = async (force = false) => {
     setLoadingSessions(true);
@@ -116,35 +142,34 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   };
 
   const handleAddProvider = async () => {
-      try {
-          const values = await configForm.validateFields();
-          setSubmittingConfig(true);
-          setIsProviderModalOpen(false);
-          onShowGlobalLoading(t('bots.syncingProvider'), 0); 
-          
-          await api.post('/v1/openclaw/models/provider', {
-              name: isEditingProvider ? editingProviderName : values.name,
-              config: {
-                  baseUrl: values.baseUrl,
-                  apiKey: values.apiKey,
-                  auth: values.auth || 'api-key',
-                  api: values.api || 'openai-completions'
-              }
-          });
-          
-          configForm.resetFields();
-          setIsEditingProvider(false);
-          setEditingProviderName(null);
-          await fetchModelsConfig();
-          onShowGlobalLoading(t('bots.providerSynced'), 3000);
-      } catch (err: any) {
-          onShowGlobalLoading('', 1);
-          if (!err.errorFields) {
-              message.error(t('bots.saveFailed') + ': ' + ((err as any).response?.data?.error || (err as any).message));
-          }
-      } finally {
-          setSubmittingConfig(false);
+    try {
+      const values = await configForm.validateFields();
+      setSubmittingConfig(true);
+      setIsProviderModalOpen(false);
+      
+      // 物理调用渠道保存接口
+      await api.post('/v1/openclaw/models/provider', {
+        name: isEditingProvider ? editingProviderName : values.name,
+        config: {
+          baseUrl: values.baseUrl,
+          apiKey: values.apiKey,
+          auth: values.auth || 'api-key',
+          api: values.api || 'openai-completions'
+        }
+      });
+      
+      configForm.resetFields();
+      setIsEditingProvider(false);
+      setEditingProviderName(null);
+      message.success(t('common.waitingGateway'));
+      // 此处不再手动调刷新，App.tsx 监听到任务完成后会自动执行 fetchModelsConfig 物理对账
+    } catch (err: any) {
+      if (!err.errorFields) {
+        message.error(t('bots.saveFailed') + ': ' + (err.response?.data?.error || err.message));
       }
+    } finally {
+      setSubmittingConfig(false);
+    }
   };
 
   const handleEditProvider = (name: string, config: any) => {
@@ -166,27 +191,26 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       const values = modelForm.getFieldsValue(true);
       setSubmittingConfig(true);
       setIsModelModalOpen(false);
-      onShowGlobalLoading(t('bots.appendingModel'), 0);
 
       const submitData = {
-        provider_name: values.provider_name,
-        model_config: {
+        providerName: values.provider_name,
+        modelConfig: {
           id: values.id,
           name: values.name || values.id,
           api: values.api,
           reasoning: !!values.reasoning,
           input: values.input,
-          maxTokens: values.maxTokens || 2000000,
-          contextWindow: values.contextWindow || 2000000,
+          maxTokens: parseInt(values.maxTokens) || 2000000,
+          contextWindow: parseInt(values.contextWindow) || 2000000,
         }
       };
 
+      // 物理发起模型添加请求
       await api.post('/v1/openclaw/models/provider/model', submitData);
       modelForm.resetFields();
-      await fetchModelsConfig();
-      onShowGlobalLoading(t('bots.modelAppended'), 3000);
+      message.success(t('common.waitingGateway'));
+      // 同上，UI 对账动作已由 App.tsx 全局观察器承包
     } catch (err: any) {
-      onShowGlobalLoading('', 1);
       if (!err.errorFields) {
         message.error(t('bots.saveFailed') + ': ' + (err.response?.data?.error || err.message));
       }
@@ -200,7 +224,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     setTestingModelId(fullId);
     try {
       const startTime = Date.now();
-      await api.post('/v1/openclaw/models/test', { provider, modelId });
+      await api.post('/v1/openclaw/models/test-direct', { providerName: provider, modelId });
       const latency = Date.now() - startTime;
       setTestLatencyMap(prev => ({ ...prev, [fullId]: { latency } }));
       message.success(t('bots.testSuccess', { id: modelId, latency }));
@@ -215,19 +239,18 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const handleDeleteModel = (provider: string, modelId: string) => {
     Modal.confirm({
       title: t('bots.removeModelTitle'),
-      content: t('bots.removeModelWarning', { id: modelId }),
+      content: t('bots.removeModelWarning', { id: modelId, provider }),
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          onShowGlobalLoading(t('bots.deletingModel'), 0);
+          // 物理调用模型删除接口 (任务 ID 会被全局 App.tsx 捕捉并自动重刷)
           await api.delete(`/v1/openclaw/models/provider/${provider}/model/${modelId}`);
-          await fetchModelsConfig();
-          onShowGlobalLoading(t('bots.modelDeleted'), 3000);
+          message.success(t('common.waitingGateway'));
         } catch (err: any) {
-          onShowGlobalLoading('', 1);
           message.error(t('bots.deleteFailed') + ': ' + (err.response?.data?.error || err.message));
+          onRefresh(); // 失败回退对账
         }
       }
     });
@@ -257,11 +280,16 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       const values = await editForm.validateFields();
       setIsEditModalOpen(false); // 立即关闭弹窗
       setProcessing(true);
-      if (editingBot && values.name !== editingBot.name) {
-        await onSetIdentity(editingBot.id, values.name);
-      }
-      if (editingBot && values.model !== editingBot.model) {
-        await onSetBotModel(editingBot.id, values.model);
+      
+      const nameChanged = editingBot && values.name !== editingBot.name;
+      const modelChanged = editingBot && values.model !== editingBot.model;
+      
+      if (editingBot && (nameChanged || modelChanged)) {
+        await onUpdateBot(
+          editingBot.id, 
+          nameChanged ? values.name : undefined, 
+          modelChanged ? values.model : undefined
+        );
       }
       onRefresh();
     } catch (err) {
@@ -285,16 +313,68 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     }
   };
 
-  const handleSetDefaultModel = async (model: any) => {
+  const handleOpenFileEditor = async (botId: string, type: 'soul' | 'identity') => {
     try {
-       onShowGlobalLoading(t('bots.settingDefault'), 0);
-       await onSetDefaultModel(model.id);
-       await onRefresh();
-       onShowGlobalLoading(t('bots.defaultSet'), 3000);
+      setEditorBotId(botId);
+      setEditorType(type);
+      setEditorContent('');
+      setIsEditorLoading(true);
+      setIsEditorOpen(true);
+      
+      const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
+      const workspaceParam = bot?.workspace ? `&workspace=${encodeURIComponent(bot.workspace)}` : '';
+      
+      const res = await api.get(`/v1/openclaw/bots/file?id=${botId}&type=${type}${workspaceParam}`);
+      setEditorContent(res.data.content || '');
     } catch (err: any) {
-       onShowGlobalLoading('', 1);
-       message.error(err.message || 'Failed to set default model');
+      if (isEditorOpen) {
+        message.error(t('common.loadFailed') + ': ' + (err.response?.data?.error || err.message));
+      }
+    } finally {
+      setIsEditorLoading(false);
     }
+  };
+
+  const handleSaveFileContent = async () => {
+    try {
+      setIsSaving(true);
+      
+      const bot = botsModels?.data?.bots?.find((b: any) => b.id === editorBotId);
+      await api.post('/v1/openclaw/bots/file', {
+        id: editorBotId,
+        type: editorType,
+        content: editorContent,
+        workspace: bot?.workspace
+      });
+      message.success(t('bots.saveSuccess'));
+      setIsEditorOpen(false); // 隐藏对话框
+    } catch (err: any) {
+      message.error(t('bots.saveFailed') + ': ' + (err.response?.data?.error || err.message));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSetDefaultModel = (fullId: string) => {
+    const confirmInstance = Modal.confirm({
+      title: t('bots.confirmSwitchDefault'),
+      content: t('bots.switchDefaultContent', { name: fullId }),
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      onOk: () => {
+        confirmInstance.destroy();
+        // 在弹窗销毁后立刻执行异步业务
+        (async () => {
+          try {
+            await onSetDefaultModel(fullId);
+            await onRefresh();
+            message.success(t('common.waitingGateway'));
+          } catch (err: any) {
+            message.error(err.message || 'Failed to set default model');
+          }
+        })();
+      }
+    });
   };
 
   return (
@@ -318,7 +398,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
               )}
               <Button 
                 icon={<RefreshCw size={16} className={loadingBots ? 'animate-spin' : ''} />} 
-                onClick={onRefresh} 
+                onClick={onRefreshBots} 
                 loading={loadingBots}
                 style={{ borderRadius: 10, background: '#f1f5f9', border: 'none', color: '#64748b', fontWeight: 600 }}
               >
@@ -373,10 +453,21 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                           transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
                           position: 'relative',
                           overflow: 'hidden',
-                          boxShadow: `0 10px 25px -12px ${color.theme}40` // 主题色阴影
+                          boxShadow: `0 10px 25px -12px ${color.theme}40`, // 主题色阴影
+                          opacity: isBotProcessing(bot.id) ? 0.7 : 1,
+                          pointerEvents: isBotProcessing(bot.id) ? 'none' : 'auto'
                         }}
                         className="bot-card card-float"
                       >
+                        {isBotProcessing(bot.id) && (
+                          <div style={{ 
+                            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, 
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                            background: 'rgba(255,255,255,0.4)', zIndex: 10, backdropFilter: 'blur(2px)' 
+                          }}>
+                            <Spin tip={t('common.processing')} />
+                          </div>
+                        )}
                         <div style={{ position: 'absolute', top: 0, right: 0, width: 80, height: 80, background: `linear-gradient(135deg, transparent 50%, ${color.bg} 100%)`, opacity: 0.5, zIndex: 0 }}></div>
                         
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, position: 'relative', zIndex: 1 }}>
@@ -394,20 +485,48 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                              )}
                            </div>
                           <div style={{ display: 'flex', gap: 4 }}>
-                            <Tooltip title={t('common.edit')}>
-                              <Button type="text" size="small" icon={<Pencil size={16} />} onClick={() => handleEditClick(bot)} style={{ color: '#94a3b8' }} />
-                            </Tooltip>
-                            <Tooltip title={t('common.delete')}>
+                            <Button type="text" size="small" icon={<Pencil size={16} />} onClick={() => handleEditClick(bot)} style={{ color: '#94a3b8' }} />
+                            {bot.id !== 'main' && (
                               <Button type="text" size="small" icon={<Trash2 size={16} />} onClick={() => showDeleteConfirm(bot.id)} style={{ color: '#94a3b8' }} className="delete-hover" />
-                            </Tooltip>
+                            )}
                           </div>
                         </div>
 
                         <div style={{ position: 'relative', zIndex: 1 }}>
-                          <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                            {bot.name || bot.id}
-                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} className="status-pulse"></div>
-                          </h3>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', marginBottom: 4 }}>
+                            <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.5px' }}>{bot.name || bot.id}</div>
+                            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', border: '2px solid #fff', boxShadow: '0 0 10px rgba(34, 197, 94, 0.4)', flexShrink: 0 }} className="status-pulse" />
+                            
+                            {/* 基于用户图片更新的图标组 - 靠右对齐 */}
+                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                              <Tooltip title={t('bots.editSoul')}>
+                                <Button 
+                                  type="text" 
+                                  size="small" 
+                                  icon={<Brain size={16} color="#8b5cf6" />} 
+                                  onClick={() => handleOpenFileEditor(bot.id, 'soul')}
+                                  style={{ 
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 28, height: 28, borderRadius: 8, background: '#f5f3ff', 
+                                    border: '1px solid #ddd6fe'
+                                  }}
+                                />
+                              </Tooltip>
+                              <Tooltip title={t('bots.editIdentity')}>
+                                <Button 
+                                  type="text" 
+                                  size="small" 
+                                  icon={<ShieldCheck size={16} color="#2563eb" />} 
+                                  onClick={() => handleOpenFileEditor(bot.id, 'identity')}
+                                  style={{ 
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 28, height: 28, borderRadius: 8, background: '#eff6ff', 
+                                    border: '1px solid #dbeafe'
+                                  }}
+                                />
+                              </Tooltip>
+                            </div>
+                          </div>
                           <div style={{ fontSize: 12, color: '#94a3b8', fontFamily: 'monospace', marginBottom: 16 }}>ID: {bot.id}</div>
                           
                           <div style={{ background: 'rgba(255, 255, 255, 0.5)', backdropFilter: 'blur(8px)', padding: '14px', borderRadius: 18, border: `1px solid ${color.border}60` }}>
@@ -425,19 +544,21 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                   </span>
                                 </div>
                               </div>
-                              <div style={{ paddingTop: 10, borderTop: `1px dashed ${color.border}` }}>
-                                <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, fontWeight: 800 }}>
-                                  {t('bots.workspace')}
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <div style={{ padding: 4, background: '#f1f5f9', borderRadius: 6 }}>
-                                      <FolderOpen size={12} color="#64748b" />
+                              <div style={{ paddingTop: 10, borderTop: `1px dashed ${color.border}`, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                                <div style={{ flex: 1, overflow: 'hidden' }}>
+                                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, fontWeight: 800 }}>
+                                    {t('bots.workspace')}
                                   </div>
-                                  <Tooltip title={bot.workspace}>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
-                                      {bot.workspace || '-'}
-                                    </span>
-                                  </Tooltip>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <div style={{ padding: 4, background: '#f1f5f9', borderRadius: 6 }}>
+                                        <FolderOpen size={12} color="#64748b" />
+                                    </div>
+                                    <Tooltip title={bot.workspace}>
+                                      <span style={{ fontSize: 12, fontWeight: 700, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontFamily: 'monospace' }}>
+                                        {bot.workspace?.length > 24 ? bot.workspace.substring(0, 10) + '...' + bot.workspace.substring(bot.workspace.length - 10) : bot.workspace}
+                                      </span>
+                                    </Tooltip>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -455,13 +576,23 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   pagination={false}
                   rowKey="id"
                   columns={[
-                    { title: t('bots.botId'), dataIndex: 'id', key: 'id', render: (id: string, record: any) => <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><ProviderIcon provider={record.provider || (id === 'main' ? 'openai' : '')} size={20} /><span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{id}</span></div> },
+                    { title: t('bots.botId'), dataIndex: 'id', key: 'id', render: (id: string, record: any) => {
+                      const modelProvider = record.model?.includes('/') ? record.model.split('/')[0] : (record.provider || (id === 'main' ? 'openai' : ''));
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <ProviderIcon provider={modelProvider} size={20} />
+                          <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{id}</span>
+                        </div>
+                      );
+                    }},
                     { title: t('bots.displayName'), dataIndex: 'name', key: 'name', render: (name: string, record: any) => name || record.id },
                     { title: t('bots.currentModel'), dataIndex: 'model', key: 'model', render: (m: string) => <Tag color="blue" style={{ borderRadius: 6 }}>{m}</Tag> },
                     { title: t('common.action'), key: 'action', width: 120, render: (_, record: any) => (
                       <div style={{ display: 'flex', gap: 8 }}>
                         <Button size="small" type="text" icon={<Pencil size={14} />} onClick={() => handleEditClick(record)} />
-                        <Button size="small" type="text" danger icon={<Trash2 size={14} />} onClick={() => showDeleteConfirm(record.id)} />
+                        {record.id !== 'main' && (
+                          <Button size="small" type="text" danger icon={<Trash2 size={14} />} onClick={() => showDeleteConfirm(record.id)} />
+                        )}
                       </div>
                     )}
                   ]}
@@ -541,18 +672,18 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                         <span style={{ fontWeight: 800, color: '#475569', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                           {providerName} ({providerModels.length})
                         </span>
-                        <Tooltip title={t('common.edit')}>
-                          <Button 
-                            type="text" 
-                            size="small" 
-                            icon={<Pencil size={12} />} 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditProvider(providerName, providerData);
-                            }}
-                            style={{ color: '#94a3b8', padding: 0, height: 18, width: 18, marginLeft: -4 }}
-                          />
-                        </Tooltip>
+                        {isProviderProcessing(providerName) && <Spin size="small" style={{ marginLeft: 4 }} />}
+                        <Button 
+                          type="text" 
+                          size="small" 
+                          icon={<Pencil size={12} />} 
+                          disabled={isProviderProcessing(providerName)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditProvider(providerName, providerData);
+                          }}
+                          style={{ color: '#94a3b8', padding: 0, height: 18, width: 18, marginLeft: -4 }}
+                        />
                         {collapsedProviders.has(providerName) ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
                         <div style={{ height: 1, flex: 1, background: '#f1f5f9', marginLeft: 8 }}></div>
                       </div>
@@ -580,8 +711,20 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                     boxShadow: isDefault 
                                       ? '0 10px 20px -5px rgba(139, 92, 246, 0.2)' 
                                       : `0 4px 12px -4px ${color.theme}20`,
-                                    cursor: 'default'
+                                    cursor: 'default',
+                                    opacity: isModelProcessing(`${providerName}/${m.id}`) ? 0.7 : 1,
+                                    pointerEvents: isModelProcessing(`${providerName}/${m.id}`) ? 'none' : 'auto'
                                   }} className="model-card card-float">
+                                    {isModelProcessing(`${providerName}/${m.id}`) && (
+                                      <div style={{ 
+                                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, 
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                        background: 'rgba(255,255,255,0.4)', zIndex: 10, backdropFilter: 'blur(2px)',
+                                        borderRadius: 18
+                                      }}>
+                                        <Spin size="small" />
+                                      </div>
+                                    )}
                                     {isDefault && (
                                       <div style={{
                                         position: 'absolute', top: -10, right: 12,
@@ -627,26 +770,23 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                          )} 
                                       </div>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                        <Tooltip title="测试连通性 (hello)" placement="bottom">
-                                            <Button
-                                                type="text"
-                                                size="small"
-                                                icon={<Zap size={14} className={testingModelId === `${providerName}/${m.id}` ? 'animate-pulse' : ''} />}
-                                                loading={testingModelId === `${providerName}/${m.id}`}
-                                                onClick={() => handleTestModel(providerName, m.id)}
-                                                style={{ color: testingModelId === `${providerName}/${m.id}` ? '#f59e0b' : '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                            />
-                                        </Tooltip>
+                                        <Button
+                                            type="text"
+                                            size="small"
+                                            icon={<Zap size={14} className={testingModelId === `${providerName}/${m.id}` ? 'animate-pulse' : ''} />}
+                                            loading={testingModelId === `${providerName}/${m.id}`}
+                                            onClick={() => handleTestModel(providerName, m.id)}
+                                            style={{ color: testingModelId === `${providerName}/${m.id}` ? '#f59e0b' : '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        />
                                         {!isDefault && (
-                                          <Tooltip title="设为全局默认" placement="bottom">
-                                            <Button 
-                                              type="text" 
-                                              size="small" 
-                                              icon={<Star size={14} />} 
-                                              onClick={() => handleSetDefaultModel(m)}
-                                              style={{ color: '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                            />
-                                          </Tooltip>
+                                          <Button 
+                                            type="text" 
+                                            size="small" 
+                                            icon={<Star size={14} className={isModelProcessing(`${providerName}/${m.id}`) ? 'animate-spin' : ''} />} 
+                                            loading={isModelProcessing(`${providerName}/${m.id}`)}
+                                            onClick={() => handleSetDefaultModel(`${providerName}/${m.id}`)}
+                                            style={{ color: '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                          />
                                         )}
                                         <Button
                                             type="text"
@@ -672,16 +812,16 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                             columns={[
                               { title: 'ID', dataIndex: 'id', key: 'id', render: (id: string) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{id}</span> },
                               { title: t('bots.displayName'), dataIndex: 'name', key: 'name', render: (name: string, r: any) => name || r.id },
-                              { title: 'API', dataIndex: 'api', key: 'api', render: (api: string) => <Tag style={{ borderRadius: 4, fontSize: 10 }}>{api}</Tag> },
+                              { title: t('bots.api'), dataIndex: 'api', key: 'api', render: (api: string) => <Tag style={{ borderRadius: 4, fontSize: 10 }}>{api}</Tag> },
                               { title: t('bots.latency'), key: 'latency', width: 100, render: (_, r: any) => {
                                 const lat = testLatencyMap[providerName + '/' + r.id]?.latency;
                                 if (lat === undefined) return '-';
-                                return <Tag color={lat > 0 ? 'success' : 'error'}>{lat > 0 ? `${lat}ms` : 'FAIL'}</Tag>;
+                                return <Tag color={lat > 0 ? 'success' : 'error'}>{lat > 0 ? `${lat}ms` : t('bots.fail')}</Tag>;
                               }},
                               { title: t('common.action'), key: 'action', width: 150, render: (_, r: any) => (
                                 <div style={{ display: 'flex', gap: 4 }}>
                                   <Button size="small" type="text" icon={<Zap size={14} />} onClick={() => handleTestModel(providerName, r.id)} loading={testingModelId === `${providerName}/${r.id}`} />
-                                  <Button size="small" type="text" icon={<Star size={14} />} onClick={() => handleSetDefaultModel(r)} />
+                                  <Button size="small" type="text" icon={<Star size={14} />} onClick={() => handleSetDefaultModel(`${providerName}/${r.id}`)} />
                                   <Button size="small" type="text" danger icon={<Trash2 size={14} />} onClick={() => handleDeleteModel(providerName, r.id)} />
                                 </div>
                               )}
@@ -824,7 +964,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 { required: true, message: t('bots.botIdRequired') },
                 { pattern: /^[a-zA-Z0-9_]+$/, message: t('bots.botIdPattern') }
               ]}
-              extra={<span style={{ fontSize: 11, color: '#94a3b8' }}>{t('bots.idFormatTip')}: <code style={{ background: '#f1f5f9', padding: '1px 4px' }}>dev_bot</code>。{t('bots.workspaceAutoTip')} <code style={{ background: '#f1f5f9', padding: '1px 4px' }}>~/.openclaw/workspace_[id]</code></span>}
+              extra={<span style={{ fontSize: 11, color: '#94a3b8' }}>{t('bots.idFormatTip')}: <code style={{ background: '#f1f5f9', padding: '1px 4px' }}>dev_bot</code>. {t('bots.workspaceAutoTip')} <code style={{ background: '#f1f5f9', padding: '1px 4px' }}>~/.openclaw/workspace_[id]</code></span>}
             >
               <Input placeholder={t('bots.botIdPlaceholder')} />
             </Form.Item>
@@ -912,7 +1052,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 </Col>
                 <Col span={12}>
                   <Form.Item label={t('bots.apiProtocol')} name="api" initialValue="openai-completions">
-                    <Select options={[{ label: 'OpenAI Completions', value: 'openai-completions' }]} />
+                    <Select options={[{ label: t('bots.protocolOpenAICompletions'), value: 'openai-completions' }]} />
                   </Form.Item>
                 </Col>
               </Row>
@@ -974,14 +1114,14 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 <Col span={12}>
                   <Form.Item label={t('bots.apiProtocol')} name="api">
                     <Select options={[
-                      { label: 'OpenAI Completions', value: 'openai-completions' },
-                      { label: 'OpenAI Responses', value: 'openai-responses' },
-                      { label: 'OpenAI Codex Responses', value: 'openai-codex-responses' },
-                      { label: 'Anthropic Messages', value: 'anthropic-messages' },
-                      { label: 'Google Generative AI', value: 'google-generative-ai' },
-                      { label: 'GitHub Copilot', value: 'github-copilot' },
-                      { label: 'Bedrock Converse Stream', value: 'bedrock-converse-stream' },
-                      { label: 'Ollama', value: 'ollama' }
+                      { label: t('bots.protocolOpenAICompletions'), value: 'openai-completions' },
+                      { label: t('bots.protocolOpenAIResponses'), value: 'openai-responses' },
+                      { label: t('bots.protocolOpenAICodexResponses'), value: 'openai-codex-responses' },
+                      { label: t('bots.protocolAnthropicMessages'), value: 'anthropic-messages' },
+                      { label: t('bots.protocolGoogleGenerativeAI'), value: 'google-generative-ai' },
+                      { label: t('bots.protocolGitHubCopilot'), value: 'github-copilot' },
+                      { label: t('bots.protocolBedrockConverseStream'), value: 'bedrock-converse-stream' },
+                      { label: t('bots.protocolOllama'), value: 'ollama' }
                     ]} />
                   </Form.Item>
                 </Col>
@@ -1114,7 +1254,114 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           <p style={{ color: '#64748b', fontSize: 13 }}>{t('bots.irreversible')}</p>
         </div>
       </Modal>
-      <style>{`
+
+      {/* 机器人核心人格/身份编辑器 (分屏预览模式) */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ 
+              padding: 8, 
+              background: editorType === 'soul' ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' : 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)', 
+              borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
+            }}>
+              {editorType === 'soul' ? <Brain size={18} color="#fff" /> : <ShieldCheck size={18} color="#fff" />}
+            </div>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b', marginBottom: 2 }}>
+                {editorType === 'soul' ? t('bots.editSoul') : t('bots.editIdentity')}
+              </div>
+              <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
+                {editorBotId} · {editorType === 'soul' ? 'SOUL.md' : 'IDENTITY.md'}
+              </div>
+            </div>
+          </div>
+        }
+        open={isEditorOpen}
+        onCancel={() => setIsEditorOpen(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setIsEditorOpen(false)} style={{ borderRadius: 8 }}>
+            {t('common.cancel')}
+          </Button>,
+          <Button 
+            key="save" 
+            type="primary" 
+            loading={isSaving} 
+            icon={<Save size={14} />} 
+            onClick={handleSaveFileContent} 
+            style={{ borderRadius: 8, background: editorType === 'soul' ? '#8b5cf6' : '#2563eb', border: 'none' }}
+          >
+            {t('common.save')}
+          </Button>
+        ]}
+        width={isMobile ? '100%' : 1100}
+        centered
+        bodyStyle={{ padding: '0', height: isMobile ? 'calc(100vh - 120px)' : '75vh', overflow: 'hidden' }}
+      >
+        <Spin 
+          spinning={isEditorLoading || isSaving} 
+          tip={isSaving ? t('common.processing') : t('common.loading')}
+          style={{ height: '100%' }}
+          wrapperClassName="bot-editor-spin-wrapper"
+        >
+          {isEditorLoading ? (
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
+              <div style={{ marginTop: 16, color: '#94a3b8', fontSize: 14 }}>{t('common.loading')}</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', height: '100%', flexDirection: isMobile ? 'column' : 'row' }}>
+              {/* 左侧编辑器 */}
+              <div style={{ flex: 1, borderRight: isMobile ? 'none' : '1px solid #f1f5f9', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#f8fafc' }}>
+                  <Edit3 size={14} color="#64748b" />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{t('bots.markdownSource')}</span>
+                </div>
+                <div style={{ flex: 1, padding: 0, position: 'relative', overflow: 'hidden' }}>
+                  <Input.TextArea
+                    value={editorContent}
+                    onChange={(e) => setEditorContent(e.target.value)}
+                    placeholder={editorType === 'soul' ? t('experts.soulPlaceholder') : t('experts.identityPlaceholder')}
+                    className="bot-editor-textarea"
+                    style={{ 
+                      height: '100%', border: 'none', background: 'transparent',
+                      padding: '24px', resize: 'none', fontSize: 14, fontFamily: 'monospace',
+                      lineHeight: 1.7, borderRadius: 0, overflowY: 'auto'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* 右侧预览 */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa' }}>
+                <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#fff' }}>
+                  <Eye size={14} color="#64748b" />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{t('experts.preview')}</span>
+                </div>
+                <div style={{ flex: 1, padding: 30, overflowY: 'auto', backgroundColor: '#fff' }}>
+                  {editorContent ? (
+                    <div className="markdown-body" style={{ fontSize: 15 }}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>
+                      <Empty description={t('common.noContent')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </Spin>
+      </Modal>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .markdown-body h1 { font-size: 1.4em; margin-bottom: 16px; color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+        .markdown-body h2 { font-size: 1.25em; margin-top: 24px; margin-bottom: 12px; color: #334155; }
+        .markdown-body p { margin-bottom: 16px; line-height: 1.7; color: #475569; }
+        .markdown-body ul, .markdown-body ol { margin-bottom: 16px; padding-left: 20px; }
+        .markdown-body li { margin-bottom: 6px; color: #475569; }
+        .markdown-body code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; color: #2563eb; }
+        .markdown-body blockquote { border-left: 4px solid #e2e8f0; padding-left: 16px; color: #64748b; font-style: italic; margin: 16px 0; }
         @keyframes pulse-green {
           0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
           70% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
@@ -1123,7 +1370,34 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         .status-pulse {
           animation: pulse-green 2s infinite;
         }
-      `}</style>
+        .bot-editor-spin-wrapper, 
+        .bot-editor-spin-wrapper .ant-spin-container,
+        .bot-editor-spin-wrapper .ant-spin-nested-loading {
+          height: 100% !important;
+        }
+        .bot-editor-textarea {
+          height: 100% !important;
+          border-radius: 0 !important;
+        }
+        .bot-editor-textarea textarea {
+          height: 100% !important;
+          overflow-y: auto !important;
+          padding: 24px !important;
+          scrollbar-width: thin;
+          scrollbar-color: #e2e8f0 transparent;
+        }
+        /* 强制滚动条始终可见 (针对 Webkit) */
+        .bot-editor-textarea textarea::-webkit-scrollbar {
+          width: 6px;
+        }
+        .bot-editor-textarea textarea::-webkit-scrollbar-thumb {
+          background: #e2e8f0;
+          border-radius: 3px;
+        }
+        .bot-editor-textarea textarea::-webkit-scrollbar-thumb:hover {
+          background: #cbd5e1;
+        }
+      ` }} />
     </div>
   );
 };

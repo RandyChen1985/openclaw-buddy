@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Tag, Button, Input, message, Tooltip, Segmented, Modal } from 'antd';
+import { RefreshCw, Search, CheckCircle2, AlertCircle, Puzzle, Trash2, HelpCircle, ExternalLink } from 'lucide-react';
+import { Card, Table, Tag, Button, Input, message, Tooltip, Segmented, Modal, Steps, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { RefreshCw, Search, CheckCircle2, AlertCircle, Puzzle, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import api from '../api';
 
@@ -23,20 +23,34 @@ interface Skill {
 
 interface SkillManagementProps {
   isMobile?: boolean;
+  onRefresh?: (force?: boolean, isSilent?: boolean) => Promise<void>;
+  loading?: boolean;
+  skills?: any[];
 }
 
-const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
+const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, loading: globalLoading, skills: globalSkills }) => {
   const { t } = useTranslation();
-  const [skills, setSkills] = useState<Skill[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [localSkills, setLocalSkills] = useState<Skill[]>([]);
+  const [localLoading, setLocalLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
   const [updatedAt, setUpdatedAt] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | number>('ready');
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+
+  const loading = globalLoading !== undefined ? globalLoading : localLoading;
+  const skills = globalSkills !== undefined ? globalSkills : localSkills;
 
   const fetchSkills = async (force = false) => {
-    setLoading(true);
+    // 如果存在父级分发的 onRefresh，优先使用 (同步阻塞)
+    if (onRefresh) {
+      await onRefresh(force, false);
+      return;
+    }
+    
+    setLocalLoading(true);
     try {
       if (force) {
+          // 这个接口现在是同步返回的，物理阻塞直到重载完成
           await api.post('/v1/openclaw/skills/reload');
       }
       const res = await api.get(`/v1/openclaw/skills${force ? '?refresh=true' : ''}`);
@@ -45,23 +59,25 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
       let skillsList: Skill[] = [];
       if (rawData.data) {
           skillsList = Array.isArray(rawData.data.skills) ? rawData.data.skills : [];
-          // 统一格式化时间
-          setUpdatedAt(rawData.updated_at ? dayjs(rawData.updated_at).format('YYYY-MM-DD HH:mm:ss') : '');
+          const updateTime = rawData.data.updated_at || rawData.data.updatedAt || rawData.updated_at;
+          setUpdatedAt(updateTime ? dayjs(updateTime).format('YYYY-MM-DD HH:mm:ss') : '');
       } else {
           skillsList = Array.isArray(rawData.skills) ? rawData.skills : [];
       }
       
-      setSkills(skillsList);
+      setLocalSkills(skillsList);
       if (force) message.success(t('skills.syncSuccess'));
     } catch (err) {
       message.error(t('skills.fetchFailed'));
     } finally {
-      setLoading(false);
+      setLocalLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchSkills();
+    if (!onRefresh) {
+      fetchSkills();
+    }
   }, []);
 
   const filteredSkills = skills.filter(skill => {
@@ -81,15 +97,18 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
       centered: true,
       onOk: async () => {
         try {
-          setLoading(true);
-          await api.delete(`/v1/openclaw/skills/${name}`);
-          message.loading(t('skills.reloadingEngine'), 1.5);
-          await api.post('/v1/openclaw/skills/reload');
-          message.success(t('skills.uninstallSuccess', { name }));
-          fetchSkills();
+          // 物理接入异步任务机制：卸载逻辑走异步
+          const res = await api.delete(`/v1/openclaw/skills/${name}`);
+          if (res.data.taskId) {
+            // 后端返回 TaskID，前端只需提示。数据拉取由 App.tsx 的 Task Observer 在任务完成后自动触发。
+            message.info(t('chat.waitingGatewaySync'));
+          } else {
+            // 兜底逻辑
+            message.success(t('skills.uninstallSuccess', { name }));
+            fetchSkills();
+          }
         } catch (err: any) {
           message.error(err.response?.data?.error || t('skills.uninstallFailed'));
-          setLoading(false);
         }
       }
     });
@@ -157,16 +176,14 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
       width: 80,
       render: (_: any, record: Skill) => (
         !record.bundled && (
-          <Tooltip title={t('skills.uninstall')}>
-            <Button 
-              type="text" 
-              danger 
-              size="small" 
-              icon={<Trash2 size={14} />} 
-              onClick={() => handleUninstall(record.name)}
-              style={{ borderRadius: 6 }}
-            />
-          </Tooltip>
+          <Button 
+            type="text" 
+            danger 
+            size="small" 
+            icon={<Trash2 size={14} />} 
+            onClick={() => handleUninstall(record.name)}
+            style={{ borderRadius: 6 }}
+          />
         )
       )
     }
@@ -180,23 +197,30 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
             <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Puzzle size={isMobile ? 18 : 20} color="#2563eb" /> {isMobile ? t('skills.title') : t('skills.fullTitle')}
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12 }}>
-              {updatedAt && (
-                <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
-                  {isMobile ? updatedAt.split(' ')[1] : `${t('skills.syncedAt')}: ${updatedAt}`}
-                </span>
-              )}
-              <Button 
-                type="text" 
-                size="small" 
-                icon={<RefreshCw size={14} className={loading ? 'animate-spin' : ''} />} 
-                onClick={() => fetchSkills(true)}
-                loading={loading}
-                style={{ color: '#64748b', display: 'flex', alignItems: 'center', padding: isMobile ? '0 4px' : '0 8px' }}
-              >
-                {isMobile ? '' : t('common.refresh')}
-              </Button>
-            </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12 }}>
+                {updatedAt && (
+                  <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
+                    {isMobile ? updatedAt.split(' ')[1] : `${t('skills.syncedAt')}: ${updatedAt}`}
+                  </span>
+                )}
+                <Button 
+                  type="text" 
+                  size="small" 
+                  icon={<RefreshCw size={14} className={loading ? 'animate-spin' : ''} />} 
+                  onClick={() => fetchSkills(true)}
+                  loading={loading}
+                  style={{ color: '#64748b', display: 'flex', alignItems: 'center', padding: isMobile ? '0 4px' : '0 8px' }}
+                >
+                  {isMobile ? '' : t('common.refresh')}
+                </Button>
+                <Button 
+                  type="text" 
+                  size="small" 
+                  icon={<HelpCircle size={16} />} 
+                  onClick={() => setIsHelpModalOpen(true)}
+                  style={{ color: '#2563eb', background: '#eff6ff', borderRadius: 8, display: 'flex', alignItems: 'center' }}
+                />
+              </div>
           </div>
         }
         bodyStyle={{ padding: 0 }} 
@@ -303,6 +327,67 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile }) => {
         )}
       </Card>
       
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ padding: 8, background: '#eff6ff', borderRadius: 10, color: '#2563eb' }}><HelpCircle size={20} /></div>
+            <div>
+                <div style={{ fontSize: 16, fontWeight: 700 }}>{t('skills.help.title')}</div>
+                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 400 }}>{t('skills.help.subtitle')}</div>
+            </div>
+          </div>
+        }
+        open={isHelpModalOpen}
+        onCancel={() => setIsHelpModalOpen(false)}
+        footer={[
+          <Button key="close" type="primary" onClick={() => setIsHelpModalOpen(false)} style={{ borderRadius: 8 }}>{t('common.confirm')}</Button>
+        ]}
+        width={580}
+        bodyStyle={{ padding: '24px 24px 10px' }}
+        style={{ borderRadius: 20, overflow: 'hidden' }}
+        maskStyle={{ backdropFilter: 'blur(10px)', background: 'rgba(255,255,255,0.4)' }}
+      >
+        <div style={{ marginBottom: 24, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #f1f5f9' }}>
+            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                {t('skills.help.description')}
+            </Typography.Text>
+        </div>
+        
+        <Steps
+          direction="vertical"
+          size="small"
+          current={-1}
+          items={[
+            {
+              title: <span style={{ fontWeight: 700 }}>{t('skills.help.step1')}</span>,
+              description: (
+                <Button 
+                    type="link" 
+                    href="https://skills.sh/" 
+                    target="_blank" 
+                    icon={<ExternalLink size={14} />}
+                    style={{ padding: 0, height: 'auto', fontSize: 12 }}
+                >
+                    立即前往 skills.sh
+                </Button>
+              )
+            },
+            {
+              title: <span style={{ fontWeight: 600 }}>{t('skills.help.step2')}</span>
+            },
+            {
+              title: <span style={{ fontWeight: 600 }}>{t('skills.help.step3')}</span>,
+              description: <Typography.Text code>openclaw skill install [skill-id]</Typography.Text>
+            },
+            {
+              title: <span style={{ fontWeight: 600 }}>{t('skills.help.step4')}</span>
+            },
+            {
+              title: <span style={{ fontWeight: 600 }}>{t('skills.help.step5')}</span>
+            }
+          ]}
+        />
+      </Modal>
     </div>
   );
 };

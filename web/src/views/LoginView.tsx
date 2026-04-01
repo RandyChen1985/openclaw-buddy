@@ -4,6 +4,8 @@ import { KeyRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import api from '../api';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import { getBaseURL } from '../utils/url';
+import storage from '../utils/storage';
 
 interface LoginViewProps {
   onLoginSuccess: (token: string) => void;
@@ -53,7 +55,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
     const timeout = setTimeout(handleType, speed);
     return () => clearTimeout(timeout);
-  }, [displayText, isDeleting, index, speed]);
+  }, [displayText, isDeleting, index, speed, typewriterText, quotes.length]);
 
   useEffect(() => {
     const handleResize = () => setIsMobileLogin(window.innerWidth < 1024);
@@ -61,7 +63,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const loginImages = ['/openclaw.png', '/openclaw2.png', '/openclaw3.jpg'];
+  const loginImages = ['/openclaw.png', '/openclaw2.png', '/openclaw3.jpg'].map(img => getBaseURL() + img);
   const [mascotImage] = useState(() => loginImages[Math.floor(Math.random() * loginImages.length)]);
 
   const onFinish = async (values: { token: string }) => {
@@ -69,7 +71,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     try {
       const res = await api.post('/login', { token: values.token });
       if (res.data.status === 'success') {
-        localStorage.setItem('guardian_token', values.token);
+        storage.setItem('guardian_token', values.token);
         onLoginSuccess(values.token);
         message.success(t('login.authSuccess'));
       }

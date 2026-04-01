@@ -1,41 +1,71 @@
-# 🧪 Lobster Guardian 测试规范 (Test Specification)
+# 🧪 OpenClaw Buddy 全量测试与质量保证指南
 
-本项目采用 **自动化集成测试** + **手动功能校验** 的双重验证体系。
+本项目采用 **“沙箱隔离 (Sandboxing) + Mock 模拟器 (Binary Mocking)”** 的全量回归测试体系，确保在不破坏生产环境的前提下，实现对 50+ 接口的分钟级自动化验证。
 
-## 1. 自动化测试 (Automated Tests)
+## 1. 测试架构 (Architecture)
 
-所有的自动化集成测试代码均存放在 `tests/` 目录下。
+为了实现“零侵入”测试，我们构建了以下三层防御体系：
 
-### 运行方式
-执行根目录下的脚本：
+- **沙箱隔离层 (`SetupIntegrationTest`)**: 每次测试自动在 `/tmp` 下创建随机命名的工作目录，并生成测试专用的 `openclaw.json` 和 `SQLite` 数据库。
+- **Mock 模拟层 (`mock_openclaw`)**: 这是一个用 Go 编写的极简二进制文件，它接管了 `openclaw` 的所有命令行调用（如 `gateway restart`, `agents list` 等），返回预设的 Mock 数据，不产生任何实际进程副作用。
+- **接口集成层 (`api_integration_test.go`)**: 基于 `gin.TestMode` 模拟真实的 HTTP 请求流，覆盖从登录鉴权到资产管理、模型配置及系统监控的全量接口契约。
+
+---
+
+## 2. 自动化测试执行 (Automation)
+
+### 🚀 一键全量回归测试
+在项目根目录下运行：
 ```bash
 ./tests/run_tests.sh
 ```
 
-### 覆盖范围
-- **API 认证**: 验证 Bearer Token 和 Cookie 认证的安全性。
-- **解析逻辑**: 验证对 OpenClaw CLI 的 ANSI 彩色代码过滤能力。
-- **路由健康**: 验证核心 API 终结点（如 `/health`）的可用性。
-- **构建完整性**: 验证前端 React 项目是否能编译成功且产物完整。
+**脚本内部流程：**
+1.  **编译 Mock**: 自动将 `tests/mock_openclaw/main.go` 编译为 `tests/bin/openclaw`。
+2.  **注入 PATH**: 临时修改环境变量 `PATH`，确保程序调用的是 Mock 模拟器。
+3.  **并发测试**: 执行 `go test ./tests/...`，运行所有集成测试用例。
+4.  **环境清理**: 测试结束后自动销毁 Mock 产物和沙箱临时目录。
 
 ---
 
-## 2. 手动测试清单 (Manual Checklist)
+## 3. 核心测试模块 (Core Modules)
 
-在大版本发布前，必须对照 `tests/CHECKLIST.md` 进行以下手动校验：
+当前自动化测试已覆盖以下核心模块：
 
-### Web 界面
-- [ ] **登录页**: 输入 Token 后能否成功跳转。
-- [ ] **移动端适配**: 手机浏览器访问时，侧边栏或布局是否正常折叠。
-- [ ] **实时日志**: 控制台能否实时滚动显示日志流。
-- [ ] **图表渲染**: 首页的 SQLite 健康度趋势图是否正常绘制。
+| 模块 | 测试项 (T.Run) | 验证重点 |
+| :--- | :--- | :--- |
+| **Auth** | `LoginAPI` | 验证 Token 校验及 Session Cookie 设置 |
+| **Status** | `StatusAPI` | 验证网关运行状态、版本及负载数据的解析 |
+| **Assets** | `BotsModelsAPI` | 验证机器人列表获取、配置同步及资产清单 |
+| **Market** | `ExpertsAPI` | 验证专家模板市场的读取与初始化 |
+| **Healing** | `SelfHealingSettings` | 验证自愈开关的持久化修改逻辑 |
+| **System** | `SystemInfoAPI` | 验证 CPU/内存/磁盘等实时监控指标的提取 |
 
-### 核心管理功能
-- [ ] **服务控制**: 点击“重启”按钮后，后端是否真的执行了 `gateway restart`。
-- [ ] **微信登录**: 点击“获取二维码”后，能否正常弹出并展示。
-- [ ] **数据库持久化**: 运行一段时间后，检查 `data/guardian.db` 是否生成了巡检纪录。
+---
 
-## 3. 测试隔离规范
+## 4. 开发者维护指南 (Developer Guide)
 
-- 所有的测试产物必须生成在 `.gitignore` 涵盖的目录中（如 `temp-dev-test/`）。
-- 禁止在自动化测试中直接修改生产环境的 `openclaw.json` 配置。
+### 如何扩展 Mock 模拟器？
+如果您修改了 `internal/process` 中调用的 `openclaw` 命令或增加了新命令，请同步更新 `tests/mock_openclaw/main.go`。
+- **例**：增加一个 `openclaw plugins install` 的 Mock 响应。
+
+### 如何新增 API 测试用例？
+在 `tests/api_integration_test.go` 中追加一个新的 `t.Run`：
+```go
+t.Run("NewFeatureAPI", func(t *testing.T) {
+    w := PerformRequest(s, "POST", "/v1/new-feature", body)
+    if w.Code != http.StatusOK {
+        t.Errorf("接口报错: %d", w.Code)
+    }
+})
+```
+
+---
+
+## 5. 手动测试清单 (Manual Checklist)
+
+对于涉及 **WebSocket 实时流 (Logs/TUI)** 或 **前端 CSS 布局** 的变更，建议参考 `tests/CHECKLIST.md` 进行手动确认。
+
+> [!IMPORTANT]
+> **发布前必读**：任何代码提交（PR）前，必须确保 `./tests/run_tests.sh` 的结果为 **PASS**。
+

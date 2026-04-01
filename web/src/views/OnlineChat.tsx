@@ -12,7 +12,9 @@ import 'katex/dist/katex.min.css';
 import mermaid from 'mermaid';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import api from '../api';
+import api, { getFullUrl } from '../api';
+import { getBaseURL } from '../utils/url';
+import storage from '../utils/storage';
 
 const { Option } = Select;
 
@@ -116,7 +118,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   const [selectedBot, setSelectedBot] = useState<string>('');
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<Message[]>(() => {
-    const saved = localStorage.getItem('chat_history');
+    const saved = storage.getItem('chat_history');
     return saved ? JSON.parse(saved) : [];
   });
   const [quotedMsg, setQuotedMsg] = useState<string | null>(null);
@@ -137,7 +139,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   
   // 持久化存储
   useEffect(() => {
-    localStorage.setItem('chat_history', JSON.stringify(messages));
+    storage.setItem('chat_history', JSON.stringify(messages));
   }, [messages]);
 
   // --- Markdown 预处理逻辑 ---
@@ -174,7 +176,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
   
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
   const [showQuickActions, setShowQuickActions] = useState<boolean>(() => {
-    return localStorage.getItem('chat_show_quick_actions') !== 'false';
+    return storage.getItem('chat_show_quick_actions') !== 'false';
   });
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [form] = Form.useForm();
@@ -191,10 +193,10 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
   useEffect(() => {
     if (!urlUser) {
-      let storedSessionId = localStorage.getItem('chat_session_id');
+      let storedSessionId = storage.getItem('chat_session_id');
       if (!storedSessionId) {
         storedSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-        localStorage.setItem('chat_session_id', storedSessionId);
+        storage.setItem('chat_session_id', storedSessionId);
       }
       setGeneratedSessionId(storedSessionId);
     } else {
@@ -336,7 +338,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
 
     if (!textOverride) setInputText('');
     const currentQuoted = quotedMsg;
-    setQuotedMsg(null); // 发送后清除引用
+    setQuotedMsg(null); 
     setIsTyping(true);
     
     abortControllerRef.current = new AbortController();
@@ -346,7 +348,12 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
     const newMessages = [...messages, newUserMessage];
     setMessages(newMessages);
 
-    // 将历史消息格式化为 OpenAI 格式（排除自定义属性）
+    // 1. 发送瞬间：先挂载一个带有“正在思考”标志的 Assistant 消息气泡
+    const thinkingTip = t('chat.thinking');
+    const assistantTimestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const assistantMessage: Message = { role: 'assistant', content: thinkingTip, timestamp: assistantTimestamp };
+    setMessages(prev => [...prev, assistantMessage]);
+
     const formattedMessages = newMessages.map(m => {
         let content = m.content;
         if (m.quotedMessage) {
@@ -369,19 +376,48 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       requestBody.user = userIdToSend;
     }
 
+    // 打字机状态控制
+    let displayedContent = thinkingTip;
+    const charQueue: string[] = [];
+    let isStreamingFinished = false;
+
+    const processQueue = () => {
+      if (charQueue.length > 0) {
+        const batchSize = charQueue.length > 20 ? 3 : (charQueue.length > 5 ? 2 : 1);
+        for (let i = 0; i < batchSize && charQueue.length > 0; i++) {
+          const char = charQueue.shift();
+          if (char) displayedContent += char;
+        }
+
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === 'assistant') {
+            return [...prev.slice(0, -1), { ...last, content: displayedContent }];
+          }
+          return prev;
+        });
+      }
+
+      if (!isStreamingFinished || charQueue.length > 0) {
+        requestAnimationFrame(processQueue);
+      }
+    };
+
+    requestAnimationFrame(processQueue);
+
     try {
-      const response = await fetch(`${api.defaults.baseURL || ''}/v1/openclaw/chat/completions`, {
+      const chatUrl = getFullUrl('/v1/openclaw/chat/completions');
+      const response = await fetch(chatUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('guardian_token')}`
+          'Authorization': `Bearer ${storage.getItem('guardian_token')}`
         },
         body: JSON.stringify(requestBody),
         signal: abortControllerRef.current.signal
       });
 
       if (!response.ok) {
-        // 增加容错：处理网关版本更新导致的权限协议变更 (operator.write 缺失)
         if (response.status === 403 || response.status === 401) {
           try {
             const errorData = await response.clone().json();
@@ -390,9 +426,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
               setIsTyping(false);
               return;
             }
-          } catch (e) {
-            // 解析失败则走通用错误逻辑
-          }
+          } catch (e) {}
         }
         throw new Error(t('chat.networkError'));
       }
@@ -400,19 +434,19 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       const reader = response.body?.getReader();
       if (!reader) throw new Error(t('chat.streamError'));
 
-      const assistantTimestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const assistantMessage: Message = { role: 'assistant', content: '', timestamp: assistantTimestamp };
-      setMessages(prev => [...prev, assistantMessage]);
-
       const decoder = new TextDecoder();
       let accumulatedContent = '';
+      let isFirstChunk = true; 
       let firstTokenTime: number | null = null;
       const startTime = Date.now();
       let totalLength = 0;
       
       streamLoop: while (true) {
         const { done, value } = await reader.read();
-        if (done) break streamLoop;
+        if (done) {
+          isStreamingFinished = true;
+          break streamLoop;
+        }
 
         const chunk = decoder.decode(value);
         if (!firstTokenTime && (chunk.includes('"content":') || chunk.includes('"delta":'))) {
@@ -423,17 +457,24 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const dataStr = line.slice(6).trim();
-            if (dataStr === '[DONE]') break streamLoop;
+            if (dataStr === '[DONE]') {
+              isStreamingFinished = true;
+              break streamLoop;
+            }
             try {
                 const data = JSON.parse(dataStr);
                 const content = data.choices[0]?.delta?.content || '';
                 if (content) {
-                  accumulatedContent += content;
+                  if (isFirstChunk) {
+                    // 核心变更：首个有效字符到达，彻底抹除“正在思考中...”提示
+                    displayedContent = ''; 
+                    isFirstChunk = false;
+                  }
+                  for (const char of content) {
+                    charQueue.push(char);
+                  }
                   totalLength += content.length;
-                  setMessages(prev => {
-                      const last = prev[prev.length - 1];
-                      return [...prev.slice(0, -1), { ...last, content: accumulatedContent }];
-                  });
+                  accumulatedContent += content;
                 }
             } catch (e) {}
           }
@@ -507,9 +548,9 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
       centered: true,
       onOk: () => {
         setMessages([]);
-        localStorage.removeItem('chat_history');
+        storage.removeItem('chat_history');
         const newSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-        localStorage.setItem('chat_session_id', newSessionId);
+        storage.setItem('chat_session_id', newSessionId);
         setGeneratedSessionId(newSessionId);
         message.success(t('chat.historyCleared'));
       }
@@ -712,7 +753,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                 icon={<ExternalLink size={14} />} 
                 title={t('chat.labDescription')}
                 onClick={() => {
-                  const token = localStorage.getItem('guardian_token');
+                  const token = storage.getItem('guardian_token');
                   const botId = selectedBot.replace('openclaw:', '');
                   const url = `${window.location.origin}/?page=chat&token=${token}&bot=${botId}&embed=true`;
                   window.open(url, '_blank');
@@ -724,7 +765,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                 icon={<Share2 size={14} />} 
                 title={t('chat.shareTitle')}
                 onClick={() => {
-                  const token = localStorage.getItem('guardian_token');
+                  const token = storage.getItem('guardian_token');
                   const botId = selectedBot.replace('openclaw:', '');
                   const url = `${window.location.origin}/?page=chat&token=${token}&bot=${botId}&embed=true`;
                   const iframeCode = `<iframe src="${url}" width="100%" height="600" frameborder="0"></iframe>`;
@@ -815,7 +856,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
             <div style={{ margin: 'auto', textAlign: 'center', maxWidth: 640, padding: isMobile ? '20px' : '40px', width: '100%' }}>
               <div style={{ marginBottom: 24, position: 'relative', display: 'inline-block' }}>
                 <img 
-                  src="/openclaw.png" 
+                  src={`${getBaseURL()}/openclaw.png`} 
                   style={{ width: 80, height: 80, borderRadius: 20, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '4px solid #fff' }} 
                   alt="Mascot"
                 />
@@ -937,74 +978,85 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                     )}
                     {msg.role === 'assistant' ? (
                       <div className="markdown-body" style={{ whiteSpace: 'normal' }}>
-                        <ReactMarkdown 
-                          remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
-                          rehypePlugins={[rehypeSanitize, rehypeKatex]}
-                          components={{
-                            table: ({ node, ...props }: any) => (
-                              <div style={{ 
-                                width: '100%', 
-                                overflowX: 'auto', 
-                                marginBottom: 12, 
-                                borderRadius: 8,
-                                border: '1px solid #e2e8f0',
-                                background: '#fff'
-                              }}>
-                                <table {...props} style={{ 
+                        {msg.content === t('chat.thinking') ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span>{msg.content}</span>
+                            <div className="typing-indicator" style={{ marginTop: 4 }}>
+                              <div className="typing-dot" style={{ background: '#2563eb' }}></div>
+                              <div className="typing-dot" style={{ background: '#2563eb' }}></div>
+                              <div className="typing-dot" style={{ background: '#2563eb' }}></div>
+                            </div>
+                          </div>
+                        ) : (
+                          <ReactMarkdown 
+                            remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
+                            rehypePlugins={[rehypeSanitize, rehypeKatex]}
+                            components={{
+                              table: ({ node, ...props }: any) => (
+                                <div style={{ 
                                   width: '100%', 
-                                  borderCollapse: 'collapse',
-                                  fontSize: isMobile ? '12px' : '13px',
-                                  minWidth: isMobile ? '500px' : 'auto'
-                                }} />
-                              </div>
-                            ),
-                            th: ({ node, ...props }: any) => (
-                              <th {...props} style={{ 
-                                padding: '8px 12px', 
-                                background: '#f8fafc', 
-                                borderBottom: '1px solid #e2e8f0', 
-                                borderRight: '1px solid #e2e8f0',
-                                textAlign: 'left',
-                                fontWeight: 600
-                              }} />
-                            ),
-                            td: ({ node, ...props }: any) => (
-                              <td {...props} style={{ 
-                                padding: '8px 12px', 
-                                borderBottom: '1px solid #e2e8f0', 
-                                borderRight: '1px solid #e2e8f0'
-                              }} />
-                            ),
-                              code: ({ node, inline, className, children, ...props }: any) => {
-                                const match = /language-(\w+)/.exec(className || '');
-                                const language = match ? match[1] : '';
-                                const codeContent = String(children).replace(/\n$/, '');
-                                
-                                if (!inline && language === 'mermaid') {
-                                  return <Mermaid chart={codeContent} />;
-                                }
-
-                                if (!inline && language) {
-                                  return <CodeBlock language={language} value={codeContent} isMobile={isMobile} {...props} />;
-                                }
-                              
-                              return (
-                                <code className={className} {...props} style={{
-                                  padding: '0.2em 0.4em',
-                                  backgroundColor: 'rgba(175, 184, 193, 0.2)',
-                                  borderRadius: '6px',
-                                  fontSize: '85%',
-                                  wordBreak: 'break-all',
-                                  whiteSpace: 'pre-wrap'
+                                  overflowX: 'auto', 
+                                  marginBottom: 12, 
+                                  borderRadius: 8,
+                                  border: '1px solid #e2e8f0',
+                                  background: '#fff'
                                 }}>
-                                  {children}
-                                </code>
-                              );
-                            }
-                          }}
-                        >
-                          {preprocessMarkdown(msg.content)}
-                        </ReactMarkdown>
+                                  <table {...props} style={{ 
+                                    width: '100%', 
+                                    borderCollapse: 'collapse',
+                                    fontSize: isMobile ? '12px' : '13px',
+                                    minWidth: isMobile ? '500px' : 'auto'
+                                  }} />
+                                </div>
+                              ),
+                              th: ({ node, ...props }: any) => (
+                                <th {...props} style={{ 
+                                  padding: '8px 12px', 
+                                  background: '#f8fafc', 
+                                  borderBottom: '1px solid #e2e8f0', 
+                                  borderRight: '1px solid #e2e8f0',
+                                  textAlign: 'left',
+                                  fontWeight: 600
+                                }} />
+                              ),
+                              td: ({ node, ...props }: any) => (
+                                <td {...props} style={{ 
+                                  padding: '8px 12px', 
+                                  borderBottom: '1px solid #e2e8f0', 
+                                  borderRight: '1px solid #e2e8f0'
+                                }} />
+                              ),
+                                code: ({ node, inline, className, children, ...props }: any) => {
+                                  const match = /language-(\w+)/.exec(className || '');
+                                  const language = match ? match[1] : '';
+                                  const codeContent = String(children).replace(/\n$/, '');
+                                  
+                                  if (!inline && language === 'mermaid') {
+                                    return <Mermaid chart={codeContent} />;
+                                  }
+
+                                  if (!inline && language) {
+                                    return <CodeBlock language={language} value={codeContent} isMobile={isMobile} {...props} />;
+                                  }
+                                
+                                return (
+                                  <code className={className} {...props} style={{
+                                    padding: '0.2em 0.4em',
+                                    backgroundColor: 'rgba(175, 184, 193, 0.2)',
+                                    borderRadius: '6px',
+                                    fontSize: '85%',
+                                    wordBreak: 'break-all',
+                                    whiteSpace: 'pre-wrap'
+                                  }}>
+                                    {children}
+                                  </code>
+                                );
+                              }
+                            }}
+                          >
+                            {preprocessMarkdown(msg.content)}
+                          </ReactMarkdown>
+                        )}
                       </div>
                     ) : (
                       msg.content
@@ -1156,7 +1208,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                     style={{ color: '#94a3b8', background: '#f1f5f9', borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onClick={() => {
                         setShowQuickActions(false);
-                        localStorage.setItem('chat_show_quick_actions', 'false');
+                        storage.setItem('chat_show_quick_actions', 'false');
                     }}
                     title={t('chat.collapseQuickCommands')}
                   />
@@ -1171,7 +1223,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefr
                         icon={<ChevronDown size={14} style={{ marginRight: 4 }} />}
                         onClick={() => {
                             setShowQuickActions(true);
-                            localStorage.setItem('chat_show_quick_actions', 'true');
+                            storage.setItem('chat_show_quick_actions', 'true');
                         }}
                         style={{ fontSize: 11, color: '#94a3b8', height: 20, padding: '0 8px', borderRadius: 10, background: '#f8fafc', display: 'flex', alignItems: 'center' }}
                     >

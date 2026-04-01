@@ -11,6 +11,7 @@ import (
 	"openclaw-buddy/internal/analyzer"
 	"openclaw-buddy/internal/config"
 	"openclaw-buddy/internal/process"
+	"openclaw-buddy/internal/scheduler"
 	"openclaw-buddy/internal/utils"
 	"crypto/md5"
 	"encoding/hex"
@@ -55,6 +56,7 @@ func (g *Guardian) Run(ctx context.Context) {
 		if err == nil && rows > 0 {
 			log.Printf("🧹 [DB] 已自动清理超过 7 天的旧监控数据 (共 %d 条).", rows)
 		}
+		process.CleanupOrphanedTasks()
 		process.SyncAll(g.config.OpenClawConfigDir)
 		g.checkVersionUpdate()
 	}()
@@ -71,7 +73,7 @@ func (g *Guardian) Run(ctx context.Context) {
 	log.Printf("🛡️ OpenClaw Buddy 监控服务巡检循环已启动. Every %d seconds.", g.config.CheckIntervalSeconds)
 
 	// 启动时检查：如果服务正常，根据开关状态决定是否备份
-	isSelfHealingEnabled := utils.GetSetting("self_healing_enabled", "true") == "true"
+	isSelfHealingEnabled := utils.GetSetting("self_healing_enabled", "false") == "true"
 	if process.IsPortListening(g.config.HealthPort) {
 		if _, err := process.CheckHealth(); err == nil {
 			if isSelfHealingEnabled {
@@ -109,7 +111,7 @@ func (g *Guardian) check() {
 	var lastErr error
 	var reason string
 
-	isSelfHealingEnabled := utils.GetSetting("self_healing_enabled", "true") == "true"
+	isSelfHealingEnabled := utils.GetSetting("self_healing_enabled", "false") == "true"
 	if !isSelfHealingEnabled {
 		log.Printf("🔍 [巡检] 自愈服务开关目前处于【关闭】状态，本次巡检将仅记录监控数据，不触发自动修复。")
 	}
@@ -158,6 +160,13 @@ func (g *Guardian) check() {
 	
 	// Only trigger healing if switch is enabled
 	if isSelfHealingEnabled {
+		// [加固] 优先级检测：如果用户任务队列中有 gateway 相关的任务 (排队中或执行中)，自愈彻底跳过
+		if scheduler.GetScheduler().IsModuleBusy("gateway") {
+			log.Printf("⚠️  [自愈服务] 检测到用户队列中有活跃或排队中的网关控制任务，系统将彻底跳过自愈，由用户手动完成恢复。")
+			utils.RecordSystemEvent("WARN", "检测到用户网关操作排队中，自愈逻辑已主动跳过")
+			return
+		}
+
 		log.Printf("🛠️ Initiating self-healing process.")
 		g.heal(reason)
 	} else {
@@ -389,7 +398,7 @@ func (g *Guardian) checkVersionUpdate() {
 		return
 	}
 
-	latestVersion := strings.TrimSpace(string(body))
+	latestVersion := strings.TrimPrefix(strings.TrimSpace(string(body)), "v")
 	if latestVersion == "" {
 		return
 	}

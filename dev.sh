@@ -29,9 +29,9 @@ stop_and_clean() {
     fi
     
     if [ -d "$DEV_ROOT" ]; then
-        echo "🧹 正在清理隔离任务环境 (保留数据目录: $DEV_ROOT/data)..."
-        # 排除 data 目录，清理其余所有内容
-        find "$DEV_ROOT" -mindepth 1 -maxdepth 1 ! -name 'data' -exec rm -rf {} +
+        echo "🧹 正在清理隔离任务环境 (保留数据与配置)..."
+        # 排除 data 目录和 env 文件，清理其余所有内容
+        find "$DEV_ROOT" -mindepth 1 -maxdepth 1 ! -name 'data' ! -name 'env' -exec rm -rf {} +
     fi
 }
 
@@ -57,25 +57,45 @@ mkdir -p "$DEV_ROOT/backups"
 # 3. 编译前端
 if [ -d "web" ]; then
     echo "🎨 正在编译前端..."
-    pushd web > /dev/null && npm run build --silent; popd > /dev/null
+    pushd web > /dev/null
+    npm run build
+    if [ $? -ne 0 ]; then
+        echo "❌ 前端项目编译失败！请检查 TypeScript 或 Lint 错误。"
+        popd > /dev/null
+        exit 1
+    fi
+    popd > /dev/null
+
+    # 校验产物目录
+    if [ ! -d "web/dist" ]; then
+        echo "❌ 找不到编译产物目录 (web/dist)，编译可能未完整完成。"
+        exit 1
+    fi
+
+    echo "📦 正在同步前端资产到后端..."
     mkdir -p internal/api/dist
     rm -rf internal/api/dist/*
     cp -r web/dist/* internal/api/dist/
 fi
 
 # 4. 编译后端到隔离目录
-echo "🏗️  正在编译后端..."
-go build -o "$DEV_ROOT/openclaw-buddy-dev" ./cmd/monitor/main.go
+DEV_VERSION=$(cat VERSION 2>/dev/null || echo "dev")
+echo "🏗️  正在编译后端 (版本: $DEV_VERSION)..."
+go build -ldflags="-X 'openclaw-buddy/internal/config.Version=${DEV_VERSION}'" -o "$DEV_ROOT/openclaw-buddy-dev" ./cmd/monitor/main.go
 if [ $? -ne 0 ]; then
     echo "❌ 编译失败！"
     exit 1
 fi
 
-# 6. 生成隔离环境配置: $DEV_ROOT/env
-echo "📝 生成隔离环境配置: $DEV_ROOT/env"
-cat <<EOF > "$DEV_ROOT/env"
-# 🦞 OpenClaw Buddy (OpenClaw Buddy) 隔离开发配置
+# 6. 生成隔离环境配置: $DEV_ROOT/env (仅在不存在时生成)
+if [ ! -f "$DEV_ROOT/env" ]; then
+    echo "📝 生成隔离环境配置: $DEV_ROOT/env"
+    cat <<EOF > "$DEV_ROOT/env"
+# [网络与访问]
+# 默认端口 (3000)
 WEB_PORT=3000
+# 基础路径 (默认为 /, 若需配置如 /claw 则改为 /claw)
+WEB_ROOT="/console/claw"
 BUDDY_TOKEN="openclaw-buddy-2026"
 PID_FILE="./openclaw-buddy.pid"
 
@@ -91,7 +111,7 @@ REPORT_DIR="./reports"
 
 # [监控策略]
 # 监控轮询间隔 (秒)
-CHECK_INTERVAL_SECONDS=30
+CHECK_INTERVAL_SECONDS=60
 # 网关健康检查端口
 HEALTH_PORT=18789
 # 最大容错重试次数
@@ -107,6 +127,9 @@ FEISHU_APP_ID=""
 FEISHU_APP_SECRET=""
 FEISHU_CHAT_ID=""
 EOF
+else
+    echo "📝 使用已存在的隔离环境配置: $DEV_ROOT/env"
+fi
 
 # 7. 切换到隔离目录启动服务
 cd "$DEV_ROOT"

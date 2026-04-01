@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"strings"
 	"time"
 	"openclaw-buddy/internal/config"
+	"openclaw-buddy/internal/scheduler"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -36,17 +38,22 @@ func NewServer(cfg *config.Config) *Server {
 	}
 
 	s.setupRoutes()
+	// 显式拉起全局任务调度器，确保串行队列就绪
+	_ = scheduler.GetScheduler()
 	return s
 }
 
 func (s *Server) setupRoutes() {
+	// Create a group for the configured WebRoot
+	root := s.engine.Group(s.cfg.WebRoot)
+
 	// Public routes
-	s.engine.GET("/health", func(c *gin.Context) {
+	root.GET("/health", func(c *gin.Context) {
 		c.JSON(200, APIResponse{Code: 200, Message: "success", Data: gin.H{"status": "ok"}})
 	})
 
 	// Login endpoint
-	s.engine.POST("/login", func(c *gin.Context) {
+	root.POST("/login", func(c *gin.Context) {
 		var req struct {
 			Token string `json:"token"`
 		}
@@ -56,7 +63,12 @@ func (s *Server) setupRoutes() {
 		}
 
 		if req.Token == s.cfg.Token {
-			c.SetCookie("guardian_token", req.Token, 3600*24*7, "/", "", false, true)
+			// Set cookie path to WebRoot to prevent collisions
+			cookiePath := s.cfg.WebRoot
+			if cookiePath == "" {
+				cookiePath = "/"
+			}
+			c.SetCookie("guardian_token", req.Token, 3600*24*7, cookiePath, "", false, true)
 			s.Success(c, gin.H{"status": "success"})
 		} else {
 			s.Error(c, http.StatusUnauthorized, "Invalid token")
@@ -64,7 +76,7 @@ func (s *Server) setupRoutes() {
 	})
 
 	// V1 API Group
-	v1 := s.engine.Group("/v1")
+	v1 := root.Group("/v1")
 	v1.Use(AuthMiddleware(s.cfg.Token))
 	{
 		// OpenClaw related routes
@@ -79,13 +91,17 @@ func (s *Server) setupRoutes() {
 			oc.POST("/bots/add", s.addOpenClawBot)
 			oc.POST("/bots/set-identity", s.setOpenClawBotIdentity)
 			oc.POST("/bots/set-model", s.setOpenClawBotModel)
+			oc.POST("/bots/update", s.updateOpenClawBot)
 			oc.POST("/bots/delete", s.deleteOpenClawBot)
 			oc.GET("/bots/top", s.getTopBots)
+			oc.GET("/bots/file", s.getOpenClawBotFile)
+			oc.POST("/bots/file", s.updateOpenClawBotFile)
 			oc.POST("/models/set-default", s.setDefaultModel)
 			oc.GET("/models/config", s.getOpenClawModelsConfig)
 			oc.POST("/models/test-direct", s.testOpenClawModelDirect)
 			oc.POST("/models/provider", s.addOpenClawProvider)
 			oc.POST("/models/provider/model", s.addOpenClawModelToProvider)
+			oc.DELETE("/models/provider/:provider/model/:id", s.deleteOpenClawModelFromProvider)
 			oc.DELETE("/models/provider/model", s.deleteOpenClawModelFromProvider)
 			oc.POST("/chat/completions", s.chatProxy)
 			oc.GET("/chat/status", s.getChatStatus)
@@ -96,11 +112,17 @@ func (s *Server) setupRoutes() {
 			oc.GET("/skills", s.getOpenClawSkills)
 			oc.DELETE("/skills/:name", s.uninstallSkill)
 			oc.POST("/skills/reload", s.reloadSkills)
+			oc.GET("/plugins", s.getOpenClawPlugins)
+			oc.POST("/plugins/reload", s.reloadPlugins)
+			oc.POST("/plugins/enable", s.enablePlugin)
+			oc.POST("/plugins/disable", s.disablePlugin)
+			oc.DELETE("/plugins/:id", s.uninstallPlugin)
+			oc.POST("/plugins/update", s.updatePlugins)
 			oc.GET("/experts", s.getOpenClawExperts)
 			oc.POST("/bots/template", s.createBotFromExpert)
 			oc.GET("/sessions", s.getSessions)
 		}
-		
+
 		gateway := v1.Group("/gateway")
 		{
 			gateway.POST("/start", s.startGateway)
@@ -138,31 +160,103 @@ func (s *Server) setupRoutes() {
 //go:embed dist/*
 var staticFiles embed.FS
 
+// renderIndexHTML handles the common logic for serving and injecting WebRoot into index.html
+func (s *Server) renderIndexHTML(c *gin.Context, distFS fs.FS) {
+	content, err := fs.ReadFile(distFS, "index.html")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "index.html not found"})
+		return
+	}
+
+	html := string(content)
+
+	// Inject window.__WEB_ROOT__ as early as possible
+	script := fmt.Sprintf("<script>window.__WEB_ROOT__='%s';</script>", s.cfg.WebRoot)
+	html = strings.Replace(html, "<title>", script+"<title>", 1)
+
+	// Fix asset paths in HTML if WebRoot is not /
+	if s.cfg.WebRoot != "/" {
+		prefix := s.cfg.WebRoot
+		// Only replace if it doesn't already have the prefix
+		if !strings.Contains(html, "href=\""+prefix) {
+			html = strings.ReplaceAll(html, "href=\"/", "href=\""+prefix+"/")
+			html = strings.ReplaceAll(html, "src=\"/", "src=\""+prefix+"/")
+			html = strings.ReplaceAll(html, "action=\"/", "action=\""+prefix+"/")
+			html = strings.ReplaceAll(html, "content=\"/", "content=\""+prefix+"/")
+		}
+	}
+
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, html)
+}
+
 func (s *Server) setupStaticFiles() {
 	distFS, err := fs.Sub(staticFiles, "dist")
 	if err != nil {
 		return
 	}
 
+	// For root path or files that exist in the dist folder
 	s.engine.NoRoute(func(c *gin.Context) {
 		path := c.Request.URL.Path
-		if path == "/" || path == "" {
-			path = "index.html"
-		} else if path[0] == '/' {
-			path = path[1:]
+
+		// Handle WebRoot prefix
+		prefix := s.cfg.WebRoot
+		if prefix == "/" {
+			prefix = ""
 		}
-		
-		if f, err := distFS.Open(path); err == nil {
-			f.Close()
-			http.FileServer(http.FS(distFS)).ServeHTTP(c.Writer, c.Request)
+
+		relPath := path
+		if prefix != "" {
+			if len(path) < len(prefix) || path[:len(prefix)] != prefix {
+				// Not under webroot
+				if strings.Contains(path, "/v1/") {
+					c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "API not found"})
+					return
+				}
+				return
+			}
+			relPath = path[len(prefix):]
+		}
+
+		// If the relative path starts with /v1/ after prefix, it's an API that wasn't matched
+		if strings.HasPrefix(relPath, "/v1/") {
+			c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "API not found"})
 			return
 		}
-		
-		c.FileFromFS("index.html", http.FS(distFS))
+
+		if relPath == "/" || relPath == "" {
+			s.renderIndexHTML(c, distFS)
+			return
+		}
+
+		if relPath[0] == '/' {
+			relPath = relPath[1:]
+		}
+
+		// Try to open the file in embedded FS
+		f, err := distFS.Open(relPath)
+		if err == nil {
+			f.Close()
+			// If it's index.html, use the render logic
+			if relPath == "index.html" {
+				s.renderIndexHTML(c, distFS)
+				return
+			}
+
+			http.StripPrefix(prefix, http.FileServer(http.FS(distFS))).ServeHTTP(c.Writer, c.Request)
+			return
+		}
+
+		// Fallback to index.html for SPA routing
+		// CRITICAL: Must use renderIndexHTML here to ensure WebRoot injection works on refreshes!
+		s.renderIndexHTML(c, distFS)
 	})
 }
 
 func (s *Server) Run() error {
+	go s.StartWebSocketBroadcaster()
+	fmt.Printf("2026/03/31 🚀 Web Root is set to: %s\n", s.cfg.WebRoot)
 	return s.engine.Run(fmt.Sprintf(":%d", s.cfg.WebPort))
 }
 

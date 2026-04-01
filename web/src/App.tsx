@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
@@ -6,6 +6,7 @@ import {
   Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone, Rocket
 } from 'lucide-react';
 import api from './api';
+import storage from './utils/storage';
 
 // Components
 import LoginView from './views/LoginView';
@@ -18,8 +19,10 @@ import LogsViewer from './views/LogsViewer';
 import SelfHealing from './views/SelfHealing';
 import OnlineChat from './views/OnlineChat';
 import LanguageSwitcher from './components/LanguageSwitcher';
+import TaskTray from './components/common/TaskTray';
 import SkillManagement from './views/SkillManagement';
 import ExpertMarket from './views/ExpertMarket';
+import PluginManagement from './views/PluginManagement';
 import TuiView from './views/TuiView';
 import ShellView from './views/ShellView';
 import CrayfishLoading from './components/common/CrayfishLoading';
@@ -29,6 +32,7 @@ import CommandPalette from './components/common/CommandPalette';
 // Hooks
 import { useStatusPolling } from './hooks/useStatusPolling';
 import { useWebSocketLogs } from './hooks/useWebSocketLogs';
+import { useTaskCenter, type Task } from './hooks/useTaskCenter';
 
 const { Content, Sider, Header } = Layout;
 
@@ -38,6 +42,7 @@ const Dashboard = () => {
   const queryParams = new URLSearchParams(window.location.search);
   const isEmbed = queryParams.get('embed') === 'true';
   const initialPage = queryParams.get('page');
+  const tag = storage.getItem('guardian_tag') || undefined;
 
   const [activeTab, setActiveTab] = useState(initialPage || 'dashboard');
   const [collapsed, setCollapsed] = useState(window.innerWidth < 1200 || isEmbed);
@@ -61,7 +66,9 @@ const Dashboard = () => {
   const [checkWeixinSeconds, setCheckWeixinSeconds] = useState(0);
   const [botsModels, setBotsModels] = useState<any>(null);
   const [loadingBots, setLoadingBots] = useState(false);
-  const [healEvents, setHealEvents] = useState<any[]>([]);// Global loading for custom messages
+  const [modelsConfig, setModelsConfig] = useState<any>(null);
+  const [loadingModelsConfig, setLoadingModelsConfig] = useState(false);
+  const [healEvents, setHealEvents] = useState<any[]>([]);
   const [globalLoadingMessage, setGlobalLoadingMessage] = useState<string | null>(null);
   const [globalLoadingCountdown, setGlobalLoadingCountdown] = useState<number>(0);
   const [devices, setDevices] = useState<any>(null);
@@ -72,21 +79,121 @@ const Dashboard = () => {
   const [versionUpdate, setVersionUpdate] = useState<{ latest: string, current: string, release_url: string } | null>(null);
   const [systemEvents, setSystemEvents] = useState<any[]>([]);
   const [topBots, setTopBots] = useState<any[]>([]);
+  const [loadingTopBots, setLoadingTopBots] = useState(false);
+  const [plugins, setPlugins] = useState<any[]>([]);
+  const [loadingPlugins, setLoadingPlugins] = useState(false);
+  const [pluginsUpdatedAt, setPluginsUpdatedAt] = useState('');
+  const [loadingSkills, setLoadingSkills] = useState(false);
+  const [skills, setSkills] = useState<any[]>([]);
+
+  const fetchSkills = async (force = false, isSilent = false) => {
+    if (!isSilent) setLoadingSkills(true);
+    try {
+      if (force) {
+        await api.post('/v1/openclaw/skills/reload');
+      }
+      const res = await api.get(`/v1/openclaw/skills${force ? '?refresh=true' : ''}`);
+      const rawData = res.data;
+      
+      let skillsList = [];
+      if (rawData.data) {
+          skillsList = Array.isArray(rawData.data.skills) ? rawData.data.skills : [];
+      } else {
+          skillsList = Array.isArray(rawData.skills) ? rawData.skills : [];
+      }
+      setSkills(skillsList);
+      if (force && !isSilent) message.success(t('skills.syncSuccess'));
+    } catch (err) {
+      if (!isSilent) message.error(t('skills.fetchFailed'));
+    } finally {
+      setLoadingSkills(false);
+    }
+  };
   const [ocInstalled, setOcInstalled] = useState<boolean | null>(null);
   const [dashboardProcessing, setDashboardProcessing] = useState(false);
   const [dashboardAbortCtrl, setDashboardAbortCtrl] = useState<AbortController | null>(null);
 
   // Hooks
-  const { status, history, fetching, refreshCountdown } = useStatusPolling(
-    isTransitioning, targetStatus, (status) => {
+  const { tasks: activeTasks, updateTask: baseUpdateTask, loading: tasksLoading, fetchActiveTasks } = useTaskCenter();
+  const { status, history, fetching, refreshCountdown, fetchData } = useStatusPolling(
+    isTransitioning, targetStatus, () => {
       setIsTransitioning(false);
       setTargetStatus(null);
       setTransitionSeconds(0);
-      message.success(t('chat.gatewayCommandSuccess', { status }));
     }
   );
 
-  const { wsLogs } = useWebSocketLogs(localStorage.getItem('guardian_token'));
+  const processedTaskIds = useRef<Set<string>>(new Set());
+  const isInitialProcessed = useRef(false);
+
+  // --- 核心：任务副作用中控台 (Task Side Effect Orchestrator) ---
+  // 无论任务是从 WS 还是 Polling 回来的，只要状态变为完成，就触发业务刷新
+  useEffect(() => {
+    if (activeTasks.length > 0 && !isInitialProcessed.current) {
+      // 页面首次加载/同步时，将现有已完成的任务直接标记为处理过，避免旧任务触发业务刷新风暴
+      activeTasks.forEach(task => {
+        if (task.status === 'Completed' || task.status === 'Failed') {
+          processedTaskIds.current.add(task.id);
+        }
+      });
+      isInitialProcessed.current = true;
+      return;
+    }
+
+    activeTasks.forEach(task => {
+      if ((task.status === 'Completed' || task.status === 'Failed') && !processedTaskIds.current.has(task.id)) {
+        processedTaskIds.current.add(task.id);
+        
+        console.log(`🎯 [Task Observer] 侦测到任务完成: ${task.id} (${task.module}/${task.action})`);
+
+        if (task.module === 'gateway') {
+          fetchData();
+          fetchSystemEvents();
+        } else if (task.module === 'plugins') {
+          fetchPlugins();
+        } else if (task.module === 'bots') {
+          // 如果是模型相关变更（添加、删除、设置默认、新增渠道），触发物理对账
+          const modelActions = ['delete-model', 'add-model', 'add-provider', 'set-default-model', 'clone-expert'];
+          if (modelActions.includes(task.action || '')) {
+            console.log('🔄 [Task Observer] 机器人/模型变更任务完成，正在物理刷新...');
+            fetchModelsConfig(); 
+            fetchBotsModels(true); 
+            // 如果存在全局遮罩，则物理重置
+            onShowGlobalLoading && onShowGlobalLoading('', 1);
+          }
+          
+          if (task.action === 'delete' && task.status === 'Completed' && task.target) {
+            setBotsModels((prev: any) => {
+              if (!prev?.data?.bots) return prev;
+              return {
+                ...prev,
+                data: {
+                  ...prev.data,
+                  bots: prev.data.bots.filter((b: any) => b.id !== task.target)
+                }
+              };
+            });
+          }
+        } else if (task.module === 'skills' || task.module === 'plugins') {
+          // 4. 技能或插件任务落地后，触发全系统对账
+          const syncActions = ['delete-skill', 'sync-skills', 'install-plugin', 'uninstall-plugin', 'delete-plugin'];
+          if (syncActions.includes(task.action || '')) {
+            console.log('🔄 [Task Observer] 监测到技能/插件任务完成，执行物理对账...');
+            fetchSkills(true, true); // 强制获取最新数据，并静默执行
+            fetchPlugins(); // 同步刷新插件状态
+          }
+        }
+      }
+    });
+  }, [activeTasks]);
+
+  const handleTaskUpdate = (task: Task) => {
+    baseUpdateTask(task);
+    // 业务刷新逻辑已移至全局 useEffect 监听，此处仅负责分发任务状态更新
+  };
+
+  const [logSource, setLogSource] = useState('buddy');
+  const { wsLogs } = useWebSocketLogs(storage.getItem('guardian_token'), logSource, handleTaskUpdate);
 
   // Side Effects
   useEffect(() => {
@@ -108,7 +215,10 @@ const Dashboard = () => {
       fetchSystemEvents();
       fetchTopBots();
     }
-    if (activeTab === 'bots-models' || activeTab === 'chat') fetchBotsModels();
+    if (activeTab === 'bots' || activeTab === 'bots-models' || activeTab === 'chat') {
+      fetchBotsModels();
+      if (activeTab === 'bots' || activeTab === 'bots-models') fetchModelsConfig();
+    }
     if (activeTab === 'components') {
       fetchChatChannels();
       // 仅在状态未知时重置并触发检测
@@ -118,6 +228,8 @@ const Dashboard = () => {
       }
     }
     if (activeTab === 'devices') fetchDevices();
+    if (activeTab === 'skills') fetchSkills();
+    if (activeTab === 'plugins') fetchPlugins();
     if (activeTab === 'tools') fetchSelfHealing();
   }, [activeTab]);
 
@@ -187,11 +299,22 @@ const Dashboard = () => {
     try {
       const res = await api.get(`/v1/openclaw/bots-models${force ? '?refresh=true' : ''}`);
       setBotsModels(res.data);
-      if (force) message.success(t('chat.syncAssetsSuccess'));
     } catch (e) {
       message.error(t('chat.syncAssetsError'));
     } finally {
       setLoadingBots(false);
+    }
+  };
+
+  const fetchModelsConfig = async () => {
+    setLoadingModelsConfig(true);
+    try {
+      const res = await api.get('/v1/openclaw/models/config');
+      setModelsConfig(res.data);
+    } catch (err) {
+      console.error('Failed to fetch models config:', err);
+    } finally {
+      setLoadingModelsConfig(false);
     }
   };
 
@@ -247,10 +370,28 @@ const Dashboard = () => {
   };
 
   const fetchTopBots = async () => {
+    setLoadingTopBots(true);
     try {
       const res = await api.get('/v1/openclaw/bots/top');
       setTopBots(res.data);
-    } catch (err) {}
+    } catch (err) {
+    } finally {
+      setLoadingTopBots(false);
+    }
+  };
+
+  const fetchPlugins = async () => {
+    setLoadingPlugins(true);
+    try {
+      const res = await api.get('/v1/openclaw/plugins');
+      const data = res.data.data || res.data || [];
+      setPlugins(data);
+      // 记录同步时间
+      setPluginsUpdatedAt(new Date().toLocaleString());
+    } catch (err) {
+    } finally {
+      setLoadingPlugins(false);
+    }
   };
 
   const onShowGlobalLoading = (message: string, duration: number = 3000) => {
@@ -262,8 +403,10 @@ const Dashboard = () => {
     try {
       const res = await api.get('/v1/system/version');
       if (res.data) setVersionUpdate(res.data);
+      return res.data;
     } catch (e) {
       console.warn(t('common.versionCheckFailed'), e);
+      return null;
     }
   };
 
@@ -296,7 +439,7 @@ const Dashboard = () => {
   };
 
   const executeControl = async () => {
-    const { action } = confirmModal;
+    const { action, title } = confirmModal;
     setConfirmModal(prev => ({ ...prev, open: false }));
 
     if (action === 'wechat') {
@@ -315,10 +458,28 @@ const Dashboard = () => {
     }
 
     try {
-      await api.post(`/v1/gateway/${action}`);
-      setIsTransitioning(true);
-      setTargetStatus(action === 'stop' ? 'stopped' : 'running');
-      setTransitionSeconds(0);
+      const res = await api.post(`/v1/gateway/${action}`);
+      const taskID = res.data?.taskID;
+      
+      // 设置过渡状态以确保 UI 立即响应
+      if (action !== 'wechat') {
+        setIsTransitioning(true);
+        setTargetStatus(action === 'start' ? 'running' : 'stopped');
+      }
+
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: title,
+          module: 'gateway',
+          action: action,
+          target: '',
+          status: 'Running',
+          progress: 0,
+          startTime: new Date().toISOString()
+        });
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       message.error(err.response?.data?.error || t('common.commandFailed'));
     }
@@ -326,10 +487,25 @@ const Dashboard = () => {
 
   const restartGateway = async () => {
     try {
-      await api.post('/v1/gateway/restart');
+      const res = await api.post('/v1/gateway/restart');
+      const taskID = res.data?.taskID;
+      
       setIsTransitioning(true);
-      setTargetStatus('running');
-      setTransitionSeconds(0);
+      // 重启通常先变 stopped 再变 running，这里我们先设为过渡态，由 polling 最终恢复
+
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: t('common.restart'),
+          module: 'gateway',
+          action: 'restart',
+          target: '',
+          status: 'Running',
+          progress: 0,
+          startTime: new Date().toISOString()
+        });
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       message.error(err.response?.data?.error || t('common.restartFailed'));
       throw err;
@@ -339,13 +515,21 @@ const Dashboard = () => {
   const handleInstallWeixin = async () => {
     setLoadingWeixin(true);
     try {
-      await api.post('/v1/wechat/install');
-      message.loading(t('common.processing'), 0);
-      setTimeout(() => {
-        message.destroy();
-        message.success(t('chat.gatewayCommandSuccess', { status: 'Installed' }));
-        checkWeixinPlugin();
-      }, 3000);
+      const res = await api.post('/v1/wechat/install');
+      const taskID = res.data?.taskID;
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: t('channels.weixinPlugin'),
+          module: 'wechat',
+          action: 'install',
+          target: '',
+          status: 'Running',
+          progress: 0,
+          startTime: new Date().toISOString()
+        });
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       message.error(err.response?.data?.error || t('common.error'));
     } finally {
@@ -354,18 +538,11 @@ const Dashboard = () => {
   };
 
   const handleApproveDevice = async (requestId: string) => {
-    setTargetStatus('approving_device');
-    setIsTransitioning(true);
-    setTransitionSeconds(0);
     try {
       await api.post('/v1/openclaw/devices/approve', { requestId });
-      message.success(t('devices.approveSuccess'));
-      await fetchDevices();
+      // 不再设置全屏遮罩
     } catch (err: any) {
       message.error(err.response?.data?.error || t('common.error'));
-    } finally {
-      setIsTransitioning(false);
-      setTargetStatus(null);
     }
   };
 
@@ -383,96 +560,193 @@ const Dashboard = () => {
   };
 
   const handleAddBot = async (id: string, model: string) => {
-    setTargetStatus('adding_bot');
-    setIsTransitioning(true);
-    setTransitionSeconds(0);
+    const pendingId = `pending-add-${id}`;
+    baseUpdateTask({
+      id: pendingId,
+      name: `${t('bots.addingBot')}: ${id} (${t('common.waiting')})`,
+      module: 'bots',
+      action: 'add',
+      target: id,
+      status: 'Running',
+      progress: 0,
+      startTime: new Date().toISOString()
+    });
+
     try {
-      await api.post('/v1/openclaw/bots/add', { id, model });
-      message.success(t('bots.createSuccess', { id }));
-      await fetchBotsModels(true); // 补全 await
+      const res = await api.post('/v1/openclaw/bots/add', { id, model });
+      const taskID = res.data?.taskID;
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: `${t('bots.addingBot')}: ${id}`,
+          module: 'bots',
+          action: 'add',
+          target: id,
+          status: 'Running',
+          progress: 5,
+          startTime: new Date().toISOString()
+        });
+      }
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.createFailed');
+      baseUpdateTask({
+        id: pendingId,
+        name: `${t('bots.addBot')}: ${id}`,
+        module: 'bots',
+        action: 'add',
+        target: id,
+        status: 'Failed',
+        error: msg,
+        progress: 0,
+        startTime: new Date().toISOString()
+      });
       message.error(msg);
-      throw err; // 继续抛出以阻止 Modal 关闭
-    } finally {
-      setIsTransitioning(false);
-      setTargetStatus(null);
+      throw err;
     }
   };
 
-  const handleSetBotIdentity = async (id: string, name: string) => {
-    setTargetStatus('setting_identity');
-    setIsTransitioning(true);
-    setTransitionSeconds(0);
+  const handleUpdateBot = async (id: string, name?: string, model?: string) => {
+    const pendingId = `pending-update-${id}`;
+    baseUpdateTask({
+      id: pendingId,
+      name: `${t('bots.updatingConfig')}: ${id} (${t('common.waiting')})`,
+      module: 'bots',
+      action: 'update',
+      target: id,
+      status: 'Running',
+      progress: 0,
+      startTime: new Date().toISOString()
+    });
+
     try {
-      await api.post('/v1/openclaw/bots/set-identity', { id, name });
-      message.success(t('bots.updateSuccess', { id, name }));
-      await fetchBotsModels(true); // 补全 await
+      const res = await api.post('/v1/openclaw/bots/update', { id, name, model });
+      const taskID = res.data?.taskID;
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: `${t('bots.updatingConfig')}: ${id}`,
+          module: 'bots',
+          action: 'update',
+          target: id,
+          status: 'Running',
+          progress: 5,
+          startTime: new Date().toISOString()
+        });
+      }
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.updateFailed');
+      baseUpdateTask({
+        id: pendingId,
+        name: `${t('bots.updatingConfig')}: ${id}`,
+        module: 'bots',
+        action: 'update',
+        target: id,
+        status: 'Failed',
+        error: msg,
+        progress: 0,
+        startTime: new Date().toISOString()
+      });
       message.error(msg);
       throw err;
-    } finally {
-      setIsTransitioning(false);
-      setTargetStatus(null);
-    }
-  };
-
-  const handleSetBotModel = async (id: string, model: string) => {
-    setTargetStatus('setting_bot_model');
-    setIsTransitioning(true);
-    setTransitionSeconds(0);
-    try {
-      await api.post('/v1/openclaw/bots/set-model', { id, model });
-      message.success(t('bots.modelUpdateSuccess', { id, model }));
-      await fetchBotsModels(true);
-    } catch (err: any) {
-      const msg = err.response?.data?.error || t('bots.modelUpdateFailed');
-      message.error(msg);
-      throw err;
-    } finally {
-      setIsTransitioning(false);
-      setTargetStatus(null);
     }
   };
 
   const handleDeleteBot = async (id: string) => {
-    setTargetStatus('deleting_bot');
-    setIsTransitioning(true);
-    setTransitionSeconds(0);
+    // 1. 立即发起 Pending 任务提供视觉反馈 (0ms 延迟)
+    const pendingId = `pending-delete-${id}`;
+    baseUpdateTask({
+      id: pendingId,
+      name: `${t('bots.removingBot')}: ${id} (${t('common.waiting')})`,
+      module: 'bots',
+      action: 'delete',
+      target: id,
+      status: 'Running',
+      progress: 0,
+      startTime: new Date().toISOString()
+    });
+
     try {
-      await api.post('/v1/openclaw/bots/delete', { id });
-      message.success(t('bots.removeSuccess', { id }));
-      await fetchBotsModels(true); // 补全 await
+      const res = await api.post('/v1/openclaw/bots/delete', { id });
+      const taskID = res.data?.taskID;
+      if (taskID) {
+        // 2. 拿到真实 ID 后更新，触发 useTaskCenter 的接力逻辑
+        baseUpdateTask({
+          id: taskID,
+          name: `${t('bots.removingBot')}: ${id}`,
+          module: 'bots',
+          action: 'delete',
+          target: id,
+          status: 'Running',
+          progress: 5,
+          startTime: new Date().toISOString()
+        });
+      }
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.removeFailed');
+      // 失败清理：将 Pending 任务转为失败状态，触发错误提示
+      baseUpdateTask({
+        id: pendingId,
+        name: `${t('bots.removeBotTitle')}: ${id}`,
+        module: 'bots',
+        action: 'delete',
+        target: id,
+        status: 'Failed',
+        error: msg,
+        progress: 0,
+        startTime: new Date().toISOString()
+      });
       message.error(msg);
       throw err;
-    } finally {
-      setIsTransitioning(false);
-      setTargetStatus(null);
     }
   };
 
   const handleSetDefaultModel = async (modelId: string) => {
-    setTargetStatus('setting_default_model');
-    setIsTransitioning(true);
-    setTransitionSeconds(0);
+    const pendingId = `pending-default-model-${modelId}`;
+    baseUpdateTask({
+      id: pendingId,
+      name: `${t('bots.settingDefaultModel')}: ${modelId} (${t('common.waiting')})`,
+      module: 'bots',
+      action: 'set-default-model',
+      target: modelId,
+      status: 'Running',
+      progress: 0,
+      startTime: new Date().toISOString()
+    });
+
     try {
-      await api.post('/v1/openclaw/models/set-default', { modelId });
-      message.success(t('bots.setDefaultSuccess', { id: modelId }));
-      await fetchBotsModels(true);
+      const res = await api.post('/v1/openclaw/models/set-default', { modelId });
+      const taskID = res.data?.taskID;
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: `${t('bots.settingDefaultModel')}: ${modelId}`,
+          module: 'bots',
+          action: 'set-default-model',
+          target: modelId,
+          status: 'Running',
+          progress: 5,
+          startTime: new Date().toISOString()
+        });
+      }
     } catch (err: any) {
       const msg = err.response?.data?.error || t('bots.setDefaultFailed');
+      baseUpdateTask({
+        id: pendingId,
+        name: `${t('bots.defaultModel')}: ${modelId}`,
+        module: 'bots',
+        action: 'set-default-model',
+        target: modelId,
+        status: 'Failed',
+        error: msg,
+        progress: 0,
+        startTime: new Date().toISOString()
+      });
       message.error(msg);
-    } finally {
-      setIsTransitioning(false);
-      setTargetStatus(null);
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('guardian_token');
+    storage.removeItem('guardian_token');
     window.location.reload();
   };
   
@@ -542,6 +816,7 @@ const Dashboard = () => {
         { key: 'tui', label: t('common.tuiChat'), icon: <Terminal size={14} /> },
         { key: 'bots-models', label: t('common.bots'), icon: <Boxes size={14} /> },
         { key: 'skills', label: t('common.skills'), icon: <Puzzle size={14} /> },
+        { key: 'plugins', label: t('plugins.title'), icon: <Zap size={14} /> },
         { key: 'experts', label: t('common.expertMarket'), icon: <Rocket size={14} /> },
       ]
     },
@@ -582,28 +857,37 @@ const Dashboard = () => {
   const renderContent = () => {
     const viewMap: Record<string, React.ReactNode> = {
       'dashboard': (
-        <DashboardOverview 
-          status={status} 
-          history={history} 
+        <DashboardOverview
+          status={status}
+          history={history}
+ 
           wsLogs={wsLogs} 
           isRunning={isRunning} 
           onControl={handleControl} 
           onNavigate={setActiveTab}
           systemEvents={systemEvents}
           topBots={topBots}
+          loading={loadingTopBots}
           ocInstalled={ocInstalled}
+          activeTasks={activeTasks}
+          isTransitioning={isTransitioning}
+          onRefreshVersion={checkVersionUpdate}
         />
       ),
       'bots-models': (
         <BotsManager 
-          botsModels={botsModels} loadingBots={loadingBots} isMobile={isMobile} 
-          onRefresh={() => fetchBotsModels(true)}
+          modelsConfig={modelsConfig}
+          loadingConfig={loadingModelsConfig}
+          onRefresh={fetchModelsConfig}
+          botsModels={botsModels} 
+          loadingBots={loadingBots} 
+          isMobile={isMobile} 
+          onRefreshBots={() => fetchBotsModels(true)}
           onAddBot={handleAddBot}
-          onSetIdentity={handleSetBotIdentity}
-          onSetBotModel={handleSetBotModel}
+          onUpdateBot={handleUpdateBot}
           onDeleteBot={handleDeleteBot}
           onSetDefaultModel={handleSetDefaultModel}
-          onShowGlobalLoading={onShowGlobalLoading}
+          activeTasks={activeTasks}
         />
       ),
       'components': (
@@ -623,13 +907,26 @@ const Dashboard = () => {
           isMobile={isMobile}
         />
       ),
-      'logs': <LogsViewer wsLogs={wsLogs} />,
+      'logs': <LogsViewer wsLogs={wsLogs} activeSource={logSource} onSourceChange={setLogSource} />,
       'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} ocInstalled={ocInstalled} />,
       'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} />,
       'tui': <TuiView />,
       'shell': <ShellView />,
-      'skills': <SkillManagement isMobile={isMobile} />,
-      'experts': <ExpertMarket isMobile={isMobile} onShowGlobalLoading={onShowGlobalLoading} onNavigate={setActiveTab} />
+      'skills': <SkillManagement 
+        isMobile={isMobile} 
+        onRefresh={fetchSkills} 
+        loading={loadingSkills} 
+        skills={skills}
+      />,
+      'plugins': <PluginManagement 
+        isMobile={isMobile} 
+        plugins={plugins} 
+        loading={loadingPlugins} 
+        onRefresh={fetchPlugins} 
+        updatedAt={pluginsUpdatedAt} 
+        onTaskUpdate={handleTaskUpdate}
+      />,
+      'experts': <ExpertMarket isMobile={isMobile} onNavigate={setActiveTab} />
     };
 
     return (
@@ -641,7 +938,7 @@ const Dashboard = () => {
 
   if (fetching && !status) return <CrayfishLoading />;
 
-  const globalLoadingMask = (isTransitioning || globalLoadingMessage || dashboardProcessing) && (
+  const globalLoadingMask = (globalLoadingMessage || dashboardProcessing) && (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
       background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(2px)',
@@ -750,6 +1047,12 @@ const Dashboard = () => {
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, flexShrink: 0 }}>
+        <TaskTray 
+          tasks={activeTasks} 
+          isMobile={isMobile} 
+          loading={tasksLoading} 
+          onRefresh={() => fetchActiveTasks(false, true)}
+        />
         <LanguageSwitcher isMobile={isMobile} />
         <Badge
           status={isRunning ? 'success' : 'error'}
@@ -806,6 +1109,7 @@ const Dashboard = () => {
               }} 
               onLogout={handleLogout} navItems={menuItems} 
               versionUpdate={versionUpdate}
+              tag={tag}
             />
           </Drawer>
         </Layout>
@@ -827,6 +1131,7 @@ const Dashboard = () => {
               }} 
               onLogout={handleLogout} navItems={menuItems} 
               versionUpdate={versionUpdate}
+              tag={tag}
             />
           </Sider>
           <Layout style={{ 
@@ -956,14 +1261,14 @@ const Dashboard = () => {
 // --- App Root ---------------------------------------------------------------------
 export default function App() {
   const { t } = useTranslation();
-  const [token, setToken] = useState<string | null>(localStorage.getItem('guardian_token'));
+  const [token, setToken] = useState<string | null>(storage.getItem('guardian_token'));
 
   useEffect(() => {
     const interceptor = api.interceptors.response.use(
       (response) => response,
       (error) => {
         if (error.response?.status === 401) {
-          localStorage.removeItem('guardian_token');
+          storage.removeItem('guardian_token');
           setToken(null);
           if (token) message.error(t('common.sessionExpired'));
         }
@@ -976,17 +1281,34 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get('token');
+    const urlTag = params.get('tag');
+
+    // 捕获并持久化身份标签 (Tag)
+    if (urlTag) {
+      if (urlTag === 'none') {
+        storage.removeItem('guardian_tag');
+      } else {
+        storage.setItem('guardian_tag', urlTag);
+      }
+      params.delete('tag');
+    }
+
     if (urlToken) {
-      localStorage.setItem('guardian_token', urlToken);
+      storage.setItem('guardian_token', urlToken);
       setToken(urlToken);
       
-      // 仅移除 token 参数，保留其他参数（如 embed, page 等）
+      // 移除已处理的参数，保持 URL 整洁
       params.delete('token');
       const newSearch = params.toString();
       const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
       window.history.replaceState({}, '', newUrl);
       
       message.success(t('common.autoLogin'));
+    } else if (urlTag) {
+      // 仅有 tag 变更时也清理 URL
+      const newSearch = params.toString();
+      const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
+      window.history.replaceState({}, '', newUrl);
     }
   }, []);
 

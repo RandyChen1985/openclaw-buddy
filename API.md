@@ -113,21 +113,19 @@
 ### 4.2 机器人管理 (Bot Operations)
 | 动作 | 路径 | 方法 | 请求体 | 响应 Data 示例 |
 | :--- | :--- | :--- | :--- | :--- |
-| 添加 Bot | `/v1/openclaw/bots/add` | POST | `{"id": "bot_1", "model": "...", "workspace": "..."}` | `{"code": 200, "message": "success", "data": {"status": "success", "message": "创建成功"}}` |
-| 修改名称 | `/v1/openclaw/bots/set-identity` | POST | `{"id": "bot_1", "name": "New Name"}` | `{"code": 200, "message": "success", "data": {"status": "success", "message": "名称修改成功"}}` |
-| 修改模型 | `/v1/openclaw/bots/set-model` | POST | `{"id": "bot_1", "model": "model_id"}` | `{"code": 200, "message": "success", "data": {"status": "success", "message": "模型修改成功"}}` |
-| 删除 Bot | `/v1/openclaw/bots/delete` | POST | `{"id": "bot_1"}` | `{"code": 200, "message": "success", "data": {"status": "success", "message": "机器人已彻底移除"}}` |
+| 添加 Bot | `/v1/openclaw/bots/add` | POST | `{"id": "bot_1", "model": "...", "workspace": "..."}` | `{"status": "success", "message": "创建成功"}` |
+| 更新配置 | `/v1/openclaw/bots/update` | POST | `{"id": "bot_1", "config": {...}}` | `{"status": "success", "message": "配置已更新"}` |
+| 修改名称 | `/v1/openclaw/bots/set-identity` | POST | `{"id": "bot_1", "name": "New Name"}` | `{"status": "success", "message": "名称修改成功"}` |
+| 修改模型 | `/v1/openclaw/bots/set-model` | POST | `{"id": "bot_1", "model": "model_id"}` | `{"status": "success", "message": "模型修改成功"}` |
+| 删除 Bot | `/v1/openclaw/bots/delete` | POST | `{"id": "bot_1"}` | `{"status": "success", "message": "机器人已彻底移除"}` |
+| 读取文件 | `/v1/openclaw/bots/file` | GET | `?id=bot_1` | `{"content": "...json content..."}` |
+| 保存文件 | `/v1/openclaw/bots/file` | POST | `{"id": "bot_1", "content": "..."}` | `{"status": "success"}` |
 
-### 4.3 模型与渠道管理 (Models & Providers)
-- **获取渠道配置 (GET)**: `/v1/openclaw/models/config` -> `{ "code": 200, "message": "success", "data": { "providers": [...] } }`
-- **新增渠道 (POST)**: `/v1/openclaw/models/provider`
-  - **Body**: `{"name": "deepseek", "config": {"baseUrl": "...", "apiKey": "..."}}`
-  - **响应**: `{ "code": 200, "message": "success", "data": { "status": "success", "message": "提供商已添加" } }`
-- **向渠道追加模型 (POST)**: `/v1/openclaw/models/provider/model`
-  - **Body**: `{"provider_name": "...", "model_config": {"id": "...", "name": "..."}}`
-  - **响应**: `{ "code": 200, "message": "success", "data": { "status": "success", "message": "模型已添加" } }`
-- **删除特定模型 (DELETE)**: `/v1/openclaw/models/provider/model` -> `{ "code": 200, "message": "success" }`
-- **设定全局默认模型 (POST)**: `/v1/openclaw/models/set-default` -> `{ "code": 200, "message": "success" }`
+### 4.4 专家市场与模板 (Expert Market)
+- **获取模板列表 (GET)**: `/v1/openclaw/experts` -> 返回预设的机器人专家配置及其元数据。
+- **模板克隆 (POST)**: `/v1/openclaw/bots/template`
+  - **Body**: `{"expertId": "architect", "newBotId": "my_dev_lead"}`
+  - **响应**: 一键初始化一个具备特定能力的机器人。
 
 ---
 
@@ -140,31 +138,30 @@
 - **鉴权**: 自动追加网关 Token。
 
 ### 5.2 聊天状态与功能管理
-- **查询功能开启状态 (GET)**: `/v1/openclaw/chat/status` -> `{ "code": 200, "message": "success", "data": { "enabled": true } }`
-- **开启聊天功能 (POST)**: `/v1/openclaw/chat/enable` (需重启生效) -> `{ "code": 200, "message": "success", "data": { "status": "success", "message": "聊天功能已开启..." } }`
+- **查询功能开启状态 (GET)**: `/v1/openclaw/chat/status` -> `{ "enabled": true }`
+- **开启聊天功能 (POST)**: `/v1/openclaw/chat/enable` (需重启生效) -> `{ "status": "success", "message": "聊天功能已开启，请重启网关" }`
 
 ### 5.3 快捷指令管理 (Quick Commands)
 - **获取列表 (GET)**: `/v1/openclaw/chat/quick-commands`
-- **添加 (POST)**: `/v1/openclaw/chat/quick-commands` -> `{ "code": 200, "message": "success", "data": { "id": 1, "status": "success" } }`
-- **删除 (DELETE)**: `/v1/openclaw/chat/quick-commands/:id` -> `{ "code": 200, "message": "success" }`
-
-### 5.4 活跃会话监控 (Sessions)
-- **路径**: `/v1/openclaw/sessions`
-- **响应**: `{ "code": 200, "message": "success", "data": { "data": [...], "updated_at": "..." } }`
+- **添加 (POST)**: `/v1/openclaw/chat/quick-commands` -> `{ "id": 1, "status": "success" }`
+- **删除 (DELETE)**: `/v1/openclaw/chat/quick-commands/:id`
 
 ---
 
-## 🕹️ 6. 技能管理 (Skills)
+## 🕹️ 6. 技能与插件 (Skills & Plugins)
 
-### 6.1 技能清单获取 (GET)
-- **路径**: `/v1/openclaw/skills`
-- **响应**: `{ "code": 200, "message": "success", "data": { "data": [...], "updated_at": "..." } }`
+### 6.1 技能管理 (Skills)
+- **清单获取 (GET)**: `/v1/openclaw/skills`
+- **卸载 (DELETE)**: `/v1/openclaw/skills/:name`
+- **热重载 (POST)**: `/v1/openclaw/skills/reload`
 
-### 6.2 卸载技能插件 (DELETE)
-- **路径**: `/v1/openclaw/skills/:name`
-
-### 6.3 路由与技能热重载 (POST)
-- **路径**: `/v1/openclaw/skills/reload` -> `{ "code": 200, "message": "success", "data": { "status": "success", "message": "规则与技能已重新加载" } }`
+### 6.2 插件管理 (Plugins)
+底层插件（如 WeChat, Telegram）的生命周期管理：
+- **获取插件列表 (GET)**: `/v1/openclaw/plugins`
+- **开启插件 (POST)**: `/v1/openclaw/plugins/enable` -> `{"id": "wechat-control"}`
+- **禁用插件 (POST)**: `/v1/openclaw/plugins/disable`
+- **重载插件 (POST)**: `/v1/openclaw/plugins/reload`
+- **更新插件 (POST)**: `/v1/openclaw/plugins/update`
 
 ---
 
@@ -178,65 +175,52 @@
   {
     "code": 202,
     "message": "Restart command initiated",
-    "data": {
-      "taskID": "task-1774656000",
-      "command": "openclaw gateway restart"
-    }
+    "data": { "taskID": "task-1774656000" }
   }
   ```
 
 ---
 
-## 🩺 8. 自愈审计与异步任务 (Healing & Tasks)
+## 🩺 8. 系统监控与审计 (System & Audit)
 
-### 8.1 自愈设置管理
-- **获取开关 (GET)**: `/v1/settings/self-healing` -> `{ "code": 200, "message": "success", "data": { "enabled": true } }`
-- **修改开关 (POST)**: `/v1/settings/self-healing` -> `{ "code": 200, "message": "success", "data": { "enabled": true } }`
-
-### 8.2 自愈记录审计 (Audit)
-- **事件列表 (GET)**: `/v1/heal/events` -> `{ "code": 200, "message": "success", "data": [...] }`
-- **报表列表 (GET)**: `/v1/heal/reports` -> `{ "code": 200, "message": "success", "data": [...] }`
-- **报表内容详情 (GET)**: `/v1/heal/reports/:name` -> `{ "code": 200, "message": "success", "data": { "name": "...", "content": "..." } }`
-
-### 8.3 任务系统进度查询 (Task Status)
-用于追踪网关重启、安装插件等异步操作的实时进度。
-- **路径**: `/v1/tasks/status`
+### 8.1 负载监控 (Server Info)
+实时获取服务器硬件状态。
+- **路径**: `/v1/system/info`
 - **方法**: `GET`
-- **响应示例 (200)**:
+- **响应 Data**:
   ```json
   {
-    "code": 200,
-    "message": "success",
-    "data": {
-      "task-123456": {
-        "name": "重启网关",
-        "status": "Completed",
-        "error": "",
-        "updatedAt": "2026-03-28 10:05:00"
-      }
-    }
+    "cpu": {"usage": 15.5, "cores": 8},
+    "memory": {"total": 16384, "used": 4096, "percent": 25.0},
+    "disk": {"path": "/", "percent": 60.5},
+    "os": "linux",
+    "arch": "amd64"
   }
   ```
 
+### 8.2 审计日志与事件 (Events)
+追踪用户通过 Buddy 执行的所有敏感操作。
+- **路径**: `/v1/system/events`
+- **方法**: `GET`
+- **响应 Data**: `[{"time": "...", "user": "admin", "action": "restart_gateway", "status": "success"}]`
+
 ---
 
-## 🔌 9. 渠道集成与日志流 (Channels & Logs)
+## 🔌 9. 渠道集成与流通信 (Channels & Streams)
 
 ### 9.1 微信集成专项
-- **获取登录二维码 (GET)**: `/v1/wechat/qrcode` -> `{ "code": 200, "message": "success", "data": { "qrcode_url": "...", "expires_in": 300 } }`
-- **查询插件状态 (GET)**: `/v1/wechat/plugin/status` -> `{ "code": 200, "message": "success", "data": { "is_installed": true, "version": "..." } }`
-- **触发一键安装 (POST)**: `/v1/wechat/install` (异步执行) -> `{ "code": 202, "message": "Installation started", "data": { "taskID": "..." } }`
+- **获取登录二维码 (GET)**: `/v1/wechat/qrcode` -> 支持 SSE 模式或单次获取。
+- **查询配置状态 (GET)**: `/v1/wechat/config/status` -> 返回微信绑定的 AppID、状态位及同步时间。
 
-### 9.2 实时日志流 (WebSocket)
-订阅系统实时运行日志。
-- **路径**: `/v1/ws/logs`
-- **方法**: `GET` (需使用 WebSocket 协议 `ws://` 或 `wss://`)
-- **握手协议**: `Upgrade: websocket`
-- **消息格式**: 文本字符串（单行日志内容）。
+### 9.2 WebSocket 实时通信
+Buddy 提供了多个 WebSocket 挂载点以实现极低延迟的交互：
+- **日志订阅 (`/v1/ws/logs`)**: 实时推送 `.log` 文件行，适配前端 Xterm.js。
+- **终端交互 (`/v1/ws/tui`)**: 提供完整的 PTY 映射，允许在浏览器内直接操作 OpenClaw 终端。
+- **远程 Shell (`/v1/ws/shell`)**: (受限模式) 允许执行特定维护命令。
 
 ### 9.3 龙虾面板反向代理 (Proxy)
 - **路径**: `/v1/proxy/*path`
-- **功能**: 透传请求至本地网关健康监测端口，解决跨域与鉴权问题。
+- **原理**: 剥离 `X-Frame-Options` 等响应头，并自动追加 `Authorization` 透传给本地 18789 端口。
 
 ---
 

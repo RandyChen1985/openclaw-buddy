@@ -49,3 +49,6 @@ FEISHU_APP_SECRET=""
 
 # 接收报警通知的群聊 ID (需先将机器人拉入群聊)
 FEISHU_CHAT_ID=""
+
+# [网络与路径]
+WEB_ROOT=/console/claw

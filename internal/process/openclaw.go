@@ -81,7 +81,8 @@ type Expert struct {
 		Name string `json:"name"`
 		Bio  string `json:"bio"`
 	} `json:"identity"`
-	Skills []string `json:"skills"`
+	IdentityMD string   `json:"identity_md"` // 新增字段：支持全量身份 Markdown
+	Skills     []string `json:"skills"`
 }
 
 func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error) {
@@ -253,51 +254,200 @@ func SetOpenClawDefaultModel(modelID string) error {
 	return nil
 }
 
+func GetOpenClawBotFileContent(configDir, id, fileType, workspace string) (string, error) {
+	// 如果 workspace 已经传入，直接使用，避免执行耗时的 openclaw agents list
+	botWorkspace := workspace
+	if botWorkspace == "" {
+		// 降级逻辑：如果 workspace 没传，则尝试全量获取并寻找 (旧逻辑兼容)
+		res, err := GetOpenClawBotsModels(configDir)
+		if err != nil {
+			return "", err
+		}
+
+		for _, bot := range res.Bots {
+			if bot.ID == id {
+				botWorkspace = bot.Workspace
+				break
+			}
+		}
+	}
+
+	if botWorkspace == "" {
+		return "", fmt.Errorf("bot %s not found and no workspace provided", id)
+	}
+
+	if strings.HasPrefix(botWorkspace, "~") {
+		home, _ := os.UserHomeDir()
+		if botWorkspace == "~" {
+			botWorkspace = home
+		} else if strings.HasPrefix(botWorkspace, "~/") {
+			botWorkspace = filepath.Join(home, botWorkspace[2:])
+		}
+	}
+
+	fileName := ""
+	switch strings.ToLower(fileType) {
+	case "soul":
+		fileName = "SOUL.md"
+	case "identity":
+		fileName = "IDENTITY.md"
+	case "tools":
+		fileName = "TOOLS.md"
+	case "user":
+		fileName = "USER.md"
+	default:
+		return "", fmt.Errorf("unsupported file type: %s", fileType)
+	}
+
+	filePath := filepath.Join(botWorkspace, fileName)
+	// 尝试探测大小写
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		lowerPath := filepath.Join(botWorkspace, strings.ToLower(fileName))
+		if _, err := os.Stat(lowerPath); err == nil {
+			filePath = lowerPath
+		}
+	}
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil // 文件不存在返回空
+		}
+		return "", err
+	}
+
+	return string(data), nil
+}
+
+// SaveOpenClawBotFileContent 保存机器人工作区文件的内容
+func SaveOpenClawBotFileContent(configDir, id, fileType, content, workspace string) error {
+	// 如果 workspace 已经传入，直接使用
+	botWorkspace := workspace
+	if botWorkspace == "" {
+		res, err := GetOpenClawBotsModels(configDir)
+		if err != nil {
+			return err
+		}
+
+		for _, bot := range res.Bots {
+			if bot.ID == id {
+				botWorkspace = bot.Workspace
+				break
+			}
+		}
+	}
+
+	if botWorkspace == "" {
+		return fmt.Errorf("bot %s not found and no workspace provided", id)
+	}
+
+	if strings.HasPrefix(botWorkspace, "~") {
+		home, _ := os.UserHomeDir()
+		if botWorkspace == "~" {
+			botWorkspace = home
+		} else if strings.HasPrefix(botWorkspace, "~/") {
+			botWorkspace = filepath.Join(home, botWorkspace[2:])
+		}
+	}
+
+	fileName := ""
+	switch strings.ToLower(fileType) {
+	case "soul":
+		fileName = "SOUL.md"
+	case "identity":
+		fileName = "IDENTITY.md"
+	case "tools":
+		fileName = "TOOLS.md"
+	case "user":
+		fileName = "USER.md"
+	default:
+		return fmt.Errorf("unsupported file type: %s", fileType)
+	}
+
+	filePath := filepath.Join(botWorkspace, fileName)
+	// 如果存在小写形式，则遵循原有命名进行覆盖
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		lowerPath := filepath.Join(botWorkspace, strings.ToLower(fileName))
+		if _, err := os.Stat(lowerPath); err == nil {
+			filePath = lowerPath
+		}
+	}
+
+	err := os.WriteFile(filePath, []byte(content), 0644)
+	if err != nil {
+		return err
+	}
+
+	// 异步触发同步逻辑，避免阻塞 API 响应
+	go SyncKeySingle("bots_models", configDir)
+	return nil
+}
+
 func SetOpenClawBotModel(configDir, botID, modelID string) error {
-	configPath := filepath.Join(configDir, "openclaw.json")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return err
+	return UpdateOpenClawBotConfig(configDir, botID, nil, &modelID)
+}
+
+// UpdateOpenClawBotConfig 统一更新机器人的基本配置 (名称、模型等)
+// 采用一次性读写模式，防止并发修改 openclaw.json 产生冲突
+func UpdateOpenClawBotConfig(configDir, botID string, name, model *string) error {
+	// 1. 如果传入了名称，调用官方命令执行 Identity 设置 (不要手动改文件中的 name)
+	if name != nil {
+		if err := SetOpenClawBotIdentity(botID, *name); err != nil {
+			return fmt.Errorf("failed to set identity via CLI: %v", err)
+		}
 	}
 
-	var fullCfg map[string]interface{}
-	if err := json.Unmarshal(data, &fullCfg); err != nil {
-		return err
-	}
+	// 2. 只有在修改模型时，才执行磁盘 JSON 物理重写逻辑
+	if model != nil {
+		configPath := filepath.Join(configDir, "openclaw.json")
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to read openclaw.json: %v", err)
+		}
 
-	agents, ok := fullCfg["agents"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("invalid config: agents key not found")
-	}
+		var fullCfg map[string]interface{}
+		if err := json.Unmarshal(data, &fullCfg); err != nil {
+			return fmt.Errorf("failed to unmarshal config: %v", err)
+		}
 
-	list, ok := agents["list"].([]interface{})
-	if !ok {
-		return fmt.Errorf("invalid config: agents.list not found or not an array")
-	}
-
-	found := false
-	for i := range list {
-		bot, ok := list[i].(map[string]interface{})
+		agents, ok := fullCfg["agents"].(map[string]interface{})
 		if !ok {
-			continue
+			return fmt.Errorf("invalid config: agents key not found")
 		}
-		if id, ok := bot["id"].(string); ok && id == botID {
-			bot["model"] = modelID
-			found = true
-			break
+
+		list, ok := agents["list"].([]interface{})
+		if !ok {
+			return fmt.Errorf("invalid config: agents.list not found or not an array")
+		}
+
+		found := false
+		for i := range list {
+			bot, ok := list[i].(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if id, ok := bot["id"].(string); ok && id == botID {
+				// 修改模型
+				bot["model"] = *model
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return fmt.Errorf("bot with ID '%s' not found", botID)
+		}
+
+		newData, err := json.MarshalIndent(fullCfg, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal config: %v", err)
+		}
+		if err := os.WriteFile(configPath, newData, 0644); err != nil {
+			return fmt.Errorf("failed to write openclaw.json: %v", err)
 		}
 	}
 
-	if !found {
-		return fmt.Errorf("bot with ID '%s' not found in agents.list", botID)
-	}
-
-	newData, err := json.MarshalIndent(fullCfg, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(configPath, newData, 0644)
+	return nil
 }
 
 func GetOpenClawGatewayConfig(configDir string) (*OpenClawGatewayConfig, error) {
@@ -366,6 +516,90 @@ func EnableChatCompletions(configDir string) error {
 	return os.WriteFile(configPath, newData, 0644)
 }
 
+type OpenClawPlugin struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Version     string   `json:"version"`
+	Enabled     bool     `json:"enabled"`
+	Status      string   `json:"status"`
+	Origin      string   `json:"origin"`
+	RootDir     string   `json:"rootDir"`
+	Source      string   `json:"source"`
+	Error       string   `json:"error,omitempty"`
+	ChannelIds  []string `json:"channelIds"`
+	ProviderIds []string `json:"providerIds"`
+}
+
+func GetOpenClawPlugins() (any, error) {
+	cmd := exec.Command("openclaw", "plugins", "list", "--json")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list plugins: %v. Output: %s", err, string(out))
+	}
+
+	// 清理 ANSI 颜色代码
+	cleanOut := StripANSI(string(out))
+
+	// 找到第一个 '{'，跳过前面的日志行
+	index := strings.Index(cleanOut, "{")
+	if index == -1 {
+		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
+	}
+	cleanOut = cleanOut[index:]
+
+	var data struct {
+		Plugins []OpenClawPlugin `json:"plugins"`
+	}
+	decoder := json.NewDecoder(strings.NewReader(cleanOut))
+	if err := decoder.Decode(&data); err != nil {
+		return nil, fmt.Errorf("failed to parse plugins json: %v", err)
+	}
+	return data.Plugins, nil
+}
+
+func ReloadOpenClawPlugins() error {
+	// 目前版本的 openclaw CLI (2026.3.24) 不支持 plugins reload 子命令。
+	// 重载操作由上层 Handler 调用 SyncKeySingle("plugins") 通过执行 list 命令来完成实时的列表扫描。
+	return nil
+}
+
+func EnableOpenClawPlugin(id string) error {
+	cmd := exec.Command("openclaw", "plugins", "enable", id)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to enable plugin %s: %v. Output: %s", id, err, string(out))
+	}
+	return nil
+}
+
+func DisableOpenClawPlugin(id string) error {
+	cmd := exec.Command("openclaw", "plugins", "disable", id)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to disable plugin %s: %v. Output: %s", id, err, string(out))
+	}
+	return nil
+}
+
+func UninstallOpenClawPlugin(id string) error {
+	cmd := exec.Command("openclaw", "plugins", "uninstall", id)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to uninstall plugin %s: %v. Output: %s", id, err, string(out))
+	}
+	return nil
+}
+
+func UpdateOpenClawPlugins() error {
+	cmd := exec.Command("openclaw", "plugins", "update")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to update plugins: %v. Output: %s", err, string(out))
+	}
+	return nil
+}
+
 func GetOpenClawSkills() (any, error) {
 	cmd := exec.Command("openclaw", "skills", "list", "--json")
 	out, err := cmd.CombinedOutput()
@@ -401,11 +635,8 @@ func UninstallOpenClawSkill(name string) error {
 }
 
 func ReloadOpenClawSkills() error {
-	cmd := exec.Command("openclaw", "skills", "reload")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to reload skills: %v. Output: %s", err, string(out))
-	}
+	// 目前版本的 openclaw CLI (2026.3.24) 不支持 skills reload 子命令。
+	// 重载操作由上层 Handler 调用 SyncKeySingle("skills") 通过执行 list 命令来完成实时的列表扫描。
 	return nil
 }
 
@@ -589,7 +820,24 @@ func AddOpenClawModelToProvider(configDir, providerName string, modelConfig map[
 		}
 	}
 
-	provider["models"] = append(providerModels, modelConfig)
+	// [Hardening] 检查是否存在相同 ID 的模型，如有则更新
+	modelID, _ := modelConfig["id"].(string)
+	foundIdx := -1
+	for i, m := range providerModels {
+		if model, isMap := m.(map[string]interface{}); isMap {
+			if id, idOk := model["id"].(string); idOk && id == modelID {
+				foundIdx = i
+				break
+			}
+		}
+	}
+
+	if foundIdx >= 0 {
+		providerModels[foundIdx] = modelConfig
+	} else {
+		providerModels = append(providerModels, modelConfig)
+	}
+	provider["models"] = providerModels
 
 	// --- 2. 处理 agents.defaults.models 注册部分 ---
 	agents, ok := fullCfg["agents"].(map[string]interface{})
@@ -611,7 +859,6 @@ func AddOpenClawModelToProvider(configDir, providerName string, modelConfig map[
 	}
 
 	// 注册格式: "provider/id": {}
-	modelID, _ := modelConfig["id"].(string)
 	if modelID != "" {
 		registrationKey := fmt.Sprintf("%s/%s", providerName, modelID)
 		if _, exists := registeredModels[registrationKey]; !exists {
@@ -729,7 +976,18 @@ func GetOpenClawExperts() ([]Expert, error) {
 	return experts, nil
 }
 
-func CreateBotFromExpert(expertID, newBotID, modelID string) error {
+func CreateBotFromExpert(expertID, newBotID, modelID, customSoul, customIdentityMD string) error {
+	// [Hardening] 预检 BotID 是否已占用，防止覆盖 SOUL.md 和误操作
+	// 这里通过尝试列出机器人来实现，如果 GetOpenClawBotsModels 返回了该 ID，则拦截
+	currentBots, err := GetOpenClawBotsModels("") 
+	if err == nil {
+		for _, b := range currentBots.Bots {
+			if b.ID == newBotID {
+				return fmt.Errorf("bot ID '%s' already exists, please use another ID", newBotID)
+			}
+		}
+	}
+
 	// 1. 获取专家模板内容
 	experts, err := GetOpenClawExperts()
 	if err != nil {
@@ -769,22 +1027,47 @@ func CreateBotFromExpert(expertID, newBotID, modelID string) error {
 
 	fmt.Printf("🔍 [Expert] Initializing bot config in: %s\n", workspaceDir)
 
-	// 5. 写入 SOUL.md (注意全大写)
+	// 5. 写入 SOUL.md (优先使用自定义内容)
+	var soulContent string
+	if customSoul != "" {
+		soulContent = customSoul
+	} else {
+		soulContent = targetExpert.Soul
+	}
+
 	soulPath := filepath.Join(workspaceDir, "SOUL.md")
-	if err := os.WriteFile(soulPath, []byte(targetExpert.Soul), 0644); err != nil {
+	if err := os.WriteFile(soulPath, []byte(soulContent), 0644); err != nil {
 		return fmt.Errorf("failed to write SOUL.md: %v", err)
 	}
-	fmt.Printf("✅ [Expert] Successfully wrote SOUL.md (%d bytes)\n", len(targetExpert.Soul))
+	fmt.Printf("✅ [Expert] Successfully wrote SOUL.md (Custom: %v)\n", customSoul != "")
 
-	// 6. 写入 IDENTITY.md (格式化为 Markdown 而非 JSON)
-	identityContent := fmt.Sprintf("# IDENTITY.md - Who Am I?\n\n- **Name:** %s\n- **Bio:** %s\n- **Emoji:** %s\n",
-		targetExpert.Identity.Name, targetExpert.Identity.Bio, targetExpert.Emoji)
-	
+	// 6. 写入 IDENTITY.md (优先使用自定义内容)
+	var identityContent string
+	if customIdentityMD != "" {
+		identityContent = customIdentityMD
+	} else if targetExpert.IdentityMD != "" {
+		identityContent = targetExpert.IdentityMD
+	} else {
+		// 降级渲染逻辑：将旧版 JSON 属性转换为结构化的专业 Markdown
+		identityContent = fmt.Sprintf("# 🆔 Identity: %s\n\n## 👤 角色定义\n- **Name:** %s\n- **Role:** %s\n\n## 📝 个人简介\n%s\n",
+			targetExpert.Name,
+			targetExpert.Identity.Name,
+			targetExpert.Description,
+			targetExpert.Identity.Bio)
+
+		if len(targetExpert.Skills) > 0 {
+			identityContent += "\n## 🛠️ 具备技能\n"
+			for _, skill := range targetExpert.Skills {
+				identityContent += fmt.Sprintf("- [x] %s\n", skill)
+			}
+		}
+	}
+
 	identityPath := filepath.Join(workspaceDir, "IDENTITY.md")
 	if err := os.WriteFile(identityPath, []byte(identityContent), 0644); err != nil {
 		return fmt.Errorf("failed to write IDENTITY.md: %v", err)
 	}
-	fmt.Printf("✅ [Expert] Successfully wrote IDENTITY.md\n")
+	fmt.Printf("✅ [Expert] Successfully wrote IDENTITY.md (Rich Content: %v)\n", targetExpert.IdentityMD != "")
 
 	return nil
 }

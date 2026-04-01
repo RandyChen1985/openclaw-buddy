@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
+	"sort"
 )
 
 type SystemMetrics struct {
@@ -45,6 +47,13 @@ type Device struct {
 	ApprovedAtMs int64   `json:"approvedAtMs"`
 }
 
+type BotRank struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Emoji    string `json:"emoji"`
+	Sessions int    `json:"sessions"`
+}
+
 type ServiceStatus struct {
 	Name    string `json:"name"`
 	Online  bool   `json:"online"`
@@ -63,24 +72,38 @@ func GetStructuredStatus(port int) (OpenClawStatus, error) {
 	verOut, _ := verCmd.CombinedOutput()
 	status.Version = strings.TrimSpace(StripANSI(string(verOut)))
 
-	// 0.1 获取系统负载 (针对 Mac 优化)
+	// 0.1 获取系统负载 (支持 Mac/Linux)
 	status.Metrics = GetSystemMetrics()
 
-	// 1. 解析网关状态：仅使用端口监听判断，确保最快响应速度
+	// 1. 解析网关状态
 	if IsPortListening(port) {
 		status.Gateway.Status = "running"
 		pid, _ := GetPIDByPort(port)
 		status.Gateway.PID = pid
-		status.Gateway.Runtime = "Active (Port Monitored)"
+		status.Gateway.Runtime = GetProcessRuntime(pid)
 	} else {
 		status.Gateway.Status = "stopped"
 		status.Gateway.Runtime = "Inactive"
 	}
 
-	// 2. 解析插件/渠道/Agent 表格：移除依赖项扫描逻辑，直接返回空列表以提升性能
-	// 已按用户要求关闭 openclaw status 调用
-
 	return status, nil
+}
+
+// GetProcessRuntime 获取指定 PID 进程的已运行时间
+func GetProcessRuntime(pid int) string {
+	if pid <= 0 {
+		return "Unknown"
+	}
+	cmd := exec.Command("ps", "-o", "etime=", "-p", strconv.Itoa(pid))
+	out, err := cmd.Output()
+	if err != nil {
+		return "Active (Port Monitored)"
+	}
+	runtimeStr := strings.TrimSpace(string(out))
+	if runtimeStr == "" {
+		return "Active (Port Monitored)"
+	}
+	return runtimeStr
 }
 
 func GetSystemMetrics() SystemMetrics {
@@ -90,28 +113,42 @@ func GetSystemMetrics() SystemMetrics {
 		DiskUsage:   0,
 	}
 
-	// 1. CPU Usage (from top)
-	cpuCmd := exec.Command("sh", "-c", "top -l 1 | grep 'CPU usage'")
-	cpuOut, _ := cpuCmd.Output()
-	cpuStr := string(cpuOut)
-	idleMatch := regexp.MustCompile(`([\d.]+)% idle`).FindStringSubmatch(cpuStr)
-	if len(idleMatch) > 1 {
-		idle, _ := strconv.ParseFloat(idleMatch[1], 64)
-		metrics.CPUUsage = 100.0 - idle
+	// 1. CPU Usage (平台差异化适配)
+	if runtime.GOOS == "darwin" {
+		// macOS: top -l 1 并匹配 "idle"
+		cpuCmd := exec.Command("sh", "-c", "top -l 1 | grep 'CPU usage'")
+		cpuOut, _ := cpuCmd.Output()
+		cpuStr := string(cpuOut)
+		idleMatch := regexp.MustCompile(`([\d.]+)% idle`).FindStringSubmatch(cpuStr)
+		if len(idleMatch) > 1 {
+			idle, _ := strconv.ParseFloat(idleMatch[1], 64)
+			metrics.CPUUsage = 100.0 - idle
+		}
+	} else if runtime.GOOS == "linux" {
+		// Linux: top -b -n 1 (批处理模式单次采样) 并匹配 "id"
+		cpuCmd := exec.Command("sh", "-c", "top -b -n 1 | grep \"Cpu(s)\"")
+		cpuOut, _ := cpuCmd.Output()
+		cpuStr := string(cpuOut)
+		// Linux 示例: %Cpu(s):  5.0 us,  2.0 sy,  0.0 ni, 93.0 id, ...
+		idleMatch := regexp.MustCompile(`([\d.]+)\s+id`).FindStringSubmatch(cpuStr)
+		if len(idleMatch) > 1 {
+			idle, _ := strconv.ParseFloat(idleMatch[1], 64)
+			metrics.CPUUsage = 100.0 - idle
+		}
 	}
 
-	// 2. Memory Usage (Rough estimate using ps)
+	// 2. Memory Usage (Rough estimate using ps, 跨平台通用)
 	memCmd := exec.Command("sh", "-c", "ps -A -o %mem | awk '{s+=$1} END {print s}'")
 	memOut, _ := memCmd.Output()
 	memRaw := strings.TrimSpace(string(memOut))
 	if memRaw != "" {
 		metrics.MemoryUsage, _ = strconv.ParseFloat(memRaw, 64)
 		if metrics.MemoryUsage > 100 {
-			metrics.MemoryUsage = 95.5
+			metrics.MemoryUsage = 95.5 // 封顶保护
 		}
 	}
 
-	// 3. Disk Usage (Root partition)
+	// 3. Disk Usage (Root partition, df 指令跨平台语义一致)
 	diskCmd := exec.Command("sh", "-c", "df / | tail -1 | awk '{print $5}' | sed 's/%//'")
 	diskOut, _ := diskCmd.Output()
 	diskRaw := strings.TrimSpace(string(diskOut))
@@ -203,4 +240,59 @@ func splitTableLine(line string) []string {
 		}
 	}
 	return result
+}
+
+// GetBotRanking 聚合计算机器人活跃榜 (前 3 名)
+func GetBotRanking(configDir string) ([]BotRank, error) {
+	sessions, err := GetOpenClawSessions()
+	if err != nil {
+		return nil, err
+	}
+
+	// 聚合分析：统计每个 Agent 的活跃会话
+	stats := make(map[string]int)
+	for _, sess := range sessions {
+		stats[sess.AgentID]++
+	}
+
+	// 获取所有机器人名称信息以丰富结果
+	botsData, _ := GetOpenClawBotsModels(configDir)
+	botNames := make(map[string]string)
+	botEmojis := make(map[string]string)
+	if botsData != nil {
+		for _, b := range botsData.Bots {
+			botNames[b.ID] = b.Name
+			botEmojis[b.ID] = b.Emoji
+		}
+	}
+
+	ranks := []BotRank{}
+	for id, count := range stats {
+		name := id
+		if n, ok := botNames[id]; ok {
+			name = n
+		}
+		emoji := "🤖"
+		if e, ok := botEmojis[id]; ok {
+			emoji = e
+		}
+		ranks = append(ranks, BotRank{
+			ID:       id,
+			Name:     name,
+			Emoji:    emoji,
+			Sessions: count,
+		})
+	}
+
+	// 按会话数倒序排序
+	sort.Slice(ranks, func(i, j int) bool {
+		return ranks[i].Sessions > ranks[j].Sessions
+	})
+
+	// 仅返回前 3 名
+	if len(ranks) > 3 {
+		ranks = ranks[:3]
+	}
+
+	return ranks, nil
 }

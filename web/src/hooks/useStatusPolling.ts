@@ -5,7 +5,7 @@ export const useStatusPolling = (isTransitioning: boolean, targetStatus: string 
   const [status, setStatus] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [fetching, setFetching] = useState(true);
-  const [refreshCountdown, setRefreshCountdown] = useState(10);
+  const [refreshCountdown, setRefreshCountdown] = useState(5);
   const lastStatusRef = useRef<string | null>(null);
 
   const fetchData = async () => {
@@ -42,12 +42,12 @@ export const useStatusPolling = (isTransitioning: boolean, targetStatus: string 
       timer = setInterval(fetchData, 2000);
       setRefreshCountdown(0);
     } else {
-      setRefreshCountdown(10);
+      setRefreshCountdown(5);
       timer = setInterval(() => {
         setRefreshCountdown(prev => {
           if (prev <= 1) {
             fetchData();
-            return 10;
+            return 5;
           }
           return prev - 1;
         });

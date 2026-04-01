@@ -4,6 +4,7 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 
 import zhTranslation from './locales/zh.json';
 import enTranslation from './locales/en.json';
+import storage from './utils/storage';
 
 i18n
   .use(LanguageDetector)
@@ -19,6 +20,7 @@ i18n
     },
     detection: {
       order: ['localStorage', 'navigator'],
+      lookupLocalStorage: storage.getRawKey('i18nextLng'),
       caches: ['localStorage']
     }
   });

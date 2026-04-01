@@ -32,10 +32,20 @@ func SyncAll(configDir string) {
 	syncKey("skills", func() (any, error) {
 		return GetOpenClawSkills()
 	})
+
+	// 5. Plugins
+	syncKey("plugins", func() (any, error) {
+		return GetOpenClawPlugins()
+	})
 	
-	// 5. Sessions
+	// 6. Sessions
 	syncKey("sessions", func() (any, error) {
 		return GetOpenClawSessions()
+	})
+	
+	// 7. Bot Ranking (机器人活跃榜)
+	syncKey("ranking", func() (any, error) {
+		return GetBotRanking(configDir)
 	})
 
 	log.Printf("✅ [Cache] 全量同步完成，耗时 %v。", time.Since(start))
@@ -55,6 +65,8 @@ func SyncKeySingle(key string, configDir string) error {
 		fetcher = func() (any, error) { return GetOpenClawSkills() }
 	case "sessions":
 		fetcher = func() (any, error) { return GetOpenClawSessions() }
+	case "ranking":
+		fetcher = func() (any, error) { return GetBotRanking(configDir) }
 	default:
 		return nil
 	}
