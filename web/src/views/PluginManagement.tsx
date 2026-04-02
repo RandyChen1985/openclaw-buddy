@@ -19,6 +19,7 @@ interface Plugin {
   error?: string;
   channelIds: string[];
   providerIds: string[];
+  _processing?: boolean;
 }
 
 interface PluginManagementProps {
@@ -37,16 +38,29 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | number>('all');
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
-  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const [updating, setUpdating] = useState(false);
+  const [reloading, setReloading] = useState(false);
+  
+  // 同步引用，用于立即锁定，防止 React 异步状态导致的重复点击
+  const processingRef = React.useRef(new Set<string>());
+  const lastActionTimeRef = React.useRef<Record<string, number>>({});
   
   // 本地插件状态列表，用于支持乐观更新
   const [localPlugins, setLocalPlugins] = useState<Plugin[]>(globalPlugins);
 
-  // 当全局插件列表刷新时，同步到本地
+  // 当后端数据真正刷新时（updatedAt 或 globalPlugins 变化），同步本地状态并清除所有进行中的锁
+  const lastUpdateRef = React.useRef(updatedAt);
   React.useEffect(() => {
     setLocalPlugins(globalPlugins);
-  }, [globalPlugins]);
+    // 严格锁定：只有当同步时间戳真正发生变化时（意味着后端已完成同步并返回新数据），才释放锁定
+    if (updatedAt && updatedAt !== lastUpdateRef.current) {
+      setProcessingIds(new Set());
+      processingRef.current.clear();
+      lastUpdateRef.current = updatedAt;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalPlugins, updatedAt]);
 
   const toggleExpand = (id: string) => {
     setExpandedIds(prev => 
@@ -54,85 +68,97 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
     );
   };
 
-  const handleAction = async (id: string, action: 'enable' | 'disable' | 'uninstall') => {
-    if (!onTaskUpdate) {
-      // 降级逻辑：如果没有任务中心更新函数，走旧的同步流程（虽然后端已改为异步，但此处仅作兼容）
-      setActionLoading(prev => ({ ...prev, [id]: true }));
-      try {
-        const url = action === 'uninstall' ? `/v1/openclaw/plugins/${id}` : `/v1/openclaw/plugins/${action}`;
-        if (action === 'uninstall') {
-          await api.delete(url);
-        } else {
-          await api.post(url, { id });
-        }
-        message.success(t(`plugins.${action}Success`));
-        onRefresh(true);
-      } catch (err: any) {
-        message.error(err.message || t('common.error'));
-      } finally {
-        setActionLoading(prev => ({ ...prev, [id]: false }));
-      }
+  const handleAction = async (id: string, action: 'enable' | 'disable' | 'uninstall', e?: React.BaseSyntheticEvent) => {
+    // 立即停止传播
+    if (e) e.stopPropagation();
+
+    const now = Date.now();
+    const lastTime = lastActionTimeRef.current[id] || 0;
+    
+    // 同步哨兵拦截：由于 Ref 是同步的，这里能秒级拦截重复点击
+    if (processingRef.current.has(id) || now - lastTime < 1000) {
       return;
     }
 
-    // --- 1. [乐观更新] 立即反馈 UI ---
-    const pendingId = `pending-plugins-${action}-${id}-${Date.now()}`;
-    const startTime = new Date().toISOString();
-    
-    if (action === 'uninstall') {
-      // 卸载操作：立即从本地列表中隐藏
-      setLocalPlugins(prev => prev.filter(p => p.id !== id));
-    } else {
-      // 启用/禁用操作：立即切换本地状态
-      setLocalPlugins(prev => prev.map(p => 
-        p.id === id ? { ...p, enabled: action === 'enable' } : p
-      ));
-    }
-
-    // --- 2. [任务注册] 创建虚拟挂起任务 ---
-    const pendingTask: Task = {
-      id: pendingId,
-      name: t(`plugins.${action}`) + `: ${id}`,
-      module: 'plugins',
-      action: action,
-      target: id,
-      status: 'Running',
-      progress: 10,
-      startTime: startTime
-    };
-    onTaskUpdate(pendingTask);
+    // 锁定 ID
+    lastActionTimeRef.current[id] = now;
+    processingRef.current.add(id);
+    setProcessingIds(new Set(processingRef.current));
 
     try {
-      const url = action === 'uninstall' ? `/v1/openclaw/plugins/${id}` : `/v1/openclaw/plugins/${action}`;
-      let response;
-      if (action === 'uninstall') {
-        response = await api.delete(url);
-      } else {
-        response = await api.post(url, { id });
+      if (!onTaskUpdate) {
+        // 降级逻辑：走旧的同步流程
+        try {
+          const url = action === 'uninstall' ? `/v1/openclaw/plugins/${id}` : `/v1/openclaw/plugins/${action}`;
+          if (action === 'uninstall') {
+            await api.delete(url);
+          } else {
+            await api.post(url, { id });
+          }
+          message.success(t(`plugins.${action}Success`));
+          onRefresh(true);
+        } catch (err: any) {
+          message.error(err.message || t('common.error'));
+          // 失败时解锁
+          processingRef.current.delete(id);
+          setProcessingIds(new Set(processingRef.current));
+        }
+        return;
       }
 
-      // --- 3. [任务接力] 使用后端返回的真正 TaskID 进行 Handshake ---
-      const realTaskId = response.data.taskId || response.data.data?.taskId;
-      if (realTaskId) {
-        onTaskUpdate({
-          ...pendingTask,
-          id: realTaskId,
-          progress: 20
-        });
-        message.info(t('chat.waitingGatewaySync'));
+      // --- 1. [乐观更新] ---
+      const pendingId = `pending-plugins-${action}-${id}-${Date.now()}`;
+      if (action === 'uninstall') {
+        setLocalPlugins(prev => prev.filter(p => p.id !== id));
       } else {
-        // 如果后端没返回 TaskID（可能是旧版代码），则标记完成并刷新
-        onTaskUpdate({ ...pendingTask, status: 'Completed', progress: 100 });
-        onRefresh(true);
+        setLocalPlugins(prev => prev.map(p => 
+          p.id === id ? { ...p, enabled: action === 'enable' } : p
+        ));
       }
-    } catch (err: any) {
-      // 失败回滚乐观更新
-      setLocalPlugins(globalPlugins);
-      onTaskUpdate({ 
-        ...pendingTask, 
-        status: 'Failed', 
-        error: err.response?.data?.error || err.message 
-      });
+
+      // --- 2. [任务注册] ---
+      const pendingTask: Task = {
+        id: pendingId,
+        name: t(`plugins.${action}`) + `: ${id}`,
+        module: 'plugins',
+        action: action,
+        target: id,
+        status: 'Running',
+        progress: 10,
+        startTime: new Date().toISOString()
+      };
+      onTaskUpdate(pendingTask);
+
+      try {
+        const url = action === 'uninstall' ? `/v1/openclaw/plugins/${id}` : `/v1/openclaw/plugins/${action}`;
+        let response;
+        if (action === 'uninstall') {
+          response = await api.delete(url);
+        } else {
+          response = await api.post(url, { id });
+        }
+
+        const realTaskId = response.data.taskId || response.data.data?.taskId;
+        if (realTaskId) {
+          onTaskUpdate({ ...pendingTask, id: realTaskId, progress: 20 });
+          message.info(t('chat.waitingGatewaySync'));
+        } else {
+          onTaskUpdate({ ...pendingTask, status: 'Completed', progress: 100 });
+          onRefresh(true);
+        }
+      } catch (err: any) {
+        setLocalPlugins(globalPlugins);
+        processingRef.current.delete(id);
+        setProcessingIds(new Set(processingRef.current));
+        onTaskUpdate({ 
+          ...pendingTask, 
+          status: 'Failed', 
+          error: err.response?.data?.error || err.message 
+        });
+      }
+    } catch {
+      processingRef.current.delete(id);
+      setProcessingIds(new Set(processingRef.current));
     }
   };
 
@@ -174,12 +200,16 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
   };
 
   const handleReload = async () => {
+    if (reloading) return;
+    setReloading(true);
     try {
       await api.post('/v1/openclaw/plugins/reload');
       message.success(t('plugins.syncSuccess'));
       onRefresh(true);
     } catch (err: any) {
       message.error(err.message || t('common.error'));
+    } finally {
+      setReloading(false);
     }
   };
 
@@ -248,36 +278,64 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
       title: t('plugins.enable'),
       key: 'enabled',
       width: 80,
-      render: (record: Plugin) => (
-        <Switch 
-          checked={record.enabled} 
-          size="small"
-          loading={actionLoading[record.id]}
-          onChange={(checked) => handleAction(record.id, checked ? 'enable' : 'disable')}
-        />
-      )
+      render: (record: Plugin) => {
+        const isProcessing = processingIds.has(record.id);
+        const switchComp = (
+          <Switch 
+            checked={record.enabled} 
+            size="small"
+            loading={isProcessing}
+            disabled={isProcessing}
+            onChange={(checked, e) => handleAction(record.id, checked ? 'enable' : 'disable', e)}
+          />
+        );
+
+        if (isProcessing) {
+          return (
+            <Tooltip title={t('common.processing')}>
+              <div style={{ cursor: 'not-allowed', display: 'inline-block' }}>
+                {switchComp}
+              </div>
+            </Tooltip>
+          );
+        }
+        return switchComp;
+      }
     },
     {
       title: t('common.action'),
       key: 'actions',
       width: 150,
-      render: (record: Plugin) => (
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Tooltip title={record.rootDir}>
-            <Button size="small" type="text" icon={<Info size={14} />} />
-          </Tooltip>
-          <Popconfirm
-            title={t('plugins.uninstallConfirmTitle')}
-            description={t('plugins.uninstallConfirmContent', { name: record.name })}
-            onConfirm={() => handleAction(record.id, 'uninstall')}
-            okText={t('common.confirm')}
-            cancelText={t('common.cancel')}
-            okButtonProps={{ danger: true, loading: actionLoading[record.id] }}
-          >
-            <Button size="small" type="text" danger icon={<Trash2 size={14} />} />
-          </Popconfirm>
-        </div>
-      )
+      render: (record: Plugin) => {
+        const isProcessing = processingIds.has(record.id);
+        return (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Tooltip title={record.rootDir}>
+              <Button size="small" type="text" icon={<Info size={14} />} />
+            </Tooltip>
+            <Tooltip title={isProcessing ? t('common.processing') : ''}>
+              <Popconfirm
+                title={t('plugins.uninstallConfirmTitle')}
+                description={t('plugins.uninstallConfirmContent', { name: record.name })}
+                onConfirm={(e) => handleAction(record.id, 'uninstall', e)}
+                disabled={isProcessing}
+                okText={t('common.confirm')}
+                cancelText={t('common.cancel')}
+                okButtonProps={{ danger: true, loading: isProcessing }}
+              >
+                <Button 
+                  size="small" 
+                  type="text" 
+                  danger 
+                  icon={<Trash2 size={14} />} 
+                  disabled={isProcessing}
+                  style={{ cursor: isProcessing ? 'not-allowed' : 'pointer' }}
+                />
+              </Popconfirm>
+            </Tooltip>
+          </div>
+        );
+      }
     }
   ];
 
@@ -297,6 +355,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                       icon={<ArrowUpCircle size={14} />} 
                       onClick={handleUpdate}
                       loading={updating}
+                      disabled={updating || reloading}
                       style={{ fontSize: 12, borderRadius: 6 }}
                     >
                       {t('plugins.update')}
@@ -305,6 +364,8 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                       size="small" 
                       icon={<Settings2 size={14} />} 
                       onClick={handleReload}
+                      loading={reloading}
+                      disabled={updating || reloading}
                       style={{ fontSize: 12, borderRadius: 6 }}
                     >
                       {t('plugins.reload')}
@@ -440,12 +501,16 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                             </div>
                             <div>
                                <div style={{ fontWeight: 600, color: '#64748b', fontSize: 11, marginBottom: 4 }}>{t('plugins.enable')}</div>
-                               <Switch 
-                                  checked={plugin.enabled} 
-                                  size="small"
-                                  loading={actionLoading[plugin.id]}
-                                  onChange={(checked) => handleAction(plugin.id, checked ? 'enable' : 'disable')}
-                                />
+                               <Tooltip title={processingIds.has(plugin.id) ? t('common.processing') : ''}>
+                                  <Switch 
+                                    checked={plugin.enabled} 
+                                    size="small"
+                                    loading={processingIds.has(plugin.id)}
+                                    disabled={processingIds.has(plugin.id)}
+                                    onChange={(checked, e) => handleAction(plugin.id, checked ? 'enable' : 'disable', e)}
+                                    style={{ cursor: processingIds.has(plugin.id) ? 'not-allowed' : 'pointer' }}
+                                  />
+                               </Tooltip>
                             </div>
                           </div>
 
@@ -458,23 +523,26 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                             >
                               {t('common.info') || 'Details'}
                             </Button>
-                            <Popconfirm
-                              title={t('plugins.uninstallConfirmTitle')}
-                              description={t('plugins.uninstallConfirmContent', { name: plugin.name })}
-                              onConfirm={() => handleAction(plugin.id, 'uninstall')}
-                              okText={t('common.confirm')}
-                              cancelText={t('common.cancel')}
-                              okButtonProps={{ danger: true, loading: actionLoading[plugin.id] }}
-                            >
-                              <Button 
-                                size="small" 
-                                danger 
-                                icon={<Trash2 size={14} />} 
-                                style={{ flex: 1, borderRadius: 8 }}
+                            <Tooltip title={processingIds.has(plugin.id) ? t('common.processing') : ''}>
+                              <Popconfirm
+                                title={t('plugins.uninstallConfirmTitle')}
+                                description={t('plugins.uninstallConfirmContent', { name: plugin.name })}
+                                onConfirm={(e) => handleAction(plugin.id, 'uninstall', e)}
+                                okText={t('common.confirm')}
+                                cancelText={t('common.cancel')}
+                                okButtonProps={{ danger: true, loading: processingIds.has(plugin.id) }}
                               >
-                                {t('plugins.uninstall')}
-                              </Button>
-                            </Popconfirm>
+                                <Button 
+                                  size="small" 
+                                  danger 
+                                  icon={<Trash2 size={14} />} 
+                                  style={{ flex: 1, borderRadius: 8, cursor: processingIds.has(plugin.id) ? 'not-allowed' : 'pointer' }}
+                                  disabled={processingIds.has(plugin.id)}
+                                >
+                                  {t('plugins.uninstall')}
+                                </Button>
+                              </Popconfirm>
+                            </Tooltip>
                           </div>
 
                           {(plugin.channelIds?.length > 0 || plugin.providerIds?.length > 0) && (

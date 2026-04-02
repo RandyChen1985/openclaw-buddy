@@ -205,6 +205,8 @@
 - [x] **自愈避让机制**: 当用户正在手动排队操作网关时，验证 Guardian 日志中是否出现 “Module gateway is busy, skipping heal” 的物理避让记录。
 
 ## 12. 技能与插件管理同步 (Skill & Plugin Sync v1.3)
+- [x] **插件管理操作锁定**: 验证点击启用、禁用或卸载按钮后，按钮立即进入禁用/加载状态，防止重复触发。
+- [x] **技能管理操作锁定**: 验证技能管理（Skills）页面在执行同步、卸载等操作时具备类似的防重复点击机制。
 - [ ] **技能卸载任务化**: `DELETE /v1/openclaw/skills/:name` 应立即返回 202 并产生 `delete-skill` 任务，不再物理阻塞 UI。
 - [ ] **重载规则任务化**: `POST /v1/openclaw/skills/reload` 应返回 202 并在任务中心产生 `sync-skills` 任务。
 - [ ] **静默对账机制**: 验证当 `delete-skill` 或 `sync-skills` 任务状态变为 `Completed` 时，`App.tsx` 是否自动触发数据刷新。

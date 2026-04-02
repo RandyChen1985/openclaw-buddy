@@ -63,6 +63,8 @@ func SyncKeySingle(key string, configDir string) error {
 		fetcher = func() (any, error) { return GetOpenClawDevices() }
 	case "skills":
 		fetcher = func() (any, error) { return GetOpenClawSkills() }
+	case "plugins":
+		fetcher = func() (any, error) { return GetOpenClawPlugins() }
 	case "sessions":
 		fetcher = func() (any, error) { return GetOpenClawSessions() }
 	case "ranking":
