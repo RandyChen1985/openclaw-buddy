@@ -211,6 +211,15 @@
 - [ ] **数据结构兼容性**: 验证 `GET /v1/openclaw/skills` 返回的 `updated_at` (下划线) 能够被前端正确解析，彻底消除“获取技能列表失败”报错。
 - [ ] **UI 零手感回执**: 在技能管理页面执行卸载后，验证列表是否能在任务完成后自动物理更新，无需用户手动点击“刷新”。
 
+---
+
+## 13. WebSocket 流式协议 (WebSocket Streaming)
+- [x] **V3 协议深度调研**: 完成对 OpenClaw 源码 (`server-methods`) 的全量审计，识别出 Agents/Sessions/Config 等模块的 20+ 个 Mutation 方法。
+- [x] **协议参考手册更新**: 更新 `docs/md/openclaw-websocket-protocol.md`，包含精确的入参 Schema、权限要求及异步事件。
+- [x] **全量 Mutation 验证**: 编写并执行 `tests/test_websocket_mutation_full.go`，验证了 V3 握手鉴权及全生命周期（创建、修改、删除）的协议路径。
+
+---
+
 - [x] **Dashboard 移动端布局优化**: 验证快捷操作卡片在窄屏下使用 Grid 布局呈 2x2 对齐，移除多余占位。
 - [x] **Buddy 版本显示对账**: 验证顶部环境栏成功从 `/v1/system/version` 获取并在 UI 中显示 Buddy 版本号。
 - [x] **版本手动刷新交互**: 点击版本号旁的 🔄 图标，应触发旋转动画并根据对比结果（current vs latest）弹出 `message.success` 或 `notification.info`。
