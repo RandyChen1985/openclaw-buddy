@@ -25,3 +25,7 @@ temp-dev-test/
 backups/
 openclaw-buddy
 /monitor
+
+# WeChat Test Files
+weixin
+docs/releases/1.0.3/v1.0.3.1.html
