@@ -556,10 +556,13 @@
     "set_model": "切换机器人模型: {{id}}",
     "delete_bot": "删除机器人: {{id}}",
     "set_default_model": "设置全局默认模型: {{id}}",
+    "start_gateway": "启动网关",
     "stop_gateway": "停止网关",
     "restart_gateway": "重启网关",
     "install_plugin": "安装插件: {{id}}",
     "uninstall_plugin": "卸载插件: {{id}}",
+    "enable_plugin": "启用插件: {{id}}",
+    "disable_plugin": "禁用插件: {{id}}",
     "reload_plugins": "重载插件引擎",
     "update_plugins": "更新全部插件",
     "results": {
@@ -574,6 +577,8 @@
       "restarted": "已重启",
       "installed": "已安装",
       "uninstalled": "已卸载",
+      "enabled": "已启用",
+      "disabled": "已禁用",
       "reloaded": "已重载"
     }
   }

@@ -541,10 +541,13 @@
     "set_model": "Switch Bot Model: {{id}}",
     "delete_bot": "Remove Bot: {{id}}",
     "set_default_model": "Set Global Default Model: {{id}}",
+    "start_gateway": "Start Gateway",
     "stop_gateway": "Stop Gateway",
     "restart_gateway": "Restart Gateway",
     "install_plugin": "Install Plugin: {{id}}",
     "uninstall_plugin": "Uninstall Plugin: {{id}}",
+    "enable_plugin": "Enable Plugin: {{id}}",
+    "disable_plugin": "Disable Plugin: {{id}}",
     "reload_plugins": "Reload Plugin Engine",
     "update_plugins": "Update All Plugins",
     "results": {
@@ -559,6 +562,8 @@
       "restarted": "Restarted",
       "installed": "Installed",
       "uninstalled": "Uninstalled",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
       "reloaded": "Reloaded"
     }
   }

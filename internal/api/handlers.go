@@ -232,7 +232,7 @@ func (s *Server) startGateway(c *gin.Context) {
 	utils.RecordSystemEvent("CONTROL", "用户手动请求【启动网关】")
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   "启动网关",
+		Name:   "tasks.start_gateway",
 		Module: "gateway",
 		Action: "start",
 	}
@@ -432,7 +432,7 @@ func (s *Server) installWeChatPlugin(c *gin.Context) {
 	log.Printf("🎮 [控制] 用户请求: 【安装微信插件】")
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   "安装微信插件",
+		Name:   "tasks.install_plugin:wechat",
 		Module: "plugins",
 		Action: "install",
 		Target: "wechat",
@@ -442,7 +442,7 @@ func (s *Server) installWeChatPlugin(c *gin.Context) {
 		if err != nil {
 			return "", err
 		}
-		return "Installed", nil
+		return "tasks.results.installed", nil
 	})
 }
 
@@ -480,7 +480,7 @@ func (s *Server) addOpenClawBot(c *gin.Context) {
 
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("添加机器人: %s", req.ID),
+		Name:   "tasks.add_bot:" + req.ID,
 		Module: "bots",
 		Action: "add",
 		Target: req.ID,
@@ -492,7 +492,7 @@ func (s *Server) addOpenClawBot(c *gin.Context) {
 		}
 		// 成功后强制同步缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Created", nil
+		return "tasks.results.created", nil
 	})
 }
 
@@ -512,7 +512,7 @@ func (s *Server) updateOpenClawBot(c *gin.Context) {
 
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("修改机器人配置: %s", req.ID),
+		Name:   "tasks.update_bot:" + req.ID,
 		Module: "bots",
 		Action: "update",
 		Target: req.ID,
@@ -524,7 +524,7 @@ func (s *Server) updateOpenClawBot(c *gin.Context) {
 		}
 		// 成功后强制同步缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Config Updated", nil
+		return "tasks.results.updated", nil
 	})
 }
 
@@ -542,7 +542,7 @@ func (s *Server) setOpenClawBotIdentity(c *gin.Context) {
 	utils.RecordSystemEvent("CONTROL", fmt.Sprintf("用户手动请求 【修改机器人名称】 (ID: %s -> %s)", req.ID, req.Name))
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("修改机器人名称: %s -> %s", req.ID, req.Name),
+		Name:   "tasks.set_identity:" + req.ID,
 		Module: "bots",
 		Action: "set-identity",
 		Target: req.ID,
@@ -554,7 +554,7 @@ func (s *Server) setOpenClawBotIdentity(c *gin.Context) {
 		}
 		// 成功后强制同步缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Identity Updated", nil
+		return "tasks.results.identity_updated", nil
 	})
 }
 
@@ -572,7 +572,7 @@ func (s *Server) setOpenClawBotModel(c *gin.Context) {
 	utils.RecordSystemEvent("CONTROL", fmt.Sprintf("用户手动请求 【切换机器人模型】 (机器人: %s, 模型: %s)", req.ID, req.Model))
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("切换机器人模型: %s -> %s", req.ID, req.Model),
+		Name:   "tasks.set_model:" + req.ID,
 		Module: "bots",
 		Action: "set-model",
 		Target: req.ID,
@@ -584,7 +584,7 @@ func (s *Server) setOpenClawBotModel(c *gin.Context) {
 		}
 		// 成功后强制同步缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Model Updated", nil
+		return "tasks.results.model_updated", nil
 	})
 }
 
@@ -637,7 +637,7 @@ func (s *Server) setDefaultModel(c *gin.Context) {
 	utils.RecordSystemEvent("CONTROL", fmt.Sprintf("用户手动请求 【设置全局默认模型】 (模型: %s)", req.ModelID))
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("设置全局默认模型: %s", req.ModelID),
+		Name:   "tasks.set_default_model:" + req.ModelID,
 		Module: "bots",
 		Action: "set-default-model",
 		Target: req.ModelID,
@@ -649,7 +649,7 @@ func (s *Server) setDefaultModel(c *gin.Context) {
 		}
 		// 同步缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Default Model Updated", nil
+		return "tasks.results.default_model_updated", nil
 	})
 }
 
@@ -876,7 +876,7 @@ func (s *Server) uninstallSkill(c *gin.Context) {
 	log.Printf("🎮 [控制] 用户请求: 【卸载技能/插件】 (Name: %s)", name)
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("卸载技能插件: %s", name),
+		Name:   "tasks.uninstall_plugin:" + name,
 		Module: "skills",
 		Action: "delete-skill",
 		Target: name,
@@ -887,7 +887,7 @@ func (s *Server) uninstallSkill(c *gin.Context) {
 		}
 		// 自动清理缓存，让下一次获取触发同步
 		process.SyncKeySingle("skills", s.cfg.OpenClawConfigDir)
-		return "Uninstalled", nil
+		return "tasks.results.uninstalled", nil
 	})
 }
 
@@ -1296,7 +1296,7 @@ func (s *Server) enablePlugin(c *gin.Context) {
 	log.Printf("🎮 [控制] 用户请求: 【启用指定插件】 (ID: %s)", req.ID)
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("启用插件: %s", req.ID),
+		Name:   "tasks.enable_plugin:" + req.ID,
 		Module: "plugins",
 		Action: "enable",
 		Target: req.ID,
@@ -1307,7 +1307,7 @@ func (s *Server) enablePlugin(c *gin.Context) {
 			return "", err
 		}
 		_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
-		return "Enabled", nil
+		return "tasks.results.enabled", nil
 	})
 }
 
@@ -1323,7 +1323,7 @@ func (s *Server) disablePlugin(c *gin.Context) {
 	log.Printf("🎮 [控制] 用户请求: 【禁用指定插件】 (ID: %s)", req.ID)
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("禁用插件: %s", req.ID),
+		Name:   "tasks.disable_plugin:" + req.ID,
 		Module: "plugins",
 		Action: "disable",
 		Target: req.ID,
@@ -1334,7 +1334,7 @@ func (s *Server) disablePlugin(c *gin.Context) {
 			return "", err
 		}
 		_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
-		return "Disabled", nil
+		return "tasks.results.disabled", nil
 	})
 }
 
@@ -1348,7 +1348,7 @@ func (s *Server) uninstallPlugin(c *gin.Context) {
 	log.Printf("🎮 [控制] 用户请求: 【卸载指定插件】 (ID: %s)", id)
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("卸载插件: %s", id),
+		Name:   "tasks.uninstall_plugin:" + id,
 		Module: "plugins",
 		Action: "uninstall",
 		Target: id,
@@ -1359,7 +1359,7 @@ func (s *Server) uninstallPlugin(c *gin.Context) {
 			return "", err
 		}
 		_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
-		return "Uninstalled", nil
+		return "tasks.results.uninstalled", nil
 	})
 }
 
@@ -1368,7 +1368,7 @@ func (s *Server) updatePlugins(c *gin.Context) {
 	utils.RecordSystemEvent("CONTROL", "用户手动请求【更新插件】")
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   "更新插件",
+		Name:   "tasks.update_plugins",
 		Module: "plugins",
 		Action: "update",
 	}
