@@ -4,6 +4,56 @@
 
 ---
 
+## ⚡ 0. API 概览与后端实现 (Overview & Implementation)
+
+下表总结了平台各模块 API 的分类及其底层实现方式，帮助开发者了解接口的调用开销（如 CLI 进程启动 vs 数据库查询）。
+
+| 模块分组 | 接口路径 (Path, `/v1` 前缀) | 功能简述 | 后端底层实现机制 |
+| :--- | :--- | :--- | :--- |
+| **OpenClaw 核心 (Bots)** | `GET /openclaw/bots-models` | 获取专家及模型汇总信息 | **CLI**: `openclaw agents list` & `openclaw models list` |
+| | `POST /openclaw/bots/add` | 新增一个机器人专家 | **CLI**: `openclaw agents add` |
+| | `POST /openclaw/bots/set-identity` | 修改机器人名称与身份标识 | **CLI**: `openclaw agents set-identity` |
+| | `POST /openclaw/bots/set-model` | 修改机器人关联模型 | **File**: 追加至 `openclaw.json` (重写) |
+| | `POST /openclaw/bots/delete` | 物理移除机器人工作区 | **CLI**: `openclaw agents delete` |
+| | `[GET/POST] /openclaw/bots/file` | 读写专家配置(SOUL/Identity) | **File**: `.md` (直接读写) |
+| **专家模板 (Experts)** | `GET /openclaw/experts` | 获取本地预设模板列表 | **File**: `experts/*.json` (资源树嵌读) |
+| | `POST /openclaw/bots/template` | 通过模板克隆出新机器人 | **CLI** + **File**: 组合多步文件覆写与命名 |
+| **模型渠道 (Models)** | `GET /openclaw/models/config` | 查看渠道列表(Providers) | **File**: 解析 `openclaw.json` |
+| | `POST /openclaw/models/provider` | 新增/更新提供商 API Key | **File**: `openclaw.json` (写入) |
+| | `POST /openclaw/models/provider/model` | 追加/修改渠道内模型 | **File**: `openclaw.json` (写入) |
+| | `DELETE /openclaw/models/provider/:provider/model/:id` | 移除特定模型或提供商 | **File**: `openclaw.json` (删除后重写) |
+| | `POST /openclaw/models/set-default` | 设定全局默认模型 | **CLI**: `openclaw models set` |
+| | `POST /openclaw/models/test-direct` | 绕过网关直连测速 | **Network**: 后端直发 HTTP 握手测连通性 |
+| **插件与机制 (Engine)** | `GET /openclaw/skills` | 获取已安装技能与 SDK 状态 | **CLI**: `openclaw skills list --json` |
+| | `DELETE /openclaw/skills/:name` | 卸载特定的技能包 | **CLI**: `openclaw skills uninstall` |
+| | `POST /openclaw/skills/reload` | 热重载规则引擎机制 | **Memory**: 令配置缓存失效引发下阶动作 |
+| | `GET /openclaw/plugins` | 获取系统底层插件配置清单 | **CLI**: `openclaw plugins list --json` |
+| | `POST /openclaw/plugins/enable` | 启用插件包 (如微信) | **CLI**: `openclaw plugins enable` |
+| | `POST /openclaw/plugins/disable` | 禁用插件包挂载 | **CLI**: `openclaw plugins disable` |
+| | `DELETE /openclaw/plugins/:id` | 彻底移除已安装的插件体系 | **CLI**: `openclaw plugins uninstall` |
+| | `POST /openclaw/plugins/update` | 一键增量更新全站所有插件 | **CLI**: `openclaw plugins update` |
+| **网关聊天 (Chat)** | `POST /openclaw/chat/completions`| 发起流式并发 AI 对话 | **Proxy**: 代理至本地大模型网关入口 (WAF 穿透) |
+| | `GET /openclaw/chat/status` | 查询聊天功能开启标记状态 | **File**: 读取 `openclaw.json` 开关配置 |
+| | `POST /openclaw/chat/enable` | 一键解封网关聊天并发功能 | **File**: `openclaw.json` (配置修改置位) |
+| | `GET /openclaw/sessions` | 查看已有的运行态大纲记录 | **CLI**: `openclaw sessions --json` |
+| **网关生命周期控制** | `POST /gateway/start` | 重新拉起网关守护主进程 | **System**: 本机子线程派发命令 |
+| | `POST /gateway/stop` | 主动停止网关运行排障 | **Signal**: 端口占用扫描及优雅的中断信号 |
+| | `POST /gateway/restart` | 重启网关彻底应用最新配置 | **System**: 调用关停与启动守护队列模型 |
+| **系统排障自愈 (Heal)** | `GET /heal/events` | 调取系统异常重启审计履历 | **DB**: Sqlite `heal_events` 查询 |
+| | `GET /heal/reports` | 检索故障高阶自动诊断序列 | **File**: 读取 `reports` 存储下的 markdown 报表 |
+| | `GET /heal/backups` | 平台配置防灾容灾备份列表 | **File**: 查询 `backup/` 的历史 `.bak` 状态 |
+| | `GET /heal/backups/:name/diff` | 高时效检索配置对比及差异 | **Logic**: 派发 Analyzer 对比算法返回抽象 Diff |
+| **状态大盘 (Dashboard)**| `GET /openclaw/status` | 网关核心结构健康状态探针 | **Proxy**: 解析 18789 面板端口下沉服务数据 |
+| | `GET /openclaw/bots/top` | 人手最常问询的对话排行榜 | **Logic**+**CLI**: 获取所有 Sessions 本地汇总分析 |
+| | `GET /stats/health` | 24 小时资源趋势（内存/CPU） | **DB**: Sqlite `health_checks` 轮询高密持久数据 |
+| | `GET /tasks/status` | 用户发起的并发长时处理状态 | **Memory**: 本机异步协程调度管理器暴露的数据总线 |
+| | `GET /system/events` | 近期人员管理面板行为溯源 | **DB**: Sqlite `system_events` 日志库查询 |
+| **微信生态 (WeChat)** | `GET /wechat/qrcode` | 特殊扫码托管及反注入探针 | **Logic**: 动态截取 CLI 输出文本中流暴露的图片地址 |
+| | `GET /wechat/config/status` | 查询通道授权挂载配置状况 | **File**: 获取 `channels` Key |
+| | `POST /wechat/install` | 零配置拉取微信全量通道 | **CLI**: `openclaw plugins install wechat` |
+
+---
+
 ## 🔐 1. 基础规范 (Base Specification)
 
 ### 1.1 鉴权指南 (Authentication)
