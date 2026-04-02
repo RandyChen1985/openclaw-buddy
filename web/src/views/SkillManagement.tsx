@@ -26,9 +26,10 @@ interface SkillManagementProps {
   onRefresh?: (force?: boolean, isSilent?: boolean) => Promise<void>;
   loading?: boolean;
   skills?: any[];
+  activeTasks?: any[];
 }
 
-const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, loading: globalLoading, skills: globalSkills }) => {
+const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, loading: globalLoading, skills: globalSkills, activeTasks = [] }) => {
   const { t } = useTranslation();
   const [localSkills, setLocalSkills] = useState<Skill[]>([]);
   const [localLoading, setLocalLoading] = useState(true);
@@ -42,6 +43,16 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, 
 
   const loading = globalLoading !== undefined ? globalLoading : localLoading;
   const skills = globalSkills !== undefined ? globalSkills : localSkills;
+
+  // 检查是否有相同的任务正在进行中
+  const hasActiveTask = (name: string, action?: string) => {
+    return activeTasks.some(task => 
+      task.module === 'skills' && 
+      task.target === name && 
+      (action ? task.action === action : true) &&
+      task.status === 'Running'
+    );
+  };
 
   // 当全局 skills 变化时，清空处理中的锁
   const lastUpdateRef = React.useRef(updatedAt);
@@ -108,8 +119,9 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, 
     const now = Date.now();
     const lastTime = lastActionTimeRef.current[name] || 0;
     
-    // 2. [同步哨兵] 秒级拦截，防止穿透
-    if (processingRef.current.has(name) || now - lastTime < 1000) {
+    // 2. [同步哨兵] 秒级拦截，防止穿透，并检查全局任务
+    if (processingRef.current.has(name) || now - lastTime < 1000 || hasActiveTask(name, 'uninstall')) {
+      message.warning(t('common.taskAlreadyRunning') || '已有相同任务正在进行中，请耐心等待');
       return;
     }
 
@@ -118,7 +130,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, 
       content: t('skills.uninstallConfirmContent', { name }),
       okText: t('skills.confirmUninstall'),
       cancelText: t('common.cancel'),
-      okButtonProps: { danger: true, loading: processingNames.has(name) },
+      okButtonProps: { danger: true, loading: processingNames.has(name) || hasActiveTask(name, 'uninstall') },
       centered: true,
       onCancel: () => {
         // 用户取消，解锁
@@ -127,7 +139,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, 
       },
       onOk: async () => {
         // 确认瞬间再次加锁
-        if (processingRef.current.has(name)) return;
+        if (processingRef.current.has(name) || hasActiveTask(name, 'uninstall')) return;
         
         lastActionTimeRef.current[name] = Date.now();
         processingRef.current.add(name);
@@ -212,7 +224,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, 
       key: 'action',
       width: 80,
       render: (_: any, record: Skill) => {
-        const isProcessing = processingNames.has(record.name);
+        const isProcessing = processingNames.has(record.name) || hasActiveTask(record.name, 'uninstall');
         return !record.bundled && (
           <Tooltip title={isProcessing ? t('common.processing') : ''}>
             <Button 
@@ -334,15 +346,15 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, 
                                 <span style={{ fontWeight: 600, color: '#1e293b' }}>{skill.name}</span>
                             </div>
                             {!skill.bundled && (
-                                <Tooltip title={processingNames.has(skill.name) ? t('common.processing') : ''}>
+                                <Tooltip title={processingNames.has(skill.name) || hasActiveTask(skill.name, 'uninstall') ? t('common.processing') : ''}>
                                     <Button 
                                         type="text" 
                                         danger 
                                         size="small" 
                                         icon={<Trash2 size={16} />} 
                                         onClick={(e) => handleUninstall(skill.name, e)}
-                                        disabled={processingNames.has(skill.name)}
-                                        style={{ padding: 0, height: 24, cursor: processingNames.has(skill.name) ? 'not-allowed' : 'pointer' }}
+                                        disabled={processingNames.has(skill.name) || hasActiveTask(skill.name, 'uninstall')}
+                                        style={{ padding: 0, height: 24, cursor: (processingNames.has(skill.name) || hasActiveTask(skill.name, 'uninstall')) ? 'not-allowed' : 'pointer' }}
                                     />
                                 </Tooltip>
                             )}

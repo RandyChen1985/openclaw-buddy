@@ -7,7 +7,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-var Version = "0.0.0-dev"
+var Version = "1.0.2"
 
 type Config struct {
 	OpenClawConfigDir    string

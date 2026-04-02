@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -151,6 +152,8 @@ func (s *Server) setupRoutes() {
 		v1.GET("/tasks/status", s.getTasksStatus)
 		v1.GET("/system/events", s.getSystemEvents)
 		v1.GET("/system/version", s.getSystemVersion)
+		v1.POST("/system/upgrade", s.handleUpgrade)
+		v1.POST("/system/restart", s.handleRestart)
 		v1.GET("/system/info", s.getServerInfo)
 
 		// Proxy for external dashboard
@@ -259,8 +262,28 @@ func (s *Server) setupStaticFiles() {
 
 func (s *Server) Run() error {
 	go s.StartWebSocketBroadcaster()
-	fmt.Printf("2026/03/31 🚀 Web Root is set to: %s\n", s.cfg.WebRoot)
-	return s.engine.Run(fmt.Sprintf(":%d", s.cfg.WebPort))
+	
+	addr := fmt.Sprintf(":%d", s.cfg.WebPort)
+	log.Printf("🚀 Web Server starting on %s (WebRoot: %s)", addr, s.cfg.WebRoot)
+	
+	// 为自重启场景增加重试逻辑 (最多等待 15 秒)
+	// 使用更宽松的错误判定，确保在任何端口冲突情况下都能坚持等待旧进程退出
+	var err error
+	for i := 0; i < 30; i++ {
+		err = s.engine.Run(addr)
+		if err != nil {
+			errStr := strings.ToLower(err.Error())
+			if strings.Contains(errStr, "address already in use") || 
+			   strings.Contains(errStr, "bind") || 
+			   strings.Contains(errStr, "permission denied") {
+				log.Printf("⚠️ [API] 端口 %s 暂时无法绑定，可能旧进程正在退出，200ms 后重试 (%d/30)...", addr, i+1)
+				time.Sleep(200 * time.Millisecond)
+				continue
+			}
+		}
+		break
+	}
+	return err
 }
 
 func (s *Server) GetEngine() *gin.Engine {

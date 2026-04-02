@@ -56,7 +56,10 @@
     "restartFailed": "Failed to restart gateway",
     "updateFailed": "Failed to update settings",
     "processing": "Processing...",
-    "noChanges": "No changes detected"
+    "finished": "Finished",
+    "taskAlreadyRunning": "A similar task is already running, please wait",
+    "noChanges": "No changes detected",
+    "timeout": "Request Timeout"
   },
   "experts": {
     "title": "Expert Market",

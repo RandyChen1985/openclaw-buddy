@@ -74,6 +74,9 @@ export const useTaskCenter = () => {
       };
 
       const getStatusText = () => {
+        if (task.module === 'system' && task.action === 'upgrade' && task.status === 'Completed') {
+          return "核心文件已替换，请点击重启生效";
+        }
         switch (task.status) {
           case 'Running': return t('common.waitingGateway');
           case 'Completed': return t('common.success');

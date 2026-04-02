@@ -57,7 +57,15 @@
     "restartFailed": "重启网关失败",
     "updateFailed": "设置更新失败",
     "processing": "正在处理...",
-    "noChanges": "未检测到信息变更"
+    "finished": "已完成",
+    "taskAlreadyRunning": "已有相同任务正在进行中，请耐心等待",
+    "noChanges": "未检测到信息变更",
+    "systemUpgrade": "系统版本升级",
+    "upgradeStarted": "已开始下载升级包，请关注进度",
+    "systemUpgradeFailed": "系统升级失败",
+    "restarting": "正在执行静默重启...",
+    "systemRestartFailed": "系统自重启失败",
+    "timeout": "请求超时"
   },
   "experts": {
     "title": "专家市场",
@@ -596,7 +604,8 @@
       "uninstalled": "已卸载",
       "enabled": "已启用",
       "disabled": "已禁用",
-      "reloaded": "已重载"
+      "reloaded": "已重载",
+      "upgraded": "升级就绪，请重启生效"
     }
   }
 }

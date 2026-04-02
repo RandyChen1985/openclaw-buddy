@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"os"
+	"time"
 )
 
 type FileLock struct {
@@ -10,22 +11,36 @@ type FileLock struct {
 	file *os.File
 }
 
+var GlobalLock *FileLock
+
 func NewFileLock(path string) *FileLock {
-	return &FileLock{
+	GlobalLock = &FileLock{
 		path: path,
 	}
+	return GlobalLock
 }
 
 func (l *FileLock) Lock() error {
-	f, err := os.OpenFile(l.path, os.O_RDWR|os.O_CREATE, 0666)
-	if err != nil {
-		return fmt.Errorf("failed to open lock file: %v", err)
+	var f *os.File
+	var err error
+	
+	// 增加重试逻辑，支持自重启时的锁平滑接管 (最多等待 5 秒)
+	for i := 0; i < 10; i++ {
+		f, err = os.OpenFile(l.path, os.O_RDWR|os.O_CREATE, 0666)
+		if err == nil {
+			if err = s_lockFile(f); err == nil {
+				break
+			}
+			f.Close()
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
-	l.file = f
 
-	if err := s_lockFile(l.file); err != nil {
-		return fmt.Errorf("failed to lock file: %v. %s", err, l.path)
+	if err != nil {
+		return fmt.Errorf("failed to acquire lock after retries: %v. %s", err, l.path)
 	}
+	
+	l.file = f
 
 	// Write current PID to the file
 	l.file.Truncate(0)

@@ -22,6 +22,8 @@ interface DashboardOverviewProps {
   isTransitioning?: boolean; // 新增：正在执行过渡动作
   loading?: boolean;
   onRefreshVersion?: () => Promise<any>;
+  onUpgrade?: (version: string) => void;
+  onRestart?: () => void;
 }
 
 interface SystemInfo {
@@ -40,11 +42,12 @@ interface OcStatus {
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({ 
   status, history, isRunning, onControl, onNavigate,
   systemEvents = [], topBots = [], ocInstalled, activeTasks = [], isTransitioning = false, loading = false,
-  onRefreshVersion
+  onRefreshVersion, onUpgrade, onRestart
 }) => {
   const { t } = useTranslation();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [verLoading, setVerLoading] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [ocStatus, setOcStatus] = useState<OcStatus | null>(null);
 
@@ -80,20 +83,31 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             description: (
               <div>
                 已发布新版本 v{data.latest}，建议立即更新以获得最佳体验。
-                <div style={{ marginTop: 8 }}>
+                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <Button 
+                    type="primary" 
+                    size="small" 
+                    onClick={() => {
+                      onUpgrade?.(data.latest);
+                      notification.destroy();
+                    }}
+                    style={{ background: '#2563eb', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600 }}
+                  >
+                    🚀 立即一键升级
+                  </Button>
                   <a 
                     href={`https://github.com/RandyChen1985/openclaw-buddy/releases/tag/${data.latest}`} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    style={{ color: '#3b82f6', fontWeight: 600 }}
+                    style={{ color: '#64748b', fontSize: 12 }}
                   >
-                    🚀 点击查看发布说明 (Releases)
+                    查看发布说明
                   </a>
                 </div>
               </div>
             ),
             placement: 'topRight',
-            duration: 10
+            duration: 15
           });
         } else {
           message.success('当前已是最新版本');
@@ -210,6 +224,45 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                       icon={<RefreshCw size={10} className={verLoading ? 'animate-spin' : ''} style={{ color: '#94a3b8' }} />} 
                       style={{ padding: 0, height: 'auto', minWidth: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     />
+                    {/* 升级就绪后的重启提醒按钮 */}
+                    {/* 升级就绪后的重启提醒按钮：仅在目标版本 > 当前版本时显示 */}
+                    {activeTasks.some(t => 
+                      t.module === 'system' && 
+                      t.action === 'upgrade' && 
+                      t.status === 'Completed' &&
+                      (() => {
+                        const curr = APP_VERSION.split('.').map(Number);
+                        const targetVersion = (t.target || '').toString().replace('v', '');
+                        const target = targetVersion.split('.').map(Number);
+                        for (let i = 0; i < Math.max(curr.length, target.length); i++) {
+                          const c = curr[i] || 0;
+                          const tVal = target[i] || 0;
+                          if (tVal > c) return true; // 目标大于当前，需重启
+                          if (tVal < c) return false;
+                        }
+                        return false;
+                      })()
+                    ) && (
+                      <Tag 
+                        icon={<RefreshCw size={10} className={isRestarting ? "animate-spin" : ""} />} 
+                        color={isRestarting ? "default" : "error"} 
+                        onClick={() => {
+                          if (isRestarting) return;
+                          setIsRestarting(true);
+                          onRestart?.();
+                        }}
+                        style={{ 
+                          cursor: isRestarting ? 'not-allowed' : 'pointer', 
+                          borderRadius: 10, 
+                          margin: 0, 
+                          fontSize: 10, 
+                          fontWeight: 700,
+                          opacity: isRestarting ? 0.7 : 1
+                        }}
+                      >
+                        {isRestarting ? "正在重启..." : "重启生效"}
+                      </Tag>
+                    )}
                   </div>
                 </div>
               </div>
@@ -270,15 +323,23 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   <div style={{ marginTop: 12, fontSize: 12 }}>{t('dashboard.analyzing')}</div>
                 </div>
               ) : topBots.length > 0 ? (
-                topBots.map((bot, idx) => (
-                  <div key={bot.id} style={{ marginBottom: 16 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>{bot.emoji} {bot.name}</span>
-                      <Tag color="blue" style={{ fontSize: 10 }}>{bot.sessions} {t('dashboard.activeSessions')}</Tag>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {topBots.map((bot, index) => (
+                    <div key={bot.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#f8fafc', borderRadius: 10, border: '1px solid #f1f5f9' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 24, height: 24, borderRadius: 6, background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#64748b' }}>{index + 1}</div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{bot.name || bot.id}</div>
+                          <div style={{ fontSize: 11, color: '#94a3b8' }}>ID: {bot.id}</div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>{bot.sessions || 0}</div>
+                        <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase' }}>{t('dashboard.activeSessions')}</div>
+                      </div>
                     </div>
-                    <Progress percent={Math.min(100, bot.sessions * 10)} showInfo={false} strokeColor={idx === 0 ? '#f59e0b' : '#3b82f6'} strokeWidth={6} />
-                  </div>
-                ))
+                  ))}
+                </div>
               ) : (
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('dashboard.noActiveBots')} />
               )}

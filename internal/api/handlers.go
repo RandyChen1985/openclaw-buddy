@@ -1227,6 +1227,45 @@ func (s *Server) getSystemVersion(c *gin.Context) {
 	})
 }
 
+func (s *Server) handleUpgrade(c *gin.Context) {
+	var req struct {
+		Version string `json:"version" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "版本号是必填项")
+		return
+	}
+
+	log.Printf("📥 [系统] 用户请求全自动版本升级: v%s", req.Version)
+	utils.RecordSystemEvent("CONTROL", fmt.Sprintf("发起系统升级请求: v%s", req.Version))
+
+	task := &process.Task{
+		ID:     fmt.Sprintf("upgrade-%d", time.Now().UnixNano()),
+		Name:   "系统版本升级: v" + req.Version,
+		Module: "system",
+		Action: "upgrade",
+		Target: req.Version,
+	}
+
+	s.runAsyncTask(c, task, func() (string, error) {
+		return process.DownloadAndUpgrade(req.Version, task.ID)
+	})
+}
+
+func (s *Server) handleRestart(c *gin.Context) {
+	log.Printf("📥 [系统] 用户请求全自动静默重启...")
+	utils.RecordSystemEvent("CONTROL", "发起系统重启请求")
+
+	// 异步执行重启，给响应留出时间
+	err := process.SelfRestart()
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "重启失败: "+err.Error())
+		return
+	}
+
+	s.Success(c, "服务正在重启，请在 5-10 秒后刷新页面")
+}
+
 func (s *Server) getSystemEvents(c *gin.Context) {
 	rows, err := utils.DB.Query(`
 		SELECT id, timestamp, event_type, message 

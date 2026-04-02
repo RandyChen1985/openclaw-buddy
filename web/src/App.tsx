@@ -410,6 +410,43 @@ const Dashboard = () => {
     }
   };
 
+  const handleUpgrade = async (version: string) => {
+    try {
+      const res = await api.post('/v1/system/upgrade', { version });
+      const taskID = res.data?.taskID || res.data?.data?.taskID;
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: `${t('common.systemUpgrade')}: v${version}`,
+          module: 'system',
+          action: 'upgrade',
+          target: version,
+          status: 'Running',
+          progress: 5,
+          startTime: new Date().toISOString()
+        });
+        message.loading(t('common.upgradeStarted'), 2);
+      }
+    } catch (err: any) {
+      message.error(err.response?.data?.message || t('common.upgradeFailed'));
+    }
+  };
+
+  const handleRestart = async () => {
+    try {
+      message.loading(t('common.restarting'), 0); 
+      await api.post('/v1/system/restart');
+      
+      // 给几秒钟时间让进程重启，然后刷新页面
+      setTimeout(() => {
+        window.location.reload();
+      }, 6000);
+    } catch (err: any) {
+      message.destroy();
+      message.error(err.response?.data?.message || t('common.restartFailed'));
+    }
+  };
+
   // 管理全局加载倒计时
   useEffect(() => {
     if (globalLoadingMessage && globalLoadingCountdown > 0) {
@@ -872,6 +909,8 @@ const Dashboard = () => {
           activeTasks={activeTasks}
           isTransitioning={isTransitioning}
           onRefreshVersion={checkVersionUpdate}
+          onUpgrade={handleUpgrade}
+          onRestart={handleRestart}
         />
       ),
       'bots-models': (
@@ -917,6 +956,7 @@ const Dashboard = () => {
         onRefresh={fetchSkills} 
         loading={loadingSkills} 
         skills={skills}
+        activeTasks={activeTasks}
       />,
       'plugins': <PluginManagement 
         isMobile={isMobile} 
@@ -925,6 +965,7 @@ const Dashboard = () => {
         onRefresh={fetchPlugins} 
         updatedAt={pluginsUpdatedAt} 
         onTaskUpdate={handleTaskUpdate}
+        activeTasks={activeTasks}
       />,
       'experts': <ExpertMarket isMobile={isMobile} onNavigate={setActiveTab} />
     };

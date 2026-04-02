@@ -29,10 +29,11 @@ interface PluginManagementProps {
   onRefresh: (force?: boolean) => void;
   updatedAt?: string;
   onTaskUpdate?: (task: Task) => void;
+  activeTasks?: Task[];
 }
 
 const PluginManagement: React.FC<PluginManagementProps> = ({ 
-  isMobile, plugins: globalPlugins, loading, onRefresh, updatedAt, onTaskUpdate
+  isMobile, plugins: globalPlugins, loading, onRefresh, updatedAt, onTaskUpdate, activeTasks = []
 }) => {
   const { t } = useTranslation();
   const [searchText, setSearchText] = useState('');
@@ -48,6 +49,16 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
   
   // 本地插件状态列表，用于支持乐观更新
   const [localPlugins, setLocalPlugins] = useState<Plugin[]>(globalPlugins);
+
+  // 检查是否有相同的任务正在进行中
+  const hasActiveTask = (id: string, action?: string) => {
+    return activeTasks.some(task => 
+      task.module === 'plugins' && 
+      task.target === id && 
+      (action ? task.action === action : true) &&
+      task.status === 'Running'
+    );
+  };
 
   // 当后端数据真正刷新时（updatedAt 或 globalPlugins 变化），同步本地状态并清除所有进行中的锁
   const lastUpdateRef = React.useRef(updatedAt);
@@ -76,7 +87,8 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
     const lastTime = lastActionTimeRef.current[id] || 0;
     
     // 同步哨兵拦截：由于 Ref 是同步的，这里能秒级拦截重复点击
-    if (processingRef.current.has(id) || now - lastTime < 1000) {
+    if (processingRef.current.has(id) || now - lastTime < 1000 || hasActiveTask(id, action)) {
+      message.warning(t('common.taskAlreadyRunning') || '已有相同任务正在进行中，请耐心等待');
       return;
     }
 
@@ -279,7 +291,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
       key: 'enabled',
       width: 80,
       render: (record: Plugin) => {
-        const isProcessing = processingIds.has(record.id);
+        const isProcessing = processingIds.has(record.id) || hasActiveTask(record.id);
         const switchComp = (
           <Switch 
             checked={record.enabled} 
@@ -307,7 +319,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
       key: 'actions',
       width: 150,
       render: (record: Plugin) => {
-        const isProcessing = processingIds.has(record.id);
+        const isProcessing = processingIds.has(record.id) || hasActiveTask(record.id, 'uninstall');
         return (
           <div style={{ display: 'flex', gap: 8 }}>
             <Tooltip title={record.rootDir}>
@@ -501,14 +513,14 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                             </div>
                             <div>
                                <div style={{ fontWeight: 600, color: '#64748b', fontSize: 11, marginBottom: 4 }}>{t('plugins.enable')}</div>
-                               <Tooltip title={processingIds.has(plugin.id) ? t('common.processing') : ''}>
+                               <Tooltip title={processingIds.has(plugin.id) || hasActiveTask(plugin.id) ? t('common.processing') : ''}>
                                   <Switch 
                                     checked={plugin.enabled} 
                                     size="small"
-                                    loading={processingIds.has(plugin.id)}
-                                    disabled={processingIds.has(plugin.id)}
+                                    loading={processingIds.has(plugin.id) || hasActiveTask(plugin.id)}
+                                    disabled={processingIds.has(plugin.id) || hasActiveTask(plugin.id)}
                                     onChange={(checked, e) => handleAction(plugin.id, checked ? 'enable' : 'disable', e)}
-                                    style={{ cursor: processingIds.has(plugin.id) ? 'not-allowed' : 'pointer' }}
+                                    style={{ cursor: (processingIds.has(plugin.id) || hasActiveTask(plugin.id)) ? 'not-allowed' : 'pointer' }}
                                   />
                                </Tooltip>
                             </div>
@@ -523,21 +535,22 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                             >
                               {t('common.info') || 'Details'}
                             </Button>
-                            <Tooltip title={processingIds.has(plugin.id) ? t('common.processing') : ''}>
+                            <Tooltip title={processingIds.has(plugin.id) || hasActiveTask(plugin.id, 'uninstall') ? t('common.processing') : ''}>
                               <Popconfirm
                                 title={t('plugins.uninstallConfirmTitle')}
                                 description={t('plugins.uninstallConfirmContent', { name: plugin.name })}
                                 onConfirm={(e) => handleAction(plugin.id, 'uninstall', e)}
+                                disabled={processingIds.has(plugin.id) || hasActiveTask(plugin.id, 'uninstall')}
                                 okText={t('common.confirm')}
                                 cancelText={t('common.cancel')}
-                                okButtonProps={{ danger: true, loading: processingIds.has(plugin.id) }}
+                                okButtonProps={{ danger: true, loading: processingIds.has(plugin.id) || hasActiveTask(plugin.id, 'uninstall') }}
                               >
                                 <Button 
                                   size="small" 
                                   danger 
                                   icon={<Trash2 size={14} />} 
-                                  style={{ flex: 1, borderRadius: 8, cursor: processingIds.has(plugin.id) ? 'not-allowed' : 'pointer' }}
-                                  disabled={processingIds.has(plugin.id)}
+                                  style={{ flex: 1, borderRadius: 8, cursor: (processingIds.has(plugin.id) || hasActiveTask(plugin.id, 'uninstall')) ? 'not-allowed' : 'pointer' }}
+                                  disabled={processingIds.has(plugin.id) || hasActiveTask(plugin.id, 'uninstall')}
                                 >
                                   {t('plugins.uninstall')}
                                 </Button>
