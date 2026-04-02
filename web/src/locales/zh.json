@@ -441,6 +441,9 @@
     "removeFailed": "删除机器人失败",
     "setDefaultSuccess": "已将 {{id}} 设为全局默认模型",
     "setDefaultFailed": "设置默认模型失败",
+    "editModelTitle": "编辑模型配置 (Edit Model)",
+    "updateModel": "保存并更新模型配置",
+    "updatingModel": "正在更新模型配置...",
     "settingDefault": "正在同步配置...",
     "updatingConfig": "正在更新机器人配置...",
     "saveSuccess": "成功更新机器人核心配置文件",
@@ -605,6 +608,9 @@
       "enabled": "已启用",
       "disabled": "已禁用",
       "reloaded": "已重载",
+      "provider_synced": "渠道配置已同步",
+      "model_appended": "模型已追加/更新",
+      "model_removed": "模型已移除",
       "upgraded": "升级就绪，请重启生效"
     }
   }

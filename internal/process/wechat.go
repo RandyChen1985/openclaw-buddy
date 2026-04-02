@@ -183,8 +183,6 @@ func GetChatChannels() ([]ChatChannel, error) {
 	var channels []ChatChannel
 	lines := strings.Split(res.Output, "\n")
 	isChannelSection := false
-	// 使用正则匹配渠道行: - name: status, ... 或 - name id: status
-	channelRe := regexp.MustCompile(`^-\s+([\w\d\-_]+)(?:\s+[\w\d\-]+)?:\s+([\w\d\s,]+)`)
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(StripANSI(line))
@@ -199,14 +197,15 @@ func GetChatChannels() ([]ChatChannel, error) {
 		}
 
 		if isChannelSection && strings.HasPrefix(trimmed, "- ") {
-			matches := channelRe.FindStringSubmatch(trimmed)
-			if len(matches) >= 3 {
-				channel := ChatChannel{
-					Name:       matches[1],
-					Configured: strings.Contains(matches[2], "configured"),
-				}
-				channels = append(channels, channel)
+			// 简化解析：直接取 "- " 之后的所有内容作为名称显示
+			// 逻辑解释：如果包含 "configured" 且不包含 "not configured"，则识别为已配置
+			isConfigured := strings.Contains(trimmed, "configured") && !strings.Contains(trimmed, "not configured")
+			
+			channel := ChatChannel{
+				Name:       strings.TrimPrefix(trimmed, "- "),
+				Configured: isConfigured,
 			}
+			channels = append(channels, channel)
 		}
 	}
 
@@ -216,13 +215,13 @@ func GetChatChannels() ([]ChatChannel, error) {
 func InstallWeChatPlugin() error {
 	// 1. 安装插件
 	log.Printf("📦 Installing WeChat plugin...")
-	_, err := RunCommandWithTimeout(120*time.Second, "openclaw", "plugins", "install", "@tencent-weixin/openclaw-weixin")
+	_, err := RunCommandWithTimeout(120*time.Second, GetOpenClawBinary(), "plugins", "install", "@tencent-weixin/openclaw-weixin")
 	if err != nil {
 		return err
 	}
 
 	// 2. 启用插件
 	log.Printf("⚙️ Enabling WeChat plugin in config...")
-	_, err = RunCommandWithTimeout(10*time.Second, "openclaw", "config", "set", "plugins.entries.openclaw-weixin.enabled", "true")
+	_, err = RunCommandWithTimeout(10*time.Second, GetOpenClawBinary(), "config", "set", "plugins.entries.openclaw-weixin.enabled", "true")
 	return err
 }

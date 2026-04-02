@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"time"
 )
 
 func ForceStartGateway() error {
 	// 使用 nohup 方式或直接 Start() 且不等待，确保网关在后台启动
-	cmd := exec.Command("openclaw", "gateway", "--force")
+	cmd := exec.Command(GetOpenClawBinary(), "gateway", "--force")
 	
 	// 我们不使用 Run()，因为 gateway 是一个常驻进程，Run() 会一直阻塞直到进程退出
 	if err := cmd.Start(); err != nil {
@@ -26,7 +27,7 @@ func ForceStartGateway() error {
 
 func StopGateway(port int) error {
 	// 1. 尝试标准停止命令
-	cmd := exec.Command("openclaw", "gateway", "stop")
+	cmd := exec.Command(GetOpenClawBinary(), "gateway", "stop")
 	_ = cmd.Run() // 忽略错误，因为可能是散装进程
 
 	// 2. 等待一小会儿让进程自行退出
@@ -43,7 +44,12 @@ func StopGateway(port int) error {
 				return nil
 			}
 
-			killCmd := exec.Command("kill", "-9", fmt.Sprintf("%d", pid))
+			var killCmd *exec.Cmd
+			if runtime.GOOS == "windows" {
+				killCmd = exec.Command("taskkill", "/F", "/PID", fmt.Sprintf("%d", pid))
+			} else {
+				killCmd = exec.Command("kill", "-9", fmt.Sprintf("%d", pid))
+			}
 			_ = killCmd.Run()
 		}
 	}
@@ -64,7 +70,7 @@ func RestartGateway(port int) error {
 
 func RunDoctorFix() error {
 	// doctor --fix 通常是一次性执行的命令，可以使用 Run()
-	cmd := exec.Command("openclaw", "doctor", "--fix")
+	cmd := exec.Command(GetOpenClawBinary(), "doctor", "--fix")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to run openclaw doctor --fix: %v", err)
 	}

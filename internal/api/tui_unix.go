@@ -12,6 +12,7 @@ import (
 	"github.com/creack/pty"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"openclaw-buddy/internal/process"
 )
 
 func (s *Server) startPTY(c *gin.Context, command string, args ...string) {
@@ -30,6 +31,11 @@ func (s *Server) startPTY(c *gin.Context, command string, args ...string) {
 
 	configDir := s.cfg.OpenClawConfigDir
 
+	// 智能定位二进制 (如果是 openclaw)
+	if command == "openclaw" {
+		command = process.GetOpenClawBinary()
+	}
+
 	// 启动进程
 	cmd := exec.Command(command, args...)
 
@@ -47,6 +53,7 @@ func (s *Server) startPTY(c *gin.Context, command string, args ...string) {
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		log.Printf("Failed to start process with PTY: %v", err)
+		_ = conn.WriteMessage(websocket.TextMessage, []byte("\r\n[Buddy Error] 无法通过 PTY 启动命令: "+command+"\r\n请检查执行文件是否存在且有执行权限。\r\n"))
 		return
 	}
 

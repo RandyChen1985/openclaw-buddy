@@ -1045,7 +1045,7 @@ func (s *Server) addOpenClawProvider(c *gin.Context) {
 		}
 		// 自动刷新模型列表缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Provider Synced", nil
+		return "tasks.results.provider_synced", nil
 	})
 }
 
@@ -1098,7 +1098,7 @@ func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 		}
 		// 成功后强制同步 bots_models 缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Model Appended", nil
+		return "tasks.results.model_appended", nil
 	})
 }
 
@@ -1126,7 +1126,7 @@ func (s *Server) deleteOpenClawModelFromProvider(c *gin.Context) {
 		}
 		// 成功后强制同步 bots_models 缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Model Removed", nil
+		return "tasks.results.model_removed", nil
 	})
 }
 
@@ -1221,9 +1221,11 @@ func (s *Server) getSystemVersion(c *gin.Context) {
 	latest := strings.TrimPrefix(utils.GetSetting("latest_version", current), "v")
 	
 	s.Success(c, gin.H{
-		"current":     current,
-		"latest":      latest,
-		"release_url": "https://github.com/RandyChen1985/openclaw-buddy/releases",
+		"current":              current,
+		"latest":               latest,
+		"release_url":          "https://github.com/RandyChen1985/openclaw-buddy/releases",
+		"gui_disable_features": s.cfg.GUIDisableFeatures,
+		"show_external_tools":  s.cfg.ShowExternalTools,
 	})
 }
 

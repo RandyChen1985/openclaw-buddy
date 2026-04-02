@@ -430,6 +430,9 @@
     "setDefaultSuccess": "{{id}} set as global default model",
     "defaultSet": "Global default model updated",
     "setDefaultFailed": "Failed to set default model",
+    "editModelTitle": "Edit Model Configuration",
+    "updateModel": "Update Model Configuration",
+    "updatingModel": "Updating model configuration...",
     "settingDefault": "Syncing configuration...",
     "updatingConfig": "Updating bot configuration...",
     "saveSuccess": "Bot core file updated successfully",
@@ -595,7 +598,11 @@
       "uninstalled": "Uninstalled",
       "enabled": "Enabled",
       "disabled": "Disabled",
-      "reloaded": "Reloaded"
+      "reloaded": "Reloaded",
+      "provider_synced": "Provider Synced",
+      "model_appended": "Model Appended/Updated",
+      "model_removed": "Model Removed",
+      "upgraded": "Upgrade ready, please restart"
     }
   }
 }

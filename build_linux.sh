@@ -63,7 +63,7 @@ echo "🏗️ 正在交叉编译 Go 程序 (Linux/amd64): ${BINARY_NAME}..."
 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X 'openclaw-buddy/internal/config.Version=${VERSION}'" -o "${BINARY_NAME}" cmd/monitor/main.go
 
 # 3. 组织发布包结构
-mkdir -p "${PKG_DIR}/lib" "${PKG_DIR}/logs" "${PKG_DIR}/reports" "${PKG_DIR}/backups" "${PKG_DIR}/data"
+mkdir -p "${PKG_DIR}/lib" "${PKG_DIR}/logs" "${PKG_DIR}/reports" "${PKG_DIR}/backups" "${PKG_DIR}/data" "${PKG_DIR}/pid"
 mv "${BINARY_NAME}" "${PKG_DIR}/lib/openclaw-buddy"
 [ -f "release/README.md" ] && cp "release/README.md" "${PKG_DIR}/README.md"
 
@@ -98,6 +98,8 @@ MAX_RETRIES=3
 # [高级选项]
 # 外部跳转链接 (可选)
 EXTERNAL_DASHBOARD_URL=""
+# 是否显示“外部工具”菜单组
+SHOW_EXTERNAL_TOOLS=false
 
 # [飞书通知 (可选)]
 FEISHU_ENABLED=false

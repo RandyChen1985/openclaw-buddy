@@ -6,21 +6,27 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"openclaw-buddy/internal/api"
 	"openclaw-buddy/internal/config"
 	"openclaw-buddy/internal/guardian"
 	"openclaw-buddy/internal/process"
 	"openclaw-buddy/internal/utils"
+	"runtime"
 
 	"github.com/natefinch/lumberjack"
 )
 
 func main() {
-	// 1. Singleton Check
+	// 1. Ensure required directories exist
+	_ = os.MkdirAll("data", 0755)
+	_ = os.MkdirAll("pid", 0755)
+
+	// 2. Singleton Check
 	pidPath := os.Getenv("PID_FILE")
 	if pidPath == "" {
-		pidPath = "/tmp/openclaw-buddy.pid"
+		pidPath = filepath.Join("pid", "openclaw-buddy.pid")
 	}
 	lock := utils.NewFileLock(pidPath)
 	if err := lock.Lock(); err != nil {
@@ -72,15 +78,21 @@ func main() {
 
 	// 8. Start Web Server
 	server := api.NewServer(cfg)
-	log.Printf("🚀 Web Server starting on http://0.0.0.0:%d (Token: %s)", cfg.WebPort, cfg.Token)
 	
-	go func() {
-		if err := server.Run(); err != nil {
-			log.Printf("❌ Web Server failed: %v", err)
-			stop()
+	if runtime.GOOS == "windows" && os.Getenv("CLI_MODE") != "true" {
+		log.Printf("🚀 Starting GUI mode (Windows)...")
+		if err := server.RunGUI(); err != nil {
+			log.Fatalf("❌ GUI Failed: %v", err)
 		}
-	}()
-
-	<-ctx.Done()
+	} else {
+		log.Printf("🚀 Web Server starting on http://0.0.0.0:%d (Token: %s)", cfg.WebPort, cfg.Token)
+		go func() {
+			if err := server.Run(); err != nil {
+				log.Printf("❌ Web Server failed: %v", err)
+				stop()
+			}
+		}()
+		<-ctx.Done()
+	}
 	log.Printf("👋 OpenClaw Buddy 正在退出...")
 }

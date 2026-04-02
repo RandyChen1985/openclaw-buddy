@@ -8,9 +8,10 @@ import (
 	"log"
 	"os"
 
-	gopty "github.com/aymanbagabas/go-pty"
+	"github.com/aymanbagabas/go-pty"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"openclaw-buddy/internal/process"
 )
 
 func (s *Server) startPTY(c *gin.Context, command string, args ...string) {
@@ -25,6 +26,7 @@ func (s *Server) startPTY(c *gin.Context, command string, args ...string) {
 	ptmx, err := gopty.New()
 	if err != nil {
 		log.Printf("Failed to open Windows PTY: %v", err)
+		_ = conn.WriteMessage(websocket.TextMessage, []byte("\r\n[Buddy Error] 无法创建 Windows PTY 实例，请确保系统支持 ConPTY。\r\n"))
 		return
 	}
 	defer ptmx.Close()
@@ -36,7 +38,12 @@ func (s *Server) startPTY(c *gin.Context, command string, args ...string) {
 	}
 	configDir := s.cfg.OpenClawConfigDir
 
-	// 3. 使用 pty 实例创建命令
+	// 3. 智能定位二进制 (如果是 openclaw)
+	if command == "openclaw" {
+		command = process.GetOpenClawBinary()
+	}
+
+	// 4. 使用 pty 实例创建命令
 	cmd := ptmx.Command(command, args...)
 
 	// 4. 配置环境变量与工作目录
@@ -52,6 +59,7 @@ func (s *Server) startPTY(c *gin.Context, command string, args ...string) {
 	// 5. 启动进程
 	if err := cmd.Start(); err != nil {
 		log.Printf("Failed to start process in Windows PTY: %v", err)
+		_ = conn.WriteMessage(websocket.TextMessage, []byte("\r\n[Buddy Error] 无法启动命令: "+command+"\r\n请检查执行文件是否存在且有执行权限。\r\n"))
 		return
 	}
 

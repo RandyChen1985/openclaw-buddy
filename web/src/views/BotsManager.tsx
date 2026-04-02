@@ -61,6 +61,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const [configForm] = Form.useForm();
   const [modelForm] = Form.useForm();
   const [submittingConfig, setSubmittingConfig] = useState(false);
+  const [isEditingModel, setIsEditingModel] = useState(false);
   
   // 模型连通性测试状态
   const [testingModelId, setTestingModelId] = useState<string | null>(null);
@@ -185,6 +186,22 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     setIsProviderModalOpen(true);
   };
 
+  const handleEditModel = (providerName: string, m: any) => {
+    setIsEditingModel(true);
+    // 回填表单
+    modelForm.setFieldsValue({
+      provider_name: providerName,
+      id: m.id,
+      name: m.name,
+      api: m.api || 'openai-completions',
+      reasoning: !!m.reasoning,
+      input: m.input || ['text'],
+      maxTokens: m.maxTokens || 2000000,
+      contextWindow: m.contextWindow || 2000000,
+    });
+    setIsModelModalOpen(true);
+  };
+
   const handleAddModelToProvider = async () => {
     try {
       await modelForm.validateFields();
@@ -208,6 +225,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       // 物理发起模型添加请求
       await api.post('/v1/openclaw/models/provider/model', submitData);
       modelForm.resetFields();
+      setIsEditingModel(false);
       message.success(t('common.waitingGateway'));
       // 同上，UI 对账动作已由 App.tsx 全局观察器承包
     } catch (err: any) {
@@ -780,6 +798,13 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                             onClick={() => handleTestModel(providerName, m.id)}
                                             style={{ color: testingModelId === `${providerName}/${m.id}` ? '#f59e0b' : '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                         />
+                                        <Button
+                                            type="text"
+                                            size="small"
+                                            icon={<Pencil size={14} />}
+                                            onClick={() => handleEditModel(providerName, m)}
+                                            style={{ color: '#cbd5e1', padding: 0, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        />
                                         {!isDefault && (
                                           <Button 
                                             type="text" 
@@ -823,6 +848,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                               { title: t('common.action'), key: 'action', width: 150, render: (_, r: any) => (
                                 <div style={{ display: 'flex', gap: 4 }}>
                                   <Button size="small" type="text" icon={<Zap size={14} />} onClick={() => handleTestModel(providerName, r.id)} loading={testingModelId === `${providerName}/${r.id}`} />
+                                  <Button size="small" type="text" icon={<Pencil size={14} />} onClick={() => handleEditModel(providerName, r)} />
                                   <Button size="small" type="text" icon={<Star size={14} />} onClick={() => handleSetDefaultModel(`${providerName}/${r.id}`)} />
                                   <Button size="small" type="text" danger icon={<Trash2 size={14} />} onClick={() => handleDeleteModel(providerName, r.id)} />
                                 </div>
@@ -1070,11 +1096,15 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ padding: 6, background: '#f5f3ff', borderRadius: 8 }}><Cpu size={18} color="#7c3aed" /></div>
-            <span>{t('bots.addNewModelTitle')}</span>
+            <span>{isEditingModel ? t('bots.editModelTitle') : t('bots.addNewModelTitle')}</span>
           </div>
         }
         open={isModelModalOpen}
-        onCancel={() => setIsModelModalOpen(false)}
+        onCancel={() => {
+          setIsModelModalOpen(false);
+          setIsEditingModel(false);
+          modelForm.resetFields();
+        }}
         footer={null}
         width={550}
         centered
@@ -1096,7 +1126,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
               <Row gutter={16}>
                 <Col span={12}>
                   <Form.Item label={t('bots.selectProvider')} name="provider_name" rules={[{ required: true, message: t('bots.selectProviderRequired') }]}>
-                    <Select placeholder={t('bots.selectProviderPlaceholder')} allowClear>
+                    <Select placeholder={t('bots.selectProviderPlaceholder')} allowClear disabled={isEditingModel}>
                       {modelsConfig && Object.keys(modelsConfig).map(name => (
                         <Select.Option key={name} value={name}>{name}</Select.Option>
                       ))}
@@ -1105,7 +1135,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 </Col>
                 <Col span={12}>
                   <Form.Item label={t('bots.modelId')} name="id" rules={[{ required: true, message: t('bots.modelIdRequired') }]}>
-                    <Input placeholder={t('bots.modelIdPlaceholder')} />
+                    <Input placeholder={t('bots.modelIdPlaceholder')} disabled={isEditingModel} />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
@@ -1163,8 +1193,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   </div>
                 </Col>
               </Row>
-              <Button type="primary" block onClick={handleAddModelToProvider} loading={submittingConfig} icon={<Plus size={16} />} style={{ marginTop: 8, height: 40, borderRadius: 10 }}>
-                {t('bots.appendModel')}
+              <Button type="primary" block onClick={handleAddModelToProvider} loading={submittingConfig} icon={isEditingModel ? <Save size={16} /> : <Plus size={16} />} style={{ marginTop: 8, height: 40, borderRadius: 10 }}>
+                {isEditingModel ? t('bots.updateModel') : t('bots.appendModel')}
               </Button>
             </Form>
         </div>

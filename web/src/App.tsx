@@ -76,7 +76,7 @@ const Dashboard = () => {
   const [selfHealingEnabled, setSelfHealingEnabled] = useState(false);
   const [loadingSets, setLoadingSets] = useState(false);
   const [commandPaletteVisible, setCommandPaletteVisible] = useState(false);
-  const [versionUpdate, setVersionUpdate] = useState<{ latest: string, current: string, release_url: string } | null>(null);
+  const [versionUpdate, setVersionUpdate] = useState<{ latest: string, current: string, release_url: string, gui_disable_features?: string, show_external_tools?: boolean } | null>(null);
   const [systemEvents, setSystemEvents] = useState<any[]>([]);
   const [topBots, setTopBots] = useState<any[]>([]);
   const [loadingTopBots, setLoadingTopBots] = useState(false);
@@ -402,8 +402,11 @@ const Dashboard = () => {
   const checkVersionUpdate = async () => {
     try {
       const res = await api.get('/v1/system/version');
-      if (res.data) setVersionUpdate(res.data);
-      return res.data;
+      if (res.data.data) {
+        setVersionUpdate(res.data.data);
+        return res.data.data;
+      }
+      return null;
     } catch (e) {
       console.warn(t('common.versionCheckFailed'), e);
       return null;
@@ -814,7 +817,9 @@ const Dashboard = () => {
   const isRunning = status?.gateway?.status?.toLowerCase() === 'running';
 
   // --- Menu Configuration ---
-  const menuItems = [
+  const disabledFeatures = versionUpdate?.gui_disable_features?.split(',') || [];
+
+  const rawMenuItems = [
     {
       key: 'grp-monitor',
       label: t('common.monitor_center'),
@@ -875,6 +880,23 @@ const Dashboard = () => {
       ]
     }
   ];
+
+  const menuItems = rawMenuItems
+    .filter(group => {
+      // 如果配置为不显示外部工具，则过滤掉 grp-external 组
+      if (group.key === 'grp-external' && !versionUpdate?.show_external_tools) {
+        return false;
+      }
+      return true;
+    })
+    .map(group => ({
+      ...group,
+      children: group.children?.filter(item => {
+        // 核心功能 'chat' (在线聊天 Web 版) 不允许被隐藏
+        if (item.key === 'chat') return true;
+        return !disabledFeatures.includes(item.key);
+      })
+    })).filter(group => group.children && group.children.length > 0);
 
   // Helper to find label for breadcrumb
   const getActiveLabel = (key: string) => {

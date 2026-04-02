@@ -74,9 +74,29 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
             {t('channels.noChannels')}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {configuredChannels.map((c: any) => (
-              <Tag key={c.name} color="blue" icon={<CheckCircle size={10} />} style={{ borderRadius: 4, padding: '2px 8px' }}>
+              <Tag 
+                key={c.name} 
+                color="blue" 
+                icon={<CheckCircle size={12} />} 
+                style={{ 
+                  borderRadius: 8, 
+                  padding: '6px 12px', 
+                  margin: 0,
+                  fontSize: 13,
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#f0f7ff',
+                  border: '1px solid #dbeafe',
+                  color: '#1d4ed8',
+                  width: 'fit-content',
+                  maxWidth: '100%',
+                  whiteSpace: 'normal',
+                  height: 'auto',
+                  lineHeight: '1.5'
+                }}
+              >
                 {c.name}
               </Tag>
             ))}

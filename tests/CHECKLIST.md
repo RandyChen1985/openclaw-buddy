@@ -107,6 +107,7 @@
 - [ ] **专家详情预览**: 点击专家卡片应弹出 Drawer 展示其人格特征 (Soul) 和技能列表。
 - [x] **专家克隆向导 (Clone Station)**: 验证三步式引导流程，包含核心属性配置、Markdown 源码编辑与实时预览同步。
 - [x] **专家克隆交互优化**: 移除点击“启动克隆”后的全局倒计时遮罩，改为 Modal 按钮局部 Loading 状态，提升操作流畅度。
+- [x] **模型编辑功能**: 验证已添加模型的参数（如 maxTokens, contextWindow, API 协议等）能够正确回填并成功更新，且异步任务反馈已汉化。
 - [ ] **Token 实时校准**: 验证 `estimateTokens` 对 Markdown 符号的加权估算是否准确，并具备视觉预警（3k 阈值）。
 - [ ] **身份降级渲染**: 验证后端 `CreateBotFromExpert` 是否能将旧版 JSON 自动渲染为标准的 `IDENTITY.md`。
 - [ ] **文档完备性**: 验证 `docs/md/expert-market-design.md` 是否包含了最新的设计哲学与技术架构细节。
@@ -233,6 +234,23 @@
 - [ ] **跨实例对账隔离**: 验证同域名、同端口下，不同 `WEB_ROOT` 的 `guardian_token` 互不干扰。
 - [ ] **聊天记录物理隔离**: 验证 `chat_history` 加载时仅拉取对应实例路径下的内容。
 - [ ] **i18n 配置隔离**: 验证 `i18nextLng` 正确附加了命名空间 Key。
+
+## 14. Windows GUI 与 桌面封装 (Wails)
+- [ ] **路径跨平台兼容**: 验证 `OPENCLAW_CONFIG_DIR` 等路径在 Windows 下不再包含混合斜杠（如 `C:\Users\Admin/.openclaw`）。
+- [ ] **精准进程识别**: 在 Windows 下运行多个占用相似端口的服务（如 80, 8080），验证 `GetPIDByPort` 不会发生误杀。
+- [ ] **二进制自动感应**: 验证即使 `openclaw.exe` 没在系统 PATH 中，只要放在 Buddy 同目录下即可正常调用。
+- [ ] **PTY 启动反馈**: 模拟 `openclaw` 文件丢失或权限不足，验证终端界面是否显示了 "[Buddy Error]" 友好的错误提示。
+- [ ] **图标资源同步**: 验证 Windows 发布包的 `internal/api/dist` 目录下已包含 `openclaw2.png`。
+- [ ] **Wails 初始化**: 启动 `openclaw-buddy.exe` 后，应能正确初始化 Wails 运行时并在 Windows 10/11 上弹出 WebView2 窗口。
+- [ ] **启动 URL 动态合成**: Wails 窗口加载的地址应符合 `http://localhost:{WEB_PORT}{WEB_ROOT}` 配置。
+- [ ] **系统托盘图标**: 任务栏右下角应出现 🦞 图标，且在深色/浅色模式下均清晰可见。
+- [ ] **隐藏至托盘逻辑**: 点击窗口右上角 `X` 按钮，窗口应隐藏（WindowHide），而非退出进程。
+- [ ] **托盘右键菜单**: 右键点击托盘图标应弹出菜单，包含“显示面板”、“查看日志”、“彻底退出”三项。
+- [ ] **查看日志快捷操作**: 点击“查看日志”应能调用 `notepad.exe` 成功打开当前配置的 `guardian.log`。
+- [ ] **彻底退出确认**: 点击“彻底退出”应能正确销毁 Wails 实例、停止 Gin 后端并清理 PID 锁文件。
+- [ ] **功能开关 (GUI_DISABLE_FEATURES)**: 设置 `GUI_DISABLE_FEATURES=terminal,logs` 后，GUI 窗口内的侧边栏对应菜单应物理隐藏。
+- [ ] **配置自动初始化**: 在空目录下启动 `.exe`，应能自动生成 `env` 文件并包含随机生成的 `BUDDY_TOKEN`。
+- [ ] **WebView2 自动检测**: 在未安装 WebView2 运行时的系统上启动，应能触发 Wails 的原生下载/安装引导。
 
 ---
 > [!NOTE]
