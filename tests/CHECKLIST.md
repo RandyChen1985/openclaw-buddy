@@ -217,6 +217,8 @@
 - [x] **V3 协议深度调研**: 完成对 OpenClaw 源码 (`server-methods`) 的全量审计，识别出 Agents/Sessions/Config 等模块的 20+ 个 Mutation 方法。
 - [x] **协议参考手册更新**: 更新 `docs/md/openclaw-websocket-protocol.md`，包含精确的入参 Schema、权限要求及异步事件。
 - [x] **全量 Mutation 验证**: 编写并执行 `tests/test_websocket_mutation_full.go`，验证了 V3 握手鉴权及全生命周期（创建、修改、删除）的协议路径。
+- [x] **全量协议一致性验证**: 增强并执行 `tests/test_websocket_mutation_full.go` 脚本，确保网关各模块 Mutation 接口与最新 V3 协议文档高度一致，并具备完善的错误回溯能。
+
 
 ---
 
@@ -232,4 +234,4 @@
 
 ---
 > [!NOTE]
-> 记录于 2026-04-01：完成了 Dashboard 移动端布局深度优化及 Buddy 版本全链路监控。引入了响应式 Grid 布局，并打通了前端与各端版本号的动态同步及手动对账功能。
+> 记录于 2026-04-02：完成了 WebSocket V3 协议文档的深度增补及测试脚本的稳健性重构。实现了全量协议一致性验证逻辑，确保网关 Mutation 方法在 CRUD 全生命周期中的入参及响应符合规范。
