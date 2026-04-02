@@ -24,6 +24,7 @@ import (
 	"openclaw-buddy/internal/analyzer"
 
 	"github.com/gin-gonic/gin"
+	"context"
 )
 
 // APIResponse 统一业务响应格式
@@ -760,12 +761,15 @@ func (s *Server) chatProxy(c *gin.Context) {
 		req.Header.Set("Accept", "text/event-stream")
 	}
 
-	// 4. 执行请求
+	// 4. 执行请求 (增加 3 分钟显式超时保护)
 	startTime := time.Now()
-	client := &http.Client{}
 	
-	// 设置上下文，以便在客户端断开时同步取消代理请求，节省网关资源
-	req = req.WithContext(c.Request.Context())
+	// 设置带超时的上下文，防止后端网关长时间挂起占用资源
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
+	defer cancel()
+	
+	req = req.WithContext(ctx)
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	duration := time.Since(startTime).Milliseconds()
 

@@ -155,6 +155,7 @@
 - [ ] **错误状态码**: 认证失败时，`/v1/openclaw/status` 应返回 HTTP 401 且 JSON 体内 `code` 同样为 401。
 - [ ] **Data 解包校验**: 验证前端各页面（如虾兵蟹将、设备中心）在后端返回包装格式后，能否通过 Axios 拦截器正常解包并渲染。
 - [ ] **流式接口兼容**: 验证 `POST /v1/openclaw/chat/completions` 是否成功绕过标准化包装，维持原始 OpenAI SSE 流。
+- [x] **聊天代理超时保护**: 验证 `chatProxy` 具备 3 分钟显式超时 (Context Timeout)，防止网关挂起导致的资源占用。
 - [ ] **任务 ID 追踪**: 验证网关操作返回的 `taskID` 是否被正确包裹在 `data` 字段中。
 
 ## 7. 文档与指南 (Documentation)
