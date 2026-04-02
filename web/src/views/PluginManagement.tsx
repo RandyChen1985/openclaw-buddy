@@ -427,7 +427,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                         <div style={{ padding: 12, background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 13 }}>
                           <div style={{ marginBottom: 12 }}>
                             <div style={{ fontWeight: 600, color: '#64748b', fontSize: 11, marginBottom: 4 }}>{t('plugins.functionDesc')}</div>
-                            <div style={{ color: '#445469', lineHeight: 1.5 }}>{plugin.description || 'N/A'}</div>
+                            <div style={{ color: '#445469', lineHeight: 1.5 }}>{plugin.description || t('plugins.noDescription')}</div>
                           </div>
                           
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
@@ -481,7 +481,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                             <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #e2e8f0' }}>
                               {plugin.channelIds?.length > 0 && (
                                 <div style={{ marginBottom: 8 }}>
-                                  <div style={{ fontWeight: 600, color: '#64748b', fontSize: 11, marginBottom: 4 }}>Channels</div>
+                                  <div style={{ fontWeight: 600, color: '#64748b', fontSize: 11, marginBottom: 4 }}>{t('plugins.channels')}</div>
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                                     {plugin.channelIds.map((c: string) => <Tag key={c} style={{ margin: 0, fontSize: 10 }}>{c}</Tag>)}
                                   </div>
@@ -489,7 +489,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                               )}
                               {plugin.providerIds?.length > 0 && (
                                 <div>
-                                  <div style={{ fontWeight: 600, color: '#64748b', fontSize: 11, marginBottom: 4 }}>Providers</div>
+                                  <div style={{ fontWeight: 600, color: '#64748b', fontSize: 11, marginBottom: 4 }}>{t('plugins.providers')}</div>
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                                     {plugin.providerIds.map((p: string) => <Tag key={p} style={{ margin: 0, fontSize: 10 }}>{p}</Tag>)}
                                   </div>
@@ -519,12 +519,12 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                 <div style={{ padding: '12px 20px', background: '#f8fafc', borderRadius: 8 }}>
                   <div style={{ marginBottom: 8 }}>
                     <Typography.Text type="secondary" strong style={{ fontSize: 12 }}>{t('plugins.functionDesc')}:</Typography.Text>
-                    <div style={{ color: '#475569', marginTop: 4 }}>{record.description || 'No description available.'}</div>
+                    <div style={{ color: '#475569', marginTop: 4 }}>{record.description || t('plugins.noDescription')}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 24 }}>
                     {record.channelIds?.length > 0 && (
                       <div style={{ marginBottom: 8 }}>
-                        <Typography.Text type="secondary" strong style={{ fontSize: 12 }}>Channels:</Typography.Text>
+                        <Typography.Text type="secondary" strong style={{ fontSize: 12 }}>{t('plugins.channels')}:</Typography.Text>
                         <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                           {record.channelIds.map(c => <Tag key={c}>{c}</Tag>)}
                         </div>
@@ -532,7 +532,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                     )}
                     {record.providerIds?.length > 0 && (
                       <div>
-                        <Typography.Text type="secondary" strong style={{ fontSize: 12 }}>Providers:</Typography.Text>
+                        <Typography.Text type="secondary" strong style={{ fontSize: 12 }}>{t('plugins.providers')}:</Typography.Text>
                         <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                           {record.providerIds.map(p => <Tag key={p}>{p}</Tag>)}
                         </div>

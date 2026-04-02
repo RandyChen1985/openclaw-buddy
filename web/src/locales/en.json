@@ -52,7 +52,8 @@
     "commandFailed": "Failed to send gateway command",
     "restartFailed": "Failed to restart gateway",
     "updateFailed": "Failed to update settings",
-    "processing": "Processing..."
+    "processing": "Processing...",
+    "noChanges": "No changes detected"
   },
   "experts": {
     "title": "Expert Market",
@@ -247,7 +248,8 @@
       "syncing": "Syncing Status"
     },
     "userLabel": "User",
-    "requestReceived": "Request received, thinking..."
+    "requestReceived": "Request received, thinking...",
+    "waitingGatewaySync": "Syncing gateway task status..."
   },
   "channels": {
     "boundChannels": "Bound Channels",
@@ -530,7 +532,22 @@
     "count": "{{count}} plugins total",
     "search": "Search plugin name or ID...",
     "syncedAt": "Synced at",
-    "functionDesc": "Function Description"
+    "functionDesc": "Function Description",
+    "enable": "Enable",
+    "disable": "Disable",
+    "uninstall": "Uninstall",
+    "update": "Check Update",
+    "uninstallConfirmTitle": "Confirm Uninstall Plugin",
+    "uninstallConfirmContent": "Are you sure you want to uninstall plugin {{name}}? This action is irreversible.",
+    "uninstallSuccess": "Plugin uninstalled successfully",
+    "enableSuccess": "Plugin enabled",
+    "disableSuccess": "Plugin disabled",
+    "updateStarted": "Background update started, check task center later",
+    "updateSuccess": "Plugin updated successfully",
+    "noDescription": "No description available",
+    "channels": "Related Channels",
+    "providers": "Related Providers",
+    "reload": "Reload Engine"
   },
   "tasks": {
     "empty": "No task records",

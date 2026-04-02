@@ -290,6 +290,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           nameChanged ? values.name : undefined, 
           modelChanged ? values.model : undefined
         );
+      } else {
+        message.info(t('common.noChanges'));
       }
       onRefresh();
     } catch (err) {
