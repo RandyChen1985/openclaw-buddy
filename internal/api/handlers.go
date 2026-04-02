@@ -21,6 +21,7 @@ import (
 	"openclaw-buddy/internal/process"
 	"openclaw-buddy/internal/utils"
 	"openclaw-buddy/internal/scheduler"
+	"openclaw-buddy/internal/analyzer"
 
 	"github.com/gin-gonic/gin"
 )
@@ -425,6 +426,77 @@ func (s *Server) getHealReportDetail(c *gin.Context) {
 	s.Success(c, gin.H{
 		"name":    name,
 		"content": string(content),
+	})
+}
+
+func (s *Server) getHealBackups(c *gin.Context) {
+	files, err := os.ReadDir(s.cfg.BackupDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "无法读取备份目录: "+err.Error())
+		return
+	}
+
+	backups := []map[string]interface{}{}
+	for _, f := range files {
+		// 备份文件以 .bak 结尾
+		if !f.IsDir() && strings.HasSuffix(f.Name(), ".bak") {
+			info, _ := f.Info()
+			backups = append(backups, map[string]interface{}{
+				"name": f.Name(),
+				"size": info.Size(),
+				"time": info.ModTime().Format("2006-01-02 15:04:05"),
+			})
+		}
+	}
+
+	// 按时间倒序
+	sort.Slice(backups, func(i, j int) bool {
+		return backups[i]["time"].(string) > backups[j]["time"].(string)
+	})
+
+	s.Success(c, backups)
+}
+
+func (s *Server) getHealBackupDetail(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" || strings.Contains(name, "..") {
+		s.Error(c, http.StatusBadRequest, "无效的备份名称")
+		return
+	}
+
+	path := filepath.Join(s.cfg.BackupDir, name)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		s.Error(c, http.StatusNotFound, "未找到该备份文件")
+		return
+	}
+
+	s.Success(c, gin.H{
+		"name":    name,
+		"content": string(content),
+	})
+}
+
+func (s *Server) getHealBackupDiff(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" || strings.Contains(name, "..") {
+		s.Error(c, http.StatusBadRequest, "无效的备份名称")
+		return
+	}
+
+	backupPath := filepath.Join(s.cfg.BackupDir, name)
+	currentConfigPath := filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json")
+
+	// 使用 analyzer 中的通用对比逻辑
+	diff, err := analyzer.GetDiff(backupPath, currentConfigPath)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "生成对比失败: "+err.Error())
+		return
+	}
+
+	s.Success(c, gin.H{
+		"name": name,
+		"diff": diff,
 	})
 }
 
