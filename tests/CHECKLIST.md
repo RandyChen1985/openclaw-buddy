@@ -157,7 +157,7 @@
 - [ ] **流式接口兼容**: 验证 `POST /v1/openclaw/chat/completions` 是否成功绕过标准化包装，维持原始 OpenAI SSE 流。
 - [x] **聊天代理超时保护**: 验证 `chatProxy` 具备 3 分钟显式超时 (Context Timeout)，防止网关挂起导致的资源占用。
 - [ ] **任务 ID 追踪**: 验证网关操作返回的 `taskID` 是否被正确包裹在 `data` 字段中。
-- [x] **鉴权稳定性 (Sync Token)**: 修复了前端同步捕获 URL Token 的竞态条件，并增加了前后端 Token 字符串的 TrimSpace 容错处理 `2026-04-03`
+- [x] **鉴权稳定性 (Sync Token)**: 修复了前端捕获 URL Token 的竞态条件，实现了异步强验证流，并支持多实例存储空间物理隔离 `2026-04-03`
 - [ ] **微信解绑功能**: 验证 `DELETE /v1/wechat/unbind/:id` 接口能物理删除本地凭证文件同步过滤 `accounts.json` `2026-04-03`
 
 ## 7. 文档与指南 (Documentation)
@@ -234,9 +234,10 @@
 - [x] **发布说明外链校验**: 发现新版本时，通知卡片内应包含指向 `github.com/.../tag/{version}` 的正确超链接。
 
 ## 七、多实例隔离测试 (Storage Isolation)
-- [ ] **跨实例对账隔离**: 验证同域名、同端口下，不同 `WEB_ROOT` 的 `guardian_token` 互不干扰。
+- [x] **跨实例对账隔离**: 验证同域名、同端口下，不同 `WEB_ROOT` 的 `guardian_token` 互不干扰（已实现基于运行时 `__WEB_ROOT__` 的动态前缀）。 `2026-04-03`
+- [x] **URL Token 安全验证**: 验证 `?token=xxx` 自动登录包含服务器端 `/login` 异步校验及全屏加载状态，防止非法 Token 绕过。 `2026-04-03`
 - [ ] **聊天记录物理隔离**: 验证 `chat_history` 加载时仅拉取对应实例路径下的内容。
-- [ ] **i18n 配置隔离**: 验证 `i18nextLng` 正确附加了命名空间 Key。
+- [x] **i18n 配置隔离**: 验证 `i18nextLng` 正确附加了命名空间 Key。 `2026-04-03`
 
 ## 14. Windows GUI 与 桌面封装 (Wails)
 - [ ] **路径跨平台兼容**: 验证 `OPENCLAW_CONFIG_DIR` 等路径在 Windows 下不再包含混合斜杠（如 `C:\Users\Admin/.openclaw`）。
