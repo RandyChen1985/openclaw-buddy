@@ -97,7 +97,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
   const fetchModels = async () => {
     try {
       const res = await api.get('/v1/openclaw/bots-models');
-      setModels(res.data.data?.models || []);
+      setModels(res.data.data?.models || res.data?.models || []);
     } catch (err) {}
   };
 

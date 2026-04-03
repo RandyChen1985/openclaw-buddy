@@ -126,7 +126,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     setLoadingSessions(true);
     try {
       const res = await api.get(`/v1/openclaw/sessions${force ? '?refresh=true' : ''}`);
-      setSessions(res.data.data || []);
+      setSessions(res.data.data || res.data || []);
     } catch (err) {
     } finally {
       setLoadingSessions(false);

@@ -402,9 +402,9 @@ const Dashboard = () => {
   const checkVersionUpdate = async () => {
     try {
       const res = await api.get('/v1/system/version');
-      if (res.data.data) {
-        setVersionUpdate(res.data.data);
-        return res.data.data;
+      if (res.data) {
+        setVersionUpdate(res.data);
+        return res.data;
       }
       return null;
     } catch (e) {

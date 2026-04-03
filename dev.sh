@@ -120,6 +120,8 @@ MAX_RETRIES=3
 # [高级选项]
 # 外部跳转链接 (可选)
 EXTERNAL_DASHBOARD_URL=""
+# 是否显示“外部工具”菜单组
+SHOW_EXTERNAL_TOOLS=true
 
 # [飞书通知 (可选)]
 FEISHU_ENABLED=false
