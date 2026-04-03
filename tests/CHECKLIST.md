@@ -141,10 +141,10 @@
 
 
 ## 5. 构建与部署 (Build)
-- [ ] **多平台打包**: 分别运行 `./build_mac.sh` 和 `./build_linux.sh`，检查 `release/` 下是否存在对应的 `.tar.gz`。
-- [ ] **打包清理**: 检查生成的 .tar.gz 压缩包内是否已彻底排除以 `._` 开头的 macOS 元数据文件，且在 Linux 上解压时不应出现 `LIBARCHIVE.xattr` 警告。
+- [x] **多平台打包**: 分别运行 `./build_mac.sh` 和 `./build_linux.sh`，检查 `release/` 下是否存在对应的 `.tar.gz`。
+- [x] **打包清理**: 检查生成的 .tar.gz 压缩包内是否已彻底排除以 `._` 开头的 macOS 元数据文件，且在 Linux 上解压时不应出现 `LIBARCHIVE.xattr` 警告。
 - [ ] **产物体积**: 检查 Linux 版二进制文件是否已通过 `ldflags` 压缩（约 27MB 左右）。
-- [ ] **环境隔离**: 检查生成的 `env` 文件是否包含新增的 `EXTERNAL_DASHBOARD_URL` 配置项。
+- [x] **环境隔离**: 检查生成的 `env` 文件是否包含新增的 `EXTERNAL_DASHBOARD_URL` 配置项。
 - [ ] **配置持久化**: 验证 `dev.sh` 在重启或停止时是否能正确保留 `temp-dev-test/env` 文件，且不再重复覆盖。
 - [ ] **Windows 兼容性**: 在 Windows 环境下执行 `openclaw-buddy.exe`，验证 Shell 终端与 TUI 聊天能够正常启动（ConPTY）。
 - [ ] **跨平台编译**: 执行 `GOOS=windows go build` 应无 `syscall` 相关编译错误。
@@ -157,6 +157,8 @@
 - [ ] **流式接口兼容**: 验证 `POST /v1/openclaw/chat/completions` 是否成功绕过标准化包装，维持原始 OpenAI SSE 流。
 - [x] **聊天代理超时保护**: 验证 `chatProxy` 具备 3 分钟显式超时 (Context Timeout)，防止网关挂起导致的资源占用。
 - [ ] **任务 ID 追踪**: 验证网关操作返回的 `taskID` 是否被正确包裹在 `data` 字段中。
+- [x] **鉴权稳定性 (Sync Token)**: 修复了前端同步捕获 URL Token 的竞态条件，并增加了前后端 Token 字符串的 TrimSpace 容错处理 `2026-04-03`
+- [ ] **微信解绑功能**: 验证 `DELETE /v1/wechat/unbind/:id` 接口能物理删除本地凭证文件同步过滤 `accounts.json` `2026-04-03`
 
 ## 7. 文档与指南 (Documentation)
 - [ ] **HOWTO 渲染**: 检查 `HOWTO.md` 在 GitHub 或 Markdown 预览器中是否能正确加载图片。

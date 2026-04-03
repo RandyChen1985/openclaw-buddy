@@ -3,8 +3,11 @@ package process
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"log"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -224,4 +227,50 @@ func InstallWeChatPlugin() error {
 	log.Printf("⚙️ Enabling WeChat plugin in config...")
 	_, err = RunCommandWithTimeout(10*time.Second, GetOpenClawBinary(), "config", "set", "plugins.entries.openclaw-weixin.enabled", "true")
 	return err
+}
+func UnbindWeChatAccount(configDir string, accountID string) error {
+	log.Printf("🗑️ [WeChat] 用户请求解绑账号: %s", accountID)
+
+	// 1. 删除 accounts 目录下的相关文件
+	accountsDir := filepath.Join(configDir, "openclaw-weixin", "accounts")
+	filesToDelete := []string{
+		accountID + ".json",
+		accountID + ".sync.json",
+		accountID + ".context-tokens.json",
+	}
+
+	for _, fileName := range filesToDelete {
+		filePath := filepath.Join(accountsDir, fileName)
+		if _, err := os.Stat(filePath); err == nil {
+			log.Printf("   - 物理删除凭证文件: %s", filePath)
+			_ = os.Remove(filePath)
+		}
+	}
+
+	// 2. 从 accounts.json 中移除 ID
+	accountsJsonPath := filepath.Join(configDir, "openclaw-weixin", "accounts.json")
+	if _, err := os.Stat(accountsJsonPath); err == nil {
+		content, err := os.ReadFile(accountsJsonPath)
+		if err == nil {
+			var accounts []string
+			if err := json.Unmarshal(content, &accounts); err == nil {
+				newAccounts := []string{}
+				changed := false
+				for _, acc := range accounts {
+					if acc != accountID {
+						newAccounts = append(newAccounts, acc)
+					} else {
+						changed = true
+					}
+				}
+				if changed {
+					log.Printf("   - 从 accounts.json 索引中移除账号 ID: %s", accountID)
+					newContent, _ := json.MarshalIndent(newAccounts, "", "  ")
+					_ = os.WriteFile(accountsJsonPath, newContent, 0644)
+				}
+			}
+		}
+	}
+
+	return nil
 }

@@ -275,7 +275,9 @@
     "overwriteWarning": "Already bound WeChat. Re-binding will overwrite previous config.",
     "getLoginCode": "Get WeChat Login Code",
     "getLoginCodeDesc": "Generate a WeChat QR code for identity authorization. Valid for 5 minutes.",
-    "getNow": "Get Now"
+    "getNow": "Get Now",
+    "unbind": "Unbind",
+    "unbindConfirm": "Are you sure you want to unbind WeChat account {{id}}?\nThis will physically delete local credentials, and you'll need to re-scan next time."
   },
   "devices": {
     "pendingRequests": "Pending Connection Requests",
@@ -584,6 +586,7 @@
     "disable_plugin": "Disable Plugin: {{id}}",
     "reload_plugins": "Reload Plugin Engine",
     "update_plugins": "Update All Plugins",
+    "unbind_wechat": "Unbind WeChat",
     "results": {
       "cloned": "Cloned",
       "created": "Created",
@@ -602,6 +605,7 @@
       "provider_synced": "Provider Synced",
       "model_appended": "Model Appended/Updated",
       "model_removed": "Model Removed",
+      "unbound": "Unbound",
       "upgraded": "Upgrade ready, please restart"
     }
   }

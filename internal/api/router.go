@@ -63,7 +63,7 @@ func (s *Server) setupRoutes() {
 			return
 		}
 
-		if req.Token == s.cfg.Token {
+		if strings.TrimSpace(req.Token) == s.cfg.Token {
 			// Set cookie path to WebRoot to prevent collisions
 			cookiePath := s.cfg.WebRoot
 			if cookiePath == "" {
@@ -136,6 +136,7 @@ func (s *Server) setupRoutes() {
 		v1.GET("/wechat/plugin/status", s.checkWeChatPlugin)
 		v1.GET("/wechat/config/status", s.getWeChatConfigStatus)
 		v1.POST("/wechat/install", s.installWeChatPlugin)
+		v1.DELETE("/wechat/unbind/:id", s.unbindWeChatAccount)
 		v1.GET("/ws/logs", s.streamLogs)
 		v1.GET("/ws/tui", s.handleTUI)
 		v1.GET("/ws/shell", s.handleShell)

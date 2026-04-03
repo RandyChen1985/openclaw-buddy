@@ -1580,4 +1580,28 @@ func (s *Server) updateOpenClawBotFile(c *gin.Context) {
 	}
 	s.Success(c, gin.H{"status": "success"})
 }
+func (s *Server) unbindWeChatAccount(c *gin.Context) {
+	accountID := c.Param("id")
+	if accountID == "" {
+		s.Error(c, http.StatusBadRequest, "account id is required")
+		return
+	}
 
+	log.Printf("🎮 [控制] 用户请求: 【解绑微信账号】 (ID: %s)", accountID)
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   "tasks.unbind_wechat:" + accountID,
+		Module: "wechat",
+		Action: "unbind",
+		Target: accountID,
+	}
+
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.UnbindWeChatAccount(s.cfg.OpenClawConfigDir, accountID); err != nil {
+			return "", err
+		}
+		// 解绑后同步一次渠道列表
+		_ = process.SyncKeySingle("chat_channels", s.cfg.OpenClawConfigDir)
+		return "tasks.results.unbound", nil
+	})
+}

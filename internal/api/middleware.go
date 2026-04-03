@@ -14,7 +14,7 @@ func AuthMiddleware(token string) gin.HandlerFunc {
 		if authHeader != "" {
 			parts := strings.Split(authHeader, " ")
 			if len(parts) == 2 && parts[0] == "Bearer" {
-				if parts[1] == token {
+				if strings.TrimSpace(parts[1]) == token {
 					c.Next()
 					return
 				}
@@ -22,7 +22,7 @@ func AuthMiddleware(token string) gin.HandlerFunc {
 		}
 
 		// 2. Check token from query parameter (optional, for easier testing/specific links)
-		queryToken := c.Query("token")
+		queryToken := strings.TrimSpace(c.Query("token"))
 		if queryToken == token {
 			c.Next()
 			return

@@ -182,6 +182,11 @@ const Dashboard = () => {
             fetchSkills(true, true); // 强制获取最新数据，并静默执行
             fetchPlugins(); // 同步刷新插件状态
           }
+        } else if (task.module === 'wechat') {
+          if (task.action === 'unbind' && task.status === 'Completed') {
+            console.log('🔄 [Task Observer] 微信解绑任务完成，强制刷新渠道内容...');
+            fetchChatChannels(true);
+          }
         }
       }
     });
@@ -577,6 +582,19 @@ const Dashboard = () => {
     }
   };
 
+  const handleUnbindWeixin = async (id: string) => {
+    try {
+      const res = await api.delete(`/v1/wechat/unbind/${id}`);
+      if (res.data.code === 200) {
+        message.info(t('chat.asyncCommandTip', { title: t('tasks.unbind_wechat') }));
+        // 强制刷新渠道列表以显示任务状态
+        fetchChatChannels(true);
+      }
+    } catch (error: any) {
+      message.error(t('common.error') + ": " + (error.response?.data?.message || error.message));
+    }
+  };
+
   const handleApproveDevice = async (requestId: string) => {
     try {
       await api.post('/v1/openclaw/devices/approve', { requestId });
@@ -957,6 +975,8 @@ const Dashboard = () => {
           loadingWeixin={loadingWeixin} checkWeixinSeconds={checkWeixinSeconds}
           isGettingQR={isGettingQR} onInstallWeixin={handleInstallWeixin} onGetQRCode={() => handleControl('wechat')}
           onRefreshChannels={() => fetchChatChannels(true)}
+          onUnbindWeixin={handleUnbindWeixin}
+          activeTasks={activeTasks}
           isMobile={isMobile}
         />
       ),
@@ -1324,7 +1344,18 @@ const Dashboard = () => {
 // --- App Root ---------------------------------------------------------------------
 export default function App() {
   const { t } = useTranslation();
-  const [token, setToken] = useState<string | null>(storage.getItem('guardian_token'));
+  // 1. 同步探测 URL 中的 Token 并持久化，确保子组件挂载前 Token 已就绪且 LocalStorage 已同步
+  const getInitialToken = () => {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get('token')?.trim();
+    if (urlToken) {
+      storage.setItem('guardian_token', urlToken);
+      return urlToken;
+    }
+    return storage.getItem('guardian_token');
+  };
+
+  const [token, setToken] = useState<string | null>(getInitialToken());
 
   useEffect(() => {
     const interceptor = api.interceptors.response.use(
@@ -1333,6 +1364,7 @@ export default function App() {
         if (error.response?.status === 401) {
           storage.removeItem('guardian_token');
           setToken(null);
+          // 仅在之前是登录状态时显示过期提示
           if (token) message.error(t('common.sessionExpired'));
         }
         return Promise.reject(error);
@@ -1356,19 +1388,13 @@ export default function App() {
       params.delete('tag');
     }
 
-    if (urlToken) {
-      storage.setItem('guardian_token', urlToken);
-      setToken(urlToken);
+    // 处理并清理 URL
+    if (urlToken || urlTag) {
+      if (urlToken) {
+        message.success(t('common.autoLogin'));
+        params.delete('token');
+      }
       
-      // 移除已处理的参数，保持 URL 整洁
-      params.delete('token');
-      const newSearch = params.toString();
-      const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
-      window.history.replaceState({}, '', newUrl);
-      
-      message.success(t('common.autoLogin'));
-    } else if (urlTag) {
-      // 仅有 tag 变更时也清理 URL
       const newSearch = params.toString();
       const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
       window.history.replaceState({}, '', newUrl);

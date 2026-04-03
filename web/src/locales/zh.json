@@ -282,7 +282,9 @@
     "overwriteWarning": "已经绑定过微信，重复绑定则覆盖之前的配置",
     "getLoginCode": "获取微信登录码",
     "getLoginCodeDesc": "生成用于身份授权的微信二维码，用于绑定个人微信，有效期 5 分钟",
-    "getNow": "立即获取"
+    "getNow": "立即获取",
+    "unbind": "解绑",
+    "unbindConfirm": "确定要解绑微信账号 {{id}} 吗？\n解绑将物理删除本地登录凭证，下次使用需要重新扫码。"
   },
   "devices": {
     "pendingRequests": "待处理连接请求",
@@ -593,6 +595,7 @@
     "disable_plugin": "禁用插件: {{id}}",
     "reload_plugins": "重载插件引擎",
     "update_plugins": "更新全部插件",
+    "unbind_wechat": "解绑微信账号",
     "results": {
       "cloned": "已克隆",
       "created": "已创建",
@@ -611,6 +614,7 @@
       "provider_synced": "渠道配置已同步",
       "model_appended": "模型已追加/更新",
       "model_removed": "模型已移除",
+      "unbound": "已解绑",
       "upgraded": "升级就绪，请重启生效"
     }
   }

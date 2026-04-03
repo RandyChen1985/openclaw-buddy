@@ -7,11 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
 
-var Version = "1.0.2"
+var Version = "1.0.4"
 
 type Config struct {
 	OpenClawConfigDir    string
@@ -85,7 +86,7 @@ func LoadConfig() (*Config, error) {
 		FeishuAppSecret:      getEnv("FEISHU_APP_SECRET", ""),
 		FeishuChatID:         getEnv("FEISHU_CHAT_ID", ""),
 		DBFile:               filepath.Clean(getEnv("DB_FILE", "./data/guardian.db")),
-		Token:                getEnv("BUDDY_TOKEN", "sk-replace-me-on-first-run"),
+		Token:                strings.TrimSpace(getEnv("BUDDY_TOKEN", "sk-replace-me-on-first-run")),
 		WebPort:              webPort,
 		WebRoot:              webRoot,
 		ExternalDashboardURL: getEnv("EXTERNAL_DASHBOARD_URL", ""),
