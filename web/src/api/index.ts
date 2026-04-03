@@ -68,4 +68,17 @@ export const getFullUrl = (url: string) => {
   return url;
 };
 
+/**
+ * 获取 WebSocket 连接所需的一次性短效票据 (Ticket)
+ */
+export const getTicket = async (): Promise<string | null> => {
+  try {
+    const response = await api.post('/v1/auth/ticket');
+    return response.data.ticket;
+  } catch (err) {
+    console.error('Failed to get auth ticket:', err);
+    return null;
+  }
+};
+
 export default api;

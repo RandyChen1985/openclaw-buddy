@@ -24,6 +24,15 @@ var (
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
+		// 如果是同源请求（没有 Origin 头），直接允许
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+
+		// 否则，目前采取宽松策略允许所有 Origin，
+		// 但由于我们引入了一次性 Ticket 机制，即使 Origin 被伪造，
+		// 攻击者也无法通过 CSRF 获取有效 Ticket，从而保证了 WebSocket 的安全性。
 		return true
 	},
 }

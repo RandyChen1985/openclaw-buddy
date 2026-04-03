@@ -238,6 +238,7 @@
 - [x] **URL Token 安全验证**: 验证 `?token=xxx` 自动登录包含服务器端 `/login` 异步校验及全屏加载状态，防止非法 Token 绕过。 `2026-04-03`
 - [ ] **聊天记录物理隔离**: 验证 `chat_history` 加载时仅拉取对应实例路径下的内容。
 - [x] **i18n 配置隔离**: 验证 `i18nextLng` 正确附加了命名空间 Key。 `2026-04-03`
+- [x] **短效票据 (Ticket) 认证**: 验证 WebSocket (Shell/TUI/Logs) 采用一次性授权票据连接，防止 Token 在 URL 中泄露。 `2026-04-03`
 
 ## 14. Windows GUI 与 桌面封装 (Wails)
 - [ ] **路径跨平台兼容**: 验证 `OPENCLAW_CONFIG_DIR` 等路径在 Windows 下不再包含混合斜杠（如 `C:\Users\Admin/.openclaw`）。

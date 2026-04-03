@@ -16,8 +16,9 @@ import (
 )
 
 type Server struct {
-	cfg    *config.Config
-	engine *gin.Engine
+	cfg     *config.Config
+	engine  *gin.Engine
+	tickets *TicketStore
 }
 
 func NewServer(cfg *config.Config) *Server {
@@ -34,8 +35,9 @@ func NewServer(cfg *config.Config) *Server {
 	}))
 
 	s := &Server{
-		cfg:    cfg,
-		engine: engine,
+		cfg:     cfg,
+		engine:  engine,
+		tickets: NewTicketStore(1 * time.Minute), // Ticket valid for 1 minute
 	}
 
 	s.setupRoutes()
@@ -78,8 +80,11 @@ func (s *Server) setupRoutes() {
 
 	// V1 API Group
 	v1 := root.Group("/v1")
-	v1.Use(AuthMiddleware(s.cfg.Token))
+	v1.Use(AuthMiddleware(s.cfg.Token, s.tickets))
 	{
+		// Auth related
+		v1.POST("/auth/ticket", s.handleGetTicket)
+
 		// OpenClaw related routes
 		oc := v1.Group("/openclaw")
 		{

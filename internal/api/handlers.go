@@ -51,6 +51,11 @@ func (s *Server) Error(c *gin.Context, httpStatus int, msg string) {
 	})
 }
 
+func (s *Server) handleGetTicket(c *gin.Context) {
+	ticket := s.tickets.Generate()
+	s.Success(c, gin.H{"ticket": ticket, "expires_in": 60})
+}
+
 func (s *Server) getDashboardURL(c *gin.Context) {
 	// 传入 Request Context，实现前端请求中止时的后端子进程级联取消
 	url, err := process.GetDashboardURL(c.Request.Context(), s.cfg.ExternalDashboardURL)
