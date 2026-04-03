@@ -1344,62 +1344,73 @@ const Dashboard = () => {
 // --- App Root ---------------------------------------------------------------------
 export default function App() {
   const { t } = useTranslation();
-  // 1. 同步探测 URL 中的 Token 并持久化，确保子组件挂载前 Token 已就绪且 LocalStorage 已同步
-  const getInitialToken = () => {
-    const params = new URLSearchParams(window.location.search);
-    const urlToken = params.get('token')?.trim();
-    if (urlToken) {
-      storage.setItem('guardian_token', urlToken);
-      return urlToken;
-    }
-    return storage.getItem('guardian_token');
-  };
-
-  const [token, setToken] = useState<string | null>(getInitialToken());
+  // 只从持久化存储获取初始 Token (不再信任 URL 传来的未经验证的 Token)
+  const [token, setToken] = useState<string | null>(storage.getItem('guardian_token'));
+  const [isValidating, setIsValidating] = useState(false);
 
   useEffect(() => {
     const interceptor = api.interceptors.response.use(
       (response) => response,
       (error) => {
+        // 只有 HTTP 401 且之前有 token 时才触发清理（避免自动登录失败时的循环）
         if (error.response?.status === 401) {
+          const hasToken = !!storage.getItem('guardian_token');
           storage.removeItem('guardian_token');
           setToken(null);
-          // 仅在之前是登录状态时显示过期提示
-          if (token) message.error(t('common.sessionExpired'));
+          // 仅在之前是成功登录状态时显示过期提示
+          if (hasToken) message.error(t('common.sessionExpired'));
         }
         return Promise.reject(error);
       }
     );
     return () => api.interceptors.response.eject(interceptor);
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const urlToken = params.get('token');
-    const urlTag = params.get('tag');
+    const urlToken = params.get('token')?.trim();
+    const urlTag = params.get('tag')?.trim();
 
-    // 捕获并持久化身份标签 (Tag)
-    if (urlTag) {
-      if (urlTag === 'none') {
-        storage.removeItem('guardian_tag');
-      } else {
-        storage.setItem('guardian_tag', urlTag);
-      }
-      params.delete('tag');
-    }
-
-    // 处理并清理 URL
-    if (urlToken || urlTag) {
-      if (urlToken) {
-        message.success(t('common.autoLogin'));
+    const validateUrlToken = async (uToken: string, uTag?: string) => {
+      setIsValidating(true);
+      try {
+        // 必须通过 /login 接口验证 Token 合法性，逻辑与 LoginView 保持一致
+        const res = await api.post('/login', { token: uToken });
+        if (res.data.status === 'success') {
+          // 验证通过，持久化并更新状态
+          storage.setItem('guardian_token', uToken);
+          if (uTag) {
+            if (uTag === 'none') {
+              storage.removeItem('guardian_tag');
+            } else {
+              storage.setItem('guardian_tag', uTag);
+            }
+          }
+          setToken(uToken);
+          message.success(t('common.autoLogin'));
+        }
+      } catch (err: any) {
+        // 验证失败，不更新 Token 状态，停留在 LoginView
+        message.error(err.response?.data?.error || t('login.invalidCredentials'));
+      } finally {
+        setIsValidating(false);
+        // 清理 URL 保持整洁
         params.delete('token');
+        if (uTag) params.delete('tag');
+        const newSearch = params.toString();
+        const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
+        window.history.replaceState({}, '', newUrl);
       }
-      
-      const newSearch = params.toString();
-      const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
-      window.history.replaceState({}, '', newUrl);
+    };
+
+    if (urlToken) {
+      validateUrlToken(urlToken, urlTag);
     }
-  }, []);
+  }, [t]);
+
+  if (isValidating) {
+    return <CrayfishLoading />;
+  }
 
   return (
     <ConfigProvider theme={{

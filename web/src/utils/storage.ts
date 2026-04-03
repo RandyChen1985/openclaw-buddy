@@ -1,15 +1,14 @@
-import { getBaseURL } from './url';
-
 /**
  * 获取当前的命名空间前缀
- * 基于 WebRoot 生成，例如:
- * / -> ocb_
- * /claw1 -> ocb_claw1_
  */
 const getPrefix = () => {
-  const base = getBaseURL();
-  // 移除斜杠并用下划线连接，如果是根目录就只用 ocb_
-  const namespace = base ? base.replace(/\//g, '') : '';
+  // 优先读取由 Go 后端在运行时注入的 __WEB_ROOT__ 全局变量 (用于多实例隔离)
+  // 备选使用 Vite 环境下的 BASE_URL
+  const webRoot = (window as any).__WEB_ROOT__ || import.meta.env.BASE_URL || '/';
+  
+  // 处理格式: / -> "" ; /console/claw -> consoleclaw
+  const namespace = (webRoot === '/' || !webRoot) ? '' : webRoot.replace(/\//g, '');
+  
   return `ocb${namespace ? '_' + namespace : ''}_`;
 };
 
