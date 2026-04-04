@@ -386,10 +386,16 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
     if (res.ok) {
         const messagesData = res.payload.messages || res.payload.items || [];
         const history = messagesData.reverse().map((item: any) => {
-            // V3 历史内容通常为 Blocks 数组，需要提取 text
+            // V3 历史内容通常为 Blocks 数组，需要提取所有文本内容块 (text & thought)
             let content = item.content;
             if (Array.isArray(content)) {
-                content = content.map((c: any) => c.text || '').join('');
+                content = content.map((c: any) => {
+                    // 深度兼容：同时提取正文 (text) 和 思维链 (thought)
+                    // 思维链通常使用引用块渲染，以便与普通文本区分
+                    const textPart = c.text || '';
+                    const thoughtPart = c.thought ? `> ${c.thought}\n\n` : '';
+                    return thoughtPart + textPart;
+                }).join('');
             }
             return {
                 role: item.role,
@@ -500,7 +506,14 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         firstTokenTimeRef.current = now;
       }
 
-      const fullText = payload.message?.content?.[0]?.text || '';
+      // 深度提取：同时提取 text 和 thought 并格式化（引用块形式显示思维链）
+      const blocks = payload.message?.content || [];
+      const fullText = blocks.map((c: any) => {
+          const textPart = c.text || '';
+          const thoughtPart = c.thought ? `> ${c.thought}\n\n` : '';
+          return thoughtPart + textPart;
+      }).join('');
+
       streamContentRef.current = fullText;
       const currentContent = streamContentRef.current;
       tokenCountRef.current = currentContent.length;
