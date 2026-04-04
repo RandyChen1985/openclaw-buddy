@@ -55,6 +55,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
   const [isTyping, setIsTyping] = useState(false);
   const [sessionKey, setSessionKey] = useState<string | null>(null);
   const [thinkingLevel, setThinkingLevel] = useState<'low' | 'medium' | 'high' | 'pro'>('medium');
+  const [lastHealth, setLastHealth] = useState<{ ok: boolean, latency: number, ts: number } | null>(null);
+  const [pulse, setPulse] = useState(0);
   
   const [sessions, setSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
@@ -193,10 +195,18 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
 
     ws.onmessage = async (event) => {
       const data = JSON.parse(event.data);
-      console.log('📥 [V3] Received:', data);
-
+      
       // Handle Events
       if (data.type === 'event') {
+        if (data.event === 'health') {
+          const { ok, durationMs, ts } = data.payload;
+          setLastHealth({ ok, latency: durationMs || 0, ts });
+          setPulse(p => p + 1);
+          return;
+        }
+        if (['tick', 'presence'].includes(data.event)) return; // 过滤高频系统包
+        
+        console.log('📥 [V3] Received:', data);
         if (data.event === 'connect.challenge') {
           handleChallenge(data.payload.nonce);
         } else if (data.event === 'chat') {
@@ -206,6 +216,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         }
         return;
       }
+
+      console.log('📥 [V3] Received:', data);
 
       // Handle Responses
       if (data.type === 'res') {
@@ -617,7 +629,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                               <div style={{ fontSize: 13, fontWeight: 600, color: sessionKey === s.key ? '#1e40af' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   {s.label || s.key}
                               </div>
-                              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleDateString()}</div>
+                              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2, fontFamily: 'monospace' }}>
+                                  {new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleString([], { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+                              </div>
                           </div>
                           <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>
                               <Button 
@@ -658,6 +672,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
             .message-in { animation: message-in 0.3s ease; }
             @keyframes message-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
             
+            @keyframes v3-heartbeat {
+              0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); opacity: 1; }
+              70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); opacity: 0.8; }
+              100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); opacity: 1; }
+            }
+
             .input-container-v3:focus-within {
                 border-color: #2563eb !important;
                 box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.1), 0 8px 10px -6px rgba(37, 99, 235, 0.1) !important;
@@ -674,7 +694,15 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                 onClick={() => setShowSider(!showSider)} 
                 style={{ marginLeft: -6, color: showSider ? '#4f46e5' : '#64748b', flexShrink: 0 }}
             />
-            <Badge status={status === 'authenticated' ? 'success' : (status === 'error' ? 'error' : 'processing')} style={{ flexShrink: 0 }} />
+            {status !== 'authenticated' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                <Badge status={status === 'error' ? 'error' : 'processing'} />
+                <span style={{ fontSize: 11, color: status === 'error' ? '#ef4444' : '#94a3b8', fontWeight: 500 }}>
+                    {status === 'error' ? '网关连接失败' : '网关连接中...'}
+                </span>
+              </div>
+            )}
+            
             {status === 'authenticated' && sessionKey ? (
               <Tooltip title={t('chat.clickToCopy', { defaultValue: '点击复制会话 ID' })}>
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
@@ -693,9 +721,31 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                 </div>
               </Tooltip>
             ) : (
-              <Tag color="blue" icon={<ShieldCheck size={11} />} style={{ borderRadius: 6, border: 'none', background: '#eff6ff', color: '#4f46e5', padding: '0 6px', fontSize: 11, flexShrink: 0, margin: 0 }}>
-                {status === 'authenticated' ? (isMobile ? 'V3' : t('chat.deviceVerified')) : 'V3 RPC'}
-              </Tag>
+              status === 'authenticated' && (
+                <Tag color="blue" icon={<ShieldCheck size={11} />} style={{ borderRadius: 6, border: 'none', background: '#eff6ff', color: '#4f46e5', padding: '0 6px', fontSize: 11, flexShrink: 0, margin: 0 }}>
+                  {isMobile ? 'V3' : t('chat.deviceVerified')}
+                </Tag>
+              )
+            )}
+            
+            {status === 'authenticated' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 8, flexShrink: 0, marginLeft: 4 }}>
+                <div style={{ height: 12, width: 1, background: '#f1f5f9', marginRight: 2 }}></div>
+                <span style={{ fontSize: 11, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600, marginRight: 2 }}>
+                    {lastHealth?.ok === false ? '网关波动中' : '网关已连接'}
+                </span>
+                <div key={pulse} style={{ 
+                  width: 7, height: 7, borderRadius: '50%', 
+                  background: lastHealth?.ok === false ? '#f59e0b' : (lastHealth?.ok ? '#10b981' : '#94a3b8'),
+                  animation: lastHealth?.ok ? 'v3-heartbeat 0.8s ease-out' : 'none',
+                  flexShrink: 0
+                }} />
+                {!isMobile && (
+                  <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', width: 35 }}>
+                    {lastHealth ? `${lastHealth.latency}ms` : '---'}
+                  </span>
+                )}
+              </div>
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 2 : 6, flexShrink: 0 }}>
@@ -1067,11 +1117,26 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                        onChange={setSelectedBot}
                        loading={loadingBots}
                        variant="borderless"
-                       dropdownStyle={{ borderRadius: 10, minWidth: 180 }}
+                       dropdownStyle={{ borderRadius: 10, minWidth: 240 }}
                        dropdownMatchSelectWidth={false}
+                       listHeight={400}
                    >
                        {botsModels?.data?.bots?.map((bot: any) => (
-                           <Select.Option key={bot.id} value={`openclaw:${bot.id}`}>{bot.name || bot.id}</Select.Option>
+                           <Select.Option key={bot.id} value={`openclaw:${bot.id}`}>
+                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0' }}>
+                                   <div style={{ flexShrink: 0 }}>
+                                       <BotAvatar provider={bot.provider || (bot.id === 'main' ? 'openai' : '')} size={20} />
+                                   </div>
+                                   <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2', minWidth: 0 }}>
+                                       <span style={{ fontWeight: 600, color: '#1e293b', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                           {bot.name || bot.id}
+                                       </span>
+                                       <span style={{ fontSize: 9, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                           {bot.model || '---'}
+                                       </span>
+                                   </div>
+                               </div>
+                           </Select.Option>
                        ))}
                    </Select>
                  </div>
