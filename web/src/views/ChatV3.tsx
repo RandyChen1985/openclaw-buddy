@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Select, Input, Button, Avatar, Spin, message, Tag, Badge, Modal, Form, Tooltip } from 'antd';
+import { Select, Input, Button, Avatar, Spin, message, Tag, Badge, Modal, Form, Tooltip, Drawer } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Send, Bot, User, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, History, LayoutPanelLeft, Zap, Activity, Settings, ChevronUp, ChevronDown, Key, Copy, Square, Quote } from 'lucide-react';
+import { Send, Bot, User, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, History, LayoutPanelLeft, Zap, Activity, Settings, ChevronUp, ChevronDown, Key, Copy, Square, Quote, Sparkles, Save, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -58,6 +58,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
   const [lastHealth, setLastHealth] = useState<{ ok: boolean, latency: number, ts: number } | null>(null);
   const [pulse, setPulse] = useState(0);
   
+  // --- Soul Quick Edit States ---
+  const [isSoulDrawerOpen, setIsSoulDrawerOpen] = useState(false);
+  const [soulContent, setSoulContent] = useState('');
+  const [isSoulLoading, setIsSoulLoading] = useState(false);
+  const [isSoulSaving, setIsSoulSaving] = useState(false);
+
   const [sessions, setSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [sessionSearch, setSessionSearch] = useState('');
@@ -72,6 +78,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
   const scrollRef = useRef<HTMLDivElement>(null);
   const requestIdRef = useRef(1);
   const pendingRequests = useRef<Map<string, (res: any) => void>>(new Map());
+
+  // --- Performance Tracking Refs ---
+  const startTimeRef = useRef<number>(0);
+  const ttftRecordedRef = useRef<boolean>(false);
+  const tokenCountRef = useRef<number>(0);
+  const firstTokenTimeRef = useRef<number>(0);
 
   // 响应式处理：进入 V3 模式时默认折叠侧边栏
   useEffect(() => {
@@ -120,6 +132,46 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
       setQuickCommands(res.data || []);
     } catch (err) {
       console.error('Failed to fetch quick commands:', err);
+    }
+  };
+
+  const handleOpenSoulEditor = async () => {
+    if (!selectedBot) return;
+    const botId = selectedBot.replace('openclaw:', '');
+    try {
+      setIsSoulLoading(true);
+      setIsSoulDrawerOpen(true);
+      const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
+      const workspaceParam = bot?.workspace ? `&workspace=${encodeURIComponent(bot.workspace)}` : '';
+      const api = await import('../api').then(m => m.default);
+      const res = await api.get(`/v1/openclaw/bots/file?id=${botId}&type=soul${workspaceParam}`);
+      setSoulContent(res.data.content || '');
+    } catch (err: any) {
+      message.error(t('common.loadFailed'));
+    } finally {
+      setIsSoulLoading(false);
+    }
+  };
+
+  const handleSaveSoulContent = async () => {
+    if (!selectedBot) return;
+    const botId = selectedBot.replace('openclaw:', '');
+    try {
+      setIsSoulSaving(true);
+      const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
+      const api = await import('../api').then(m => m.default);
+      await api.post('/v1/openclaw/bots/file', {
+        id: botId,
+        type: 'soul',
+        content: soulContent,
+        workspace: bot?.workspace
+      });
+      message.success(t('bots.saveSuccess'));
+      setIsSoulDrawerOpen(false);
+    } catch (err: any) {
+      message.error(t('bots.saveFailed'));
+    } finally {
+      setIsSoulSaving(false);
     }
   };
 
@@ -420,19 +472,59 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
 
   const handleChatDelta = (payload: any) => {
     if (payload.state === 'delta') {
+      const now = Date.now();
+      if (!ttftRecordedRef.current) {
+        ttftRecordedRef.current = true;
+        firstTokenTimeRef.current = now;
+      }
+
       const fullText = payload.message?.content?.[0]?.text || '';
       streamContentRef.current = fullText;
       const currentContent = streamContentRef.current;
+      tokenCountRef.current = currentContent.length;
+
+      // Calculate real-time TPS
+      const elapsedFromFirst = (now - firstTokenTimeRef.current) / 1000;
+      const currentTPS = elapsedFromFirst > 0 ? (tokenCountRef.current / elapsedFromFirst) : 0;
+      const ttft = firstTokenTimeRef.current - startTimeRef.current;
       
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last && last.role === 'assistant') {
-          return [...prev.slice(0, -1), { ...last, content: currentContent }];
+          return [...prev.slice(0, -1), { 
+            ...last, 
+            content: currentContent,
+            metrics: {
+                ttft,
+                tps: currentTPS
+            }
+          }];
         }
         return prev;
       });
     } else if (payload.state === 'final' || payload.state === 'finished') {
+        const now = Date.now();
+        const duration = (now - startTimeRef.current) / 1000;
+        const ttft = ttftRecordedRef.current ? (firstTokenTimeRef.current - startTimeRef.current) : 0;
+        const finalTPS = duration > 0 ? (tokenCountRef.current / (duration - (ttft/1000))) : 0;
+
         console.log('✅ [V3] Stream completed, state:', payload.state);
+        
+        setMessages(prev => {
+            const last = prev[prev.length - 1];
+            if (last && last.role === 'assistant') {
+              return [...prev.slice(0, -1), { 
+                ...last, 
+                metrics: {
+                    ttft,
+                    duration,
+                    tps: finalTPS
+                }
+              }];
+            }
+            return prev;
+        });
+
         setIsTyping(false);
         streamContentRef.current = '';
         // 刷新会话列表（新会话可能会出现在列表中）
@@ -462,6 +554,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
     }
     setIsTyping(true);
     streamContentRef.current = '';
+    
+    // Reset performance counters
+    startTimeRef.current = Date.now();
+    ttftRecordedRef.current = false;
+    tokenCountRef.current = 0;
+    firstTokenTimeRef.current = 0;
 
     const newUserMsg: Message = { role: 'user', content: text, timestamp: new Date().toLocaleTimeString() };
     setMessages(prev => [...prev, newUserMsg]);
@@ -846,7 +944,10 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                   gap: 6, 
                   marginTop: 6,
                   opacity: 1,
-                  transition: 'opacity 0.2s'
+                  transition: 'opacity 0.2s',
+                  fontSize: 10, 
+                  fontWeight: 500, 
+                  color: msg.role === 'user' ? 'rgba(255,255,255,0.7)' : '#94a3b8'
                 }} className="msg-footer">
                   <div style={{ display: 'flex', gap: 2 }}>
                     <Tooltip title={t('chat.copy')}>
@@ -866,9 +967,27 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                       </Tooltip>
                     )}
                   </div>
-                  <div style={{ fontSize: 10, fontWeight: 500, color: msg.role === 'user' ? 'rgba(255,255,255,0.7)' : '#94a3b8' }}>{msg.timestamp}</div>
-                </div>
-              </div>
+                  <span>{msg.timestamp}</span>
+                  {!isMobile && msg.role === 'assistant' && msg.metrics && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4 }}>
+                      <div style={{ width: 1, height: 8, background: '#e2e8f0' }}></div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 9, color: '#94a3b8', fontFamily: 'monospace' }}>
+                          <Activity size={10} color="#10b981" />
+                          <span>{msg.metrics.ttft}ms</span>
+                      </div>
+                      {msg.metrics.tps && (
+                          <span style={{ fontSize: 9, color: '#94a3b8', fontFamily: 'monospace' }}>
+                              {msg.metrics.tps.toFixed(1)} ch/s
+                          </span>
+                      )}
+                      {msg.metrics.duration && (
+                          <span style={{ fontSize: 9, color: '#10b981', fontFamily: 'monospace', fontWeight: 600 }}>
+                              {msg.metrics.duration.toFixed(1)}s
+                          </span>
+                      )}
+                    </div>
+                  )}
+                </div>              </div>
             </div>
           ))}
         </div>
@@ -1140,6 +1259,19 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                        ))}
                    </Select>
                  </div>
+                 <Tooltip title={t('bots.editSoul', { defaultValue: '编辑灵魂 (Prompt)' })}>
+                    <Button 
+                      type="text" 
+                      size="small" 
+                      icon={<Sparkles size={16} color="#eab308" />} 
+                      onClick={handleOpenSoulEditor}
+                      disabled={!selectedBot || status !== 'authenticated'}
+                      style={{ 
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: '#f8fafc', borderRadius: 8, height: 28, width: 28, padding: 0
+                      }}
+                    />
+                 </Tooltip>
                  <div style={{ height: 16, width: 1, background: '#e2e8f0', flexShrink: 0 }}></div>
                  <span style={{ fontSize: isMobile ? 10 : 11, color: '#94a3b8', fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 0, opacity: 0.8 }}>V3 WebSocket</span>
                </div>
@@ -1233,6 +1365,100 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           </Form>
         </div>
       </Modal>
+
+      {/* 专家灵魂快捷编辑器 (Quick Soul Editor) */}
+      <Drawer
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ background: '#fffbeb', padding: 6, borderRadius: 10, border: '1px solid #fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Sparkles size={18} color="#d97706" />
+              </div>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>{t('bots.editSoul', { defaultValue: '编辑专家灵魂' })}</div>
+                <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>{selectedBot?.replace('openclaw:', '')}</div>
+              </div>
+            </div>
+          </div>
+        }
+        placement="right"
+        onClose={() => setIsSoulDrawerOpen(false)}
+        open={isSoulDrawerOpen}
+        width={isMobile ? '100%' : 600}
+        extra={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button icon={<X size={16} />} onClick={() => setIsSoulDrawerOpen(false)} />
+            <Button 
+                type="primary" 
+                icon={<Save size={16} />} 
+                loading={isSoulSaving} 
+                onClick={handleSaveSoulContent}
+                style={{ background: '#2563eb', borderRadius: 8, height: 32 }}
+            >
+              {t('common.save', { defaultValue: '保存并应用' })}
+            </Button>
+          </div>
+        }
+        styles={{ 
+          header: { borderBottom: '1px solid #f1f5f9', padding: '16px 24px' },
+          body: { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }
+        }}
+        closable={false}
+      >
+        {isSoulLoading ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, background: '#f8fafc' }}>
+            <Spin size="large" />
+            <div style={{ color: '#94a3b8', fontSize: 13, fontFamily: 'monospace' }}>RECOVERING_SOUL_FRAGMENTS...</div>
+          </div>
+        ) : (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100%' }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: isMobile ? 'none' : '1px solid #f1f5f9' }}>
+                    <div style={{ padding: '8px 16px', background: '#f8fafc', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>
+                        Soul Source (Markdown)
+                    </div>
+                    <Input.TextArea
+                        value={soulContent}
+                        onChange={e => setSoulContent(e.target.value)}
+                        placeholder="Enter expert's soul (Prompt)..."
+                        style={{ 
+                          flex: 1, 
+                          border: 'none', 
+                          borderRadius: 0, 
+                          resize: 'none', 
+                          fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                          fontSize: 13,
+                          padding: 20,
+                          background: '#fff',
+                          lineHeight: 1.6
+                        }}
+                    />
+                </div>
+                {!isMobile && (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa' }}>
+                      <div style={{ padding: '8px 16px', background: '#f1f5f9', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>
+                          Live Preview
+                      </div>
+                      <div style={{ flex: 1, padding: 20, overflowY: 'auto', background: '#fafafa' }}>
+                          <ReactMarkdown 
+                            remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
+                            rehypePlugins={[rehypeSanitize, rehypeKatex]}
+                          >
+                            {soulContent}
+                          </ReactMarkdown>
+                      </div>
+                  </div>
+                )}
+            </div>
+            <div style={{ padding: '12px 20px', background: '#fff', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fbbf24', animation: 'v3-heartbeat 1.5s infinite' }} />
+                <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
+                    修改后点击保存，网关将立即应用最新的专家人格设置。
+                </div>
+            </div>
+          </div>
+        )}
+      </Drawer>
     </>
   );
 };
