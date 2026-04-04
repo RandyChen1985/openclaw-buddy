@@ -13,7 +13,7 @@ interface OnlineChatProps {
   onRestartGateway?: () => Promise<void>;
 }
 
-const OnlineChat: React.FC<OnlineChatProps> = (props) => {
+const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, ...props }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('classic');
 
@@ -26,7 +26,7 @@ const OnlineChat: React.FC<OnlineChatProps> = (props) => {
           {t('chat.classicMode', { defaultValue: '经典模式 (HTTP)' })}
         </span>
       ),
-      children: <ChatClassic {...props} />,
+      children: <ChatClassic {...props} isMobile={isMobile} />,
     },
     {
       key: 'v3',
@@ -36,7 +36,7 @@ const OnlineChat: React.FC<OnlineChatProps> = (props) => {
           {t('chat.v3Mode', { defaultValue: 'V3 模式 (RPC)' })}
         </span>
       ),
-      children: <ChatV3Final {...props} />,
+      children: <ChatV3Final {...props} isMobile={isMobile} />,
     },
   ];
 
@@ -53,10 +53,11 @@ const OnlineChat: React.FC<OnlineChatProps> = (props) => {
         activeKey={activeTab}
         onChange={setActiveTab}
         items={items}
+        tabBarGutter={isMobile ? 12 : undefined}
         style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
         tabBarStyle={{ 
           margin: 0, 
-          padding: '0 20px', 
+          padding: isMobile ? '0 12px' : '0 20px', 
           background: '#fff', 
           borderBottom: '1px solid #f1f5f9' 
         }}

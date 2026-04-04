@@ -142,7 +142,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
       await form.validateFields(); // 基础校验
       const values = form.getFieldsValue(true); // 强力提取所有步骤的数据
       setSubmitting(true);
-      await api.post('/v1/openclaw/bots/template', {
+      const res = await api.post('/v1/openclaw/bots/template', {
         expertId: values.expertId || selectedExpert?.id, // 增加显式兜底
         botId: values.botId,
         modelId: values.modelId,
@@ -150,7 +150,14 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
         identity_md: values.identity_md
       });
       setIsModalOpen(false);
-      message.success(t('experts.createSuccess', { id: values.botId }));
+      
+      const taskID = res.data?.taskID || res.data?.data?.taskID;
+      if (taskID) {
+        message.loading(t('common.processing') + '...', 3);
+      } else {
+        message.success(t('experts.createSuccess', { id: values.botId }));
+      }
+      
       onNavigate('bots-models');
     } catch (err: any) {
       if (!err.errorFields) {

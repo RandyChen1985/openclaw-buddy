@@ -924,13 +924,14 @@ const ChatClassic: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRef
                                   marginBottom: 12, 
                                   borderRadius: 8,
                                   border: '1px solid #e2e8f0',
-                                  background: '#fff'
+                                  background: '#fff',
+                                  WebkitOverflowScrolling: 'touch'
                                 }}>
                                   <table {...props} style={{ 
                                     width: '100%', 
                                     borderCollapse: 'collapse',
                                     fontSize: isMobile ? '12px' : '13px',
-                                    minWidth: isMobile ? '500px' : 'auto'
+                                    minWidth: '100%'
                                   }} />
                                 </div>
                               ),

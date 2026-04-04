@@ -611,6 +611,7 @@
     "unbind_wechat": "解绑微信账号",
     "results": {
       "cloned": "已克隆",
+      "cloned_and_restarted": "已克隆并自动重启网关，若数据未显示请点击刷新",
       "created": "已创建",
       "updated": "已更新",
       "identity_updated": "身份已更新",

@@ -1546,14 +1546,19 @@ func (s *Server) createBotFromExpert(c *gin.Context) {
 		Target: req.BotID,
 	}
 
-	s.runAsyncTask(c, task, func() (string, error) {
+	s.runAsyncTaskWithPriority(c, task, scheduler.PriorityHigh, func() (string, error) {
 		if err := process.CreateBotFromExpert(req.ExpertID, req.BotID, req.ModelID, req.Soul, req.IdentityMD); err != nil {
 			return "", err
 		}
 
 		// 同步缓存
 		process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "tasks.results.cloned", nil
+
+		// 克隆成功后自动重启网关
+		log.Printf("🔄 [ExpertClone] 克隆成功，正在自动重启网关以激活新 Bot: %s", req.BotID)
+		_ = process.RestartGateway(s.cfg.HealthPort)
+
+		return "tasks.results.cloned_and_restarted", nil
 	})
 }
 

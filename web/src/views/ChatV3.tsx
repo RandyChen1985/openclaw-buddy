@@ -515,7 +515,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
 
   return (
     <>
-      <div style={{ flex: 1, display: 'flex', background: '#fff', overflow: 'hidden', height: '100%' }}>
+      <div style={{ flex: 1, display: 'flex', background: '#fff', overflowX: 'hidden', height: '100%', position: 'relative', width: '100%' }}>
       {/* Session Sider */}
       {showSider && (
         <>
@@ -535,7 +535,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
             position: isMobile ? 'fixed' : 'relative',
             top: 0, left: 0, bottom: 0,
             zIndex: 201,
-            boxShadow: isMobile ? '4px 0 20px rgba(0,0,0,0.15)' : 'none'
+            boxShadow: isMobile ? '4px 0 20px rgba(0,0,0,0.15)' : 'none',
+            flexShrink: 0
           }}>
             <div style={{ padding: '16px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 8 }}>
               <Button 
@@ -618,7 +619,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         </>
       )}
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa', position: 'relative' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa', position: 'relative', width: '100%', minWidth: 0, overflow: 'hidden' }}>
         <style>{`
             .session-item:hover { background: #f8fafc; }
             .session-item:hover .session-actions { opacity: 1 !important; }
@@ -643,23 +644,24 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
             .message-in:hover .msg-footer { opacity: 1; }
         `}</style>
         
-        <div style={{ padding: isMobile ? '6px 10px' : '10px 16px', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 10, gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 10, minWidth: 0 }}>
+        <div style={{ padding: isMobile ? '6px 10px' : '10px 16px', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 10, gap: 8, width: '100%', boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 10, minWidth: 0, flex: 1 }}>
             <Button 
                 type="text" 
                 icon={<LayoutPanelLeft size={18} />} 
                 onClick={() => setShowSider(!showSider)} 
                 style={{ marginLeft: -6, color: showSider ? '#4f46e5' : '#64748b', flexShrink: 0 }}
             />
-            <Badge status={status === 'authenticated' ? 'success' : (status === 'error' ? 'error' : 'processing')} />
+            <Badge status={status === 'authenticated' ? 'success' : (status === 'error' ? 'error' : 'processing')} style={{ flexShrink: 0 }} />
             {status === 'authenticated' && sessionKey ? (
               <Tooltip title={t('chat.clickToCopy', { defaultValue: '点击复制会话 ID' })}>
-                <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
                     <span 
                         style={{ 
                             fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', cursor: 'pointer',
-                            whiteSpace: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none',
-                            msOverflowStyle: 'none', maxWidth: isMobile ? 100 : 'none'
+                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                            maxWidth: isMobile ? 120 : 'none',
+                            display: 'inline-block'
                         }}
                         className="v3-session-id-header"
                         onClick={() => copyToClipboard(sessionKey)}
@@ -669,14 +671,14 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                 </div>
               </Tooltip>
             ) : (
-              <Tag color="blue" icon={<ShieldCheck size={11} />} style={{ borderRadius: 6, border: 'none', background: '#eff6ff', color: '#4f46e5', padding: '0 6px', fontSize: 11, flexShrink: 0 }}>
+              <Tag color="blue" icon={<ShieldCheck size={11} />} style={{ borderRadius: 6, border: 'none', background: '#eff6ff', color: '#4f46e5', padding: '0 6px', fontSize: 11, flexShrink: 0, margin: 0 }}>
                 {status === 'authenticated' ? (isMobile ? 'V3' : t('chat.deviceVerified')) : 'V3 RPC'}
               </Tag>
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 2 : 6, flexShrink: 0 }}>
               {!isMobile && <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>Thinking:</span>}
-              <Select size="small" value={thinkingLevel} onChange={setThinkingLevel} style={{ width: isMobile ? 72 : 90 }} dropdownStyle={{ borderRadius: 8 }}>
+              <Select size="small" value={thinkingLevel} onChange={setThinkingLevel} style={{ width: isMobile ? 75 : 100 }} dropdownStyle={{ borderRadius: 8 }}>
                   <Select.Option value="low">Low</Select.Option>
                   <Select.Option value="medium">Medium</Select.Option>
                   <Select.Option value="high">High</Select.Option>
@@ -686,18 +688,28 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           </div>
         </div>
   
-        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '12px' : '24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div ref={scrollRef} style={{ 
+            flex: 1, 
+            overflowY: 'auto', 
+            padding: isMobile ? '12px' : '24px', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: 20,
+            justifyContent: messages.length === 0 ? 'center' : 'flex-start',
+            width: '100%',
+            boxSizing: 'border-box'
+        }}>
           {messages.length === 0 && (
-            <div style={{ margin: 'auto', textAlign: 'center', maxWidth: 400, padding: 40 }}>
-              <div style={{ background: '#eff6ff', width: 80, height: 80, borderRadius: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', color: '#2563eb' }}>
-                <Cpu size={40} />
+            <div style={{ margin: '0 auto', textAlign: 'center', maxWidth: isMobile ? '100%' : 400, padding: isMobile ? '20px 0' : '40px', width: '100%', boxSizing: 'border-box' }}>
+              <div style={{ background: '#eff6ff', width: isMobile ? 64 : 80, height: isMobile ? 64 : 80, borderRadius: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', color: '#2563eb' }}>
+                <Cpu size={isMobile ? 32 : 40} />
               </div>
-              <h3 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 12 }}>{t('chat.v3Ready')}</h3>
-              <p style={{ color: '#64748b', lineHeight: 1.6, fontSize: 14 }}>{t('chat.v3ReadyDesc')}</p>
-              <div style={{ marginTop: 24, display: 'flex', gap: 8, justifyContent: 'center' }}>
-                <Tag style={{ borderRadius: 10, padding: '4px 12px' }}>⚡ 低延迟</Tag>
-                <Tag style={{ borderRadius: 10, padding: '4px 12px' }}>🔒 Ed25519</Tag>
-                <Tag style={{ borderRadius: 10, padding: '4px 12px' }}>🌐 云同步</Tag>
+              <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800, color: '#1e293b', marginBottom: 12 }}>{t('chat.v3Ready')}</h3>
+              <p style={{ color: '#64748b', lineHeight: 1.6, fontSize: isMobile ? 13 : 14, padding: isMobile ? '0 10px' : 0 }}>{t('chat.v3ReadyDesc')}</p>
+              <div style={{ marginTop: 24, display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>⚡ 低延迟</Tag>
+                <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>🔒 Ed25519</Tag>
+                <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>🌐 云同步</Tag>
               </div>
             </div>
           )}
@@ -793,104 +805,175 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           <div style={{
             position: 'absolute',
             top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(255,255,255,0.4)',
-            backdropFilter: 'blur(20px) saturate(180%)',
+            background: '#f8fafc', // 洁净的浅色背景
             zIndex: 1000,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexDirection: 'column',
-            animation: 'v3-fade-in 0.4s ease-out'
+            animation: 'v3-fade-in 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+            width: '100%',
+            height: '100%',
+            overflow: 'hidden'
           }}>
             <style>{`
               @keyframes v3-pulse-ring {
-                0% { transform: scale(0.8); opacity: 0.5; }
-                100% { transform: scale(1.4); opacity: 0; }
+                0% { transform: scale(0.8); opacity: 0.5; box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.3); }
+                70% { transform: scale(1.2); opacity: 0; box-shadow: 0 0 0 20px rgba(37, 99, 235, 0); }
+                100% { transform: scale(0.8); opacity: 0; box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
               }
               @keyframes v3-fade-in { from { opacity: 0; } to { opacity: 1; } }
-              .v3-auth-card {
-                padding: 40px;
-                background: rgba(255, 255, 255, 0.9);
-                border-radius: 32px;
-                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                text-align: center;
-                max-width: 340px;
-                width: 90%;
+              @keyframes v3-scan-line { 
+                0% { transform: translateY(-100%); opacity: 0; } 
+                50% { opacity: 0.8; }
+                100% { transform: translateY(400%); opacity: 0; } 
               }
+              @keyframes v3-grid-move {
+                0% { background-position: 0 0; }
+                100% { background-position: 40px 40px; }
+              }
+              @keyframes v3-glow-light {
+                0%, 100% { box-shadow: 0 10px 30px rgba(37, 99, 235, 0.05); }
+                50% { box-shadow: 0 15px 45px rgba(37, 99, 235, 0.15); }
+              }
+              
+              .v3-auth-container {
+                position: relative;
+                width: 100%;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background-image: 
+                  linear-gradient(rgba(37, 99, 235, 0.03) 1px, transparent 1px),
+                  linear-gradient(90deg, rgba(37, 99, 235, 0.03) 1px, transparent 1px);
+                background-size: 40px 40px;
+                animation: v3-grid-move 6s linear infinite;
+              }
+
+              .v3-auth-card {
+                position: relative;
+                padding: ${isMobile ? '32px 24px' : '48px'};
+                background: rgba(255, 255, 255, 0.7);
+                backdrop-filter: blur(20px) saturate(180%);
+                border-radius: ${isMobile ? '24px' : '32px'};
+                border: 1px solid rgba(37, 99, 235, 0.15);
+                text-align: center;
+                max-width: ${isMobile ? '280px' : '380px'};
+                width: 85%;
+                box-sizing: border-box;
+                animation: v3-glow-light 4s ease-in-out infinite;
+                overflow: hidden;
+              }
+
+              .v3-scan-line-element {
+                position: absolute;
+                top: 0; left: 0; right: 0;
+                height: 2px;
+                background: linear-gradient(90deg, transparent, #2563eb, transparent);
+                box-shadow: 0 0 10px rgba(37, 99, 235, 0.5);
+                z-index: 1;
+                animation: v3-scan-line 3.5s linear infinite;
+              }
+
               .v3-icon-box {
-                width: 80px; height: 80px;
-                border-radius: 24px;
+                width: ${isMobile ? '64px' : '80px'}; 
+                height: ${isMobile ? '64px' : '80px'};
+                border-radius: ${isMobile ? '20px' : '24px'};
                 margin: 0 auto 24px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 position: relative;
+                background: rgba(37, 99, 235, 0.05);
+                border: 1px solid rgba(37, 99, 235, 0.1);
+              }
+
+              .v3-tech-label {
+                font-family: 'JetBrains Mono', 'Fira Code', monospace;
+                font-size: 10px;
+                color: #2563eb;
+                text-transform: uppercase;
+                letter-spacing: 2px;
+                opacity: 0.5;
+                margin-bottom: 8px;
               }
             `}</style>
             
-            <div className="v3-auth-card">
-              <div className="v3-icon-box" style={{ background: status === 'error' ? '#fef2f2' : '#eff6ff' }}>
-                {status !== 'error' && (
-                  <div style={{
-                    position: 'absolute',
-                    top: 0, left: 0, right: 0, bottom: 0,
-                    borderRadius: 'inherit',
-                    border: '4px solid #2563eb',
-                    animation: 'v3-pulse-ring 1.5s cubic-bezier(0.24, 0, 0.38, 1) infinite'
-                  }} />
+            <div className="v3-auth-container">
+              <div className="v3-auth-card">
+                <div className="v3-scan-line-element" />
+                
+                <div className="v3-tech-label">System Protocol Hook</div>
+                
+                <div className="v3-icon-box">
+                  {status !== 'error' && (
+                    <div style={{
+                      position: 'absolute',
+                      top: -4, left: -4, right: -4, bottom: -4,
+                      borderRadius: 'inherit',
+                      border: '2px solid #2563eb',
+                      animation: 'v3-pulse-ring 2s cubic-bezier(0.24, 0, 0.38, 1) infinite'
+                    }} />
+                  )}
+                  {status === 'error' ? (
+                    <ShieldCheck size={36} color="#ef4444" />
+                  ) : status === 'authorizing' ? (
+                    <Key size={36} color="#2563eb" />
+                  ) : (
+                    <Cpu size={36} color="#2563eb" className="animate-spin" style={{ animationDuration: '3s' }} />
+                  )}
+                </div>
+                
+                <div style={{ fontWeight: 800, fontSize: isMobile ? 20 : 24, color: '#1e293b', marginBottom: 12, letterSpacing: '-0.02em', fontFamily: 'monospace' }}>
+                  {status === 'error' ? 'AUTH_FAILED' :
+                    status === 'connecting' ? 'CONNECTING...' :
+                    status === 'challenging' ? 'HANDSHAKING...' : 
+                    status === 'authorizing' ? 'AUTHORIZING...' : 'IDENTIFYING...'}
+                </div>
+                
+                <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6, marginBottom: 24, fontFamily: 'monospace' }}>
+                  {status === 'error' ? (
+                    <div style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.05)', padding: '8px 12px', borderRadius: 8, fontSize: 11, border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+                      [ERROR] TARGET_UNREACHABLE_OR_DENIED
+                    </div>
+                  ) : status === 'authorizing' ? (
+                    'DEVICE_NODE_HANDSHAKE_IN_PROGRESS...'
+                  ) : 'SECURE_CHANNEL_V3 // ED25519_HARDWARE_KEY'}
+                </div>
+                
+                {status === 'error' && (
+                  <Button 
+                    type="primary" 
+                    size="large" 
+                    onClick={connect} 
+                    icon={<RefreshCw size={18} />}
+                    style={{ width: '100%', height: 46, borderRadius: 12, background: '#2563eb', fontWeight: 600, border: 'none', boxShadow: '0 4px 15px rgba(37, 99, 235, 0.3)' }}
+                  >
+                    RETRY_CONNECTION
+                  </Button>
                 )}
-                {status === 'error' ? (
-                  <ShieldCheck size={36} color="#ef4444" />
-                ) : status === 'authorizing' ? (
-                  <Key size={36} color="#2563eb" />
-                ) : (
-                  <Spin size="large" />
-                )}
+
+                <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 4 }}>
+                   {[1,2,3,4].map(i => (
+                     <div key={i} style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%', opacity: 0.1 + (i*0.1) }} />
+                   ))}
+                </div>
               </div>
-              
-              <div style={{ fontWeight: 800, fontSize: 20, color: '#1e293b', marginBottom: 12, letterSpacing: '-0.02em' }}>
-                {status === 'error' ? '设备连接失败' :
-                  status === 'connecting' ? '正在寻址网关...' :
-                  status === 'challenging' ? '安全握手中...' : 
-                  status === 'authorizing' ? '正在自动获权...' : '网关认证中...'}
-              </div>
-              
-              <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6, marginBottom: 24 }}>
-                {status === 'error' ? (
-                  <div style={{ color: '#ef4444', background: '#fff1f0', padding: '8px 12px', borderRadius: 10, fontSize: 12, marginBottom: 16 }}>
-                    认证失败，请确认网关已启动且允许当前设备。
-                  </div>
-                ) : status === 'authorizing' ? (
-                  '检测到新设备接入，后台专家正在静默授权...'
-                ) : 'WebSocket V3 · Ed25519 硬件安全认证'}
-              </div>
-              
-              {status === 'error' && (
-                <Button 
-                  type="primary" 
-                  size="large" 
-                  onClick={connect} 
-                  icon={<RefreshCw size={18} />}
-                  style={{ width: '100%', height: 46, borderRadius: 14, background: '#2563eb', fontWeight: 600 }}
-                >
-                  重试连接
-                </Button>
-              )}
             </div>
             
-            <div style={{ marginTop: 24, fontSize: 12, color: 'rgba(0,0,0,0.3)', fontWeight: 500 }}>
-              OPENCLAW SECURE TUNNEL V3.0
+            <div style={{ position: 'absolute', bottom: 24, fontSize: 10, color: 'rgba(37, 99, 235, 0.2)', fontWeight: 600, letterSpacing: '4px', fontFamily: 'monospace' }}>
+              OPENCLAW_SECURE_TUNNEL_V3.0
             </div>
           </div>
         )}
 
-        <div style={{ padding: isMobile ? '8px 12px' : '0 24px 20px', background: '#fafafa', borderTop: '1px solid #f1f5f9' }}>
+        <div style={{ padding: isMobile ? '8px 12px' : '0 24px 20px', background: '#fafafa', borderTop: '1px solid #f1f5f9', width: '100%', boxSizing: 'border-box' }}>
 
-           <div style={{ display: 'flex', gap: 8, marginBottom: showQuickActions ? 12 : 8, alignItems: 'center', transition: 'all 0.3s ease', paddingTop: 12 }}>
+           <div style={{ display: 'flex', gap: 8, marginBottom: showQuickActions ? 12 : 8, alignItems: 'center', transition: 'all 0.3s ease', paddingTop: 12, width: '100%', overflow: 'hidden', boxSizing: 'border-box' }}>
              {showQuickActions ? (
                <>
-                 <div style={{ display: 'flex', gap: 8, overflowX: 'auto', flex: 1, paddingBottom: 4, scrollbarWidth: 'none' } as React.CSSProperties}>
+                 <div style={{ display: 'flex', gap: 8, overflowX: 'auto', flex: 1, paddingBottom: 6, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', whiteSpace: 'nowrap', minWidth: 0 } as React.CSSProperties}>
                    {quickCommands.map((item: any) => (
                      <Button
                        key={item.id}
@@ -903,7 +986,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                      </Button>
                    ))}
                  </div>
-                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
                    <Button
                      type="text" size="small" icon={<Settings size={14} />}
                      style={{ color: '#94a3b8', background: '#f1f5f9', borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
@@ -922,7 +1005,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                  <Button
                    type="text" size="small" icon={<ChevronDown size={14} style={{ marginRight: 4 }} />}
                    onClick={() => { setShowQuickActions(true); storage.setItem('v3_show_quick_actions', 'true'); }}
-                   style={{ fontSize: 11, color: '#94a3b8', height: 20, padding: '0 8px', borderRadius: 10, background: '#f8fafc', display: 'flex', alignItems: 'center' }}
+                   style={{ fontSize: 11, color: '#94a3b8', height: 20, padding: '0 8px', borderRadius: 10, background: '#f8fafc', display: 'flex', alignItems: 'center', flexShrink: 0 }}
                  >
                    {t('chat.expandQuickCommands', { defaultValue: '快捷指令' })}
                  </Button>
@@ -933,8 +1016,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
 
             <div style={{ 
               display: 'flex', 
-              gap: 0, 
-              alignItems: 'stretch', 
               background: '#fff', 
               borderRadius: 20, 
               boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)', 
@@ -942,27 +1023,38 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
               flexDirection: 'column',
               overflow: 'hidden',
               transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              maxWidth: '100%',
+              width: '100%',
               boxSizing: 'border-box'
             }} className="input-container-v3">
-              <div style={{ width: '100%', display: 'flex', alignItems: 'center', padding: isMobile ? '8px 12px 0' : '12px 16px 0', gap: 8 }}>
-                 <div style={{ padding: '2px 8px', background: '#f8fafc', borderRadius: 8, border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center' }}>
+              <div style={{ width: '100%', display: 'flex', alignItems: 'center', padding: isMobile ? '6px 12px 0' : '12px 16px 0', gap: isMobile ? 4 : 8, boxSizing: 'border-box' }}>
+                 <div style={{ 
+                   padding: '2px 4px', 
+                   background: '#f8fafc', 
+                   borderRadius: 8, 
+                   border: '1px solid #f1f5f9', 
+                   display: 'flex', 
+                   alignItems: 'center', 
+                   flex: isMobile ? 1 : '0 0 auto', 
+                   width: isMobile ? 'auto' : 180,
+                   minWidth: 0 
+                 }}>
                    <Select
                        placeholder={t('chat.selectBotTip')}
-                       style={{ width: 110, fontSize: 13 }}
+                       style={{ width: '100%', fontSize: isMobile ? 11 : 13 }}
                        value={selectedBot}
                        onChange={setSelectedBot}
                        loading={loadingBots}
                        variant="borderless"
-                       dropdownStyle={{ borderRadius: 10 }}
+                       dropdownStyle={{ borderRadius: 10, minWidth: 180 }}
+                       dropdownMatchSelectWidth={false}
                    >
                        {botsModels?.data?.bots?.map((bot: any) => (
                            <Select.Option key={bot.id} value={`openclaw:${bot.id}`}>{bot.name || bot.id}</Select.Option>
                        ))}
                    </Select>
                  </div>
-                 <div style={{ height: 16, width: 1, background: '#e2e8f0' }}></div>
-                 <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>V3 WebSocket</span>
+                 <div style={{ height: 16, width: 1, background: '#e2e8f0', flexShrink: 0 }}></div>
+                 <span style={{ fontSize: isMobile ? 10 : 11, color: '#94a3b8', fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 0, opacity: 0.8 }}>V3 WebSocket</span>
                </div>
               
               {quotedMsg && (
@@ -975,7 +1067,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                  </div>
                )}
 
-              <div style={{ width: '100%', display: 'flex', alignItems: 'flex-end', gap: 8, padding: isMobile ? '8px 12px 12px' : '8px 16px 16px' }}>
+              <div style={{ width: '100%', display: 'flex', alignItems: 'flex-end', gap: 8, padding: isMobile ? '4px 12px 8px' : '8px 16px 16px' }}>
                 <Input.TextArea
                   value={inputText}
                   onChange={e => setInputText(e.target.value)}
@@ -1000,9 +1092,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                    disabled={status !== 'authenticated' || (!isTyping && !inputText.trim())}
                    style={{ 
                      width: isMobile ? 36 : 40, height: isMobile ? 36 : 40, borderRadius: 12,
-                     background: isTyping ? '#ef4444' : '#4f46e5', border: 'none', flexShrink: 0,
+                     background: isTyping ? '#ef4444' : '#2563eb', border: 'none', flexShrink: 0,
                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                     boxShadow: isTyping ? '0 4px 12px rgba(239,68,68,0.25)' : '0 4px 12px rgba(79,70,229,0.25)',
+                     boxShadow: isTyping ? '0 4px 12px rgba(239,68,68,0.25)' : '0 4px 12px rgba(37,99,235,0.25)',
                      transition: 'all 0.2s'
                    }}
                  />

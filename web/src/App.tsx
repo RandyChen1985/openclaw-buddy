@@ -155,11 +155,17 @@ const Dashboard = () => {
           // 如果是模型相关变更（添加、删除、设置默认、新增渠道），触发物理对账
           const modelActions = ['delete-model', 'add-model', 'add-provider', 'set-default-model', 'clone-expert'];
           if (modelActions.includes(task.action || '')) {
-            console.log('🔄 [Task Observer] 机器人/模型变更任务完成，正在物理刷新...');
-            fetchModelsConfig(); 
-            fetchBotsModels(true); 
-            // 如果存在全局遮罩，则物理重置
-            onShowGlobalLoading && onShowGlobalLoading('', 1);
+            console.log(`🔄 [Task Observer] 机器人/模型变更任务 (${task.action}) 完成，将在延迟后物理刷新...`);
+            
+            // 针对克隆这类包含重启网关的操作，增加延迟刷新，确保网关端口已完全就绪
+            const delay = task.action === 'clone-expert' ? 1500 : 500;
+            
+            setTimeout(() => {
+              fetchModelsConfig(); 
+              fetchBotsModels(true); 
+              // 如果存在全局遮罩，则物理重置
+              onShowGlobalLoading && onShowGlobalLoading('', 1);
+            }, delay);
           }
           
           if (task.action === 'delete' && task.status === 'Completed' && task.target) {
