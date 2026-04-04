@@ -3,7 +3,11 @@
 ## 1. 基础认证 (Auth)
 - [ ] **Token 校验**: 访问 `/v1/openclaw/status` 无 Token 时应返回 401。
 - [ ] **Bearer Token**: 携带正确 `Authorization: Bearer <token>` 时应正常访问。
-- [ ] **Cookie 校验**: 设置 `buddy_token` Cookie 后，Web 访问应无需再次登录。
+- [ ] **?token= 兼容性**: 在 URL 中直接带上 `?token=xxx` 的 GET 和 POST 请求均应被允许。
+- [ ] **CSRF 防御 (Cookie 限制)**: 仅携带 `guardian_token` Cookie 发起的 POST/DELETE 请求应返回 403 Forbidden。
+- [ ] **Ticket 机制**: 成功通过 `POST /v1/auth/ticket` 获取一次性票据。
+- [ ] **WebSocket 安全**: 使用有效 Ticket 连接 WS 成功，重复使用或过期 Ticket 应导致连接失败。
+- [ ] **Cookie 校验**: 设置 `buddy_token` Cookie 后，GET 类 Web 访问应无需再次登录。
 - [ ] **接口一致性**: `/login` 接口应统一使用 `s.Success` 包装，返回 `status: success` 以兼容前端拦截器。
 
 ## 2. API 接口 (API V1)
@@ -257,6 +261,29 @@
 - [ ] **配置自动初始化**: 在空目录下启动 `.exe`，应能自动生成 `env` 文件并包含随机生成的 `BUDDY_TOKEN`。
 - [ ] **WebView2 自动检测**: 在未安装 WebView2 运行时的系统上启动，应能触发 Wails 的原生下载/安装引导。
 
----
+
+## 15. WebSocket Chat V3 (Real-time Dual-mode)
+- [ ] **双模切换**: 聊天界面应包含“经典模式 (HTTP)”和“V3 模式 (RPC)”的标签页切换。
+- [ ] **Silent Approval (静默授权)**: 首次连接 V3 时，后端应自动探测 `NOT_PAIRED` 错误并静默执行 `openclaw devices approve`，前端无需手动确认。
+- [ ] **Ed25519 身份持久化**: 刷新页面后，Derived Device ID 应保持一致（校验 `localStorage` 中的 seed）。
+- [ ] **Handshake Challenge**: 建立 WS 后，前端应能正确响应 `connect.challenge` 并通过私钥签名认证。
+- [ ] **V3 消息流**: V3 模式下发送消息，应能通过 `chat` 事件实时接收流式响应。
+- [ ] **RPC 指令同步**: 在 V3 界面修改 `thinkingLevel`，应触发 `sessions.patch` 指令并生效。
+- [ ] **Markdown 与 Mermaid**: V3 模式下的消息应支持完整的 Markdown 渲染、公式语法及 Mermaid 图表展示。
+- [ ] **断线重连**: 模拟网关重启，V3 连接应能自动感知断开并尝试重连。
+
+- [x] **V3 历史消息加载**: 验证 `chat.history` 返回的内容块数组能被正确解析为文本。
+- [x] **V3 会话 ID 完整显示**: 侧边栏应显示完整的 `agent:agentId:deviceId:timestamp` 格式。
+- [x] **V3 AI 头像同步**: AI 回复的头像应与经典模式一致（蓝色 Bot 图标）。
+- [x] **V3 思考中动效**: 验证思考中状态仅显示一个气泡，且包含打点动画。
+- [x] **V3 快捷指令支持**: 验证快捷指令面板在 V3 模式下能正常展开、收起并触发消息发送。
+- [x] **V3 自动静默重连**: 模拟 `NOT_PAIRED` 错误，验证前端是否能自动延迟重试并最终认证成功。
+- [x] **V3 全屏加载 UI**: 验证认证过程中的毛玻璃背景、脉冲动画及状态文案显示。
+- [x] **V3 状态流转**: 确认从 `connecting` 到 `challenging` 再到 `authenticated` 的完整流转。
+- [x] **V3 会话管理增强**: 验证侧边栏会话 Tooltip 是否显示完整 key，以及复制图标是否有效。
+- [x] **V3 停止生成**: 在 AI 生成过程中点击红色的“停止”按钮，验证打字机效果立即中断。
+- [x] **V3 消息操作栏**: 验证消息下方的“复制”、“引用”按钮功能是否正常。
+- [x] **V3 重新生成 (Regenerate)**: 点击最后一条 AI 消息的重试按钮，验证 AI 是否重新开始回复（且历史消息已正确清理）。
+
 > [!NOTE]
-> 记录于 2026-04-02：完成了 WebSocket V3 协议文档的深度增补及测试脚本的稳健性重构。实现了全量协议一致性验证逻辑，确保网关 Mutation 方法在 CRUD 全生命周期中的入参及响应符合规范。
+> 记录于 2026-04-03：实现了高性能 WebSocket V3 聊天模式，支持 Ed25519 签名验证与后端静默设备授权（Silent Approval），完成了 UI 的双模 Tab 容器化重构。

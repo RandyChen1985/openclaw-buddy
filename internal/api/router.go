@@ -89,6 +89,7 @@ func (s *Server) setupRoutes() {
 		oc := v1.Group("/openclaw")
 		{
 			oc.GET("/status", s.getOpenClawStatus)
+			oc.GET("/gateway-token", s.getGatewayToken)
 			oc.GET("/version", s.getOpenClawVersion)
 			oc.GET("/dashboard-url", s.getDashboardURL)
 			oc.GET("/bots-models", s.getOpenClawBotsModels)
@@ -145,6 +146,7 @@ func (s *Server) setupRoutes() {
 		v1.GET("/ws/logs", s.streamLogs)
 		v1.GET("/ws/tui", s.handleTUI)
 		v1.GET("/ws/shell", s.handleShell)
+		v1.GET("/ws/gateway", s.handleGatewayProxy)
 
 		// Self-healing management
 		v1.GET("/settings/self-healing", s.getSelfHealingSetting)

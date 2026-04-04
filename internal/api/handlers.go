@@ -192,6 +192,16 @@ func (s *Server) getOpenClawStatus(c *gin.Context) {
 	s.Success(c, status)
 }
 
+// getGatewayToken 返回 OpenClaw Gateway 的认证 Token，供前端 V3 WebSocket 握手使用
+func (s *Server) getGatewayToken(c *gin.Context) {
+	gw, err := process.GetOpenClawGatewayConfig(s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "failed to read gateway config: "+err.Error())
+		return
+	}
+	s.Success(c, gin.H{"token": gw.Auth.Token})
+}
+
 func (s *Server) getWeChatQRCode(c *gin.Context) {
 	force := c.Query("force") == "true"
 	qrcode, err := process.GetWeChatQRCode(force)
