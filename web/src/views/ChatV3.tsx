@@ -348,6 +348,11 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         setSelectedBot(`openclaw:${parts[1]}`);
       }
     }
+
+    // 移动端选中会话后自动关闭侧边栏
+    if (isMobile) {
+      setShowSider(false);
+    }
   };
 
   const copyToClipboard = (text: string) => {
@@ -403,8 +408,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
 
   const handleChatDelta = (payload: any) => {
     if (payload.state === 'delta') {
-      const delta = payload.message?.content?.[0]?.text || '';
-      streamContentRef.current += delta;
+      const fullText = payload.message?.content?.[0]?.text || '';
+      streamContentRef.current = fullText;
       const currentContent = streamContentRef.current;
       
       setMessages(prev => {
@@ -491,12 +496,18 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         setStatus('error');
         return;
       }
-      const delay = Math.min(3000 * (reconnectCountRef.current + 1), 15000);
-      console.log(`🔄 [V3] 将在 ${delay / 1000}s 后重连 (${reconnectCountRef.current + 1}/${MAX_RECONNECTS})`);
+      // 首次连接立刻尝试，重连则按阶梯延迟
+      const delay = reconnectCountRef.current === 0 ? 0 : Math.min(3000 * reconnectCountRef.current, 15000);
+      
+      if (delay > 0) {
+        console.log(`🔄 [V3] 将在 ${delay / 1000}s 后重连 (${reconnectCountRef.current}/${MAX_RECONNECTS})`);
+      }
+      
       reconnectTimerRef.current = setTimeout(() => {
         reconnectCountRef.current++;
         connect();
       }, delay);
+      
       return () => {
         if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       };
@@ -506,6 +517,17 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
       reconnectCountRef.current = 0;
     }
   }, [status, keyPair, connect]);
+
+  // 组件卸载清理：彻底切断连接
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        console.log('🧹 [V3] OnlineChat unmounted: closing WebSocket');
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -707,9 +729,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
               <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800, color: '#1e293b', marginBottom: 12 }}>{t('chat.v3Ready')}</h3>
               <p style={{ color: '#64748b', lineHeight: 1.6, fontSize: isMobile ? 13 : 14, padding: isMobile ? '0 10px' : 0 }}>{t('chat.v3ReadyDesc')}</p>
               <div style={{ marginTop: 24, display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>⚡ 低延迟</Tag>
-                <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>🔒 Ed25519</Tag>
-                <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>🌐 云同步</Tag>
+                <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>{t('chat.v3LowLatency', { defaultValue: '⚡ 低延迟' })}</Tag>
+                <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>{t('chat.v3Secure', { defaultValue: '🔒 Ed25519' })}</Tag>
+                <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>{t('chat.v3CloudSync', { defaultValue: '🌐 云同步' })}</Tag>
               </div>
             </div>
           )}
@@ -926,20 +948,20 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                 </div>
                 
                 <div style={{ fontWeight: 800, fontSize: isMobile ? 20 : 24, color: '#1e293b', marginBottom: 12, letterSpacing: '-0.02em', fontFamily: 'monospace' }}>
-                  {status === 'error' ? 'AUTH_FAILED' :
-                    status === 'connecting' ? 'CONNECTING...' :
-                    status === 'challenging' ? 'HANDSHAKING...' : 
-                    status === 'authorizing' ? 'AUTHORIZING...' : 'IDENTIFYING...'}
+                  {status === 'error' ? t('chat.v3StatusAuthFailed', { defaultValue: 'AUTH_FAILED' }) :
+                    status === 'connecting' ? t('chat.v3StatusConnecting', { defaultValue: 'CONNECTING...' }) :
+                    status === 'challenging' ? t('chat.v3StatusHandshaking', { defaultValue: 'HANDSHAKING...' }) : 
+                    status === 'authorizing' ? t('chat.v3StatusAuthorizing', { defaultValue: 'AUTHORIZING...' }) : t('chat.v3StatusIdentifying', { defaultValue: 'IDENTIFYING...' })}
                 </div>
                 
                 <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6, marginBottom: 24, fontFamily: 'monospace' }}>
                   {status === 'error' ? (
                     <div style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.05)', padding: '8px 12px', borderRadius: 8, fontSize: 11, border: '1px solid rgba(239, 68, 68, 0.1)' }}>
-                      [ERROR] TARGET_UNREACHABLE_OR_DENIED
+                      [ERROR] {t('chat.v3ErrorDesc', { defaultValue: 'TARGET_UNREACHABLE_OR_DENIED' })}
                     </div>
                   ) : status === 'authorizing' ? (
-                    'DEVICE_NODE_HANDSHAKE_IN_PROGRESS...'
-                  ) : 'SECURE_CHANNEL_V3 // ED25519_HARDWARE_KEY'}
+                    t('chat.v3AuthorizingDesc', { defaultValue: 'DEVICE_NODE_HANDSHAKE_IN_PROGRESS...' })
+                  ) : t('chat.v3SecureDesc', { defaultValue: 'SECURE_CHANNEL_V3 // ED25519_HARDWARE_KEY' })}
                 </div>
                 
                 {status === 'error' && (
@@ -950,7 +972,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                     icon={<RefreshCw size={18} />}
                     style={{ width: '100%', height: 46, borderRadius: 12, background: '#2563eb', fontWeight: 600, border: 'none', boxShadow: '0 4px 15px rgba(37, 99, 235, 0.3)' }}
                   >
-                    RETRY_CONNECTION
+                    {t('chat.v3RetryBtn', { defaultValue: 'RETRY_CONNECTION' })}
                   </Button>
                 )}
 
@@ -1092,10 +1114,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                    disabled={status !== 'authenticated' || (!isTyping && !inputText.trim())}
                    style={{ 
                      width: isMobile ? 36 : 40, height: isMobile ? 36 : 40, borderRadius: 12,
-                     background: isTyping ? '#ef4444' : '#2563eb', border: 'none', flexShrink: 0,
+                     background: (status !== 'authenticated' || (!isTyping && !inputText.trim())) ? '#e2e8f0' : (isTyping ? '#ef4444' : '#2563eb'), 
+                     border: 'none', flexShrink: 0,
                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                     boxShadow: isTyping ? '0 4px 12px rgba(239,68,68,0.25)' : '0 4px 12px rgba(37,99,235,0.25)',
-                     transition: 'all 0.2s'
+                     boxShadow: (status !== 'authenticated' || (!isTyping && !inputText.trim())) ? 'none' : (isTyping ? '0 4px 12px rgba(239,68,68,0.25)' : '0 4px 12px rgba(37,99,235,0.25)'),
+                     transition: 'all 0.2s',
+                     color: (status !== 'authenticated' || (!isTyping && !inputText.trim())) ? '#94a3b8' : '#fff'
                    }}
                  />
               </div>

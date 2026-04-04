@@ -1542,7 +1542,7 @@ func (s *Server) createBotFromExpert(c *gin.Context) {
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
 		Name:   "tasks.clone_expert:" + req.BotID,
 		Module: "bots",
-		Action: "clone",
+		Action: "clone-expert",
 		Target: req.BotID,
 	}
 

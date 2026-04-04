@@ -15,19 +15,9 @@ interface OnlineChatProps {
 
 const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, ...props }) => {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState('classic');
+  const [activeTab, setActiveTab] = useState('v3');
 
   const items = [
-    {
-      key: 'classic',
-      label: (
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <MessageSquare size={16} />
-          {t('chat.classicMode', { defaultValue: '经典模式 (HTTP)' })}
-        </span>
-      ),
-      children: <ChatClassic {...props} isMobile={isMobile} />,
-    },
     {
       key: 'v3',
       label: (
@@ -37,6 +27,16 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, ...props }) => {
         </span>
       ),
       children: <ChatV3Final {...props} isMobile={isMobile} />,
+    },
+    {
+      key: 'classic',
+      label: (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <MessageSquare size={16} />
+          {t('chat.classicMode', { defaultValue: '经典模式 (HTTP)' })}
+        </span>
+      ),
+      children: <ChatClassic {...props} isMobile={isMobile} />,
     },
   ];
 

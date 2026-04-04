@@ -125,7 +125,7 @@ export const useTaskCenter = () => {
           onClick={() => window.location.reload()}
           style={{ background: '#2563eb' }}
         >
-          立即刷新
+          {t('common.refreshNow', { defaultValue: '立即刷新' })}
         </Button>
       ) : undefined
     };
