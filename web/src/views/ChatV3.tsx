@@ -441,7 +441,29 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
   const handleStopGeneration = () => {
     setIsTyping(false);
     streamContentRef.current = '';
-    message.info(t('chat.stopGenerating', { defaultValue: '已停止生成' }));
+    
+    // 更新最后一条助手消息的状态
+    setMessages(prev => {
+      if (prev.length === 0) return prev;
+      const last = prev[prev.length - 1];
+      if (last.role === 'assistant') {
+        const stopLabel = t('chat.manuallyStopped', { defaultValue: '用户已手动停止' });
+        // 情况 1: 还在思考中，直接替换
+        if (last.content === t('chat.thinking') || last.content === '') {
+          return [...prev.slice(0, -1), { ...last, content: stopLabel }];
+        }
+        // 情况 2: 已有内容输出，在末尾追加提示（带括号）
+        const stopSuffix = ` (${stopLabel})`;
+        if (!last.content.endsWith(stopSuffix)) {
+          return [...prev.slice(0, -1), { ...last, content: last.content + stopSuffix }];
+        }
+      }
+      return prev;
+    });
+
+    // 发送 /stop 指令到后端，相当于用户输入了 /stop
+    handleSend('/stop');
+    message.info(t('chat.stopGenerating', { defaultValue: '已发送停止指令' }));
   };
 
   const handleDeleteSession = (e: React.MouseEvent, key: string) => {
@@ -562,7 +584,10 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
     firstTokenTimeRef.current = 0;
 
     const newUserMsg: Message = { role: 'user', content: text, timestamp: new Date().toLocaleTimeString() };
-    setMessages(prev => [...prev, newUserMsg]);
+    // /stop 指令作为控制指令，不显示在聊天历史中
+    if (text !== '/stop') {
+      setMessages(prev => [...prev, newUserMsg]);
+    }
 
     // Ensure session exists
     let currentKey = sessionKey;
@@ -577,9 +602,10 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
     }
 
     if (currentKey) {
-      // Add thinking placeholder
-      // 立即挂载“思考中”占位，统一提示文本
-      setMessages(prev => [...prev, { role: 'assistant', content: t('chat.thinking'), timestamp: new Date().toLocaleTimeString() }]);
+      // 只有非控制指令才显示“思考中”占位
+      if (text !== '/stop') {
+        setMessages(prev => [...prev, { role: 'assistant', content: t('chat.thinking'), timestamp: new Date().toLocaleTimeString() }]);
+      }
       
       const res = await sendRPC('chat.send', { 
         sessionKey: currentKey, 
@@ -589,6 +615,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
       if (!res.ok) {
         const errMsg = typeof res.error === 'object' ? JSON.stringify(res.error) : (res.error || 'Unknown error');
         message.error('Failed to send message: ' + errMsg);
+        setIsTyping(false);
+      } else if (text === '/stop') {
+        // /stop 指令成功返回后，立即释放状态，因为它不会产生流式响应
         setIsTyping(false);
       }
     }

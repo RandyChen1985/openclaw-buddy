@@ -136,7 +136,7 @@ func createTables(existingToken string) (string, error) {
 		{"🧠我的 Memory", "我们今天都聊了啥，看看记忆的内容", "Brain"},
 		{"🤖我当前的模型", "我当前使用的什么模型", "Bot"},
 		{"🖥️系统模型列表", "系统目前配置了哪些模型", "Cpu"},
-		{"📊会话状态", "/status", "Activity"},
+		{"📊会话状态", "查看我的会话状态/status", "Activity"},
 		{"🔄重置会话", "/reset", "RotateCcw"},
 		{"🛑终止会话", "/stop", "StopCircle"},
 	}
