@@ -72,7 +72,17 @@ export const CodeBlock = ({ language, value, isMobile }: { language: string, val
           margin: 0,
           padding: isMobile ? '10px' : '16px',
           fontSize: isMobile ? '12px' : '13px',
-          background: '#0f172a'
+          background: '#0f172a',
+          overflowX: 'auto',
+          maxWidth: '100%',
+          WebkitOverflowScrolling: 'touch'
+        }}
+        codeTagProps={{
+          style: {
+            whiteSpace: 'pre',
+            wordBreak: 'normal',
+            overflowWrap: 'normal'
+          }
         }}
       >
         {value}

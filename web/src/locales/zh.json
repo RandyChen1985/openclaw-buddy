@@ -230,7 +230,7 @@
     "labelRequired": "请输入标签名称",
     "promptRequired": "请输入指令快捷话术",
     "quickCommand": "快捷指令",
-    "reply": "引用",
+    "quote": "引用",
     "copy": "复制",
     "retry": "重试",
     "copySuccess": "已复制到剪贴板",

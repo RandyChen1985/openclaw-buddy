@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Select, Input, Button, Avatar, Spin, message, Tag, Badge, Modal, Form, Tooltip, Drawer, Switch } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Send, Bot, User, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, History, LayoutPanelLeft, Zap, Activity, Settings, ChevronUp, ChevronDown, Key, Copy, Square, Quote, Sparkles, Save, X, Terminal, CheckCircle } from 'lucide-react';
+import { Send, Bot, User, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, History, LayoutPanelLeft, Zap, Activity, Settings, ChevronUp, ChevronDown, Search, Clock, Pencil, Key, Copy, Square, Quote, Sparkles, Save, X, Terminal, CheckCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -56,6 +56,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [selectedBot, setSelectedBot] = useState<string>('');
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error'>('disconnected');
   const [isTyping, setIsTyping] = useState(false);
+  const [isStalled, setIsStalled] = useState(false);
+  const stallTimerRef = useRef<any>(null);
   const [sessionKey, setSessionKey] = useState<string | null>(null);
   const [sessionLabel, setSessionLabel] = useState<string | null>(null);
   const [isEditingLabel, setIsEditingLabel] = useState(false);
@@ -73,8 +75,16 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [isSoulLoading, setIsSoulLoading] = useState(false);
   const [isSoulSaving, setIsSoulSaving] = useState(false);
 
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
+  const [tpsData, setTpsData] = useState<number[]>([]);
+  const [editingMsgIndex, setEditingMsgIndex] = useState<number | null>(null);
+  const [editContent, setEditContent] = useState('');
+
   const [sessions, setSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [sessionSearch, setSessionSearch] = useState('');
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
   const [showQuickActions, setShowQuickActions] = useState<boolean>(() => storage.getItem('v3_show_quick_actions') !== 'false');
@@ -87,6 +97,17 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const scrollRef = useRef<HTMLDivElement>(null);
   const requestIdRef = useRef(1);
   const pendingRequests = useRef<Map<string, (res: any) => void>>(new Map());
+
+  const handleScroll = () => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    // 距离底部超过 150px 则显示返回底部按钮
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 150;
+    setShowScrollBtn(!isAtBottom);
+    if (isAtBottom) {
+      setHasNewMessages(false);
+    }
+  };
 
   // --- Performance Tracking Refs ---
   const startTimeRef = useRef<number>(0);
@@ -196,6 +217,34 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     
     // 默认/OpenClaw：统一使用经典模式中的蓝白 Bot 图标风格
     return <div style={wrapStyle}><Bot size={size * 0.55} color="#2563eb" /></div>;
+  };
+
+  const Sparkline = ({ data }: { data: number[] }) => {
+    if (data.length < 2) return null;
+    const width = 36;
+    const height = 10;
+    const max = Math.max(...data, 1);
+    const min = Math.min(...data);
+    const range = max - min || 1;
+    const points = data.map((v, i) => {
+      const x = (i / (data.length - 1)) * width;
+      const y = height - ((v - min) / range) * height;
+      return `${x},${y}`;
+    }).join(' ');
+
+    return (
+      <svg width={width} height={height} style={{ overflow: 'visible', marginLeft: 4, opacity: 0.8 }}>
+        <polyline
+          fill="none"
+          stroke="#10b981"
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          points={points}
+          style={{ transition: 'all 0.3s ease' }}
+        />
+      </svg>
+    );
   };
 
   const handleAddQuickCommand = async (values: any) => {
@@ -390,43 +439,73 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     setLoadingSessions(false);
   };
 
-  const loadSessionHistory = async (key: string) => {
-    const res = await sendRPC('chat.history', { sessionKey: key, limit: 100 });
-    if (res.ok) {
-        const messagesData = res.payload.messages || res.payload.items || [];
-        const history = messagesData.reverse().map((item: any) => {
-            // V3 历史内容通常为 Blocks 数组，需要提取所有内容块 (text, thinking, toolCall, toolResult)
+  const parseHistoryMessages = (messagesData: any[]) => {
+    return messagesData
+        .sort((a: any, b: any) => {
+            const timeA = new Date(a.createdAt || a.timestamp || 0).getTime();
+            const timeB = new Date(b.createdAt || b.timestamp || 0).getTime();
+            return timeA - timeB;
+        })
+        .map((item: any) => {
             let content = item.content;
             if (Array.isArray(content)) {
                 content = content.map((c: any) => {
                     const textPart = c.text || '';
-                    // 修正字段名并使用标记引导渲染
                     const thinkingPart = c.thinking ? `> :::thinking\n> ${c.thinking.replace(/\n/g, '\n> ')}\n> :::\n\n` : '';
-                    
-                    // 增加对 Tool Call 的基础显示支持
                     if (c.type === 'toolCall') {
                         return `\n> :::toolCall\n> **${c.name}**\n> \`\`\`json\n> ${JSON.stringify(c.arguments, null, 2).replace(/\n/g, '\n> ')}\n> \`\`\`\n> :::\n`;
                     }
-                    
                     return thinkingPart + textPart;
                 }).join('');
             }
-
-            // 处理特殊角色：toolResult
             if (item.role === 'toolResult') {
                 const toolName = item.toolName || 'unknown';
                 const resultText = typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
                 content = `\n> :::toolResult\n> **${toolName}**\n> ${resultText.split('\n').join('\n> ')}\n> :::\n`;
             }
-
             return {
-                role: item.role === 'toolResult' ? 'assistant' : item.role, // 映射到 assistant 角色显示
+                role: item.role === 'toolResult' ? 'assistant' : item.role,
                 content: content || '',
                 timestamp: new Date(item.createdAt || item.timestamp || Date.now()).toLocaleTimeString()
             };
         });
+  };
+
+  const loadSessionHistory = async (key: string) => {
+    setHasMoreHistory(true);
+    const res = await sendRPC('chat.history', { sessionKey: key, limit: 100 });
+    if (res.ok) {
+        const messagesData = res.payload.messages || res.payload.items || [];
+        const history = parseHistoryMessages(messagesData);
         setMessages(history);
+        if (messagesData.length < 100) {
+            setHasMoreHistory(false);
+        }
     }
+  };
+
+  const loadMoreHistory = async () => {
+    if (!sessionKey || loadingMore || !hasMoreHistory) return;
+    setLoadingMore(true);
+    // 使用当前消息条数作为 offset (V3 协议支持 limit/offset)
+    const res = await sendRPC('chat.history', { 
+        sessionKey: sessionKey, 
+        limit: 50, 
+        offset: messages.length 
+    });
+    if (res.ok) {
+        const messagesData = res.payload.messages || res.payload.items || [];
+        if (messagesData.length === 0) {
+            setHasMoreHistory(false);
+        } else {
+            const olderHistory = parseHistoryMessages(messagesData);
+            setMessages(prev => [...olderHistory, ...prev]);
+            if (messagesData.length < 50) {
+                setHasMoreHistory(false);
+            }
+        }
+    }
+    setLoadingMore(false);
   };
 
   const handleSelectSession = (key: string) => {
@@ -500,6 +579,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
   const handleStopGeneration = () => {
     setIsTyping(false);
+    clearStallTimer();
     streamContentRef.current = '';
     
     // 更新最后一条助手消息的状态
@@ -545,6 +625,35 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     });
   };
 
+  const handleClearAllHistory = () => {
+    if (sessions.length === 0) {
+      message.info(t('chat.noHistory', { defaultValue: '暂无历史会话' }));
+      return;
+    }
+    
+    Modal.confirm({
+      title: t('chat.clearAllHistoryConfirm', { defaultValue: '确认清除全部会话？' }),
+      content: t('chat.clearAllHistoryContent', { defaultValue: '此操作将物理删除所有历史记录，且无法恢复。' }),
+      okText: t('common.confirm', { defaultValue: '确认清除' }),
+      cancelText: t('common.cancel', { defaultValue: '取消' }),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          message.loading({ content: t('chat.clearingAll', { defaultValue: '正在清除...' }), key: 'clearingAll' });
+          // 并发删除所有会话
+          await Promise.all(sessions.map(s => sendRPC('sessions.delete', { key: s.key })));
+          message.success({ content: t('chat.clearAllSuccess', { defaultValue: '已清除全部历史记录' }), key: 'clearingAll' });
+          setSessionKey(null);
+          setMessages([]);
+          setSessions([]);
+          fetchSessions();
+        } catch (err) {
+          message.error({ content: t('common.error'), key: 'clearingAll' });
+        }
+      }
+    });
+  };
+
   const startNewSession = () => {
     setSessionKey(null);
     setMessages([]);
@@ -552,9 +661,32 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
   const streamContentRef = useRef('');
 
+  const clearStallTimer = useCallback(() => {
+    if (stallTimerRef.current) {
+      clearTimeout(stallTimerRef.current);
+      stallTimerRef.current = null;
+    }
+    setIsStalled(false);
+  }, []);
+
+  const resetStallTimer = useCallback(() => {
+    clearStallTimer();
+    // 3.5 秒无数据则认为进入长考状态
+    stallTimerRef.current = setTimeout(() => {
+      setIsStalled(true);
+    }, 3500);
+  }, [clearStallTimer]);
+
   const handleChatDelta = (payload: any) => {
     if (payload.state === 'delta') {
+      resetStallTimer();
       const now = Date.now();
+      
+      // 如果用户当前没有滚动到底部，显示“有新消息”提醒
+      if (showScrollBtn) {
+        setHasNewMessages(true);
+      }
+
       if (!ttftRecordedRef.current) {
         ttftRecordedRef.current = true;
         firstTokenTimeRef.current = now;
@@ -576,9 +708,13 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       const elapsedFromFirst = (now - firstTokenTimeRef.current) / 1000;
       const currentTPS = elapsedFromFirst > 0 ? (tokenCountRef.current / elapsedFromFirst) : 0;
       const ttft = firstTokenTimeRef.current - startTimeRef.current;
-      
-      setMessages(prev => {
-        const last = prev[prev.length - 1];
+
+      // 性能采样：每秒最多记录 2 次，保持最近 20 个点
+      if (tokenCountRef.current % 5 === 0) {
+        setTpsData(prev => [...prev.slice(-19), currentTPS]);
+      }
+
+      setMessages(prev => {        const last = prev[prev.length - 1];
         if (last && last.role === 'assistant') {
           return [...prev.slice(0, -1), { 
             ...last, 
@@ -592,6 +728,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         return prev;
       });
     } else if (payload.state === 'final' || payload.state === 'finished') {
+        clearStallTimer();
         const now = Date.now();
         const duration = (now - startTimeRef.current) / 1000;
         const ttft = ttftRecordedRef.current ? (firstTokenTimeRef.current - startTimeRef.current) : 0;
@@ -630,6 +767,23 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     });
   };
 
+  const handleSaveEdit = async () => {
+    if (editingMsgIndex === null) return;
+    const newText = editContent.trim();
+    if (!newText) {
+      setEditingMsgIndex(null);
+      return;
+    }
+    
+    // 截断数组：保留该条消息之前的所有消息
+    setMessages(prev => prev.slice(0, editingMsgIndex));
+    setEditingMsgIndex(null);
+    setEditContent('');
+    
+    // 重新发送
+    handleSend(newText);
+  };
+
   const handleSend = async (content?: any) => {
     // 兼容快捷指令直接发送和手动输入发送
     const text = (typeof content === 'string' ? content : inputText).trim();
@@ -642,6 +796,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         setInputText('');
     }
     setIsTyping(true);
+    setTpsData([]);
     streamContentRef.current = '';
     
     // Reset performance counters
@@ -672,6 +827,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       // 只有非控制指令才显示“思考中”占位
       if (text !== '/stop') {
         setMessages(prev => [...prev, { role: 'assistant', content: t('chat.thinking'), timestamp: new Date().toLocaleTimeString() }]);
+        resetStallTimer();
       }
       
       const res = await sendRPC('chat.send', { 
@@ -683,9 +839,11 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         const errMsg = typeof res.error === 'object' ? JSON.stringify(res.error) : (res.error || 'Unknown error');
         message.error('Failed to send message: ' + errMsg);
         setIsTyping(false);
+        clearStallTimer();
       } else if (text === '/stop') {
         // /stop 指令成功返回后，立即释放状态，因为它不会产生流式响应
         setIsTyping(false);
+        clearStallTimer();
       }
     }
   };
@@ -781,16 +939,25 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             </div>
             
             <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-              <div style={{ padding: '4px 8px 8px' }}>
+              <div style={{ padding: '4px 8px 8px', display: 'flex', gap: 6, alignItems: 'center' }}>
                 <Input
                   size="small"
-                  prefix={<Copy size={12} style={{ color: '#94a3b8' }} />}
-                  placeholder="搜索会话 ID..."
+                  prefix={<Search size={12} style={{ color: '#94a3b8' }} />}
+                  placeholder={t('chat.searchSessions', { defaultValue: '搜索会话 ID...' })}
                   value={sessionSearch}
                   onChange={e => setSessionSearch(e.target.value)}
                   allowClear
-                  style={{ borderRadius: 8, fontSize: 12 }}
+                  style={{ borderRadius: 8, fontSize: 12, flex: 1 }}
                 />
+                <Tooltip title={t('chat.clearAllHistory', { defaultValue: '清除全部历史' })}>
+                    <Button 
+                        size="small" 
+                        type="text" 
+                        icon={<Trash2 size={13} />} 
+                        onClick={handleClearAllHistory}
+                        style={{ color: '#94a3b8', background: '#f8fafc', borderRadius: 8 }}
+                    />
+                </Tooltip>
               </div>
               {loadingSessions && <div style={{ textAlign: 'center', padding: 20 }}><Spin size="small" /></div>}
               {!loadingSessions && sessions.length === 0 && (
@@ -907,6 +1074,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               font-size: 13px;
               color: #64748b;
               font-style: italic;
+              max-width: 100%;
+              overflow-x: auto;
             }
             .v3-thought-header {
               display: flex;
@@ -930,6 +1099,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               color: #e2e8f0;
               font-family: 'JetBrains Mono', monospace;
               border: 1px solid #334155;
+              max-width: 100%;
+              overflow-x: auto;
             }
             .v3-tool-header {
               display: flex;
@@ -950,6 +1121,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               padding: 10px;
               margin: 10px 0;
               font-size: 12px;
+              max-width: 100%;
+              overflow-x: auto;
             }
             .v3-tool-result-header {
               display: flex;
@@ -1043,9 +1216,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                 </div>
               </div>
             ) : (
-              status === 'authenticated' && (
+              !isMobile && status === 'authenticated' && (
                 <Tag color="blue" icon={<ShieldCheck size={11} />} style={{ borderRadius: 6, border: 'none', background: '#eff6ff', color: '#4f46e5', padding: '0 6px', fontSize: 11, flexShrink: 0, margin: 0 }}>
-                  {isMobile ? 'V3' : t('chat.deviceVerified')}
+                  {t('chat.deviceVerified')}
                 </Tag>
               )
             )}
@@ -1082,28 +1255,34 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                       }} 
                   />
               </div>
-              <div style={{ width: 1, height: 12, background: '#f1f5f9', marginRight: 2 }}></div>
-              {!isMobile && <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{t('chat.thinkingLevel', { defaultValue: '思考等级' })}:</span>}
-              <Select size="small" value={thinkingLevel} onChange={setThinkingLevel} style={{ width: isMobile ? 75 : 100 }} dropdownStyle={{ borderRadius: 8 }}>
-                  <Select.Option value="low">Low</Select.Option>
-                  <Select.Option value="medium">Medium</Select.Option>
-                  <Select.Option value="high">High</Select.Option>
-                  <Select.Option value="pro">Pro</Select.Option>
-              </Select>
+              {!isMobile && (
+                <>
+                  <div style={{ width: 1, height: 12, background: '#f1f5f9', marginRight: 2 }}></div>
+                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{t('chat.thinkingLevel', { defaultValue: '思考等级' })}:</span>
+                  <Select size="small" value={thinkingLevel} onChange={setThinkingLevel} style={{ width: 100 }} dropdownStyle={{ borderRadius: 8 }}>
+                      <Select.Option value="low">Low</Select.Option>
+                      <Select.Option value="medium">Medium</Select.Option>
+                      <Select.Option value="high">High</Select.Option>
+                      <Select.Option value="pro">Pro</Select.Option>
+                  </Select>
+                </>
+              )}
               <Button size="small" type="text" icon={<RefreshCw size={13} />} onClick={connect} title={t('common.restart')} />
           </div>
         </div>
   
-        <div ref={scrollRef} style={{ 
+        <div ref={scrollRef} onScroll={handleScroll} style={{ 
             flex: 1, 
             overflowY: 'auto', 
+            overflowX: 'hidden',
             padding: isMobile ? '12px' : '24px', 
             display: 'flex', 
             flexDirection: 'column', 
             gap: 20,
             justifyContent: messages.length === 0 ? 'center' : 'flex-start',
             width: '100%',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            position: 'relative'
         }}>
           {messages.length === 0 && (
             <div style={{ margin: '0 auto', textAlign: 'center', maxWidth: isMobile ? '100%' : 400, padding: isMobile ? '20px 0' : '40px', width: '100%', boxSizing: 'border-box' }}>
@@ -1136,6 +1315,22 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               </div>
             </div>
           )}
+          
+          {hasMoreHistory && messages.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20, marginTop: 10 }}>
+                <Button 
+                    size="small" 
+                    type="text" 
+                    loading={loadingMore} 
+                    onClick={loadMoreHistory}
+                    icon={<Clock size={14} />}
+                    style={{ fontSize: 12, color: '#94a3b8', background: '#f8fafc', borderRadius: 20, padding: '0 16px', height: 28 }}
+                >
+                    {loadingMore ? '正在拉取历史...' : '查看更早的消息'}
+                </Button>
+            </div>
+          )}
+
           {messages.map((msg, index) => {
             // 彻底隐藏逻辑：如果“显示思考”关闭，且该消息仅包含元信息块，则不渲染整个消息气泡
             if (!showThinking) {
@@ -1173,98 +1368,140 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                   border: msg.role === 'assistant' ? '1px solid #e8eff6' : 'none',
                   position: 'relative',
                   wordBreak: 'break-word',
-                  overflowWrap: 'anywhere'
+                  overflowWrap: 'anywhere',
+                  minWidth: 0,
+                  overflowX: 'auto',
+                  WebkitOverflowScrolling: 'touch'
                 }}>
-                {msg.content === t('chat.thinking') ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 13, color: '#64748b' }}>{msg.content}</span>
-                    <div className="typing-indicator" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                      <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>
-                      <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>
-                      <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>
+                {editingMsgIndex === index ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: isMobile ? 220 : 400 }}>
+                    <Input.TextArea
+                      autoFocus
+                      autoSize={{ minRows: 2, maxRows: 15 }}
+                      value={editContent}
+                      onChange={e => setEditContent(e.target.value)}
+                      style={{ 
+                        borderRadius: 12, 
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        background: 'rgba(255,255,255,0.1)',
+                        color: '#fff',
+                        fontSize: isMobile ? 13 : 14
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      <Button size="small" ghost onClick={() => setEditingMsgIndex(null)} style={{ fontSize: 11, height: 24 }}>{t('common.cancel')}</Button>
+                      <Button size="small" style={{ background: '#fff', color: '#2563eb', border: 'none', fontSize: 11, height: 24, fontWeight: 600 }} onClick={handleSaveEdit}>{t('chat.saveAndRegenerate', { defaultValue: '重新生成' })}</Button>
                     </div>
                   </div>
                 ) : (
-                  <ReactMarkdown 
-                    remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
-                    rehypePlugins={[rehypeSanitize, rehypeKatex]}
-                    components={{
-                      p: ({children}: any) => <p style={{margin: 0}}>{children}</p>,
-                      blockquote: ({ children }: any) => {
-                        // 1. 更稳健的字符串提取：递归展平所有子节点文本
-                        const extractText = (node: any): string => {
-                          if (typeof node === 'string') return node;
-                          if (Array.isArray(node)) return node.map(extractText).join('');
-                          if (node?.props?.children) return extractText(node.props.children);
-                          return '';
-                        };
-                        const fullText = extractText(children);
-                        
-                        const isThinking = fullText.includes(':::thinking');
-                        const isToolCall = fullText.includes(':::toolCall');
-                        const isToolResult = fullText.includes(':::toolResult');
+                  msg.content === t('chat.thinking') ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 13, color: '#64748b' }}>{msg.content}</span>
+                      <div className="typing-indicator" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                        <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>
+                        <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>
+                        <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
+                        rehypePlugins={[rehypeSanitize, rehypeKatex]}
+                        components={{
+                          p: ({children}: any) => <p style={{margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere'}}>{children}</p>,
+                          pre: ({children}: any) => <pre style={{ overflowX: 'auto', maxWidth: '100%', margin: '8px 0', padding: '10px', background: '#f8fafc', borderRadius: 8 }}>{children}</pre>,
+                          blockquote: ({ children }: any) => {
+                            // 1. 更稳健的字符串提取：递归展平所有子节点文本
+                            const extractText = (node: any): string => {
+                              if (typeof node === 'string') return node;
+                              if (Array.isArray(node)) return node.map(extractText).join('');
+                              if (node?.props?.children) return extractText(node.props.children);
+                              return '';
+                            };
+                            const fullText = extractText(children);
+                            
+                            const isThinking = fullText.includes(':::thinking');
+                            const isToolCall = fullText.includes(':::toolCall');
+                            const isToolResult = fullText.includes(':::toolResult');
 
-                        // 全局开关：如果关闭，则不显示这些辅助信息
-                        if ((isThinking || isToolCall || isToolResult) && !showThinking) {
-                          return null;
-                        }
+                            // 全局开关：如果关闭，则不显示这些辅助信息
+                            if ((isThinking || isToolCall || isToolResult) && !showThinking) {
+                              return null;
+                            }
 
-                        // 2. 根据内容动态选择容器渲染样式卡片
-                        if (isThinking) {
-                          return (
-                            <div className="v3-thought-container">
-                              <div className="v3-thought-header">
-                                <Cpu size={12} />
-                                <span>Thinking Process</span>
-                              </div>
-                              {children}
+                            // 2. 根据内容动态选择容器渲染样式卡片
+                            if (isThinking) {
+                              return (
+                                <div className="v3-thought-container">
+                                  <div className="v3-thought-header">
+                                    <Cpu size={12} />
+                                    <span>Thinking Process</span>
+                                  </div>
+                                  {children}
+                                </div>
+                              );
+                            }
+                            if (isToolCall) {
+                              return (
+                                <div className="v3-tool-call-container">
+                                  <div className="v3-tool-header">
+                                    <Terminal size={12} />
+                                    <span>Invoking System Tool</span>
+                                  </div>
+                                  <div style={{ fontSize: 12 }}>{children}</div>
+                                </div>
+                              );
+                            }
+                            if (isToolResult) {
+                              return (
+                                <div className="v3-tool-result-container">
+                                  <div className="v3-tool-result-header">
+                                    <CheckCircle size={12} />
+                                    <span>Tool Output</span>
+                                  </div>
+                                  <div style={{ color: '#166534' }}>{children}</div>
+                                </div>
+                              );
+                            }
+                            return <blockquote style={{ borderLeft: '4px solid #e2e8f0', paddingLeft: '12px', color: '#64748b', fontStyle: 'italic', margin: '8px 0' }}>{children}</blockquote>;
+                          },
+                          table: ({ ...props }: any) => (
+                            <div style={{ width: '100%', overflowX: 'auto', marginBottom: 12, borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff' }}>
+                              <table {...props} style={{ width: '100%', borderCollapse: 'collapse', fontSize: isMobile ? '12px' : '13px' }} />
                             </div>
-                          );
-                        }
-                        if (isToolCall) {
-                          return (
-                            <div className="v3-tool-call-container">
-                              <div className="v3-tool-header">
-                                <Terminal size={12} />
-                                <span>Invoking System Tool</span>
-                              </div>
-                              <div style={{ fontSize: 12 }}>{children}</div>
-                            </div>
-                          );
-                        }
-                        if (isToolResult) {
-                          return (
-                            <div className="v3-tool-result-container">
-                              <div className="v3-tool-result-header">
-                                <CheckCircle size={12} />
-                                <span>Tool Output</span>
-                              </div>
-                              <div style={{ color: '#166534' }}>{children}</div>
-                            </div>
-                          );
-                        }
-                        return <blockquote style={{ borderLeft: '4px solid #e2e8f0', paddingLeft: '12px', color: '#64748b', fontStyle: 'italic', margin: '8px 0' }}>{children}</blockquote>;
-                      },
-                      table: ({ ...props }: any) => (
-                        <div style={{ width: '100%', overflowX: 'auto', marginBottom: 12, borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff' }}>
-                          <table {...props} style={{ width: '100%', borderCollapse: 'collapse', fontSize: isMobile ? '12px' : '13px' }} />
-                        </div>
-                      ),
-                      th: ({ ...props }: any) => <th {...props} style={{ padding: '8px 12px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left', fontWeight: 600 }} />,
-                      td: ({ ...props }: any) => <td {...props} style={{ padding: '8px 12px', borderBottom: '1px solid #e2e8f0', color: '#475569' }} />,
-                      code: ({ inline, className, children, ...props }: any) => {
-                        const match = /language-(\w+)/.exec(className || '');
-                        const language = match ? match[1] : '';
-                        const codeContent = String(children).replace(/\n$/, '');
-                        if (!inline && language === 'mermaid') return <Mermaid chart={codeContent} />;
-                        if (!inline && language) return <CodeBlock language={language} value={codeContent} isMobile={isMobile} {...props} />;
-                        return <code {...props} style={{ padding: '0.2em 0.4em', backgroundColor: msg.role === 'user' ? 'rgba(255,255,255,0.1)' : 'rgba(175, 184, 193, 0.2)', borderRadius: '6px', fontSize: '85%' }}>{children}</code>;
-                      }
-                    }}
-                  >
-                    {msg.content}
-                  </ReactMarkdown>
+                          ),
+                          th: ({ ...props }: any) => <th {...props} style={{ padding: '8px 12px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left', fontWeight: 600 }} />,
+                          td: ({ ...props }: any) => <td {...props} style={{ padding: '8px 12px', borderBottom: '1px solid #e2e8f0', color: '#475569' }} />,
+                          code: ({ inline, className, children, ...props }: any) => {
+                            const match = /language-(\w+)/.exec(className || '');
+                            const language = match ? match[1] : '';
+                            const codeContent = String(children).replace(/\n$/, '');
+                            if (!inline && language === 'mermaid') return <Mermaid chart={codeContent} />;
+                            if (!inline && language) return <CodeBlock language={language} value={codeContent} isMobile={isMobile} {...props} />;
+                            return <code {...props} style={{ padding: '0.2em 0.4em', backgroundColor: msg.role === 'user' ? 'rgba(255,255,255,0.1)' : 'rgba(175, 184, 193, 0.2)', borderRadius: '6px', fontSize: '85%' }}>{children}</code>;
+                          }
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    </>
+                  )
                 )}
+
+                {isStalled && isTyping && index === messages.length - 1 && msg.role === 'assistant' && (
+                  <div style={{ 
+                      marginTop: 8, padding: '4px 10px', background: '#f8fafc', borderRadius: 8, 
+                      border: '1px dashed #e2e8f0', display: 'flex', alignItems: 'center', gap: 6,
+                      animation: 'v3-fade-in 0.5s ease'
+                  }}>
+                      <div className="typing-dot" style={{ width: 4, height: 4, background: '#94a3b8' }}></div>
+                      <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+                          AI 正在深度思考中，请耐心等待...
+                      </span>
+                  </div>
+                )}
+
                 <div style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
@@ -1277,39 +1514,48 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                   fontWeight: 500, 
                   color: msg.role === 'user' ? 'rgba(255,255,255,0.7)' : '#94a3b8'
                 }} className="msg-footer">
-                  <div style={{ display: 'flex', gap: 2 }}>
-                    <Tooltip title={t('chat.copy')}>
-                      <Button type="text" size="small" icon={<Copy size={11} />} onClick={() => copyToClipboard(msg.content)}
-                        style={{ padding: '0 3px', height: 18, width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          color: msg.role === 'user' ? 'rgba(255,255,255,0.85)' : '#64748b' }} />
-                    </Tooltip>
-                    <Tooltip title={t('chat.quote')}>
-                      <Button type="text" size="small" icon={<Quote size={11} />} onClick={() => setQuotedMsg(msg.content)}
-                        style={{ padding: '0 3px', height: 18, width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          color: msg.role === 'user' ? 'rgba(255,255,255,0.85)' : '#64748b' }} />
-                    </Tooltip>
-                    {msg.role === 'assistant' && index === messages.length - 1 && (
-                      <Tooltip title={t('chat.retry')}>
-                        <Button type="text" size="small" icon={<RefreshCw size={11} />} onClick={handleRegenerate}
-                          style={{ padding: '0 3px', height: 18, width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }} />
+                  {!(isTyping && index === messages.length - 1) && (
+                    <div style={{ display: 'flex', gap: 2 }}>
+                      <Tooltip title={t('chat.copy')}>
+                        <Button type="text" size="small" icon={<Copy size={11} />} onClick={() => copyToClipboard(msg.content)}
+                          style={{ padding: '0 3px', height: 18, width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: msg.role === 'user' ? 'rgba(255,255,255,0.85)' : '#64748b' }} />
                       </Tooltip>
-                    )}
-                  </div>
-                  <span>{msg.timestamp}</span>
-                  {!isMobile && msg.role === 'assistant' && msg.metrics && (
+                      <Tooltip title={t('chat.quote')}>
+                        <Button type="text" size="small" icon={<Quote size={11} />} onClick={() => setQuotedMsg(msg.content)}
+                          style={{ padding: '0 3px', height: 18, width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: msg.role === 'user' ? 'rgba(255,255,255,0.85)' : '#64748b' }} />
+                        </Tooltip>
+                        {msg.role === 'user' && (
+                        <Tooltip title={t('common.edit')}>
+                          <Button type="text" size="small" icon={<Pencil size={11} />} onClick={() => { setEditingMsgIndex(index); setEditContent(msg.content); }}
+                            style={{ padding: '0 3px', height: 18, width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: 'rgba(255,255,255,0.85)' }} />
+                        </Tooltip>
+                        )}
+                        {msg.role === 'assistant' && index === messages.length - 1 && (                        <Tooltip title={t('chat.retry')}>
+                          <Button type="text" size="small" icon={<RefreshCw size={11} />} onClick={handleRegenerate}
+                            style={{ padding: '0 3px', height: 18, width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }} />
+                        </Tooltip>
+                      )}
+                    </div>
+                  )}
+                  <span>{msg.timestamp}</span>                  {!isMobile && msg.role === 'assistant' && msg.metrics && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4 }}>
                       <div style={{ width: 1, height: 8, background: '#e2e8f0' }}></div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 9, color: '#94a3b8', fontFamily: 'monospace' }}>
-                          <Activity size={10} color="#10b981" />
+                          <Zap size={10} color="#f59e0b" fill="#f59e0b" />
                           <span>{msg.metrics.ttft}ms</span>
                       </div>
                       {msg.metrics.tps && (
-                          <span style={{ fontSize: 9, color: '#94a3b8', fontFamily: 'monospace' }}>
-                              {msg.metrics.tps.toFixed(1)} ch/s
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                              <span style={{ fontSize: 9, color: '#94a3b8', fontFamily: 'monospace' }}>
+                                  {msg.metrics.tps.toFixed(1)} ch/s
+                              </span>
+                              {isTyping && index === messages.length - 1 && <Sparkline data={tpsData} />}
+                          </div>
                       )}
-                      {msg.metrics.duration && (
-                          <span style={{ fontSize: 9, color: '#10b981', fontFamily: 'monospace', fontWeight: 600 }}>
+                      {msg.metrics.duration && (                          <span style={{ fontSize: 9, color: '#10b981', fontFamily: 'monospace', fontWeight: 600 }}>
                               {msg.metrics.duration.toFixed(1)}s
                           </span>
                       )}
@@ -1320,6 +1566,35 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           );
         })}
         </div>
+
+        {/* 返回底部浮动按钮 */}
+        {showScrollBtn && (
+            <div style={{ position: 'absolute', bottom: isMobile ? 130 : 160, right: isMobile ? 16 : 32, zIndex: 100, animation: 'v3-fade-in 0.3s' }}>
+                <Button
+                    shape="round"
+                    type={hasNewMessages ? 'primary' : 'default'}
+                    onClick={() => {
+                        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+                        setHasNewMessages(false);
+                    }}
+                    icon={hasNewMessages ? <Activity size={14} className="animate-pulse" /> : <ChevronDown size={14} />}
+                    style={{ 
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                        background: hasNewMessages ? '#2563eb' : '#fff',
+                        color: hasNewMessages ? '#fff' : '#64748b',
+                        border: hasNewMessages ? 'none' : '1px solid #e2e8f0',
+                        height: 32,
+                        fontSize: 12,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: hasNewMessages ? '0 12px' : '0 10px'
+                    }}
+                >
+                    {hasNewMessages && '有新消息'}
+                </Button>
+            </div>
+        )}
 
         {status !== 'authenticated' && (
           <div style={{
