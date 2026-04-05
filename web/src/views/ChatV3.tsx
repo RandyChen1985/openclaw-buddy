@@ -83,6 +83,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
   const [sessions, setSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  // @ts-ignore: Temporarily unused since pagination is disabled
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [sessionSearch, setSessionSearch] = useState('');
@@ -473,39 +474,24 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
   const loadSessionHistory = async (key: string) => {
     setHasMoreHistory(true);
-    const res = await sendRPC('chat.history', { sessionKey: key, limit: 100 });
+    // 调大 limit 到 500，弥补分页功能暂不可用的问题
+    const res = await sendRPC('chat.history', { sessionKey: key, limit: 500 });
     if (res.ok) {
         const messagesData = res.payload.messages || res.payload.items || [];
         const history = parseHistoryMessages(messagesData);
         setMessages(history);
-        if (messagesData.length < 100) {
+        // 如果返回的数据少于 500 条，说明已经到底了
+        if (messagesData.length < 500) {
             setHasMoreHistory(false);
         }
     }
   };
 
   const loadMoreHistory = async () => {
-    if (!sessionKey || loadingMore || !hasMoreHistory) return;
-    setLoadingMore(true);
-    // 使用当前消息条数作为 offset (V3 协议支持 limit/offset)
-    const res = await sendRPC('chat.history', { 
-        sessionKey: sessionKey, 
-        limit: 50, 
-        offset: messages.length 
-    });
-    if (res.ok) {
-        const messagesData = res.payload.messages || res.payload.items || [];
-        if (messagesData.length === 0) {
-            setHasMoreHistory(false);
-        } else {
-            const olderHistory = parseHistoryMessages(messagesData);
-            setMessages(prev => [...olderHistory, ...prev]);
-            if (messagesData.length < 50) {
-                setHasMoreHistory(false);
-            }
-        }
-    }
-    setLoadingMore(false);
+    // 由于后端网关目前不支持 offset/before 分页参数，
+    // 暂时停用此功能以避免无效请求报错。
+    setHasMoreHistory(false);
+    return;
   };
 
   const handleSelectSession = (key: string) => {
