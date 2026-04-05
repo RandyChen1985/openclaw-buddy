@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Select, Input, Button, Avatar, Spin, message, Tag, Badge, Modal, Form, Tooltip, Drawer } from 'antd';
+import { Select, Input, Button, Avatar, Spin, message, Tag, Badge, Modal, Form, Tooltip, Drawer, Switch } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Send, Bot, User, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, History, LayoutPanelLeft, Zap, Activity, Settings, ChevronUp, ChevronDown, Key, Copy, Square, Quote, Sparkles, Save, X } from 'lucide-react';
+import { Send, Bot, User, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, History, LayoutPanelLeft, Zap, Activity, Settings, ChevronUp, ChevronDown, Key, Copy, Square, Quote, Sparkles, Save, X, Terminal, CheckCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -12,6 +12,7 @@ import 'katex/dist/katex.min.css';
 import nacl from 'tweetnacl';
 import storage from '../utils/storage';
 import { Mermaid, CodeBlock } from '../components/ChatComponents';
+import GatewayOfflineMask from '../components/GatewayOfflineMask';
 import { getWsUrl } from '../utils/url';
 import { getTicket } from '../api';
 
@@ -33,6 +34,8 @@ interface ChatV3Props {
   loadingBots: boolean;
   onRefreshBots: () => void;
   isMobile?: boolean;
+  isRunning?: boolean;
+  onNavigateToDashboard?: () => void;
 }
 
 // --- Utils ---
@@ -46,7 +49,7 @@ const hexToUint8Array = (hex: string): Uint8Array => {
   return new Uint8Array(matched ? matched.map(byte => parseInt(byte, 16)) : []);
 };
 
-const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) => {
+const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRunning, onNavigateToDashboard }) => {
   const { t } = useTranslation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -54,6 +57,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error'>('disconnected');
   const [isTyping, setIsTyping] = useState(false);
   const [sessionKey, setSessionKey] = useState<string | null>(null);
+  const [sessionLabel, setSessionLabel] = useState<string | null>(null);
+  const [isEditingLabel, setIsEditingLabel] = useState(false);
+  const [editingLabelText, setEditingLabelText] = useState('');
+  const [isUpdatingLabel, setIsUpdatingLabel] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const [showThinking, setShowThinking] = useState<boolean>(() => storage.getItem('v3_show_thinking') === 'true');
   const [thinkingLevel, setThinkingLevel] = useState<'low' | 'medium' | 'high' | 'pro'>('medium');
   const [lastHealth, setLastHealth] = useState<{ ok: boolean, latency: number, ts: number } | null>(null);
   const [pulse, setPulse] = useState(0);
@@ -382,25 +391,38 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
   };
 
   const loadSessionHistory = async (key: string) => {
-    const res = await sendRPC('chat.history', { sessionKey: key, limit: 50 });
+    const res = await sendRPC('chat.history', { sessionKey: key, limit: 100 });
     if (res.ok) {
         const messagesData = res.payload.messages || res.payload.items || [];
         const history = messagesData.reverse().map((item: any) => {
-            // V3 历史内容通常为 Blocks 数组，需要提取所有文本内容块 (text & thought)
+            // V3 历史内容通常为 Blocks 数组，需要提取所有内容块 (text, thinking, toolCall, toolResult)
             let content = item.content;
             if (Array.isArray(content)) {
                 content = content.map((c: any) => {
-                    // 深度兼容：同时提取正文 (text) 和 思维链 (thought)
-                    // 思维链通常使用引用块渲染，以便与普通文本区分
                     const textPart = c.text || '';
-                    const thoughtPart = c.thought ? `> ${c.thought}\n\n` : '';
-                    return thoughtPart + textPart;
+                    // 修正字段名并使用标记引导渲染
+                    const thinkingPart = c.thinking ? `> :::thinking\n> ${c.thinking.replace(/\n/g, '\n> ')}\n> :::\n\n` : '';
+                    
+                    // 增加对 Tool Call 的基础显示支持
+                    if (c.type === 'toolCall') {
+                        return `\n> :::toolCall\n> **${c.name}**\n> \`\`\`json\n> ${JSON.stringify(c.arguments, null, 2).replace(/\n/g, '\n> ')}\n> \`\`\`\n> :::\n`;
+                    }
+                    
+                    return thinkingPart + textPart;
                 }).join('');
             }
+
+            // 处理特殊角色：toolResult
+            if (item.role === 'toolResult') {
+                const toolName = item.toolName || 'unknown';
+                const resultText = typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
+                content = `\n> :::toolResult\n> **${toolName}**\n> ${resultText.split('\n').join('\n> ')}\n> :::\n`;
+            }
+
             return {
-                role: item.role,
+                role: item.role === 'toolResult' ? 'assistant' : item.role, // 映射到 assistant 角色显示
                 content: content || '',
-                timestamp: new Date(item.createdAt || Date.now()).toLocaleTimeString()
+                timestamp: new Date(item.createdAt || item.timestamp || Date.now()).toLocaleTimeString()
             };
         });
         setMessages(history);
@@ -409,6 +431,11 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
 
   const handleSelectSession = (key: string) => {
     setSessionKey(key);
+    
+    // 从列表中找到该会话并提取 label
+    const currentSession = sessions.find(s => s.key === key);
+    setSessionLabel(currentSession?.label || null);
+
     loadSessionHistory(key);
     
     // 从 sessionKey 中解析 botId (格式: agent:botId:deviceId:timestamp)
@@ -422,6 +449,33 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
     // 移动端选中会话后自动关闭侧边栏
     if (isMobile) {
       setShowSider(false);
+    }
+  };
+
+  const handleUpdateLabel = async () => {
+    if (!sessionKey || !editingLabelText.trim()) {
+      setIsEditingLabel(false);
+      return;
+    }
+
+    setIsUpdatingLabel(true);
+    try {
+      const res = await sendRPC('sessions.patch', { 
+        key: sessionKey, 
+        label: editingLabelText.trim() 
+      });
+      if (res.ok) {
+        message.success(t('common.success'));
+        setSessionLabel(editingLabelText.trim());
+        setIsEditingLabel(false);
+        fetchSessions(); // 刷新列表以同步新 Label
+      } else {
+        message.error('Failed to update label: ' + (res.error?.message || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Update label error:', err);
+    } finally {
+      setIsUpdatingLabel(false);
     }
   };
 
@@ -506,12 +560,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         firstTokenTimeRef.current = now;
       }
 
-      // 深度提取：同时提取 text 和 thought 并格式化（引用块形式显示思维链）
+      // 深度提取：同时提取 text 和 thinking 并格式化（引用块形式显示思维链）
       const blocks = payload.message?.content || [];
       const fullText = blocks.map((c: any) => {
           const textPart = c.text || '';
-          const thoughtPart = c.thought ? `> ${c.thought}\n\n` : '';
-          return thoughtPart + textPart;
+          const thinkingPart = c.thinking ? `> :::thinking\n> ${c.thinking.replace(/\n/g, '\n> ')}\n> :::\n\n` : '';
+          return thinkingPart + textPart;
       }).join('');
 
       streamContentRef.current = fullText;
@@ -689,6 +743,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
 
   return (
     <>
+      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
       <div style={{ flex: 1, display: 'flex', background: '#fff', overflowX: 'hidden', height: '100%', position: 'relative', width: '100%' }}>
       {/* Session Sider */}
       {showSider && (
@@ -766,10 +821,13 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                       >
                           <Avatar size={32} src={s.avatar} icon={<Bot size={16} />} style={{ background: s.key === sessionKey ? '#2563eb' : '#f1f5f9', color: s.key === sessionKey ? '#fff' : '#64748b', flexShrink: 0 }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: sessionKey === s.key ? '#1e40af' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {s.label || s.key}
+                              <div style={{ fontSize: 13, fontWeight: 700, color: sessionKey === s.key ? '#1e40af' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {s.label || t('chat.noLabel', { defaultValue: '未命名会话' })}
                               </div>
-                              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2, fontFamily: 'monospace' }}>
+                              <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 1, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {s.key}
+                              </div>
+                              <div style={{ fontSize: 9, color: '#cbd5e1', marginTop: 1 }}>
                                   {new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleString([], { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
                               </div>
                           </div>
@@ -824,6 +882,100 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
             }
             .msg-footer { opacity: 1; transition: opacity 0.2s; }
             .message-in:hover .msg-footer { opacity: 1; }
+
+            @keyframes v3-cursor-blink {
+              0%, 100% { opacity: 1; }
+              50% { opacity: 0; }
+            }
+            .v3-mock-cursor {
+              display: inline-block;
+              width: 2px;
+              height: 1.2em;
+              background: #2563eb;
+              margin-left: 2px;
+              vertical-align: middle;
+              animation: v3-cursor-blink 1s step-end infinite;
+            }
+
+            /* 思维链块样式 */
+            .v3-thought-container {
+              background: #f8fafc;
+              border-left: 3px solid #cbd5e1;
+              padding: 10px 14px;
+              margin: 8px 0;
+              border-radius: 0 8px 8px 0;
+              font-size: 13px;
+              color: #64748b;
+              font-style: italic;
+            }
+            .v3-thought-header {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              font-weight: 700;
+              font-style: normal;
+              margin-bottom: 4px;
+              color: #94a3b8;
+              font-size: 11px;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+            }
+
+            /* 工具调用块样式 */
+            .v3-tool-call-container {
+              background: #1e293b;
+              border-radius: 8px;
+              padding: 10px;
+              margin: 10px 0;
+              color: #e2e8f0;
+              font-family: 'JetBrains Mono', monospace;
+              border: 1px solid #334155;
+            }
+            .v3-tool-header {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              font-size: 11px;
+              color: #94a3b8;
+              margin-bottom: 6px;
+              border-bottom: 1px solid #334155;
+              padding-bottom: 4px;
+            }
+
+            /* 工具结果块样式 */
+            .v3-tool-result-container {
+              background: #f0fdf4;
+              border: 1px solid #dcfce7;
+              border-radius: 8px;
+              padding: 10px;
+              margin: 10px 0;
+              font-size: 12px;
+            }
+            .v3-tool-result-header {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              color: #16a34a;
+              font-weight: 700;
+              margin-bottom: 6px;
+              font-size: 11px;
+            }
+
+            /* 隐藏特殊的容器标记文本 */
+            .v3-thought-container p:first-child,
+            .v3-tool-call-container p:first-child,
+            .v3-tool-result-container p:first-child {
+               display: none;
+            }
+            .v3-thought-container blockquote,
+            .v3-tool-call-container blockquote,
+            .v3-tool-result-container blockquote {
+               border: none !important;
+               padding: 0 !important;
+               margin: 0 !important;
+               font-style: normal !important;
+               color: inherit !important;
+            }
         `}</style>
         
         <div style={{ padding: isMobile ? '6px 10px' : '10px 16px', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 10, gap: 8, width: '100%', boxSizing: 'border-box' }}>
@@ -844,22 +996,52 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
             )}
             
             {status === 'authenticated' && sessionKey ? (
-              <Tooltip title={t('chat.clickToCopy', { defaultValue: '点击复制会话 ID' })}>
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
-                    <span 
-                        style={{ 
-                            fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', cursor: 'pointer',
-                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                            maxWidth: isMobile ? 120 : 'none',
-                            display: 'inline-block'
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <Tooltip title={t('chat.clickToCopy', { defaultValue: '点击复制会话 ID' })}>
+                  <span 
+                    style={{ 
+                      fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', cursor: 'pointer',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      maxWidth: isMobile ? 120 : 'none',
+                      lineHeight: '12px'
+                    }}
+                    className="v3-session-id-header"
+                    onClick={() => copyToClipboard(sessionKey)}
+                  >
+                    {sessionKey}
+                  </span>
+                </Tooltip>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                  {isEditingLabel ? (
+                    <Input
+                      size="small"
+                      autoFocus
+                      value={editingLabelText}
+                      onChange={e => setEditingLabelText(e.target.value)}
+                      onBlur={handleUpdateLabel}
+                      onPressEnter={handleUpdateLabel}
+                      disabled={isUpdatingLabel}
+                      style={{ height: 20, fontSize: 12, width: isMobile ? 120 : 200 }}
+                    />
+                  ) : (
+                    <>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile ? 150 : 300 }}>
+                        {sessionLabel || t('chat.noLabel', { defaultValue: '未命名会话' })}
+                      </span>
+                      <Button 
+                        size="small" 
+                        type="text" 
+                        icon={isUpdatingLabel ? <RefreshCw size={10} className="animate-spin" /> : <Save size={10} />} 
+                        onClick={() => {
+                          setEditingLabelText(sessionLabel || '');
+                          setIsEditingLabel(true);
                         }}
-                        className="v3-session-id-header"
-                        onClick={() => copyToClipboard(sessionKey)}
-                    >
-                        {sessionKey}
-                    </span>
+                        style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}
+                      />
+                    </>
+                  )}
                 </div>
-              </Tooltip>
+              </div>
             ) : (
               status === 'authenticated' && (
                 <Tag color="blue" icon={<ShieldCheck size={11} />} style={{ borderRadius: 6, border: 'none', background: '#eff6ff', color: '#4f46e5', padding: '0 6px', fontSize: 11, flexShrink: 0, margin: 0 }}>
@@ -889,7 +1071,19 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 2 : 6, flexShrink: 0 }}>
-              {!isMobile && <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>Thinking:</span>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 4 }}>
+                  <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>{t('chat.showThinking', { defaultValue: '显示思考' })}</span>
+                  <Switch 
+                      size="small" 
+                      checked={showThinking} 
+                      onChange={(val) => {
+                          setShowThinking(val);
+                          storage.setItem('v3_show_thinking', val ? 'true' : 'false');
+                      }} 
+                  />
+              </div>
+              <div style={{ width: 1, height: 12, background: '#f1f5f9', marginRight: 2 }}></div>
+              {!isMobile && <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{t('chat.thinkingLevel', { defaultValue: '思考等级' })}:</span>}
               <Select size="small" value={thinkingLevel} onChange={setThinkingLevel} style={{ width: isMobile ? 75 : 100 }} dropdownStyle={{ borderRadius: 8 }}>
                   <Select.Option value="low">Low</Select.Option>
                   <Select.Option value="medium">Medium</Select.Option>
@@ -918,6 +1112,23 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
               </div>
               <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800, color: '#1e293b', marginBottom: 12 }}>{t('chat.v3Ready')}</h3>
               <p style={{ color: '#64748b', lineHeight: 1.6, fontSize: isMobile ? 13 : 14, padding: isMobile ? '0 10px' : 0 }}>{t('chat.v3ReadyDesc')}</p>
+              
+              {sessions.length > 0 && (
+                <div style={{ marginTop: 24, animation: 'v3-fade-in 0.8s ease-out' }}>
+                  <Button 
+                    type="primary" 
+                    icon={<History size={18} />} 
+                    onClick={() => setShowSider(true)}
+                    style={{ 
+                      height: 44, borderRadius: 12, background: '#4f46e5', border: 'none', 
+                      padding: '0 24px', fontWeight: 600, boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)' 
+                    }}
+                  >
+                    {t('chat.continueFromHistory', { defaultValue: '从历史会话中继续' })}
+                  </Button>
+                </div>
+              )}
+
               <div style={{ marginTop: 24, display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
                 <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>{t('chat.v3LowLatency', { defaultValue: '⚡ 低延迟' })}</Tag>
                 <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>{t('chat.v3Secure', { defaultValue: '🔒 Ed25519' })}</Tag>
@@ -925,8 +1136,28 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
               </div>
             </div>
           )}
-          {messages.map((msg, index) => (
-            <div key={index} className="message-in" style={{ display: 'flex', gap: 14, flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}>
+          {messages.map((msg, index) => {
+            // 彻底隐藏逻辑：如果“显示思考”关闭，且该消息仅包含元信息块，则不渲染整个消息气泡
+            if (!showThinking) {
+              const isMetaOnly = msg.content.includes(':::thinking') || 
+                                 msg.content.includes(':::toolCall') || 
+                                 msg.content.includes(':::toolResult');
+              
+              // 如果内容只包含这些标记且没有普通文本（简单判断：标记外的长度极短）
+              // 或者标记占据了绝大部分内容，则视为纯元信息消息
+              const cleanText = msg.content
+                .replace(/> :::thinking[\s\S]*?:::/g, '')
+                .replace(/> :::toolCall[\s\S]*?:::/g, '')
+                .replace(/> :::toolResult[\s\S]*?:::/g, '')
+                .trim();
+              
+              if (isMetaOnly && !cleanText) {
+                return null;
+              }
+            }
+
+            return (
+              <div key={index} className="message-in" style={{ display: 'flex', gap: 14, flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}>
                 {msg.role === 'user' ? (
                   <Avatar icon={<User size={18} />} style={{ background: '#1e293b', flexShrink: 0, marginTop: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} />
                 ) : (
@@ -959,6 +1190,61 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                     rehypePlugins={[rehypeSanitize, rehypeKatex]}
                     components={{
                       p: ({children}: any) => <p style={{margin: 0}}>{children}</p>,
+                      blockquote: ({ children }: any) => {
+                        // 1. 更稳健的字符串提取：递归展平所有子节点文本
+                        const extractText = (node: any): string => {
+                          if (typeof node === 'string') return node;
+                          if (Array.isArray(node)) return node.map(extractText).join('');
+                          if (node?.props?.children) return extractText(node.props.children);
+                          return '';
+                        };
+                        const fullText = extractText(children);
+                        
+                        const isThinking = fullText.includes(':::thinking');
+                        const isToolCall = fullText.includes(':::toolCall');
+                        const isToolResult = fullText.includes(':::toolResult');
+
+                        // 全局开关：如果关闭，则不显示这些辅助信息
+                        if ((isThinking || isToolCall || isToolResult) && !showThinking) {
+                          return null;
+                        }
+
+                        // 2. 根据内容动态选择容器渲染样式卡片
+                        if (isThinking) {
+                          return (
+                            <div className="v3-thought-container">
+                              <div className="v3-thought-header">
+                                <Cpu size={12} />
+                                <span>Thinking Process</span>
+                              </div>
+                              {children}
+                            </div>
+                          );
+                        }
+                        if (isToolCall) {
+                          return (
+                            <div className="v3-tool-call-container">
+                              <div className="v3-tool-header">
+                                <Terminal size={12} />
+                                <span>Invoking System Tool</span>
+                              </div>
+                              <div style={{ fontSize: 12 }}>{children}</div>
+                            </div>
+                          );
+                        }
+                        if (isToolResult) {
+                          return (
+                            <div className="v3-tool-result-container">
+                              <div className="v3-tool-result-header">
+                                <CheckCircle size={12} />
+                                <span>Tool Output</span>
+                              </div>
+                              <div style={{ color: '#166534' }}>{children}</div>
+                            </div>
+                          );
+                        }
+                        return <blockquote style={{ borderLeft: '4px solid #e2e8f0', paddingLeft: '12px', color: '#64748b', fontStyle: 'italic', margin: '8px 0' }}>{children}</blockquote>;
+                      },
                       table: ({ ...props }: any) => (
                         <div style={{ width: '100%', overflowX: 'auto', marginBottom: 12, borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff' }}>
                           <table {...props} style={{ width: '100%', borderCollapse: 'collapse', fontSize: isMobile ? '12px' : '13px' }} />
@@ -1031,7 +1317,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                   )}
                 </div>              </div>
             </div>
-          ))}
+          );
+        })}
         </div>
 
         {status !== 'authenticated' && (
@@ -1277,6 +1564,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                        value={selectedBot}
                        onChange={setSelectedBot}
                        loading={loadingBots}
+                       disabled={isTyping}
                        variant="borderless"
                        dropdownStyle={{ borderRadius: 10, minWidth: 240 }}
                        dropdownMatchSelectWidth={false}
@@ -1328,24 +1616,39 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                  </div>
                )}
 
-              <div style={{ width: '100%', display: 'flex', alignItems: 'flex-end', gap: 8, padding: isMobile ? '4px 12px 8px' : '8px 16px 16px' }}>
-                <Input.TextArea
-                  value={inputText}
-                  onChange={e => setInputText(e.target.value)}
-                  placeholder={status === 'authenticated' ? t('chat.v3InputPlaceholder') : t('chat.v3Connecting')}
-                  autoSize={{ minRows: 1, maxRows: 6 }}
-                  onCompositionStart={() => setIsComposing(true)}
-                  onCompositionEnd={() => setIsComposing(false)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  disabled={status !== 'authenticated'}
-                  variant="borderless"
-                  style={{ padding: '4px 0' }}
-                />
+              <div style={{ width: '100%', display: 'flex', alignItems: 'flex-end', gap: 8, padding: isMobile ? '4px 12px 8px' : '8px 16px 16px', position: 'relative' }}>
+                <div style={{ flex: 1, position: 'relative' }}>
+                  <Input.TextArea
+                    value={inputText}
+                    onChange={e => setInputText(e.target.value)}
+                    placeholder={(status === 'authenticated' && !inputText && !isFocused && !isTyping) ? "" : (status === 'authenticated' ? t('chat.v3InputPlaceholder') : t('chat.v3Connecting'))}
+                    autoSize={{ minRows: 1, maxRows: 6 }}
+                    onCompositionStart={() => setIsComposing(true)}
+                    onCompositionEnd={() => setIsComposing(false)}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setIsFocused(false)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
+                        e.preventDefault();
+                        handleSend();
+                      }
+                    }}
+                    disabled={status !== 'authenticated' || isTyping}
+                    variant="borderless"
+                    style={{ padding: '4px 0', opacity: isTyping ? 0.6 : 1 }}
+                  />
+                  {status === 'authenticated' && !inputText && !isFocused && !isTyping && (
+                    <div 
+                      style={{ 
+                        position: 'absolute', left: 0, top: 4, 
+                        display: 'flex', alignItems: 'center', pointerEvents: 'none' 
+                      }}
+                    >
+                      <span style={{ fontSize: 13, color: '#94a3b8', opacity: 0.6 }}>{t('chat.v3InputPlaceholder')}</span>
+                      <div className="v3-mock-cursor" style={{ height: 14, marginLeft: 2, background: '#2563eb' }} />
+                    </div>
+                  )}
+                </div>
                 <Button
                    type="primary"
                    icon={isTyping ? <Square size={16} fill="#fff" /> : <Send size={17} />}
@@ -1356,7 +1659,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
                      background: (status !== 'authenticated' || (!isTyping && !inputText.trim())) ? '#e2e8f0' : (isTyping ? '#ef4444' : '#2563eb'), 
                      border: 'none', flexShrink: 0,
                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                     boxShadow: (status !== 'authenticated' || (!isTyping && !inputText.trim())) ? 'none' : (isTyping ? '0 4px 12px rgba(239,68,68,0.25)' : '0 4px 12px rgba(37,99,235,0.25)'),
+                     boxShadow: (status !== 'authenticated' || (!isTyping && !inputText.trim())) ? 'none' : (isTyping ? '0 4px 12px rgba(239,68,68,0.25)' : (inputText.trim() ? '0 4px 12px rgba(37,99,235,0.25)' : 'none')),
                      transition: 'all 0.2s',
                      color: (status !== 'authenticated' || (!isTyping && !inputText.trim())) ? '#94a3b8' : '#fff'
                    }}

@@ -3,6 +3,7 @@ import { Card, Tag, Spin, Button, Modal } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle, Cloud, RefreshCw, Zap, AlertCircle, Smartphone, Radar, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
+import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 interface ChannelsManagerProps {
   chatChannels: any;
@@ -17,6 +18,8 @@ interface ChannelsManagerProps {
   onUnbindWeixin?: (id: string) => void;
   activeTasks?: any[]; // 新增：用于检测解绑任务状态
   isMobile?: boolean; // 新增
+  isRunning?: boolean;
+  onNavigateToDashboard?: () => void;
 }
 
 const ChannelsManager: React.FC<ChannelsManagerProps> = ({ 
@@ -31,7 +34,9 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   onRefreshChannels,
   onUnbindWeixin,
   activeTasks = [],
-  isMobile
+  isMobile,
+  isRunning,
+  onNavigateToDashboard
 }) => {
   const { t } = useTranslation();
   const channelsList = chatChannels?.data || [];
@@ -39,7 +44,9 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   const hasWeixinConfig = configuredChannels.some((c: any) => c.name.toLowerCase().includes('weixin'));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ height: '100%', minHeight: 'calc(100vh - 100px)', width: '100%', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
+      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0' : '8px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* 已绑定渠道概览 */}
       <Card
         title={
@@ -304,6 +311,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
             )}
           </div>
         </Card>
+      </div>
       </div>
     </div>
   );

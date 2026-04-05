@@ -11,6 +11,8 @@ interface OnlineChatProps {
   onRefreshBots: () => void;
   isMobile?: boolean;
   onRestartGateway?: () => Promise<void>;
+  isRunning?: boolean;
+  onNavigateToDashboard?: () => void;
 }
 
 const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, ...props }) => {

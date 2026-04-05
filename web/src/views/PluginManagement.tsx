@@ -3,6 +3,7 @@ import { RefreshCw, Search, Zap, CheckCircle2, XCircle, AlertCircle, Info, Shiel
 import { Card, Table, Tag, Button, Input, Tooltip, Typography, Segmented, message, Popconfirm, Switch } from 'antd';
 import { useTranslation } from 'react-i18next';
 import api from '../api';
+import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 import type { Task } from '../hooks/useTaskCenter';
 
@@ -30,10 +31,13 @@ interface PluginManagementProps {
   updatedAt?: string;
   onTaskUpdate?: (task: Task) => void;
   activeTasks?: Task[];
+  isRunning?: boolean;
+  onNavigateToDashboard?: () => void;
 }
 
 const PluginManagement: React.FC<PluginManagementProps> = ({ 
-  isMobile, plugins: globalPlugins, loading, onRefresh, updatedAt, onTaskUpdate, activeTasks = []
+  isMobile, plugins: globalPlugins, loading, onRefresh, updatedAt, onTaskUpdate, 
+  activeTasks = [], isRunning, onNavigateToDashboard
 }) => {
   const { t } = useTranslation();
   const [searchText, setSearchText] = useState('');
@@ -352,7 +356,9 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ height: '100%', minHeight: 'calc(100vh - 100px)', width: '100%', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
+      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0' : '8px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <Card 
         title={
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12 }}>
@@ -627,6 +633,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
           />
         )}
       </Card>
+      </div>
     </div>
   );
 };

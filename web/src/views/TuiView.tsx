@@ -8,10 +8,16 @@ import { RotateCcw, XCircle, Terminal as TerminalIcon, Info, Download, RefreshCw
 import api from '../api';
 import storage from '../utils/storage';
 import { getWsUrl } from '../utils/url';
+import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 const { Paragraph, Text } = Typography;
 
-const TuiView: React.FC = () => {
+interface TuiViewProps {
+  isRunning?: boolean;
+  onNavigateToDashboard?: () => void;
+}
+
+const TuiView: React.FC<TuiViewProps> = ({ isRunning, onNavigateToDashboard }) => {
   const { t } = useTranslation();
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
@@ -237,9 +243,11 @@ const TuiView: React.FC = () => {
         background: '#0f172a',
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        position: 'relative'
       }}
     >
+      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
       {/* 顶部信息栏与控制栏 */}
       <div 
         style={{ 

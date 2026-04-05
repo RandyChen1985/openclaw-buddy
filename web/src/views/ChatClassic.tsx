@@ -13,6 +13,7 @@ import api, { getFullUrl } from '../api';
 import { getBaseURL } from '../utils/url';
 import storage from '../utils/storage';
 import { Mermaid, CodeBlock } from '../components/ChatComponents';
+import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 const { Option } = Select;
 
@@ -36,9 +37,13 @@ interface OnlineChatProps {
   onRefreshBots: () => void;
   isMobile?: boolean;
   onRestartGateway?: () => Promise<void>;
+  isRunning?: boolean;
+  onNavigateToDashboard?: () => void;
 }
 
-const ChatClassic: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRefreshBots, isMobile, onRestartGateway }) => {
+const ChatClassic: React.FC<OnlineChatProps> = ({ 
+  botsModels, loadingBots, onRefreshBots, isMobile, onRestartGateway, isRunning, onNavigateToDashboard 
+}) => {
   const { t } = useTranslation();
   const [selectedBot, setSelectedBot] = useState<string>('');
   const [inputText, setInputText] = useState('');
@@ -606,8 +611,11 @@ const ChatClassic: React.FC<OnlineChatProps> = ({ botsModels, loadingBots, onRef
       width: '100%',
       height: '100%',
       minHeight: 0,
-      minWidth: 0
+      minWidth: 0,
+      position: 'relative',
+      overflow: 'hidden'
     }}>
+      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
       {markdownStyles}
       {/* Top Bar */}
       <Card 

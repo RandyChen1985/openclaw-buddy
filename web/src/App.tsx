@@ -973,6 +973,11 @@ const Dashboard = () => {
           onDeleteBot={handleDeleteBot}
           onSetDefaultModel={handleSetDefaultModel}
           activeTasks={activeTasks}
+          isRunning={isRunning}
+          onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }}
         />
       ),
       'components': (
@@ -984,6 +989,11 @@ const Dashboard = () => {
           onUnbindWeixin={handleUnbindWeixin}
           activeTasks={activeTasks}
           isMobile={isMobile}
+          isRunning={isRunning}
+          onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }}
         />
       ),
       'devices': (
@@ -992,12 +1002,26 @@ const Dashboard = () => {
           onApproveDevice={handleApproveDevice} 
           onRefresh={() => fetchDevices(true)}
           isMobile={isMobile}
+          isRunning={isRunning}
+          onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }}
         />
       ),
-      'logs': <LogsViewer wsLogs={wsLogs} activeSource={logSource} onSourceChange={setLogSource} />,
+      'logs': <LogsViewer wsLogs={wsLogs} activeSource={logSource} onSourceChange={setLogSource} isRunning={isRunning} onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }} />,
       'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} ocInstalled={ocInstalled} />,
-      'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} />,
-      'tui': <TuiView />,
+      'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} isRunning={isRunning} onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }} />,
+      'tui': <TuiView isRunning={isRunning} onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }} />,
       'shell': <ShellView />,
       'skills': <SkillManagement 
         isMobile={isMobile} 
@@ -1005,6 +1029,11 @@ const Dashboard = () => {
         loading={loadingSkills} 
         skills={skills}
         activeTasks={activeTasks}
+        isRunning={isRunning}
+        onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }}
       />,
       'plugins': <PluginManagement 
         isMobile={isMobile} 
@@ -1014,8 +1043,16 @@ const Dashboard = () => {
         updatedAt={pluginsUpdatedAt} 
         onTaskUpdate={handleTaskUpdate}
         activeTasks={activeTasks}
+        isRunning={isRunning}
+        onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }}
       />,
-      'experts': <ExpertMarket isMobile={isMobile} onNavigate={setActiveTab} />
+      'experts': <ExpertMarket isMobile={isMobile} onNavigate={setActiveTab} isRunning={isRunning} onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }} />
     };
 
     return (

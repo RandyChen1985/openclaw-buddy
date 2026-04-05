@@ -11,6 +11,7 @@ import remarkGfm from 'remark-gfm';
 import dayjs from 'dayjs';
 import api from '../api';
 import { message } from 'antd';
+import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 interface BotsManagerProps {
   botsModels: any; 
@@ -25,12 +26,14 @@ interface BotsManagerProps {
   onDeleteBot: (id: string) => Promise<void>;
   onSetDefaultModel: (id: string) => Promise<void>;
   activeTasks?: any[];
+  isRunning?: boolean;
+  onNavigateToDashboard?: () => void;
 }
 
 const BotsManager: React.FC<BotsManagerProps> = ({ 
   botsModels, loadingBots, isMobile, onRefresh, onRefreshBots, modelsConfig, loadingConfig,
   onAddBot, onUpdateBot, onDeleteBot, onSetDefaultModel,
-  activeTasks = []
+  activeTasks = [], isRunning, onNavigateToDashboard
 }) => {
   const { t } = useTranslation();
   const cardColors = [
@@ -398,8 +401,10 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   };
 
   return (
-    <div style={{ padding: isMobile ? '0' : '8px' }}>
-      <div style={{ marginBottom: 24, padding: isMobile ? '0 8px' : '0' }}>
+    <div style={{ height: '100%', minHeight: 'calc(100vh - 100px)', width: '100%', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
+      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0' : '8px' }}>
+        <div style={{ marginBottom: 24, padding: isMobile ? '0 8px' : '0' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
           <div>
             <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, color: '#1e293b', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1385,6 +1390,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           )}
         </Spin>
       </Modal>
+      </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
         .markdown-body h1 { font-size: 1.4em; margin-bottom: 16px; color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }

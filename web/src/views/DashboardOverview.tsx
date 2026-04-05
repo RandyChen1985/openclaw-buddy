@@ -124,6 +124,14 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     fetchData();
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
     window.addEventListener('resize', handleResize);
+
+    // 检测是否需要滚动到快捷操作
+    if (window.location.hash === '#actions') {
+      setTimeout(() => {
+        document.getElementById('dashboard-quick-actions')?.scrollIntoView({ behavior: 'smooth' });
+      }, 300);
+    }
+
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
@@ -400,6 +408,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
       {/* 快捷操作 */}
       <Card
+        id="dashboard-quick-actions"
         style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
         title={<span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>{t('dashboard.quickActions')}</span>}
         styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 52 }, body: { padding: '16px 24px' } }}
@@ -442,7 +451,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<RefreshCw size={14} />}
             onClick={() => onControl('restart')}
-            disabled={ocInstalled === false || isGatewayProcessing || isEnvChecking}
+            disabled={!isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking}
             loading={isGatewayProcessing}
             style={{ borderRadius: 10, border: '1.5px solid #e2e8f0', width: '100%' }}
           >
