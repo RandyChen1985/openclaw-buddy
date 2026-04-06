@@ -2,7 +2,15 @@ import storage from './storage';
 
 // Get base URL dynamically at runtime if available
 export const getBaseURL = () => {
-  // Try to read from global variable injected by Go backend
+  // 1. 如果在 Windows 客户端 (Wails) 环境下，由于 Origin 是 wails:// 或类似的，
+  // 我们必须显式指向本地 Gin 服务器的地址，否则相对路径会发往 wails:// 导致 404。
+  const isWails = window.location.protocol.includes('wails') || window.location.hostname === 'wails.localhost';
+  if (isWails && !import.meta.env.DEV) {
+    // 生产环境下，Wails 客户端强制指向本地 3000 端口
+    return 'http://localhost:3000';
+  }
+
+  // 2. 尝试从 Go 后端注入的全局变量读取 (适配子路径部署)
   let base = (window as any).__WEB_ROOT__ || import.meta.env.BASE_URL || '/';
   
   // Ensure base starts with /
@@ -15,23 +23,26 @@ export const getBaseURL = () => {
 
 // Get WebSocket URL with correct base path
 export const getWsUrl = (path: string) => {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.host;
-  const base = getBaseURL(); // Returns "" or "/prefix"
+  const isWails = window.location.protocol.includes('wails') || window.location.hostname === 'wails.localhost';
+  const base = getBaseURL(); // 在 Wails 下会返回 http://localhost:3000
   
   // path should start with /
   const normalizedPath = path.startsWith('/') ? path : '/' + path;
-  
-  // 添加认证 Token
   const token = storage.getItem('guardian_token');
+
   let authUrl = '';
-  if (import.meta.env.DEV && !(window as any).__WEB_ROOT__) {
+  if (isWails && !import.meta.env.DEV) {
+    // Wails 生产环境：直接构造指向 localhost:3000 的 ws 地址
+    authUrl = `ws://localhost:3000${normalizedPath}`;
+  } else if (import.meta.env.DEV && !(window as any).__WEB_ROOT__) {
     authUrl = `ws://localhost:3000${base}${normalizedPath}`;
   } else {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
     authUrl = `${protocol}//${host}${base}${normalizedPath}`;
   }
 
-  // 拼接 Token 参数（Tag 不参与鉴权，故移除）
+  // 拼接 Token 参数
   if (token) {
     const separator = authUrl.includes('?') ? '&' : '?';
     authUrl += `${separator}token=${encodeURIComponent(token)}`;
@@ -39,3 +50,4 @@ export const getWsUrl = (path: string) => {
 
   return authUrl;
 };
+

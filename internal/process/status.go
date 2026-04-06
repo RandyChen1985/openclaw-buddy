@@ -1,6 +1,7 @@
 package process
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sort"
+	"time"
 )
 
 type SystemMetrics struct {
@@ -67,12 +69,16 @@ func GetStructuredStatus(port int) (OpenClawStatus, error) {
 		Agents:   []ServiceStatus{},
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
 	// 0. 获取版本号
-	verCmd := exec.Command("openclaw", "--version")
+	verCmd := exec.CommandContext(ctx, "openclaw", "--version")
+	PrepareSilentCommand(verCmd)
 	verOut, _ := verCmd.CombinedOutput()
 	status.Version = strings.TrimSpace(StripANSI(string(verOut)))
 
-	// 0.1 获取系统负载 (支持 Mac/Linux)
+	// 0.1 获取系统负载
 	status.Metrics = GetSystemMetrics()
 
 	// 1. 解析网关状态
@@ -94,7 +100,17 @@ func GetProcessRuntime(pid int) string {
 	if pid <= 0 {
 		return "Unknown"
 	}
-	cmd := exec.Command("ps", "-o", "etime=", "-p", strconv.Itoa(pid))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		// Windows 不支持 ps，使用简单的活跃标识
+		return "Active (Port Monitored)"
+	} else {
+		cmd = exec.CommandContext(ctx, "ps", "-o", "etime=", "-p", strconv.Itoa(pid))
+	}
+	
 	out, err := cmd.Output()
 	if err != nil {
 		return "Active (Port Monitored)"
@@ -113,10 +129,13 @@ func GetSystemMetrics() SystemMetrics {
 		DiskUsage:   0,
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
 	// 1. CPU Usage (平台差异化适配)
 	if runtime.GOOS == "darwin" {
 		// macOS: top -l 1 并匹配 "idle"
-		cpuCmd := exec.Command("sh", "-c", "top -l 1 | grep 'CPU usage'")
+		cpuCmd := exec.CommandContext(ctx, "sh", "-c", "top -l 1 | grep 'CPU usage'")
 		cpuOut, _ := cpuCmd.Output()
 		cpuStr := string(cpuOut)
 		idleMatch := regexp.MustCompile(`([\d.]+)% idle`).FindStringSubmatch(cpuStr)
@@ -125,39 +144,86 @@ func GetSystemMetrics() SystemMetrics {
 			metrics.CPUUsage = 100.0 - idle
 		}
 	} else if runtime.GOOS == "linux" {
-		// Linux: top -b -n 1 (批处理模式单次采样) 并匹配 "id"
-		cpuCmd := exec.Command("sh", "-c", "top -b -n 1 | grep \"Cpu(s)\"")
+		// Linux: top -b -n 1 并匹配 "id"
+		cpuCmd := exec.CommandContext(ctx, "sh", "-c", "top -b -n 1 | grep \"Cpu(s)\"")
 		cpuOut, _ := cpuCmd.Output()
 		cpuStr := string(cpuOut)
-		// Linux 示例: %Cpu(s):  5.0 us,  2.0 sy,  0.0 ni, 93.0 id, ...
 		idleMatch := regexp.MustCompile(`([\d.]+)\s+id`).FindStringSubmatch(cpuStr)
 		if len(idleMatch) > 1 {
 			idle, _ := strconv.ParseFloat(idleMatch[1], 64)
 			metrics.CPUUsage = 100.0 - idle
 		}
-	}
-
-	// 2. Memory Usage (Rough estimate using ps, 跨平台通用)
-	memCmd := exec.Command("sh", "-c", "ps -A -o %mem | awk '{s+=$1} END {print s}'")
-	memOut, _ := memCmd.Output()
-	memRaw := strings.TrimSpace(string(memOut))
-	if memRaw != "" {
-		metrics.MemoryUsage, _ = strconv.ParseFloat(memRaw, 64)
-		if metrics.MemoryUsage > 100 {
-			metrics.MemoryUsage = 95.5 // 封顶保护
+	} else if runtime.GOOS == "windows" {
+		// Windows: 使用 wmic 获取 CPU 负载
+		cpuCmd := exec.CommandContext(ctx, "wmic", "cpu", "get", "loadpercentage")
+		PrepareSilentCommand(cpuCmd)
+		cpuOut, _ := cpuCmd.Output()
+		lines := strings.Split(strings.TrimSpace(string(cpuOut)), "\n")
+		if len(lines) > 1 {
+			val, _ := strconv.ParseFloat(strings.TrimSpace(lines[1]), 64)
+			metrics.CPUUsage = val
 		}
 	}
 
-	// 3. Disk Usage (Root partition, df 指令跨平台语义一致)
-	diskCmd := exec.Command("sh", "-c", "df / | tail -1 | awk '{print $5}' | sed 's/%//'")
-	diskOut, _ := diskCmd.Output()
-	diskRaw := strings.TrimSpace(string(diskOut))
-	if diskRaw != "" {
-		metrics.DiskUsage, _ = strconv.ParseFloat(diskRaw, 64)
+	// 2. Memory Usage
+	if runtime.GOOS == "windows" {
+		// Windows: 使用 wmic 获取空闲和总物理内存 (单位: KB)
+		memCmd := exec.CommandContext(ctx, "wmic", "OS", "get", "FreePhysicalMemory,TotalVisibleMemorySize")
+		PrepareSilentCommand(memCmd)
+		memOut, _ := memCmd.Output()
+		lines := strings.Split(strings.TrimSpace(string(memOut)), "\n")
+		if len(lines) > 1 {
+			fields := strings.Fields(lines[1])
+			if len(fields) >= 2 {
+				free, _ := strconv.ParseFloat(fields[0], 64)
+				total, _ := strconv.ParseFloat(fields[1], 64)
+				if total > 0 {
+					metrics.MemoryUsage = (1.0 - (free / total)) * 100.0
+				}
+			}
+		}
+	} else {
+		// Unix: Rough estimate using ps
+		memCmd := exec.CommandContext(ctx, "sh", "-c", "ps -A -o %mem | awk '{s+=$1} END {print s}'")
+		memOut, _ := memCmd.Output()
+		memRaw := strings.TrimSpace(string(memOut))
+		if memRaw != "" {
+			metrics.MemoryUsage, _ = strconv.ParseFloat(memRaw, 64)
+		}
+	}
+	if metrics.MemoryUsage > 100 {
+		metrics.MemoryUsage = 95.5 // 封顶保护
+	}
+
+	// 3. Disk Usage (Root partition)
+	if runtime.GOOS == "windows" {
+		// Windows: 获取 C 盘占用率
+		diskCmd := exec.CommandContext(ctx, "wmic", "logicaldisk", "where", "DeviceID='C:'", "get", "size,freespace")
+		PrepareSilentCommand(diskCmd)
+		diskOut, _ := diskCmd.Output()
+		lines := strings.Split(strings.TrimSpace(string(diskOut)), "\n")
+		if len(lines) > 1 {
+			fields := strings.Fields(lines[1])
+			if len(fields) >= 2 {
+				free, _ := strconv.ParseFloat(fields[0], 64)
+				total, _ := strconv.ParseFloat(fields[1], 64)
+				if total > 0 {
+					metrics.DiskUsage = (1.0 - (free / total)) * 100.0
+				}
+			}
+		}
+	} else {
+		diskCmd := exec.CommandContext(ctx, "sh", "-c", "df / | tail -1 | awk '{print $5}' | sed 's/%//'")
+		diskOut, _ := diskCmd.Output()
+		diskRaw := strings.TrimSpace(string(diskOut))
+		if diskRaw != "" {
+			metrics.DiskUsage, _ = strconv.ParseFloat(diskRaw, 64)
+		}
 	}
 
 	return metrics
 }
+
 
 func parseValue(input, pattern string) string {
 	re := regexp.MustCompile(pattern)
@@ -170,7 +236,8 @@ func parseValue(input, pattern string) string {
 
 func GetOpenClawDevices() ([]Device, error) {
 	cmd := exec.Command("openclaw", "devices", "list", "--json")
-	out, err := cmd.Output() // 仅读取 stdout，通常能过滤掉输出到 stderr 的插件日志
+	PrepareSilentCommand(cmd)
+	out, err := cmd.CombinedOutput() // 仅读取 stdout，通常能过滤掉输出到 stderr 的插件日志
 	if err != nil {
 		return nil, err
 	}
@@ -208,6 +275,7 @@ func GetOpenClawDevices() ([]Device, error) {
 
 func ApproveDevice(requestId string) error {
 	cmd := exec.Command("openclaw", "devices", "approve", requestId)
+	PrepareSilentCommand(cmd)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("批准设备失败: %s", string(out))
 	}

@@ -36,6 +36,14 @@ api.interceptors.response.use(
         // 业务成功：解包并直接返回数据部分，保持前端组件逻辑（如 res.data）不变
         return { ...response, data: data || response.data };
       }
+      
+      // 处理业务层面的 401 (部分接口可能在业务包内返回 401)
+      if (code === 401) {
+        console.warn('🎫 [API] Session expired (Code 401). Redirecting to login...');
+        storage.removeItem('guardian_token');
+        window.location.reload();
+      }
+
       // 业务失败：抛出异常
       const bizError = new Error(msg || '接口业务错误');
       (bizError as any).response = response;
@@ -45,11 +53,16 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // 处理 HTTP 状态码层面的错误
-    if (error.response?.data?.message) {
-      error.message = error.response.data.message;
+    // 处理 HTTP 状态码层面的错误 (如 401 Unauthorized)
+    if (error.response && error.response.status === 401) {
+      console.warn('🎫 [API] Unauthorized (Status 401). Clearing token and reloading...');
+      storage.removeItem('guardian_token');
+      window.location.reload();
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+
+    const msg = error.response?.data?.message || error.message;
+    return Promise.reject(new Error(msg));
   }
 );
 

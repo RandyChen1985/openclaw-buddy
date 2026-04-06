@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -68,16 +68,20 @@ func (s *Server) StartWebSocketBroadcaster() {
 }
 
 func (s *Server) streamLogs(c *gin.Context) {
+	log.Printf("📡 [WS] Upgrading connection for source: %s", c.DefaultQuery("source", "buddy"))
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("❌ [WS] Upgrade failed: %v", err)
+		log.Printf("❌ [WS] Upgrade failed for %s: %v", c.Request.RemoteAddr, err)
 		return
 	}
+	log.Printf("📡 [WS] Connection upgraded successfully for %s", c.Request.RemoteAddr)
 	
 	// 注册客户端
 	clientsMu.Lock()
 	clients[conn] = true
 	clientsMu.Unlock()
+
+	source := c.DefaultQuery("source", "buddy")
 
 	// 注销并彻底关闭
 	defer func() {
@@ -85,10 +89,9 @@ func (s *Server) streamLogs(c *gin.Context) {
 		delete(clients, conn)
 		clientsMu.Unlock()
 		conn.Close()
-		log.Printf("🔌 [WS] Client disconnected.")
+		log.Printf("🔌 [WS] Client disconnected (Source: %s, Remote: %s)", source, c.Request.RemoteAddr)
 	}()
 
-	source := c.DefaultQuery("source", "buddy")
 	stopChan := make(chan bool)
 	var once sync.Once
 	stop := func() {
@@ -111,9 +114,9 @@ func (s *Server) streamLogs(c *gin.Context) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		log.Printf("📡 [WS] Starting gateway log streaming...")
-		cmd := exec.CommandContext(ctx, "openclaw", "logs", "--follow")
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		log.Printf("📡 [WS] Starting gateway log streaming via binary: %s", process.GetOpenClawBinary())
+		cmd := exec.CommandContext(ctx, process.GetOpenClawBinary(), "logs", "--follow")
+		process.PrepareSilentCommand(cmd)
 		
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
@@ -137,15 +140,14 @@ func (s *Server) streamLogs(c *gin.Context) {
 		}()
 
 		<-stopChan
-		pgid, err := syscall.Getpgid(cmd.Process.Pid)
-		if err == nil {
-			syscall.Kill(-pgid, syscall.SIGKILL)
-		}
+		killProcessGroup(cmd)
 		_ = cmd.Wait()
 		return
 	}
 
-	// 默认 Buddy 日志
+	absLogPath, _ := filepath.Abs(s.cfg.LogFile)
+	log.Printf("📡 [WS] Tailing Buddy log file: %s (Absolute: %s)", s.cfg.LogFile, absLogPath)
+
 	t, err := tail.TailFile(s.cfg.LogFile, tail.Config{
 		Follow:    true,
 		ReOpen:    true,
@@ -154,6 +156,7 @@ func (s *Server) streamLogs(c *gin.Context) {
 		Location:  &tail.SeekInfo{Offset: 0, Whence: 2},
 	})
 	if err != nil {
+		log.Printf("❌ [WS] Failed to tail log file %s: %v", s.cfg.LogFile, err)
 		return
 	}
 	defer t.Stop()

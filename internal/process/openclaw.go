@@ -93,6 +93,7 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 
 	// 1. 解析 Bots: openclaw agents list
 	cmdBots := exec.Command("openclaw", "agents", "list")
+	PrepareSilentCommand(cmdBots)
 	outBots, _ := cmdBots.CombinedOutput()
 
 	var currentBot *OpenClawBot
@@ -170,6 +171,7 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 
 	// 2. 解析 Models: openclaw models list
 	cmdModels := exec.Command("openclaw", "models", "list")
+	PrepareSilentCommand(cmdModels)
 	outModels, _ := cmdModels.CombinedOutput()
 
 	scannerModels := bufio.NewScanner(strings.NewReader(string(outModels)))
@@ -218,6 +220,7 @@ func AddOpenClawBot(id, model, workspace string) error {
 
 	// 执行 openclaw agents add [id] --model [model] --workspace [workspace]
 	cmd := exec.Command("openclaw", "agents", "add", id, "--model", model, "--workspace", workspace)
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to add agent: %v. Output: %s", err, string(out))
@@ -228,6 +231,7 @@ func AddOpenClawBot(id, model, workspace string) error {
 func SetOpenClawBotIdentity(id, name string) error {
 	// 执行 openclaw agents set-identity --agent [id] --name "[name]"
 	cmd := exec.Command("openclaw", "agents", "set-identity", "--agent", id, "--name", name)
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to set identity: %v. Output: %s", err, string(out))
@@ -238,6 +242,7 @@ func SetOpenClawBotIdentity(id, name string) error {
 func DeleteOpenClawBot(id string) error {
 	// 执行 openclaw agents delete [id] --force
 	cmd := exec.Command("openclaw", "agents", "delete", id, "--force")
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to delete agent: %v. Output: %s", err, string(out))
@@ -247,6 +252,7 @@ func DeleteOpenClawBot(id string) error {
 
 func SetOpenClawDefaultModel(modelID string) error {
 	cmd := exec.Command("openclaw", "models", "set", modelID)
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to set default model: %v (%s)", err, string(out))
@@ -533,6 +539,7 @@ type OpenClawPlugin struct {
 
 func GetOpenClawPlugins() (any, error) {
 	cmd := exec.Command("openclaw", "plugins", "list", "--json")
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list plugins: %v. Output: %s", err, string(out))
@@ -566,42 +573,31 @@ func ReloadOpenClawPlugins() error {
 
 func EnableOpenClawPlugin(id string) error {
 	cmd := exec.Command("openclaw", "plugins", "enable", id)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to enable plugin %s: %v. Output: %s", id, err, string(out))
-	}
-	return nil
+	PrepareSilentCommand(cmd)
+	return cmd.Run()
 }
 
 func DisableOpenClawPlugin(id string) error {
 	cmd := exec.Command("openclaw", "plugins", "disable", id)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to disable plugin %s: %v. Output: %s", id, err, string(out))
-	}
-	return nil
+	PrepareSilentCommand(cmd)
+	return cmd.Run()
 }
 
 func UninstallOpenClawPlugin(id string) error {
 	cmd := exec.Command("openclaw", "plugins", "uninstall", id)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to uninstall plugin %s: %v. Output: %s", id, err, string(out))
-	}
-	return nil
+	PrepareSilentCommand(cmd)
+	return cmd.Run()
 }
 
 func UpdateOpenClawPlugins() error {
 	cmd := exec.Command("openclaw", "plugins", "update")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to update plugins: %v. Output: %s", err, string(out))
-	}
-	return nil
+	PrepareSilentCommand(cmd)
+	return cmd.Run()
 }
 
 func GetOpenClawSkills() (any, error) {
 	cmd := exec.Command("openclaw", "skills", "list", "--json")
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list skills: %v. Output: %s", err, string(out))
@@ -627,11 +623,8 @@ func GetOpenClawSkills() (any, error) {
 
 func UninstallOpenClawSkill(name string) error {
 	cmd := exec.Command("openclaw", "skills", "uninstall", name)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to uninstall skill %s: %v. Output: %s", name, err, string(out))
-	}
-	return nil
+	PrepareSilentCommand(cmd)
+	return cmd.Run()
 }
 
 func ReloadOpenClawSkills() error {
@@ -642,6 +635,7 @@ func ReloadOpenClawSkills() error {
 
 func GetOpenClawSessions() ([]OpenClawSession, error) {
 	cmd := exec.Command("openclaw", "sessions", "--all-agent", "--json")
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sessions: %v. Output: %s", err, string(out))

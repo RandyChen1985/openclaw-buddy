@@ -36,6 +36,10 @@ export const useWebSocketLogs = (token: string | null, source: string = 'buddy',
 
       socket = new WebSocket(wsUrl);
 
+      socket.onopen = () => {
+        console.log(`📡 [WS] Connection established for source: ${source}`);
+      };
+
       socket.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
@@ -50,7 +54,14 @@ export const useWebSocketLogs = (token: string | null, source: string = 'buddy',
       };
 
       socket.onerror = (error) => {
-        console.error('WebSocket Error:', error);
+        console.error(`❌ [WS] WebSocket Error (Source: ${source}):`, error);
+      };
+
+      socket.onclose = (event) => {
+        console.log(`🔌 [WS] WebSocket closed (Source: ${source}). Code: ${event.code}, Reason: ${event.reason}`);
+        if (!event.wasClean) {
+          console.warn('⚠️ [WS] Connection closed unexpectedly. This might be due to a network error or server crash.');
+        }
       };
     };
 

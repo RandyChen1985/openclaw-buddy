@@ -25,6 +25,7 @@ func SelfRestart() error {
 	// 准备启动新进程的参数和环境变量
 	args := os.Args
 	cmd := exec.Command(execPath, args[1:]...)
+	PrepareSilentCommand(cmd)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()

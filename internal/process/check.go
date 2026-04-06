@@ -29,12 +29,21 @@ func GetOpenClawBinary() string {
 
 	// 2. 检查环境变量 PATH
 	if path, err := exec.LookPath("openclaw"); err == nil {
-		return path
+		absPath, _ := filepath.Abs(path)
+		return absPath
 	}
 
-	// 默认返回名称，依靠系统查找
+	// 默认返回名称，并尽量转为绝对路径
+	absPath, err := filepath.Abs("openclaw")
+	if err == nil {
+		if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(absPath), ".exe") {
+			absPath += ".exe"
+		}
+		return absPath
+	}
 	return "openclaw"
 }
+
 
 func CheckBinaryInPath(name string) (string, error) {
 	path, err := exec.LookPath(name)
@@ -46,7 +55,8 @@ func CheckBinaryInPath(name string) (string, error) {
 
 func GetVersion() (string, error) {
 	cmd := exec.Command(GetOpenClawBinary(), "--version")
-	out, err := cmd.Output()
+	PrepareSilentCommand(cmd)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("failed to get openclaw version: %v", err)
 	}
@@ -55,6 +65,7 @@ func GetVersion() (string, error) {
 
 func GetGatewayStatus() string {
 	cmd := exec.Command(GetOpenClawBinary(), "gateway", "status")
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Sprintf("获取状态失败: %v", err)
@@ -75,6 +86,7 @@ func IsPortListening(port int) bool {
 func CheckHealth() (time.Duration, error) {
 	start := time.Now()
 	cmd := exec.Command(GetOpenClawBinary(), "health")
+	PrepareSilentCommand(cmd)
 	err := cmd.Run()
 	elapsed := time.Since(start)
 	if err != nil {
@@ -86,6 +98,7 @@ func CheckHealth() (time.Duration, error) {
 // CheckConfig 执行 openclaw health 并检查配置内容是否有效
 func CheckConfig() (bool, string, error) {
 	cmd := exec.Command(GetOpenClawBinary(), "health")
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	output := string(out)
 
@@ -131,6 +144,7 @@ func GetDashboardURL(ctx context.Context, externalPrefix string) (string, error)
 	bin := GetOpenClawBinary()
 	log.Printf("[Dashboard] 执行命令: %s dashboard --no-open", bin)
 	cmd := exec.CommandContext(ctx, bin, "dashboard", "--no-open")
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	output := string(out)
 	
@@ -169,11 +183,14 @@ func GetDashboardURL(ctx context.Context, externalPrefix string) (string, error)
 }
 
 func GetPIDByPort(port int) (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
 	if runtime.GOOS == "windows" {
 		// Windows: netstat -ano | findstr LISTENING
-		// 我们过滤出 LISTENING 状态且包含指定端口的行
-		cmd := exec.Command("cmd", "/c", "netstat -ano | findstr LISTENING")
-		out, err := cmd.Output()
+		cmd := exec.CommandContext(ctx, "cmd", "/c", "netstat -ano | findstr LISTENING")
+		PrepareSilentCommand(cmd)
+		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return 0, fmt.Errorf("failed to run netstat: %v", err)
 		}
@@ -198,11 +215,12 @@ func GetPIDByPort(port int) (int, error) {
 	}
 
 	// Linux/Mac: lsof -t -i :port
-	cmd := exec.Command("sh", "-c", fmt.Sprintf("lsof -t -i :%d", port))
+	cmd := exec.CommandContext(ctx, "sh", "-c", fmt.Sprintf("lsof -t -i :%d", port))
 	out, err := cmd.Output()
 	if err != nil {
 		return 0, fmt.Errorf("no process listening on port %d", port)
 	}
+
 	pidStr := strings.TrimSpace(string(out))
 	if pidStr == "" {
 		return 0, fmt.Errorf("empty PID for port %d", port)

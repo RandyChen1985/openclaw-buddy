@@ -24,6 +24,8 @@
     "start": "Start",
     "stop": "Stop",
     "restart": "Restart",
+    "install": "One-click Install",
+    "update": "Update",
     "loading": "Loading...",
     "success": "Success",
     "error": "Error",

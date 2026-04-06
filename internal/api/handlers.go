@@ -245,21 +245,49 @@ func (s *Server) runAsyncTaskWithPriority(c *gin.Context, task *process.Task, pr
 }
 
 func (s *Server) startGateway(c *gin.Context) {
-	log.Printf("🎮 [控制] 用户请求: 【启动网关】")
-	utils.RecordSystemEvent("CONTROL", "用户手动请求【启动网关】")
-	task := &process.Task{
-		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   "tasks.start_gateway",
-		Module: "gateway",
-		Action: "start",
+	log.Printf("🎮 [控制] 用户请求: 【启动 OpenClaw 网关服务】")
+
+	// 1. 预检查配置是否合法。如果配置不合法，直接返回错误，不记录为异步任务也不触发安装引导。
+	if isValid, problem, _ := process.CheckConfig(); !isValid {
+		s.Error(c, http.StatusBadRequest, "配置校验未通过: "+problem)
+		return
 	}
+
+	task := &process.Task{
+		ID:      fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:    "tasks.start_gateway",
+		Module:  "gateway",
+		Action:  "start",
+		Command: "openclaw gateway restart", // 内部统一使用较稳健的 restart
+	}
+
 	s.runAsyncTaskWithPriority(c, task, scheduler.PriorityHigh, func() (string, error) {
-		res, err := process.RunCommandWithTimeout(60*time.Second, "openclaw", "gateway", "start")
+		err := process.ForceStartGateway()
 		if err != nil {
+			errMsg := err.Error()
+
+			// 只有当明确提示任务未注册或找不到指定文件时，才引导安装
+			// 这能防止因端口冲突、权限不足等其他原因导致的“安装死循环”
+			if strings.Contains(errMsg, "schtasks") &&
+				(strings.Contains(errMsg, "not find the file") || strings.Contains(errMsg, "not found")) {
+				// 特殊处理：返回带标记的错误信息，以便后续逻辑识别
+				return "", fmt.Errorf("service_not_installed: %v", errMsg)
+			}
 			return "", err
 		}
-		return res.Output, nil
+		return "tasks.results.started", nil
 	})
+}
+
+
+func (s *Server) installGatewayService(c *gin.Context) {
+	log.Printf("🎮 [控制] 用户请求: 【系统级安装 OpenClaw 网关服务 (提权)】")
+	err := process.InstallGatewayService()
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success"})
 }
 
 func (s *Server) stopGateway(c *gin.Context) {
@@ -1361,10 +1389,14 @@ func (s *Server) getOpenClawVersion(c *gin.Context) {
 		return
 	}
 
-	out, err := exec.Command(path, "--version").Output()
+	cmd := exec.Command(path, "--version")
+	process.PrepareSilentCommand(cmd)
+	out, err := cmd.Output()
 	if err != nil {
 		// 尝试不带 -- 
-		out, err = exec.Command(path, "version").Output()
+		cmd = exec.Command(path, "version")
+		process.PrepareSilentCommand(cmd)
+		out, err = cmd.Output()
 	}
 
 	version := "Unknown"

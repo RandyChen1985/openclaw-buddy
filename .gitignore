@@ -14,15 +14,16 @@ vendor/
 
 # OS files
 .DS_Store
-release/
-release_pkg/
-web/node_modules/
-web/dist/
-internal/api/dist/
-monitor_test
-data/
-temp-dev-test/
-backups/
+# Build artifacts
+/build/
+/release/
+/release_pkg/
+/internal/api/dist/
+/web/dist/
+/web/node_modules/
+node_modules/
+openclaw-buddy-linux
+openclaw-buddy.exe
 openclaw-buddy
 /monitor
 

@@ -5,6 +5,7 @@ import { Server, Activity, Play, Square, RefreshCw, Trophy, Zap, Monitor } from 
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
 import dayjs from 'dayjs';
 import api from '../api';
+import TerminalModal from '../components/common/TerminalModal';
 import { APP_VERSION } from '../version';
 import { hasNewVersion } from '../utils/version';
 
@@ -50,6 +51,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const [isRestarting, setIsRestarting] = useState(false);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [ocStatus, setOcStatus] = useState<OcStatus | null>(null);
+  const [installModalOpen, setInstallModalOpen] = useState(false);
+  const [installCommand, setInstallCommand] = useState('');
 
   // 综合判断是否处于处理中：1. 异步任务在跑 2. 前端正在等待请求响应
   const isGatewayProcessing = isTransitioning || activeTasks.some(t => t.module === 'gateway' && t.status === 'Running');
@@ -118,6 +121,22 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     } finally {
       setVerLoading(false);
     }
+  };
+
+  const handleInstallOpenClaw = () => {
+    if (!systemInfo) return;
+    
+    let command = '';
+    const os = systemInfo.os.toLowerCase();
+    
+    if (os === 'windows') {
+      command = 'powershell -c "irm https://openclaw.ai/install.ps1 | iex"';
+    } else {
+      command = 'curl -fsSL https://openclaw.ai/install.sh | bash';
+    }
+    
+    setInstallCommand(command);
+    setInstallModalOpen(true);
   };
 
   useEffect(() => {
@@ -213,7 +232,30 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <div>
                   <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>OpenClaw CLI</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {ocStatus?.installed ? <Badge status="processing" color="#22c55e" text={<span style={{ fontSize: 14, color: '#1e293b', fontWeight: 700 }}>{ocStatus.version}</span>} /> : <span style={{ fontSize: 14, color: '#ef4444', fontWeight: 700 }}>未安装</span>}
+                    {ocStatus?.installed ? (
+                      <Badge status="processing" color="#22c55e" text={<span style={{ fontSize: 14, color: '#1e293b', fontWeight: 700 }}>{ocStatus.version}</span>} />
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 14, color: '#ef4444', fontWeight: 700 }}>未安装</span>
+                        <Button 
+                          type="primary" 
+                          size="small" 
+                          icon={<Zap size={10} />}
+                          onClick={handleInstallOpenClaw}
+                          style={{ 
+                            background: '#2563eb', 
+                            fontSize: 10, 
+                            height: 20, 
+                            borderRadius: 6, 
+                            display: 'flex', 
+                            alignItems: 'center',
+                            padding: '0 8px'
+                          }}
+                        >
+                          一键安装
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -474,6 +516,16 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </Button>
         </div>
       </Card>
+
+      <TerminalModal 
+        open={installModalOpen}
+        onClose={() => {
+          setInstallModalOpen(false);
+          fetchData(); // 重新检查安装状态
+        }}
+        title={`OpenClaw CLI ${t('common.install')}`}
+        initialCommand={installCommand}
+      />
     </div>
   );
 };

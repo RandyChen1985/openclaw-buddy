@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode } from 'antd';
+import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode, notification } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
@@ -532,7 +532,42 @@ const Dashboard = () => {
       }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
+      // 捕捉 412 错误：Windows 服务未安装/任务计划未注册
+      if (err.response?.status === 412) {
+        notification.warning({
+          message: t('dashboard.gatewayFixRequired') || '需要系统组件修复',
+          description: (
+            <div>
+              <div>{t('dashboard.gatewayFixDesc') || '检测到 OpenClaw 网关服务未在系统中登记（通常是由于权限不足导致之前的安装失败）。'}</div>
+              <Button 
+                type="primary" 
+                size="small" 
+                onClick={async () => {
+                  notification.destroy();
+                  await handleFixGatewayService();
+                }}
+                style={{ marginTop: 12, background: '#f59e0b', borderColor: '#f59e0b' }}
+              >
+                🛠️ {t('dashboard.fixNow') || '立即一键修复 (需要管理员权限)'}
+              </Button>
+            </div>
+          ),
+          duration: 0, // 不自动关闭
+        });
+        return;
+      }
       message.error(err.response?.data?.error || t('common.commandFailed'));
+    }
+  };
+
+  const handleFixGatewayService = async () => {
+    const key = 'fixing-gateway';
+    message.loading({ content: t('dashboard.fixingGateway') || '正在准备系统级修复...', key });
+    try {
+      await api.post('/v1/gateway/install');
+      message.success({ content: t('dashboard.fixGatewaySuccess') || '修复指令已发出，请在弹出的系统窗口中允许运行，完成后点击“启动”即可。', key, duration: 5 });
+    } catch (err: any) {
+      message.error({ content: err.response?.data?.error || t('dashboard.fixGatewayFailed') || '修复失败，请尝试以管理员身份运行 Buddy。', key });
     }
   };
 

@@ -26,13 +26,20 @@ func NewServer(cfg *config.Config) *Server {
 
 	// Configure CORS
 	engine.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
+		AllowOriginFunc: func(origin string) bool {
+			// 允许本地开发环境、本地生产服务器以及 Wails 客户端域
+			return strings.HasPrefix(origin, "http://localhost") ||
+				strings.HasPrefix(origin, "https://localhost") ||
+				strings.HasPrefix(origin, "wails://") ||
+				strings.Contains(origin, "wails.localhost")
+		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+
 
 	s := &Server{
 		cfg:     cfg,
@@ -135,6 +142,7 @@ func (s *Server) setupRoutes() {
 			gateway.POST("/start", s.startGateway)
 			gateway.POST("/stop", s.stopGateway)
 			gateway.POST("/restart", s.restartGateway)
+			gateway.POST("/install", s.installGatewayService)
 		}
 
 		v1.GET("/stats/health", s.getHealthStats)
@@ -143,7 +151,10 @@ func (s *Server) setupRoutes() {
 		v1.GET("/wechat/config/status", s.getWeChatConfigStatus)
 		v1.POST("/wechat/install", s.installWeChatPlugin)
 		v1.DELETE("/wechat/unbind/:id", s.unbindWeChatAccount)
-		v1.GET("/ws/logs", s.streamLogs)
+		v1.GET("/ws/logs", func(c *gin.Context) {
+			log.Printf("🔌 [Router] WebSocket logs request received from %s", c.Request.RemoteAddr)
+			s.streamLogs(c)
+		})
 		v1.GET("/ws/tui", s.handleTUI)
 		v1.GET("/ws/shell", s.handleShell)
 		v1.GET("/ws/gateway", s.handleGatewayProxy)
@@ -171,8 +182,12 @@ func (s *Server) setupRoutes() {
 	s.setupStaticFiles()
 }
 
-//go:embed dist/*
+//go:embed all:dist
 var staticFiles embed.FS
+
+func GetStaticFiles() (fs.FS, error) {
+	return fs.Sub(staticFiles, "dist")
+}
 
 // renderIndexHTML handles the common logic for serving and injecting WebRoot into index.html
 func (s *Server) renderIndexHTML(c *gin.Context, distFS fs.FS) {

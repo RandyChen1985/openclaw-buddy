@@ -4,15 +4,11 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
-	"os/exec"
-	"path/filepath"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/menu"
-	"github.com/wailsapp/wails/v2/pkg/menu/keys"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
@@ -38,14 +34,30 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	// Start the Gin server in a separate goroutine
 	go func() {
+		log.Printf("🚀 Starting Web Server for GUI...")
 		if err := a.s.Run(); err != nil {
 			log.Printf("❌ Web Server failed: %v", err)
 		}
 	}()
 }
 
+func (a *App) domReady(ctx context.Context) {
+	// 移除强制重定向到 http://localhost:3000 的逻辑，
+	// 避免在登录过程中发生 Origin 切换导致 localStorage 丢失。
+	wruntime.WindowShow(ctx)
+	wruntime.WindowCenter(ctx)
+}
+
+
 func (s *Server) RunGUI() error {
 	app := NewApp(s)
+
+	// Get a clean filesystem for Wails (without 'dist/' prefix)
+	distFS, err := GetStaticFiles()
+	if err != nil {
+		log.Printf("❌ Failed to get static assets for GUI: %v", err)
+		return err
+	}
 
 	// Create a custom menu
 	appMenu := menu.NewMenu()
@@ -53,36 +65,24 @@ func (s *Server) RunGUI() error {
 		appMenu.Append(menu.WindowMenu())
 	}
 
-	// Define tray menu
-	trayMenu := menu.NewMenu()
-	trayMenu.Append(menu.Text("显示面板", nil, func(_ *menu.CallbackData) {
-		wruntime.WindowShow(app.ctx)
-	}))
-	trayMenu.Append(menu.Text("查看日志", keys.CmdOrCtrl("l"), func(_ *menu.CallbackData) {
-		logPath, _ := filepath.Abs(s.cfg.LogFile)
-		_ = exec.Command("notepad.exe", logPath).Start()
-	}))
-	trayMenu.Append(menu.Separator())
-	trayMenu.Append(menu.Text("彻底退出", keys.CmdOrCtrl("q"), func(_ *menu.CallbackData) {
-		wruntime.Quit(app.ctx)
-	}))
-
-	startURL := fmt.Sprintf("http://localhost:%d%s", s.cfg.WebPort, s.cfg.WebRoot)
-
 	// Create application with options
-	err := wails.Run(&options.App{
+	err = wails.Run(&options.App{
 		Title:  "OpenClaw Buddy",
 		Width:  1280,
 		Height: 800,
 		AssetServer: &assetserver.Options{
-			Assets: staticFiles,
+			Assets: distFS,
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.startup,
+		OnDomReady:       app.domReady,
 		OnBeforeClose: func(ctx context.Context) (prevent bool) {
 			// Instead of closing, hide the window to tray
-			wruntime.WindowHide(ctx)
-			return true
+			// Note: If no tray icon is available, this might make the app "hidden"
+			// Only hide if we actually have a tray (currently disabled)
+			// wruntime.WindowHide(ctx)
+			// return true
+			return false
 		},
 		Bind: []interface{}{
 			app,
@@ -93,13 +93,14 @@ func (s *Server) RunGUI() error {
 			DisableWindowIcon:    false,
 		},
 		Menu: appMenu,
-		TrayMenu: trayMenu,
-		// We point Wails to the local Gin server URL
-		URL: startURL,
+		// TrayMenu is handled differently in Wails v2, temporarily disabling it for build stability
+		// TrayMenu: trayMenu,
 	})
 
 	if err != nil {
+		log.Printf("❌ Wails initialization failed: %v", err)
 		return err
 	}
+	log.Printf("✅ Wails window closed normally.")
 	return nil
 }

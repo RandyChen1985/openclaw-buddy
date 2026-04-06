@@ -55,7 +55,8 @@ func (c *DefaultGatewayController) Restart(port int) error {
 func (c *DefaultGatewayController) Stop(port int) error {
 	// 1. 尝试标准停止命令
 	cmd := exec.Command(GetOpenClawBinary(), "gateway", "stop")
-	_ = cmd.Run() 
+	PrepareSilentCommand(cmd)
+	_ = cmd.Run() // 忽略错误，因为可能是散装进程
 
 	// 2. 等待一小会儿让进程自行退出
 	time.Sleep(1500 * time.Millisecond)
@@ -73,6 +74,7 @@ func (c *DefaultGatewayController) Stop(port int) error {
 			var killCmd *exec.Cmd
 			if runtime.GOOS == "windows" {
 				killCmd = exec.Command("taskkill", "/F", "/PID", fmt.Sprintf("%d", pid))
+				PrepareSilentCommand(killCmd)
 			} else {
 				killCmd = exec.Command("kill", "-9", fmt.Sprintf("%d", pid))
 			}
@@ -85,12 +87,15 @@ func (c *DefaultGatewayController) Stop(port int) error {
 
 // Start 在后台执行网关的重启/启动命令
 func (c *DefaultGatewayController) Start() error {
-	// 使用 restart 确保官方逻辑介入清理
-	cmd := exec.Command(GetOpenClawBinary(), "gateway", "restart")
+	// 在 Windows 下即便点击的是“开始”，底层也通过 restart 来执行
+	// 因为 restart 会处理“已存在任务”的停止和清理，比 start 更稳健。
+	action := "restart"
+	cmd := exec.Command(GetOpenClawBinary(), "gateway", action)
+	PrepareSilentCommand(cmd)
 
 	// 启动进程
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start gateway: %v", err)
+		return fmt.Errorf("failed to execute gateway %s: %v", action, err)
 	}
 
 	// 立即释放对该进程的控制权
@@ -116,9 +121,33 @@ func ForceStartGateway() error {
 }
 
 func RunDoctorFix() error {
+	// 1. 系统级修复：尝试重新安装网关服务（解决 schtasks 缺失问题）
+	if runtime.GOOS == "windows" {
+		_ = InstallGatewayService()
+	}
+
+	// 2. OpenClaw 内部修复
 	cmd := exec.Command(GetOpenClawBinary(), "doctor", "--fix")
+	PrepareSilentCommand(cmd)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to run openclaw doctor --fix: %v", err)
 	}
 	return nil
+}
+
+// InstallGatewayService 尝试安装网关服务。在 Windows 下会通过 PowerShell 触发 UAC 提权。
+func InstallGatewayService() error {
+	bin := GetOpenClawBinary()
+	if runtime.GOOS == "windows" {
+		// 使用 PowerShell 的 Start-Process -Verb RunAs 来请求管理员权限
+		// 这将弹出一个系统 UAC 对话框
+		psCmd := fmt.Sprintf("Start-Process '%s' -ArgumentList 'gateway','install' -Verb RunAs -Wait", bin)
+		cmd := exec.Command("powershell", "-Command", psCmd)
+		PrepareSilentCommand(cmd)
+		return cmd.Run()
+	}
+	
+	// Unix 系统直接运行
+	cmd := exec.Command(bin, "gateway", "install")
+	return cmd.Run()
 }

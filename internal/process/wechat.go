@@ -55,7 +55,7 @@ func GetWeChatQRCode(force bool) (*WeChatQRCode, error) {
 	// 我们需要手动管理进程以在获取到 URL 后立即杀死它，因为该命令会一直等待扫码结果
 	var args []string = []string{"channels", "login", "--channel", "openclaw-weixin"}
 	cmd := exec.CommandContext(ctx, "openclaw", args...)
-	
+	PrepareSilentCommand(cmd)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err

@@ -8,7 +8,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/aymanbagabas/go-pty"
+	gopty "github.com/aymanbagabas/go-pty"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"openclaw-buddy/internal/process"

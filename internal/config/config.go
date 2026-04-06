@@ -74,7 +74,7 @@ func LoadConfig() (*Config, error) {
 		BackupDir:            filepath.Clean(getEnv("BACKUP_DIR", "./backups")),
 		CheckIntervalSeconds: interval,
 		MaxRetries:           maxRetries,
-		LogFile:              filepath.Clean(getEnv("LOG_FILE", "./logs/guardian.log")),
+		LogFile:              filepath.Clean(filepath.FromSlash(expandPath(getEnv("LOG_FILE", "./logs/guardian.log")))),
 		LogMaxSize:           maxSize,
 		LogMaxBackups:        maxBackups,
 		LogMaxAge:            maxAge,
@@ -116,8 +116,9 @@ func expandPath(path string) string {
 }
 
 func ensureEnvFile() error {
-	_ = os.MkdirAll("data", 0755)
-	_ = os.MkdirAll("pid", 0755)
+	for _, dir := range []string{"data", "pid", "logs"} {
+		_ = os.MkdirAll(dir, 0755)
+	}
 
 	if _, err := os.Stat("env"); err == nil {
 		return nil

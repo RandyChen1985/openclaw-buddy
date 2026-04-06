@@ -21,6 +21,7 @@ func RunCommandWithTimeout(timeout time.Duration, name string, args ...string) (
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, args...)
+	PrepareSilentCommand(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -53,6 +54,7 @@ func RunCommandWithTimeout(timeout time.Duration, name string, args ...string) (
 // StreamCommand runs a command and pipes its output to the provided writer.
 func StreamCommand(ctx context.Context, w io.Writer, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)
+	PrepareSilentCommand(cmd)
 	
 	// Create a writer that strips ANSI codes before writing to the output
 	ansiStripper := &ansiStrippingWriter{w: w}
