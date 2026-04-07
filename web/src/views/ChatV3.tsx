@@ -77,6 +77,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [isSoulSaving, setIsSoulSaving] = useState(false);
 
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);
   const [hasNewMessages, setHasNewMessages] = useState(false);
   const [tpsData, setTpsData] = useState<number[]>([]);
   const [editingMsgIndex, setEditingMsgIndex] = useState<number | null>(null);
@@ -97,18 +98,27 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [quotedMsg, setQuotedMsg] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const lastScrollTopRef = useRef(0);
   const requestIdRef = useRef(1);
   const pendingRequests = useRef<Map<string, (res: any) => void>>(new Map());
 
   const handleScroll = () => {
     if (!scrollRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    // 距离底部超过 150px 则显示返回底部按钮
+    
+    // 1. 处理返回底部按钮逻辑
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 150;
     setShowScrollBtn(!isAtBottom);
     if (isAtBottom) {
       setHasNewMessages(false);
     }
+
+    // 2. 处理返回顶部按钮逻辑 (仅当向上滚动且超过 150px 时显示)
+    const isScrollingUp = scrollTop < lastScrollTopRef.current;
+    setShowScrollTopBtn(isScrollingUp && scrollTop > 150);
+
+    // 记录本次滚动位置
+    lastScrollTopRef.current = scrollTop;
   };
 
   // --- Performance Tracking Refs ---
@@ -1562,9 +1572,36 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         })}
         </div>
 
+        {/* 返回顶部浮动按钮 */}
+        {showScrollTopBtn && (
+            <div style={{ position: 'absolute', top: 80, right: isMobile ? 16 : 32, zIndex: 100, animation: 'v3-fade-in 0.3s' }}>
+                <Button
+                    shape="round"
+                    onClick={() => {
+                        scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    icon={<ChevronUp size={14} />}
+                    style={{ 
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                        background: '#fff',
+                        color: '#64748b',
+                        border: '1px solid #e2e8f0',
+                        height: 32,
+                        fontSize: 12,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '0 10px'
+                    }}
+                >
+                    返回顶部
+                </Button>
+            </div>
+        )}
+
         {/* 返回底部浮动按钮 */}
         {showScrollBtn && (
-            <div style={{ position: 'absolute', bottom: isMobile ? 130 : 160, right: isMobile ? 16 : 32, zIndex: 100, animation: 'v3-fade-in 0.3s' }}>
+            <div style={{ position: 'absolute', bottom: isMobile ? 130 : 160, left: '50%', transform: 'translateX(-50%)', zIndex: 100, animation: 'v3-fade-in 0.3s' }}>
                 <Button
                     shape="round"
                     type={hasNewMessages ? 'primary' : 'default'}

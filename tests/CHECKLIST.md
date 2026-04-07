@@ -48,7 +48,7 @@
 - [ ] **基于模板创建 Bot**: `POST /v1/openclaw/bots/template` 应能根据专家画像正确初始化机器人目录及配置文件，且其 `--workspace` 参数应统一默认为 `~/.openclaw/workspace_[ID]` 而非专家名称；且在写入 `soul.md` 前必须验证 `agents/[ID]` 目录是否已由系统正确创建。
 - [ ] **机器人文件读取**: `GET /v1/openclaw/bots/file?id=<id>&type=soul` 应能自动定位工作区并返回 `SOUL.md` 或 `IDENTITY.md` 的内容。
 - [x] 更新 `tests/CHECKLIST.md` 中的自动化测试清单
-- [/] 验证更改并运行全量回归测试脚本 `./tests/run_tests.sh`
+- [x] 验证更改并运行全量回归测试脚本 `./tests/run_tests.sh`
 - [ ] **机器人内容保存**: `POST /v1/openclaw/bots/file` 应支持原子化覆盖写入，并触发 `SyncKeySingle` 缓存同步。
 - [ ] **原子化读写安全**: 验证接口是否无法通过 `../` 等手段绕过机器人工作区目录。
 - [ ] **心智编辑器预览**: 点击 ✨ / 🆔 图标后弹出的编辑器应具备左侧源码编辑、右侧 Markdown 实时预览的分屏布局。

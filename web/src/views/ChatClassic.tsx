@@ -95,7 +95,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
 
    const [isTyping, setIsTyping] = useState(false);
    const [showScrollButton, setShowScrollButton] = useState(false);
-   const [isComposing, setIsComposing] = useState(false);
+   const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);   const [isComposing, setIsComposing] = useState(false);
   const inputRef = useRef<any>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [chatEnabled, setChatEnabled] = useState<boolean | null>(null);
@@ -223,11 +223,21 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
     });
   };
 
+  const lastScrollTopRef = useRef(0);
+
   useEffect(() => {
     const handleScroll = () => {
       if (scrollRef.current) {
         const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+        
+        // 返回底部逻辑
         setShowScrollButton(scrollHeight - scrollTop - clientHeight > 300);
+
+        // 返回顶部逻辑: 仅向上翻页且超过 150px 时显示
+        const isScrollingUp = scrollTop < lastScrollTopRef.current;
+        setShowScrollTopBtn(isScrollingUp && scrollTop > 150);
+
+        lastScrollTopRef.current = scrollTop;
       }
     };
     const div = scrollRef.current;
@@ -239,6 +249,15 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  const scrollToTop = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({
+        top: 0,
         behavior: 'smooth'
       });
     }
@@ -1063,6 +1082,31 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
           )}
         </div>
 
+        {/* Scroll to Top Button */}
+        {showScrollTopBtn && (
+          <Button
+            type="default"
+            shape="circle"
+            icon={<ChevronUp size={20} />}
+            onClick={scrollToTop}
+            style={{
+              position: 'absolute',
+              top: 80,
+              right: 24,
+              zIndex: 100,
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+              width: 44,
+              height: 44,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#fff',
+              color: '#64748b',
+              border: '1px solid #e2e8f0'
+            }}
+          />
+        )}
+
         {/* Scroll to Bottom Button */}
         {showScrollButton && (
           <Button
@@ -1073,7 +1117,8 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
             style={{
               position: 'absolute',
               bottom: 120,
-              right: 24,
+              left: '50%',
+              transform: 'translateX(-50%)',
               zIndex: 100,
               boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
               width: 44,
