@@ -3,6 +3,7 @@ import { Card, Tag, Spin, List, Button, Tooltip, Modal } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Smartphone, CheckCircle, RefreshCw } from 'lucide-react';
 import dayjs from 'dayjs';
+import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 interface DeviceManagerProps {
   devices: any; // 结构: { data: [], updated_at: string }
@@ -10,6 +11,8 @@ interface DeviceManagerProps {
   onApproveDevice: (requestId: string) => void;
   onRefresh: () => void;
   isMobile?: boolean; // 新增移动端标记
+  isRunning?: boolean;
+  onNavigateToDashboard?: () => void;
 }
 
 const DeviceManager: React.FC<DeviceManagerProps> = ({ 
@@ -17,7 +20,9 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
   loadingDevices, 
   onApproveDevice,
   onRefresh,
-  isMobile
+  isMobile,
+  isRunning,
+  onNavigateToDashboard
 }) => {
   const { t } = useTranslation();
   const deviceList = devices?.data || [];
@@ -25,7 +30,9 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
   const pairedDevices = deviceList.filter((d: any) => d.status === 'paired');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={{ height: '100%', minHeight: 'calc(100vh - 100px)', width: '100%', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
+      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0' : '8px', display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* 1. 待批准设备请求 */}
       <Card
         title={
@@ -185,6 +192,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
           />
         )}
       </Card>
+      </div>
     </div>
   );
 };

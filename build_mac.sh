@@ -58,9 +58,10 @@ cp -r web/dist/* internal/api/dist/
 echo "🏗️ 正在编译 Go 程序 (Darwin/amd64): ${BINARY_NAME}..."
 go build -ldflags="-s -w -X 'openclaw-buddy/internal/config.Version=${VERSION}'" -o "${BINARY_NAME}" cmd/monitor/main.go
 
-# 3. 组织发布包
-mkdir -p "${PKG_DIR}/lib" "${PKG_DIR}/logs" "${PKG_DIR}/reports" "${PKG_DIR}/backups" "${PKG_DIR}/data"
+# 3. 组织发布包结构
+mkdir -p "${PKG_DIR}/lib" "${PKG_DIR}/logs" "${PKG_DIR}/reports" "${PKG_DIR}/backups" "${PKG_DIR}/data" "${PKG_DIR}/pid"
 mv "${BINARY_NAME}" "${PKG_DIR}/lib/openclaw-buddy"
+
 [ -f "release/README.md" ] && cp "release/README.md" "${PKG_DIR}/README.md"
 
 # 4. 生成配置文件与脚本
@@ -94,6 +95,8 @@ MAX_RETRIES=3
 # [高级选项]
 # 外部跳转链接 (可选)
 EXTERNAL_DASHBOARD_URL=""
+# 是否显示“外部工具”菜单组
+SHOW_EXTERNAL_TOOLS=false
 
 # [飞书通知 (可选)]
 FEISHU_ENABLED=false

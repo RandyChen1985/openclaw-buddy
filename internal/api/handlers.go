@@ -21,8 +21,10 @@ import (
 	"openclaw-buddy/internal/process"
 	"openclaw-buddy/internal/utils"
 	"openclaw-buddy/internal/scheduler"
+	"openclaw-buddy/internal/analyzer"
 
 	"github.com/gin-gonic/gin"
+	"context"
 )
 
 // APIResponse 统一业务响应格式
@@ -47,6 +49,11 @@ func (s *Server) Error(c *gin.Context, httpStatus int, msg string) {
 		Code:    httpStatus,
 		Message: msg,
 	})
+}
+
+func (s *Server) handleGetTicket(c *gin.Context) {
+	ticket := s.tickets.Generate()
+	s.Success(c, gin.H{"ticket": ticket, "expires_in": 60})
 }
 
 func (s *Server) getDashboardURL(c *gin.Context) {
@@ -185,6 +192,16 @@ func (s *Server) getOpenClawStatus(c *gin.Context) {
 	s.Success(c, status)
 }
 
+// getGatewayToken 返回 OpenClaw Gateway 的认证 Token，供前端 V3 WebSocket 握手使用
+func (s *Server) getGatewayToken(c *gin.Context) {
+	gw, err := process.GetOpenClawGatewayConfig(s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "failed to read gateway config: "+err.Error())
+		return
+	}
+	s.Success(c, gin.H{"token": gw.Auth.Token})
+}
+
 func (s *Server) getWeChatQRCode(c *gin.Context) {
 	force := c.Query("force") == "true"
 	qrcode, err := process.GetWeChatQRCode(force)
@@ -232,7 +249,7 @@ func (s *Server) startGateway(c *gin.Context) {
 	utils.RecordSystemEvent("CONTROL", "用户手动请求【启动网关】")
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   "启动网关",
+		Name:   "tasks.start_gateway",
 		Module: "gateway",
 		Action: "start",
 	}
@@ -428,11 +445,82 @@ func (s *Server) getHealReportDetail(c *gin.Context) {
 	})
 }
 
+func (s *Server) getHealBackups(c *gin.Context) {
+	files, err := os.ReadDir(s.cfg.BackupDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "无法读取备份目录: "+err.Error())
+		return
+	}
+
+	backups := []map[string]interface{}{}
+	for _, f := range files {
+		// 备份文件以 .bak 结尾
+		if !f.IsDir() && strings.HasSuffix(f.Name(), ".bak") {
+			info, _ := f.Info()
+			backups = append(backups, map[string]interface{}{
+				"name": f.Name(),
+				"size": info.Size(),
+				"time": info.ModTime().Format("2006-01-02 15:04:05"),
+			})
+		}
+	}
+
+	// 按时间倒序
+	sort.Slice(backups, func(i, j int) bool {
+		return backups[i]["time"].(string) > backups[j]["time"].(string)
+	})
+
+	s.Success(c, backups)
+}
+
+func (s *Server) getHealBackupDetail(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" || strings.Contains(name, "..") {
+		s.Error(c, http.StatusBadRequest, "无效的备份名称")
+		return
+	}
+
+	path := filepath.Join(s.cfg.BackupDir, name)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		s.Error(c, http.StatusNotFound, "未找到该备份文件")
+		return
+	}
+
+	s.Success(c, gin.H{
+		"name":    name,
+		"content": string(content),
+	})
+}
+
+func (s *Server) getHealBackupDiff(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" || strings.Contains(name, "..") {
+		s.Error(c, http.StatusBadRequest, "无效的备份名称")
+		return
+	}
+
+	backupPath := filepath.Join(s.cfg.BackupDir, name)
+	currentConfigPath := filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json")
+
+	// 使用 analyzer 中的通用对比逻辑
+	diff, err := analyzer.GetDiff(backupPath, currentConfigPath)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "生成对比失败: "+err.Error())
+		return
+	}
+
+	s.Success(c, gin.H{
+		"name": name,
+		"diff": diff,
+	})
+}
+
 func (s *Server) installWeChatPlugin(c *gin.Context) {
 	log.Printf("🎮 [控制] 用户请求: 【安装微信插件】")
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   "安装微信插件",
+		Name:   "tasks.install_plugin:wechat",
 		Module: "plugins",
 		Action: "install",
 		Target: "wechat",
@@ -442,7 +530,7 @@ func (s *Server) installWeChatPlugin(c *gin.Context) {
 		if err != nil {
 			return "", err
 		}
-		return "Installed", nil
+		return "tasks.results.installed", nil
 	})
 }
 
@@ -480,7 +568,7 @@ func (s *Server) addOpenClawBot(c *gin.Context) {
 
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("添加机器人: %s", req.ID),
+		Name:   "tasks.add_bot:" + req.ID,
 		Module: "bots",
 		Action: "add",
 		Target: req.ID,
@@ -492,7 +580,7 @@ func (s *Server) addOpenClawBot(c *gin.Context) {
 		}
 		// 成功后强制同步缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Created", nil
+		return "tasks.results.created", nil
 	})
 }
 
@@ -512,7 +600,7 @@ func (s *Server) updateOpenClawBot(c *gin.Context) {
 
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("修改机器人配置: %s", req.ID),
+		Name:   "tasks.update_bot:" + req.ID,
 		Module: "bots",
 		Action: "update",
 		Target: req.ID,
@@ -524,7 +612,7 @@ func (s *Server) updateOpenClawBot(c *gin.Context) {
 		}
 		// 成功后强制同步缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Config Updated", nil
+		return "tasks.results.updated", nil
 	})
 }
 
@@ -542,7 +630,7 @@ func (s *Server) setOpenClawBotIdentity(c *gin.Context) {
 	utils.RecordSystemEvent("CONTROL", fmt.Sprintf("用户手动请求 【修改机器人名称】 (ID: %s -> %s)", req.ID, req.Name))
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("修改机器人名称: %s -> %s", req.ID, req.Name),
+		Name:   "tasks.set_identity:" + req.ID,
 		Module: "bots",
 		Action: "set-identity",
 		Target: req.ID,
@@ -554,7 +642,7 @@ func (s *Server) setOpenClawBotIdentity(c *gin.Context) {
 		}
 		// 成功后强制同步缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Identity Updated", nil
+		return "tasks.results.identity_updated", nil
 	})
 }
 
@@ -572,7 +660,7 @@ func (s *Server) setOpenClawBotModel(c *gin.Context) {
 	utils.RecordSystemEvent("CONTROL", fmt.Sprintf("用户手动请求 【切换机器人模型】 (机器人: %s, 模型: %s)", req.ID, req.Model))
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("切换机器人模型: %s -> %s", req.ID, req.Model),
+		Name:   "tasks.set_model:" + req.ID,
 		Module: "bots",
 		Action: "set-model",
 		Target: req.ID,
@@ -584,7 +672,7 @@ func (s *Server) setOpenClawBotModel(c *gin.Context) {
 		}
 		// 成功后强制同步缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Model Updated", nil
+		return "tasks.results.model_updated", nil
 	})
 }
 
@@ -637,7 +725,7 @@ func (s *Server) setDefaultModel(c *gin.Context) {
 	utils.RecordSystemEvent("CONTROL", fmt.Sprintf("用户手动请求 【设置全局默认模型】 (模型: %s)", req.ModelID))
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("设置全局默认模型: %s", req.ModelID),
+		Name:   "tasks.set_default_model:" + req.ModelID,
 		Module: "bots",
 		Action: "set-default-model",
 		Target: req.ModelID,
@@ -649,7 +737,7 @@ func (s *Server) setDefaultModel(c *gin.Context) {
 		}
 		// 同步缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Default Model Updated", nil
+		return "tasks.results.default_model_updated", nil
 	})
 }
 
@@ -688,12 +776,15 @@ func (s *Server) chatProxy(c *gin.Context) {
 		req.Header.Set("Accept", "text/event-stream")
 	}
 
-	// 4. 执行请求
+	// 4. 执行请求 (增加 3 分钟显式超时保护)
 	startTime := time.Now()
-	client := &http.Client{}
 	
-	// 设置上下文，以便在客户端断开时同步取消代理请求，节省网关资源
-	req = req.WithContext(c.Request.Context())
+	// 设置带超时的上下文，防止后端网关长时间挂起占用资源
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
+	defer cancel()
+	
+	req = req.WithContext(ctx)
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	duration := time.Since(startTime).Milliseconds()
 
@@ -876,7 +967,7 @@ func (s *Server) uninstallSkill(c *gin.Context) {
 	log.Printf("🎮 [控制] 用户请求: 【卸载技能/插件】 (Name: %s)", name)
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("卸载技能插件: %s", name),
+		Name:   "tasks.uninstall_plugin:" + name,
 		Module: "skills",
 		Action: "delete-skill",
 		Target: name,
@@ -887,7 +978,7 @@ func (s *Server) uninstallSkill(c *gin.Context) {
 		}
 		// 自动清理缓存，让下一次获取触发同步
 		process.SyncKeySingle("skills", s.cfg.OpenClawConfigDir)
-		return "Uninstalled", nil
+		return "tasks.results.uninstalled", nil
 	})
 }
 
@@ -973,7 +1064,7 @@ func (s *Server) addOpenClawProvider(c *gin.Context) {
 		}
 		// 自动刷新模型列表缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Provider Synced", nil
+		return "tasks.results.provider_synced", nil
 	})
 }
 
@@ -1026,7 +1117,7 @@ func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 		}
 		// 成功后强制同步 bots_models 缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Model Appended", nil
+		return "tasks.results.model_appended", nil
 	})
 }
 
@@ -1054,7 +1145,7 @@ func (s *Server) deleteOpenClawModelFromProvider(c *gin.Context) {
 		}
 		// 成功后强制同步 bots_models 缓存
 		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "Model Removed", nil
+		return "tasks.results.model_removed", nil
 	})
 }
 
@@ -1149,10 +1240,51 @@ func (s *Server) getSystemVersion(c *gin.Context) {
 	latest := strings.TrimPrefix(utils.GetSetting("latest_version", current), "v")
 	
 	s.Success(c, gin.H{
-		"current":     current,
-		"latest":      latest,
-		"release_url": "https://github.com/RandyChen1985/openclaw-buddy/releases",
+		"current":              current,
+		"latest":               latest,
+		"release_url":          "https://github.com/RandyChen1985/openclaw-buddy/releases",
+		"gui_disable_features": s.cfg.GUIDisableFeatures,
+		"show_external_tools":  s.cfg.ShowExternalTools,
 	})
+}
+
+func (s *Server) handleUpgrade(c *gin.Context) {
+	var req struct {
+		Version string `json:"version" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "版本号是必填项")
+		return
+	}
+
+	log.Printf("📥 [系统] 用户请求全自动版本升级: v%s", req.Version)
+	utils.RecordSystemEvent("CONTROL", fmt.Sprintf("发起系统升级请求: v%s", req.Version))
+
+	task := &process.Task{
+		ID:     fmt.Sprintf("upgrade-%d", time.Now().UnixNano()),
+		Name:   "系统版本升级: v" + req.Version,
+		Module: "system",
+		Action: "upgrade",
+		Target: req.Version,
+	}
+
+	s.runAsyncTask(c, task, func() (string, error) {
+		return process.DownloadAndUpgrade(req.Version, task.ID)
+	})
+}
+
+func (s *Server) handleRestart(c *gin.Context) {
+	log.Printf("📥 [系统] 用户请求全自动静默重启...")
+	utils.RecordSystemEvent("CONTROL", "发起系统重启请求")
+
+	// 异步执行重启，给响应留出时间
+	err := process.SelfRestart()
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "重启失败: "+err.Error())
+		return
+	}
+
+	s.Success(c, "服务正在重启，请在 5-10 秒后刷新页面")
 }
 
 func (s *Server) getSystemEvents(c *gin.Context) {
@@ -1296,7 +1428,7 @@ func (s *Server) enablePlugin(c *gin.Context) {
 	log.Printf("🎮 [控制] 用户请求: 【启用指定插件】 (ID: %s)", req.ID)
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("启用插件: %s", req.ID),
+		Name:   "tasks.enable_plugin:" + req.ID,
 		Module: "plugins",
 		Action: "enable",
 		Target: req.ID,
@@ -1307,7 +1439,7 @@ func (s *Server) enablePlugin(c *gin.Context) {
 			return "", err
 		}
 		_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
-		return "Enabled", nil
+		return "tasks.results.enabled", nil
 	})
 }
 
@@ -1323,7 +1455,7 @@ func (s *Server) disablePlugin(c *gin.Context) {
 	log.Printf("🎮 [控制] 用户请求: 【禁用指定插件】 (ID: %s)", req.ID)
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("禁用插件: %s", req.ID),
+		Name:   "tasks.disable_plugin:" + req.ID,
 		Module: "plugins",
 		Action: "disable",
 		Target: req.ID,
@@ -1334,7 +1466,7 @@ func (s *Server) disablePlugin(c *gin.Context) {
 			return "", err
 		}
 		_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
-		return "Disabled", nil
+		return "tasks.results.disabled", nil
 	})
 }
 
@@ -1348,7 +1480,7 @@ func (s *Server) uninstallPlugin(c *gin.Context) {
 	log.Printf("🎮 [控制] 用户请求: 【卸载指定插件】 (ID: %s)", id)
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   fmt.Sprintf("卸载插件: %s", id),
+		Name:   "tasks.uninstall_plugin:" + id,
 		Module: "plugins",
 		Action: "uninstall",
 		Target: id,
@@ -1359,7 +1491,7 @@ func (s *Server) uninstallPlugin(c *gin.Context) {
 			return "", err
 		}
 		_ = process.SyncKeySingle("plugins", s.cfg.OpenClawConfigDir)
-		return "Uninstalled", nil
+		return "tasks.results.uninstalled", nil
 	})
 }
 
@@ -1368,7 +1500,7 @@ func (s *Server) updatePlugins(c *gin.Context) {
 	utils.RecordSystemEvent("CONTROL", "用户手动请求【更新插件】")
 	task := &process.Task{
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Name:   "更新插件",
+		Name:   "tasks.update_plugins",
 		Module: "plugins",
 		Action: "update",
 	}
@@ -1410,18 +1542,23 @@ func (s *Server) createBotFromExpert(c *gin.Context) {
 		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
 		Name:   "tasks.clone_expert:" + req.BotID,
 		Module: "bots",
-		Action: "clone",
+		Action: "clone-expert",
 		Target: req.BotID,
 	}
 
-	s.runAsyncTask(c, task, func() (string, error) {
+	s.runAsyncTaskWithPriority(c, task, scheduler.PriorityHigh, func() (string, error) {
 		if err := process.CreateBotFromExpert(req.ExpertID, req.BotID, req.ModelID, req.Soul, req.IdentityMD); err != nil {
 			return "", err
 		}
 
 		// 同步缓存
 		process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
-		return "tasks.results.cloned", nil
+
+		// 克隆成功后自动重启网关
+		log.Printf("🔄 [ExpertClone] 克隆成功，正在自动重启网关以激活新 Bot: %s", req.BotID)
+		_ = process.RestartGateway(s.cfg.HealthPort)
+
+		return "tasks.results.cloned_and_restarted", nil
 	})
 }
 
@@ -1463,4 +1600,28 @@ func (s *Server) updateOpenClawBotFile(c *gin.Context) {
 	}
 	s.Success(c, gin.H{"status": "success"})
 }
+func (s *Server) unbindWeChatAccount(c *gin.Context) {
+	accountID := c.Param("id")
+	if accountID == "" {
+		s.Error(c, http.StatusBadRequest, "account id is required")
+		return
+	}
 
+	log.Printf("🎮 [控制] 用户请求: 【解绑微信账号】 (ID: %s)", accountID)
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   "tasks.unbind_wechat:" + accountID,
+		Module: "wechat",
+		Action: "unbind",
+		Target: accountID,
+	}
+
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.UnbindWeChatAccount(s.cfg.OpenClawConfigDir, accountID); err != nil {
+			return "", err
+		}
+		// 解绑后同步一次渠道列表
+		_ = process.SyncKeySingle("chat_channels", s.cfg.OpenClawConfigDir)
+		return "tasks.results.unbound", nil
+	})
+}

@@ -16,7 +16,13 @@ api.interceptors.request.use((config) => {
   }
   
   const token = storage.getItem('guardian_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    if (typeof config.headers?.set === 'function') {
+      config.headers.set('Authorization', `Bearer ${token}`);
+    } else if (config.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  }
   return config;
 });
 
@@ -31,15 +37,19 @@ api.interceptors.response.use(
         return { ...response, data: data || response.data };
       }
       // 业务失败：抛出异常
-      return Promise.reject(new Error(msg || '接口业务错误'));
+      const bizError = new Error(msg || '接口业务错误');
+      (bizError as any).response = response;
+      return Promise.reject(bizError);
     }
     // 对于非标准包装的接口（如 chat/completions 流、proxy 代理等）直接原样放行
     return response;
   },
   (error) => {
     // 处理 HTTP 状态码层面的错误
-    const msg = error.response?.data?.message || error.message;
-    return Promise.reject(new Error(msg));
+    if (error.response?.data?.message) {
+      error.message = error.response.data.message;
+    }
+    return Promise.reject(error);
   }
 );
 
@@ -56,6 +66,19 @@ export const getFullUrl = (url: string) => {
     }
   }
   return url;
+};
+
+/**
+ * 获取 WebSocket 连接所需的一次性短效票据 (Ticket)
+ */
+export const getTicket = async (): Promise<string | null> => {
+  try {
+    const response = await api.post('/v1/auth/ticket');
+    return response.data.ticket;
+  } catch (err) {
+    console.error('Failed to get auth ticket:', err);
+    return null;
+  }
 };
 
 export default api;

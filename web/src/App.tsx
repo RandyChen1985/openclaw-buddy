@@ -76,7 +76,7 @@ const Dashboard = () => {
   const [selfHealingEnabled, setSelfHealingEnabled] = useState(false);
   const [loadingSets, setLoadingSets] = useState(false);
   const [commandPaletteVisible, setCommandPaletteVisible] = useState(false);
-  const [versionUpdate, setVersionUpdate] = useState<{ latest: string, current: string, release_url: string } | null>(null);
+  const [versionUpdate, setVersionUpdate] = useState<{ latest: string, current: string, release_url: string, gui_disable_features?: string, show_external_tools?: boolean } | null>(null);
   const [systemEvents, setSystemEvents] = useState<any[]>([]);
   const [topBots, setTopBots] = useState<any[]>([]);
   const [loadingTopBots, setLoadingTopBots] = useState(false);
@@ -155,11 +155,17 @@ const Dashboard = () => {
           // 如果是模型相关变更（添加、删除、设置默认、新增渠道），触发物理对账
           const modelActions = ['delete-model', 'add-model', 'add-provider', 'set-default-model', 'clone-expert'];
           if (modelActions.includes(task.action || '')) {
-            console.log('🔄 [Task Observer] 机器人/模型变更任务完成，正在物理刷新...');
-            fetchModelsConfig(); 
-            fetchBotsModels(true); 
-            // 如果存在全局遮罩，则物理重置
-            onShowGlobalLoading && onShowGlobalLoading('', 1);
+            console.log(`🔄 [Task Observer] 机器人/模型变更任务 (${task.action}) 完成，将在延迟后物理刷新...`);
+            
+            // 针对克隆这类包含重启网关的操作，增加延迟刷新，确保网关端口已完全就绪
+            const delay = task.action === 'clone-expert' ? 1500 : 500;
+            
+            setTimeout(() => {
+              fetchModelsConfig(); 
+              fetchBotsModels(true); 
+              // 如果存在全局遮罩，则物理重置
+              onShowGlobalLoading && onShowGlobalLoading('', 1);
+            }, delay);
           }
           
           if (task.action === 'delete' && task.status === 'Completed' && task.target) {
@@ -181,6 +187,11 @@ const Dashboard = () => {
             console.log('🔄 [Task Observer] 监测到技能/插件任务完成，执行物理对账...');
             fetchSkills(true, true); // 强制获取最新数据，并静默执行
             fetchPlugins(); // 同步刷新插件状态
+          }
+        } else if (task.module === 'wechat') {
+          if (task.action === 'unbind' && task.status === 'Completed') {
+            console.log('🔄 [Task Observer] 微信解绑任务完成，强制刷新渠道内容...');
+            fetchChatChannels(true);
           }
         }
       }
@@ -402,11 +413,51 @@ const Dashboard = () => {
   const checkVersionUpdate = async () => {
     try {
       const res = await api.get('/v1/system/version');
-      if (res.data) setVersionUpdate(res.data);
-      return res.data;
+      if (res.data) {
+        setVersionUpdate(res.data);
+        return res.data;
+      }
+      return null;
     } catch (e) {
       console.warn(t('common.versionCheckFailed'), e);
       return null;
+    }
+  };
+
+  const handleUpgrade = async (version: string) => {
+    try {
+      const res = await api.post('/v1/system/upgrade', { version });
+      const taskID = res.data?.taskID || res.data?.data?.taskID;
+      if (taskID) {
+        baseUpdateTask({
+          id: taskID,
+          name: `${t('common.systemUpgrade')}: v${version}`,
+          module: 'system',
+          action: 'upgrade',
+          target: version,
+          status: 'Running',
+          progress: 5,
+          startTime: new Date().toISOString()
+        });
+        message.loading(t('common.upgradeStarted'), 2);
+      }
+    } catch (err: any) {
+      message.error(err.response?.data?.message || t('common.upgradeFailed'));
+    }
+  };
+
+  const handleRestart = async () => {
+    try {
+      message.loading(t('common.restarting'), 0); 
+      await api.post('/v1/system/restart');
+      
+      // 给几秒钟时间让进程重启，然后刷新页面
+      setTimeout(() => {
+        window.location.reload();
+      }, 6000);
+    } catch (err: any) {
+      message.destroy();
+      message.error(err.response?.data?.message || t('common.restartFailed'));
     }
   };
 
@@ -534,6 +585,19 @@ const Dashboard = () => {
       message.error(err.response?.data?.error || t('common.error'));
     } finally {
       setLoadingWeixin(false);
+    }
+  };
+
+  const handleUnbindWeixin = async (id: string) => {
+    try {
+      const res = await api.delete(`/v1/wechat/unbind/${id}`);
+      if (res.data.code === 200) {
+        message.info(t('chat.asyncCommandTip', { title: t('tasks.unbind_wechat') }));
+        // 强制刷新渠道列表以显示任务状态
+        fetchChatChannels(true);
+      }
+    } catch (error: any) {
+      message.error(t('common.error') + ": " + (error.response?.data?.message || error.message));
     }
   };
 
@@ -777,7 +841,9 @@ const Dashboard = () => {
   const isRunning = status?.gateway?.status?.toLowerCase() === 'running';
 
   // --- Menu Configuration ---
-  const menuItems = [
+  const disabledFeatures = versionUpdate?.gui_disable_features?.split(',') || [];
+
+  const rawMenuItems = [
     {
       key: 'grp-monitor',
       label: t('common.monitor_center'),
@@ -839,6 +905,23 @@ const Dashboard = () => {
     }
   ];
 
+  const menuItems = rawMenuItems
+    .filter(group => {
+      // 如果配置为不显示外部工具，则过滤掉 grp-external 组
+      if (group.key === 'grp-external' && !versionUpdate?.show_external_tools) {
+        return false;
+      }
+      return true;
+    })
+    .map(group => ({
+      ...group,
+      children: group.children?.filter(item => {
+        // 核心功能 'chat' (在线聊天 Web 版) 不允许被隐藏
+        if (item.key === 'chat') return true;
+        return !disabledFeatures.includes(item.key);
+      })
+    })).filter(group => group.children && group.children.length > 0);
+
   // Helper to find label for breadcrumb
   const getActiveLabel = (key: string) => {
     for (const group of menuItems) {
@@ -872,6 +955,8 @@ const Dashboard = () => {
           activeTasks={activeTasks}
           isTransitioning={isTransitioning}
           onRefreshVersion={checkVersionUpdate}
+          onUpgrade={handleUpgrade}
+          onRestart={handleRestart}
         />
       ),
       'bots-models': (
@@ -888,6 +973,11 @@ const Dashboard = () => {
           onDeleteBot={handleDeleteBot}
           onSetDefaultModel={handleSetDefaultModel}
           activeTasks={activeTasks}
+          isRunning={isRunning}
+          onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }}
         />
       ),
       'components': (
@@ -896,7 +986,14 @@ const Dashboard = () => {
           loadingWeixin={loadingWeixin} checkWeixinSeconds={checkWeixinSeconds}
           isGettingQR={isGettingQR} onInstallWeixin={handleInstallWeixin} onGetQRCode={() => handleControl('wechat')}
           onRefreshChannels={() => fetchChatChannels(true)}
+          onUnbindWeixin={handleUnbindWeixin}
+          activeTasks={activeTasks}
           isMobile={isMobile}
+          isRunning={isRunning}
+          onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }}
         />
       ),
       'devices': (
@@ -905,18 +1002,38 @@ const Dashboard = () => {
           onApproveDevice={handleApproveDevice} 
           onRefresh={() => fetchDevices(true)}
           isMobile={isMobile}
+          isRunning={isRunning}
+          onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }}
         />
       ),
-      'logs': <LogsViewer wsLogs={wsLogs} activeSource={logSource} onSourceChange={setLogSource} />,
+      'logs': <LogsViewer wsLogs={wsLogs} activeSource={logSource} onSourceChange={setLogSource} isRunning={isRunning} onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }} />,
       'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} ocInstalled={ocInstalled} />,
-      'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} />,
-      'tui': <TuiView />,
+      'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} isRunning={isRunning} onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }} />,
+      'tui': <TuiView isRunning={isRunning} onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }} />,
       'shell': <ShellView />,
       'skills': <SkillManagement 
         isMobile={isMobile} 
         onRefresh={fetchSkills} 
         loading={loadingSkills} 
         skills={skills}
+        activeTasks={activeTasks}
+        isRunning={isRunning}
+        onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }}
       />,
       'plugins': <PluginManagement 
         isMobile={isMobile} 
@@ -925,8 +1042,17 @@ const Dashboard = () => {
         onRefresh={fetchPlugins} 
         updatedAt={pluginsUpdatedAt} 
         onTaskUpdate={handleTaskUpdate}
+        activeTasks={activeTasks}
+        isRunning={isRunning}
+        onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }}
       />,
-      'experts': <ExpertMarket isMobile={isMobile} onNavigate={setActiveTab} />
+      'experts': <ExpertMarket isMobile={isMobile} onNavigate={setActiveTab} isRunning={isRunning} onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }} />
     };
 
     return (
@@ -1261,56 +1387,73 @@ const Dashboard = () => {
 // --- App Root ---------------------------------------------------------------------
 export default function App() {
   const { t } = useTranslation();
+  // 只从持久化存储获取初始 Token (不再信任 URL 传来的未经验证的 Token)
   const [token, setToken] = useState<string | null>(storage.getItem('guardian_token'));
+  const [isValidating, setIsValidating] = useState(false);
 
   useEffect(() => {
     const interceptor = api.interceptors.response.use(
       (response) => response,
       (error) => {
+        // 只有 HTTP 401 且之前有 token 时才触发清理（避免自动登录失败时的循环）
         if (error.response?.status === 401) {
+          const hasToken = !!storage.getItem('guardian_token');
           storage.removeItem('guardian_token');
           setToken(null);
-          if (token) message.error(t('common.sessionExpired'));
+          // 仅在之前是成功登录状态时显示过期提示
+          if (hasToken) message.error(t('common.sessionExpired'));
         }
         return Promise.reject(error);
       }
     );
     return () => api.interceptors.response.eject(interceptor);
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const urlToken = params.get('token');
-    const urlTag = params.get('tag');
+    const urlToken = params.get('token')?.trim();
+    const urlTag = params.get('tag')?.trim();
 
-    // 捕获并持久化身份标签 (Tag)
-    if (urlTag) {
-      if (urlTag === 'none') {
-        storage.removeItem('guardian_tag');
-      } else {
-        storage.setItem('guardian_tag', urlTag);
+    const validateUrlToken = async (uToken: string, uTag?: string) => {
+      setIsValidating(true);
+      try {
+        // 必须通过 /login 接口验证 Token 合法性，逻辑与 LoginView 保持一致
+        const res = await api.post('/login', { token: uToken });
+        if (res.data.status === 'success') {
+          // 验证通过，持久化并更新状态
+          storage.setItem('guardian_token', uToken);
+          if (uTag) {
+            if (uTag === 'none') {
+              storage.removeItem('guardian_tag');
+            } else {
+              storage.setItem('guardian_tag', uTag);
+            }
+          }
+          setToken(uToken);
+          message.success(t('common.autoLogin'));
+        }
+      } catch (err: any) {
+        // 验证失败，不更新 Token 状态，停留在 LoginView
+        message.error(err.response?.data?.error || t('login.invalidCredentials'));
+      } finally {
+        setIsValidating(false);
+        // 清理 URL 保持整洁
+        params.delete('token');
+        if (uTag) params.delete('tag');
+        const newSearch = params.toString();
+        const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
+        window.history.replaceState({}, '', newUrl);
       }
-      params.delete('tag');
-    }
+    };
 
     if (urlToken) {
-      storage.setItem('guardian_token', urlToken);
-      setToken(urlToken);
-      
-      // 移除已处理的参数，保持 URL 整洁
-      params.delete('token');
-      const newSearch = params.toString();
-      const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
-      window.history.replaceState({}, '', newUrl);
-      
-      message.success(t('common.autoLogin'));
-    } else if (urlTag) {
-      // 仅有 tag 变更时也清理 URL
-      const newSearch = params.toString();
-      const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
-      window.history.replaceState({}, '', newUrl);
+      validateUrlToken(urlToken, urlTag);
     }
-  }, []);
+  }, [t]);
+
+  if (isValidating) {
+    return <CrayfishLoading />;
+  }
 
   return (
     <ConfigProvider theme={{

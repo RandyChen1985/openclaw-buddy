@@ -4,219 +4,110 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenClaw Buddy v1.0.3 发布公告</title>
-    <style>
-        body {
-            background-color: #f8f9fa;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            margin: 0;
-            padding: 20px;
-        }
-        .container {
-            max-width: 650px;
-            margin: 0 auto;
-            background: #fff;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-        }
-        h1 {
-            font-size: 24px;
-            color: #2c3e50;
-            text-align: center;
-            border-bottom: 2px solid #eef2f7;
-            padding-bottom: 15px;
-            margin-bottom: 25px;
-        }
-        .banner {
-            width: 100%;
-            border-radius: 8px;
-            margin-bottom: 25px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .quote-section {
-            background: #f8fafc;
-            color: #475569;
-            padding: 24px;
-            border-left: 4px solid #CBD5E1;
-            border-radius: 8px;
-            margin-bottom: 30px;
-            font-size: 15px;
-            line-height: 1.8;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
-        }
-        .meta-info {
-            background: #fdfdfd;
-            border: 1px solid #eee;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 30px;
-            font-size: 14px;
-        }
-        .meta-info strong {
-            color: #3498db;
-        }
-        section {
-            margin-bottom: 35px;
-        }
-        h2 {
-            font-size: 20px;
-            color: #2980b9;
-            border-left: 4px solid #2980b9;
-            padding-left: 12px;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-        }
-        h3 {
-            font-size: 17px;
-            color: #444;
-            margin-top: 20px;
-            margin-bottom: 10px;
-            padding: 8px 12px;
-            background: linear-gradient(90deg, #f0f7ff 0%, #ffffff 100%);
-            border-radius: 4px;
-        }
-        ul {
-            padding-left: 20px;
-            list-style-type: none;
-        }
-        ul li {
-            position: relative;
-            margin-bottom: 10px;
-            padding-left: 5px;
-        }
-        ul li::before {
-            content: "•";
-            color: #3498db;
-            font-weight: bold;
-            display: inline-block; 
-            width: 1em;
-            margin-left: -1em;
-        }
-        .example-box {
-            background: #f8fbff;
-            border-radius: 8px;
-            padding: 12px 15px;
-            margin: 8px 0 15px;
-            border-left: 3px solid #74b9ff;
-            font-size: 14px;
-            color: #555;
-        }
-        .footer {
-            text-align: center;
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-            font-size: 12px;
-            color: #95a5a6;
-        }
-        hr {
-            border: 0;
-            height: 1px;
-            background: #eee;
-            margin: 30px 0;
-        }
-    </style>
 </head>
-<body>
-    <div class="container">
-        <h1>🦞 OpenClaw Buddy v1.0.3<br><span style="font-size: 16px; font-weight: normal; color: #7f8c8d;">隔离的边界，对齐的视界</span></h1>
+<body style="background-color: #f8f9fa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px;">
+    <div style="max-width: 650px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
         
-        <img src="https://raw.githubusercontent.com/RandyChen1985/openclaw-buddy/main/docs/releases/1.0.3/banner.png" alt="Release Banner" class="banner">
+        <h1 style="font-size: 24px; color: #2c3e50; text-align: center; border-bottom: 2px solid #eef2f7; padding-bottom: 15px; margin-bottom: 25px;">
+            🦞 OpenClaw Buddy v1.0.3<br>
+            <span style="font-size: 16px; font-weight: normal; color: #7f8c8d;">隔离的边界，对齐的视界</span>
+        </h1>
+        
+        <img src="https://raw.githubusercontent.com/RandyChen1985/openclaw-buddy/main/docs/releases/1.0.3/banner.png" alt="Release Banner" style="width: 100%; border-radius: 8px; margin-bottom: 25px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
 
-        <div class="quote-section">
-            “如果我可以给每一项任务都加一个期限，我希望是零秒。<br><br>
-            以前，我习惯用厚厚的遮罩藏起所有的不确定，以为只要没人看见，时间在这个页面里就是静止的。直到 4 月 1 日的那一分钟，我决定拆掉所有的屏障，把那些繁琐的逻辑，赶进那个叫‘任务调度中心’的深夜里。<br><br>
-            我们在 LocalStorage 的边境线上，立起了一座座隔离的碑，让每一个 WebRoot 都能在属于自己的经纬度里，安静地呼吸。从此以后，所有的重启和删除，都只是后台背景里一个转瞬即逝的影子。<br><br>
-            我不知道这个世界上还有多少东西是不会过期的。但我知道，当滚动条重新在侧边浮现的那一刻，有些‘等待’，终于成了久别重逢的惊喜。”
+        <blockquote style="margin: 0 0 30px; padding: 25px; border-left: 5px solid #CBD5E1; background-color: #f8fafc; border-radius: 10px;">
+            <p style="margin: 0; color: #475569; font-size: 16px; line-height: 1.8; font-style: italic;">
+                “如果我可以给每一项任务都加一个期限，我希望是零秒。<br><br>
+                以前，我习惯用厚厚的遮罩藏起所有的不确定，以为只要没人看见，时间在这个页面里就是静止的。直到 4 月 1 日的那一分钟，我决定拆掉所有的屏障，把那些繁琐的逻辑，赶进那个叫‘任务调度中心’的深夜里。<br><br>
+                我们在 LocalStorage 的边境线上，立起了一座座隔离的碑，让每一个 WebRoot 都能在属于自己的经纬度里，安静地呼吸。从此以后，所有的重启和删除，都只是后台背景里一个转瞬即逝的影子。<br><br>
+                我不知道这个世界上还有多少东西是不会过期的。但我知道，当滚动条重新在侧边浮现的那一刻，有些‘等待’，终于成了久别重逢的惊喜。”
+            </p>
+        </blockquote>
+
+        <div style="background: #fdfdfd; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 30px; font-size: 14px;">
+            📅 <strong style="color: #3498db;">发布日期</strong>: 2026-04-01<br>
+            ✅ <strong style="color: #3498db;">版本状态</strong>: Production-Ready (LTS)<br>
+            🏷️ <strong style="color: #3498db;">核心主题</strong>: 存储命名空间隔离、全链路 WebRoot 适配、异步任务调度
         </div>
 
-        <div class="meta-info">
-            📅 <strong>发布日期</strong>: 2026-04-01<br>
-            ✅ <strong>版本状态</strong>: Production-Ready (LTS)<br>
-            🏷️ <strong>核心主题</strong>: 存储命名空间隔离、全链路 WebRoot 适配、异步任务调度
-        </div>
+        <hr style="border: 0; height: 1px; background: #eee; margin: 30px 0;">
 
-        <hr>
-
-        <section>
-            <h2>🚀 核心改动 (Core Changes)</h2>
+        <section style="margin-bottom: 35px;">
+            <h2 style="font-size: 20px; color: #2980b9; border-left: 4px solid #2980b9; padding-left: 12px; margin-bottom: 15px;">🚀 核心改动 (Core Changes)</h2>
             
             <p style="font-size: 14px; color: #64748b; margin-bottom: 20px;">自上次主线同步以来，我们对 Buddy 进行了大规模的底层重构，旨在提升多实例部署的稳定性和异步任务的交互性能。</p>
 
-            <h3>1. 存储命名空间隔离 (Storage Namespace Isolation)</h3>
-            <ul>
-                <li><strong>机制</strong>：引入了 <code>StorageNamespace</code> 逻辑，基于 <code>WEB_ROOT</code> 动态生成本地存储前缀。</li>
-                <li><strong>价值</strong>：彻底解决了在同一域名下同时开启多个 Buddy 导致的 <strong>Session 互踢与 Token 覆盖</strong>问题。</li>
+            <h3 style="font-size: 17px; color: #444; margin-top: 20px; margin-bottom: 10px; padding: 8px 12px; background: linear-gradient(90deg, #f0f7ff 0%, #ffffff 100%); border-radius: 4px;">1. 存储命名空间隔离 (Storage Namespace Isolation)</h3>
+            <ul style="padding-left: 20px; list-style-type: none;">
+                <li style="margin-bottom: 10px;"><strong style="color: #3498db;">机制</strong>：引入了 <code>StorageNamespace</code> 逻辑，基于 <code>WEB_ROOT</code> 动态生成本地存储前缀。</li>
+                <li style="margin-bottom: 10px;"><strong style="color: #3498db;">价值</strong>：彻底解决了在同一域名下同时开启多个 Buddy 导致的 <strong>Session 互踢与 Token 覆盖</strong>问题。</li>
             </ul>
-            <div class="example-box">
+            <div style="background: #f8fbff; border-radius: 8px; padding: 12px 15px; margin: 8px 0 15px; border-left: 3px solid #74b9ff; font-size: 14px; color: #555;">
                 💡 <strong>大白话</strong>：以前如果你在 <code>域名/A</code> 登录了，再去 <code>域名/B</code> 登录，<code>A</code> 就会被踢下线。现在好了，它们就像住在同一个小区但不同房间的邻居，互不串门。
             </div>
 
-            <h3>2. 全链路 WebRoot 适配与环境对账</h3>
-            <ul>
-                <li><strong>路径重构</strong>：前端路由与 API 基准地址现已完美对齐自定义 <code>WEB_ROOT</code>，支持 Nginx 反向代理下的任意二级路径无损部署。</li>
-                <li><strong>版本比对</strong>：实现了 Dashboard 与后端二进制文件的版本号自动校验。支持精准的语义化版本比对，当环境不一致时会实时触发桌面级警示。</li>
+            <h3 style="font-size: 17px; color: #444; margin-top: 20px; margin-bottom: 10px; padding: 8px 12px; background: linear-gradient(90deg, #f0f7ff 0%, #ffffff 100%); border-radius: 4px;">2. 全链路 WebRoot 适配与环境对账</h3>
+            <ul style="padding-left: 20px; list-style-type: none;">
+                <li style="margin-bottom: 10px;"><strong style="color: #3498db;">路径重构</strong>：前端路由与 API 基准地址现已完美对齐自定义 <code>WEB_ROOT</code>，支持 Nginx 反向代理下的任意二级路径无损部署。</li>
+                <li style="margin-bottom: 10px;"><strong style="color: #3498db;">版本比对</strong>：实现了版本号自动校验。支持精准的语义化版本比对，当环境不一致时会实时触发桌面级警示。</li>
             </ul>
-            <div class="example-box">
+            <div style="background: #f8fbff; border-radius: 8px; padding: 12px 15px; margin: 8px 0 15px; border-left: 3px solid #74b9ff; font-size: 14px; color: #555;">
                 💡 <strong>大白话</strong>：以前 Buddy 只能住在别墅（根目录），现在搬进公寓的一个房间（子路径）也没问题，地址解析全都自动对齐，再也不会迷路。
             </div>
 
-            <h3>3. 任务引擎 2.0: 异步调度与自愈同步 🚀</h3>
-            <ul>
-                <li><strong>全屏遮罩溢出</strong>：全面移除了阻断交互的全屏加载 Mask。</li>
-                <li><strong>异步串行队列</strong>：引入了 <code>Shadow Task Engine</code>，所有高危操作现在会进入后台静默排队，杜绝竞态风险。</li>
-                <li><strong>自愈对账 (Reconciliation)</strong>：建立了任务驱动的数据对账机制。异步任务完成后会自动触发状态校准，确保前端数据始终为“最终一致性”。</li>
+            <h3 style="font-size: 17px; color: #444; margin-top: 20px; margin-bottom: 10px; padding: 8px 12px; background: linear-gradient(90deg, #f0f7ff 0%, #ffffff 100%); border-radius: 4px;">3. 任务引擎 2.0: 异步调度与自愈同步 🚀</h3>
+            <ul style="padding-left: 20px; list-style-type: none;">
+                <li style="margin-bottom: 10px;"><strong style="color: #3498db;">全屏遮罩溢出</strong>：全面移除了阻断交互的全屏加载 Mask。</li>
+                <li style="margin-bottom: 10px;"><strong style="color: #3498db;">异步串行队列</strong>：引入了 <code>Shadow Task Engine</code>，所有高危操作现在会进入后台静默排队，杜绝竞态风险。</li>
+                <li style="margin-bottom: 10px;"><strong style="color: #3498db;">自愈对账 (Reconciliation)</strong>：建立了任务驱动的数据对账机制。异步任务完成后会自动触发状态校准，确保数据始终为“最终一致性”。</li>
             </ul>
-            <div class="example-box">
+            <div style="background: #f8fbff; border-radius: 8px; padding: 12px 15px; margin: 8px 0 15px; border-left: 3px solid #74b9ff; font-size: 14px; color: #555;">
                 💡 <strong>大白话</strong>：以前点个“重启网关”会弹个大圈圈让你盯着看好几秒。现在你点完可以立马去刷别的页面，Buddy 会在后台排队默默把事儿办完，办完后还会自动帮你把数据对齐。
             </div>
         </section>
 
-        <hr>
+        <hr style="border: 0; height: 1px; background: #eee; margin: 30px 0;">
 
-        <section>
-            <h2>🎨 UI & 交互精修 (UX Enhancements)</h2>
-            <ul>
-                <li><strong>Markdown 编辑器滚动修复</strong>：针对 macOS 深度优化，通过高度穿透技术解决源码编辑框滚动条缺失问题，万字长文编辑依然丝滑。</li>
-                <li><strong>Dashboard 响应式布局</strong>：优化 13 寸设备显示逻辑，新增手动刷新反馈，感知每一次任务的跳动。</li>
-                <li><strong>版本监控透明化</strong>：侧边栏实时显示版本状态，支持自动剔除 'v' 前缀进行语义化版本校验。</li>
+        <section style="margin-bottom: 35px;">
+            <h2 style="font-size: 20px; color: #2980b9; border-left: 4px solid #2980b9; padding-left: 12px; margin-bottom: 15px;">🎨 UI & 交互精修 (UX Enhancements)</h2>
+            <ul style="padding-left: 20px; list-style-type: none;">
+                <li style="margin-bottom: 10px;"><strong style="color: #3498db;">Markdown 编辑器滚动修复</strong>：针对 macOS 深度优化，解决源码编辑框滚动条缺失问题，万字长文编辑依然丝滑。</li>
+                <li style="margin-bottom: 10px;"><strong style="color: #3498db;">Dashboard 响应式布局</strong>：优化 13 寸设备显示逻辑，新增手动刷新反馈，感知每一次任务的跳动。</li>
+                <li style="margin-bottom: 10px;"><strong style="color: #3498db;">版本监控透明化</strong>：侧边栏实时显示版本状态，支持自动剔除 'v' 前缀进行语义化版本校验。</li>
             </ul>
         </section>
 
-        <hr>
+        <hr style="border: 0; height: 1px; background: #eee; margin: 30px 0;">
 
-        <section>
-            <h2>🛠️ 性能与 Bug 修复 (Bug Fixes)</h2>
-            <ul>
-                <li><strong>流式对话稳定性</strong>：优化流式响应重连逻辑，修复弱网下可能出现的响应内容截断。</li>
-                <li><strong>并发任务回收</strong>：增强“影子任务”执行后的自动回收，消除长久运行下的资源增长风险。</li>
-                <li><strong>身份标识系统</strong>：统一全站 Identity 标识配色方案，根据 Bot 索引自动适配绚丽色彩。</li>
+        <section style="margin-bottom: 35px;">
+            <h2 style="font-size: 20px; color: #2980b9; border-left: 4px solid #2980b9; padding-left: 12px; margin-bottom: 15px;">🛠️ 性能与 Bug 修复 (Bug Fixes)</h2>
+            <ul style="padding-left: 20px; list-style-type: none;">
+                <li style="margin-bottom: 10px;"><strong style="color: #3498db;">流式对话稳定性</strong>：优化流式响应重连逻辑，修复弱网下可能出现的响应内容截断。</li>
+                <li style="margin-bottom: 10px;"><strong style="color: #3498db;">并发任务回收</strong>：增强“影子任务”执行后的自动回收，消除长久运行下的资源增长风险。</li>
+                <li style="margin-bottom: 10px;"><strong style="color: #3498db;">身份标识系统</strong>：统一全站 Identity 标识配色方案，根据 Bot 索引自动适配绚丽色彩。</li>
             </ul>
         </section>
 
-        <hr>
+        <hr style="border: 0; height: 1px; background: #eee; margin: 30px 0;">
 
-        <section>
-            <h2>📦 发布产物 (Release Artifacts)</h2>
-            <div style="background: #f1f8ff; padding: 10px 15px; border-radius: 6px; font-family: monospace; font-size: 13px; border: 1px dashed #3498db;">
+        <section style="margin-bottom: 35px;">
+            <h2 style="font-size: 20px; color: #2980b9; border-left: 4px solid #2980b9; padding-left: 12px; margin-bottom: 15px;">📦 发布产物 (Release Artifacts)</h2>
+            <div style="background: #f1f8ff; padding: 15px; border-radius: 6px; font-family: monospace; font-size: 13px; border: 1px dashed #3498db; line-height: 1.8;">
                 📂 <strong>Linux (amd64)</strong>: openclaw-buddy-linux-1.0.3.tar.gz<br>
                 📂 <strong>macOS (Universal)</strong>: openclaw-buddy-mac-1.0.3.tar.gz<br><br>
                 🔗 <strong>下载地址</strong>: <a href="https://github.com/RandyChen1985/openclaw-buddy/releases/tag/1.0.3" style="color: #3498db; text-decoration: none; font-weight: bold;">GitHub Releases v1.0.3</a>
             </div>
         </section>
 
-        <section>
-            <h2>❤️ 特别致谢</h2>
-            <p style="color: #555; font-size: 15px; background: #fff5f5; padding: 15px; border-radius: 8px; border-left: 4px solid #ff7675;">
+        <section style="margin-bottom: 30px;">
+            <h2 style="font-size: 20px; color: #2980b9; border-left: 4px solid #2980b9; padding-left: 12px; margin-bottom: 15px;">❤️ 特别致谢</h2>
+            <p style="color: #555; font-size: 15px; background: #fff5f5; padding: 20px; border-radius: 8px; border-left: 4px solid #ff7675; margin: 0;">
                 感谢所有在构建 v1.0.3 过程中贡献代码与灵感的小伙伴。特别感谢对 WebRoot 适配提出深度建议的同学，是你们对生产级稳定性的追求，让 Buddy 变得更加成熟。<br><br>
                 <span style="font-style: italic; color: #7f8c8d;">“在代码的世界里，每一次隔离都是为了更好的重逢。”</span>
             </p>
         </section>
 
-        <div class="footer">
+        <div style="text-align: center; margin-top: 50px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #95a5a6;">
             <strong>RandyChen1985 / openclaw-buddy</strong><br>
             <span>© 2026 Powered by OpenClaw Buddy Guardian</span>
         </div>

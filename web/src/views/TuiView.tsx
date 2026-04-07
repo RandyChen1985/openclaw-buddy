@@ -8,10 +8,16 @@ import { RotateCcw, XCircle, Terminal as TerminalIcon, Info, Download, RefreshCw
 import api from '../api';
 import storage from '../utils/storage';
 import { getWsUrl } from '../utils/url';
+import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 const { Paragraph, Text } = Typography;
 
-const TuiView: React.FC = () => {
+interface TuiViewProps {
+  isRunning?: boolean;
+  onNavigateToDashboard?: () => void;
+}
+
+const TuiView: React.FC<TuiViewProps> = ({ isRunning, onNavigateToDashboard }) => {
   const { t } = useTranslation();
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
@@ -83,26 +89,14 @@ const TuiView: React.FC = () => {
     term.open(terminalRef.current);
     term.focus();
     
-    const initialFit = setTimeout(() => {
-      fitAddon.fit();
-      term.focus();
-      if (socketRef.current?.readyState === WebSocket.OPEN) {
-        sendResize();
-      }
-    }, 200);
-
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
     const token = storage.getItem('guardian_token');
-    const wsUrl = getWsUrl(`/v1/ws/tui?token=${token}`);
+    let socket: WebSocket | null = null;
     
-    const socket = new WebSocket(wsUrl);
-    socket.binaryType = 'arraybuffer';
-    socketRef.current = socket;
-
     const sendResize = () => {
-      if (socket.readyState === WebSocket.OPEN) {
+      if (socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({
           type: 'resize',
           cols: term.cols,
@@ -111,32 +105,60 @@ const TuiView: React.FC = () => {
       }
     };
 
-    socket.onopen = () => {
-      sendResize();
-    };
+    const connect = async () => {
+      // 优先获取短效票据 (Ticket)
+      const res = await api.post('/v1/auth/ticket').catch(() => null);
+      const ticket = res?.data?.ticket;
 
-    socket.onmessage = (event) => {
-      term.write(new Uint8Array(event.data));
-    };
-
-    socket.onerror = (error) => {
-      console.error('TUI WebSocket error:', error);
-      message.error(t('common.connectionError'));
-    };
-
-    socket.onclose = () => {
-      term.write('\r\n\x1b[31m[Connection Closed]\x1b[0m\r\n');
-    };
-
-    term.onData((data) => {
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(data);
+      let wsUrl = '';
+      if (ticket) {
+        wsUrl = getWsUrl(`/v1/ws/tui?ticket=${ticket}`);
+      } else {
+        // 回退到长效 Token
+        wsUrl = getWsUrl(`/v1/ws/tui?token=${token}`);
       }
-    });
 
-    term.onResize(() => {
+      if (xtermRef.current === null) return; // Component unmounted
+
+      socket = new WebSocket(wsUrl);
+      socket.binaryType = 'arraybuffer';
+      socketRef.current = socket;
+
+      socket.onopen = () => {
+        sendResize();
+      };
+
+      socket.onmessage = (event) => {
+        term.write(new Uint8Array(event.data));
+      };
+
+      socket.onerror = (error) => {
+        console.error('TUI WebSocket error:', error);
+        message.error(t('common.connectionError'));
+      };
+
+      socket.onclose = () => {
+        term.write('\r\n\x1b[31m[Connection Closed]\x1b[0m\r\n');
+      };
+
+      term.onData((data) => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(data);
+        }
+      });
+
+      term.onResize(() => {
+        sendResize();
+      });
+    };
+
+    connect();
+
+    const initialFit = setTimeout(() => {
+      fitAddon.fit();
+      term.focus();
       sendResize();
-    });
+    }, 200);
 
     const handleResize = () => {
       fitAddon.fit();
@@ -146,7 +168,7 @@ const TuiView: React.FC = () => {
     return () => {
       window.removeEventListener('resize', handleResize);
       clearTimeout(initialFit);
-      socket.close();
+      if (socket) socket.close();
       term.dispose();
       xtermRef.current = null;
     };
@@ -221,9 +243,11 @@ const TuiView: React.FC = () => {
         background: '#0f172a',
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        position: 'relative'
       }}
     >
+      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
       {/* 顶部信息栏与控制栏 */}
       <div 
         style={{ 

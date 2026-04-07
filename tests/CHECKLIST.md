@@ -3,7 +3,11 @@
 ## 1. 基础认证 (Auth)
 - [ ] **Token 校验**: 访问 `/v1/openclaw/status` 无 Token 时应返回 401。
 - [ ] **Bearer Token**: 携带正确 `Authorization: Bearer <token>` 时应正常访问。
-- [ ] **Cookie 校验**: 设置 `buddy_token` Cookie 后，Web 访问应无需再次登录。
+- [ ] **?token= 兼容性**: 在 URL 中直接带上 `?token=xxx` 的 GET 和 POST 请求均应被允许。
+- [ ] **CSRF 防御 (Cookie 限制)**: 仅携带 `guardian_token` Cookie 发起的 POST/DELETE 请求应返回 403 Forbidden。
+- [ ] **Ticket 机制**: 成功通过 `POST /v1/auth/ticket` 获取一次性票据。
+- [ ] **WebSocket 安全**: 使用有效 Ticket 连接 WS 成功，重复使用或过期 Ticket 应导致连接失败。
+- [ ] **Cookie 校验**: 设置 `buddy_token` Cookie 后，GET 类 Web 访问应无需再次登录。
 - [ ] **接口一致性**: `/login` 接口应统一使用 `s.Success` 包装，返回 `status: success` 以兼容前端拦截器。
 
 ## 2. API 接口 (API V1)
@@ -15,7 +19,8 @@
 - [ ] **微信二维码**: `GET /v1/wechat/qrcode` 应返回 `qrcode_url` 且支持 5 分钟缓存。
 - [ ] **资产查询 (带缓存)**: `GET /v1/openclaw/bots-models` 应返回 `data` 和 `updated_at` 包装格式，而非原始数组。
 - [ ] **强制刷新**: `GET /v1/openclaw/bots-models?refresh=true` 应绕过数据库缓存直接触发实时爬取并同步。
-- [ ] **解析鲁棒性**: `openclaw models list` 输出中包含插件日志（带 ANSI 颜色、时间戳）时，不应将其误识别为模型。
+- [ ] **解析鲁棒性 (Bots)**: `openclaw agents list` 输出中不包含 `Identity:` 的机器人应被自动跳过，不返回给前端。
+- [ ] **解析鲁棒性 (Models)**: `openclaw models list` 输出中包含插件日志（带 ANSI 颜色、时间戳）时，不应将其误识别为模型。
 - [ ] **外部地址前缀**: 设置 `EXTERNAL_DASHBOARD_URL` 后，龙虾面板跳转链接应包含该前缀。
 - [x] **环境检测状态锁定**: 确认 Dashboard 控制按钮在环境检测期间处于禁用状态。
 - [x] **API 统一重构**: 全站（含 SSE 聊天流）已迁移至 api 实例，各路径均支持自定义 WebRoot 补全。
@@ -52,7 +57,7 @@
 - [ ] **交互验证**: 在终端中输入 `ls`, `pwd`, `echo hello` 等命令，应能正确返回执行结果。
 - [ ] **窗口自适应**: 调整浏览器窗口大小，终端应能自动触发 Resize 事件并填满容器。
 - [ ] **快捷指令**: 终端顶部的“Ctrl+C”和“重启终端”按钮应能正常工作。
-- [ ] **全屏体验**: 在在线聊天、实时日志与运维终端之间切换，均应保持全屏（无页边距）的沉浸式体验。
+- [ ] **全屏体验**: 在在线聊天、实时日志与运维终端之间切换，均应保持全屏（无页边距）的沉漫式体验。
 - [ ] **移动端输入法 (IME)**: 在手机端点击终端应能正常唤起键盘，且通过中文输入法选择候选词后能正确输入到终端中。
 
 
@@ -107,9 +112,13 @@
 - [ ] **专家详情预览**: 点击专家卡片应弹出 Drawer 展示其人格特征 (Soul) 和技能列表。
 - [x] **专家克隆向导 (Clone Station)**: 验证三步式引导流程，包含核心属性配置、Markdown 源码编辑与实时预览同步。
 - [x] **专家克隆交互优化**: 移除点击“启动克隆”后的全局倒计时遮罩，改为 Modal 按钮局部 Loading 状态，提升操作流畅度。
+- [x] **模型编辑功能**: 验证已添加模型的参数（如 maxTokens, contextWindow, API 协议等）能够正确回填并成功更新，且异步任务反馈已汉化。
 - [ ] **Token 实时校准**: 验证 `estimateTokens` 对 Markdown 符号的加权估算是否准确，并具备视觉预警（3k 阈值）。
 - [ ] **身份降级渲染**: 验证后端 `CreateBotFromExpert` 是否能将旧版 JSON 自动渲染为标准的 `IDENTITY.md`。
-- [ ] **文档完备性**: 验证 `docs/md/expert-market-design.md` 是否包含了最新的设计哲学与技术架构细节。
+- [ ] **网关离线遮罩**: 模拟网关停止时（`gateway.status === 'stopped'`），资产管理与日志页面应显示模糊遮罩。
+- [ ] **遮罩启动操作**: 点击遮罩上的“启动网关”按钮，应能正确触发 `/v1/gateway/start` 异步任务。
+- [ ] **遮罩自动消失**: 待网关启动成功（轮询状态变为 `running`）后，遮罩应自动淡出/销毁，恢复界面交互。
+- [ ] **日志源联动**: 在日志页面切换 Buddy/OpenClaw 时，确认遮罩仅在 OpenClaw (`gateway`) 源且离线时出现。
 
 ## 4. UI/UX 体验升级
 - [x] **仪表盘实时动态**: 仪表盘下方应出现“实时事件流”黑色终端区块，包含模拟/真实的系统巡检记录。
@@ -140,10 +149,10 @@
 
 
 ## 5. 构建与部署 (Build)
-- [ ] **多平台打包**: 分别运行 `./build_mac.sh` 和 `./build_linux.sh`，检查 `release/` 下是否存在对应的 `.tar.gz`。
-- [ ] **打包清理**: 检查生成的 .tar.gz 压缩包内是否已彻底排除以 `._` 开头的 macOS 元数据文件，且在 Linux 上解压时不应出现 `LIBARCHIVE.xattr` 警告。
-- [ ] **产物体积**: 检查 Linux 版二进制文件是否已通过 `ldflags` 压缩（约 27MB 左右）。
-- [ ] **环境隔离**: 检查生成的 `env` 文件是否包含新增的 `EXTERNAL_DASHBOARD_URL` 配置项。
+- [x] **多平台打包**: 分别运行 `./build_mac.sh` 和 `./build_linux.sh`，检查 `release/` 下是否存在对应的 `.tar.gz`。
+- [x] **打包清理**: 检查生成的 .tar.gz 压缩包内是否已彻底排除以 `._` 开头的 macOS 元数据文件，且在 Linux 上解压时不应出现 `LIBARCHIVE.xattr` 警告。
+- [x] **产物体积**: 检查 Linux 版二进制文件是否已通过 `ldflags` 压缩（约 34MB 左右，随功能增长）。
+- [x] **环境隔离**: 检查生成的 `env` 文件是否包含新增的 `EXTERNAL_DASHBOARD_URL` 配置项。
 - [ ] **配置持久化**: 验证 `dev.sh` 在重启或停止时是否能正确保留 `temp-dev-test/env` 文件，且不再重复覆盖。
 - [ ] **Windows 兼容性**: 在 Windows 环境下执行 `openclaw-buddy.exe`，验证 Shell 终端与 TUI 聊天能够正常启动（ConPTY）。
 - [ ] **跨平台编译**: 执行 `GOOS=windows go build` 应无 `syscall` 相关编译错误。
@@ -154,7 +163,10 @@
 - [ ] **错误状态码**: 认证失败时，`/v1/openclaw/status` 应返回 HTTP 401 且 JSON 体内 `code` 同样为 401。
 - [ ] **Data 解包校验**: 验证前端各页面（如虾兵蟹将、设备中心）在后端返回包装格式后，能否通过 Axios 拦截器正常解包并渲染。
 - [ ] **流式接口兼容**: 验证 `POST /v1/openclaw/chat/completions` 是否成功绕过标准化包装，维持原始 OpenAI SSE 流。
+- [x] **聊天代理超时保护**: 验证 `chatProxy` 具备 3 分钟显式超时 (Context Timeout)，防止网关挂起导致的资源占用。
 - [ ] **任务 ID 追踪**: 验证网关操作返回的 `taskID` 是否被正确包裹在 `data` 字段中。
+- [x] **鉴权稳定性 (Sync Token)**: 修复了前端捕获 URL Token 的竞态条件，实现了异步强验证流，并支持多实例存储空间物理隔离 `2026-04-03`
+- [ ] **微信解绑功能**: 验证 `DELETE /v1/wechat/unbind/:id` 接口能物理删除本地凭证文件同步过滤 `accounts.json` `2026-04-03`
 
 ## 7. 文档与指南 (Documentation)
 - [ ] **HOWTO 渲染**: 检查 `HOWTO.md` 在 GitHub 或 Markdown 预览器中是否能正确加载图片。
@@ -174,6 +186,9 @@
 - [ ] **引导链接跳转**: 验证步骤 1 的 `skills.sh` 官方市场链接能够在新窗口正常打开。
 - [ ] **日期与时间格式**: 验证图表和日志的时间显示是否符合对应语言习惯（中文 `MM-DD`, 英文 `MMM DD`）。
 - [ ] **回退机制**: 访问不存在的翻译 Key 时，应能正确回退至中文原文或显示原始 Key 路径。
+- [x] **聊天引用翻译修复**: 验证 `chat.reply` 键在 `zh.json` 中已正确定义为“引用”（由 `quote` 重命名），且与 `en.json` 保持同步。
+- [x] **国际化键位对齐**: 验证 `zh.json` 和 `en.json` 中的 `chat` 对象键位已完全对齐（含 `v3Status`, `newSession`, `deleteSessionConfirm` 等），且移除了冗余定义。
+- [x] **非安全上下文兼容性 (SHA-256)**: 验证在局域网 IP 访问时（crypto.subtle 不可用），`js-sha256` 回退方案能正常生成 `deviceId` 而不报错。
 
 ---
 ## 9. 视觉动效与鲁棒性 (WOW Effect & Robustness)
@@ -202,14 +217,28 @@
 - [x] **串行任务调度**: 连续提交多个机器人修改任务，验证其在后端是否按顺序“排队”执行，而非并发触发。
 - [x] **优先级插队**: 在普通机器人任务执行期间，提交“重启网关”任务，验证高优先级任务能否优先被调度器消费。
 - [x] **任务中心自动同步**: 在不手动刷新的情况下，验证任务面板能否在 8 秒内自动从后端同步任务状态。
-- [x] **自愈避让机制**: 当用户正在手动排队操作网关时，验证 Guardian 日志中是否出现 “Module gateway is busy, skipping heal” 的物理避让记录。
+- [x] **自愈避让机制 (用户任务)**: 当用户正在手动排队操作网关时，验证 Guardian 日志中是否出现 “Module gateway is busy, skipping heal” 的物理避让记录。
+- [x] **自愈避让机制 (系统升级)**: 当检测到 `openclaw-update` 进程运行时，验证 Guardian 是否主动跳过自愈并记录 “检测到系统正在升级中” 事件。
 
 ## 12. 技能与插件管理同步 (Skill & Plugin Sync v1.3)
+- [x] **插件管理操作锁定**: 验证点击启用、禁用或卸载按钮后，按钮立即进入禁用/加载状态，防止重复触发。
+- [x] **技能管理操作锁定**: 验证技能管理（Skills）页面在执行同步、卸载等操作时具备类似的防重复点击机制。
 - [ ] **技能卸载任务化**: `DELETE /v1/openclaw/skills/:name` 应立即返回 202 并产生 `delete-skill` 任务，不再物理阻塞 UI。
 - [ ] **重载规则任务化**: `POST /v1/openclaw/skills/reload` 应返回 202 并在任务中心产生 `sync-skills` 任务。
 - [ ] **静默对账机制**: 验证当 `delete-skill` 或 `sync-skills` 任务状态变为 `Completed` 时，`App.tsx` 是否自动触发数据刷新。
 - [ ] **数据结构兼容性**: 验证 `GET /v1/openclaw/skills` 返回的 `updated_at` (下划线) 能够被前端正确解析，彻底消除“获取技能列表失败”报错。
 - [ ] **UI 零手感回执**: 在技能管理页面执行卸载后，验证列表是否能在任务完成后自动物理更新，无需用户手动点击“刷新”。
+
+---
+
+## 13. WebSocket 流式协议 (WebSocket Streaming)
+- [x] **V3 协议深度调研**: 完成对 OpenClaw 源码 (`server-methods`) 的全量审计，识别出 Agents/Sessions/Config 等模块的 20+ 个 Mutation 方法。
+- [x] **协议参考手册更新**: 更新 `docs/md/openclaw-websocket-protocol.md`，包含精确的入参 Schema、权限要求及异步事件。
+- [x] **全量 Mutation 验证**: 编写并执行 `tests/test_websocket_mutation_full.go`，验证了 V3 握手鉴权及全生命周期（创建、修改、删除）的协议路径。
+- [x] **全量协议一致性验证**: 增强并执行 `tests/test_websocket_mutation_full.go` 脚本，确保网关各模块 Mutation 接口与最新 V3 协议文档高度一致，并具备完善的错误回溯能。
+
+
+---
 
 - [x] **Dashboard 移动端布局优化**: 验证快捷操作卡片在窄屏下使用 Grid 布局呈 2x2 对齐，移除多余占位。
 - [x] **Buddy 版本显示对账**: 验证顶部环境栏成功从 `/v1/system/version` 获取并在 UI 中显示 Buddy 版本号。
@@ -217,10 +246,68 @@
 - [x] **发布说明外链校验**: 发现新版本时，通知卡片内应包含指向 `github.com/.../tag/{version}` 的正确超链接。
 
 ## 七、多实例隔离测试 (Storage Isolation)
-- [ ] **跨实例对账隔离**: 验证同域名、同端口下，不同 `WEB_ROOT` 的 `guardian_token` 互不干扰。
+- [x] **跨实例对账隔离**: 验证同域名、同端口下，不同 `WEB_ROOT` 的 `guardian_token` 互不干扰（已实现基于运行时 `__WEB_ROOT__` 的动态前缀）。 `2026-04-03`
+- [x] **URL Token 安全验证**: 验证 `?token=xxx` 自动登录包含服务器端 `/login` 异步校验及全屏加载状态，防止非法 Token 绕过。 `2026-04-03`
 - [ ] **聊天记录物理隔离**: 验证 `chat_history` 加载时仅拉取对应实例路径下的内容。
-- [ ] **i18n 配置隔离**: 验证 `i18nextLng` 正确附加了命名空间 Key。
+- [x] **i18n 配置隔离**: 验证 `i18nextLng` 正确附加了命名空间 Key。 `2026-04-03`
+- [x] **短效票据 (Ticket) 认证**: 验证 WebSocket (Shell/TUI/Logs) 采用一次性授权票据连接，防止 Token 在 URL 中泄露。 `2026-04-03`
 
----
+## 14. Windows GUI 与 桌面封装 (Wails)
+- [ ] **路径跨平台兼容**: 验证 `OPENCLAW_CONFIG_DIR` 等路径在 Windows 下不再包含混合斜杠（如 `C:\Users\Admin/.openclaw`）。
+- [ ] **精准进程识别**: 在 Windows 下运行多个占用相似端口的服务（如 80, 8080），验证 `GetPIDByPort` 不会发生误杀。
+- [ ] **二进制自动感应**: 验证即使 `openclaw.exe` 没在系统 PATH 中，只要放在 Buddy 同目录下即可正常调用。
+- [ ] **PTY 启动反馈**: 模拟 `openclaw` 文件丢失或权限不足，验证终端界面是否显示了 "[Buddy Error]" 友好的错误提示。
+- [ ] **图标资源同步**: 验证 Windows 发布包的 `internal/api/dist` 目录下已包含 `openclaw2.png`。
+- [ ] **Wails 初始化**: 启动 `openclaw-buddy.exe` 后，应能正确初始化 Wails 运行时并在 Windows 10/11 上弹出 WebView2 窗口。
+- [ ] **启动 URL 动态合成**: Wails 窗口加载的地址应符合 `http://localhost:{WEB_PORT}{WEB_ROOT}` 配置。
+- [ ] **系统托盘图标**: 任务栏右下角应出现 🦞 图标，且在深色/浅色模式下均清晰可见。
+- [ ] **隐藏至托盘逻辑**: 点击窗口右上角 `X` 按钮，窗口应隐藏（WindowHide），而非退出进程。
+- [ ] **托盘右键菜单**: 右键点击托盘图标应弹出菜单，包含“显示面板”、“查看日志”、“彻底退出”三项。
+- [ ] **查看日志快捷操作**: 点击“查看日志”应能调用 `notepad.exe` 成功打开当前配置的 `guardian.log`。
+- [ ] **彻底退出确认**: 点击“彻底退出”应能正确销毁 Wails 实例、停止 Gin 后端并清理 PID 锁文件。
+- [ ] **功能开关 (GUI_DISABLE_FEATURES)**: 设置 `GUI_DISABLE_FEATURES=terminal,logs` 后，GUI 窗口内的侧边栏对应菜单应物理隐藏。
+- [ ] **配置自动初始化**: 在空目录下启动 `.exe`，应能自动生成 `env` 文件并包含随机生成的 `BUDDY_TOKEN`。
+- [ ] **WebView2 自动检测**: 在未安装 WebView2 运行时的系统上启动，应能触发 Wails 的原生下载/安装引导。
+
+
+## 15. WebSocket Chat V3 (Real-time Dual-mode)
+- [ ] **双模切换**: 聊天界面应包含“经典模式 (HTTP)”和“V3 模式 (RPC)”的标签页切换。
+- [ ] **Silent Approval (静默授权)**: 首次连接 V3 时，后端应自动探测 `NOT_PAIRED` 错误并静默执行 `openclaw devices approve`，前端无需手动确认。
+- [ ] **Ed25519 身份持久化**: 刷新页面后，Derived Device ID 应保持一致（校验 `localStorage` 中的 seed）。
+- [ ] **Handshake Challenge**: 建立 WS 后，前端应能正确响应 `connect.challenge` 并通过私钥签名认证。
+- [ ] **V3 消息流**: V3 模式下发送消息，应能通过 `chat` 事件实时接收流式响应。
+- [ ] **RPC 指令同步**: 在 V3 界面修改 `thinkingLevel`，应触发 `sessions.patch` 指令并生效。
+- [ ] **Markdown 与 Mermaid**: V3 模式下的消息应支持完整的 Markdown 渲染、公式语法及 Mermaid 图表展示。
+- [x] **V3 自动重连**: 模拟网关重启或网络断开，验证 V3 连接能否通过指数退避算法自动恢复。
+- [x] **V3 极客风格认证 UI**: 验证明亮科技感风格的认证界面，包含动态网格、扫描线及亚克力玻璃质感。
+
+- [x] **V3 历史消息加载**: 验证 `chat.history` 返回的内容块数组能被正确解析为文本，且支持分页加载（offset/limit）。
+- [x] **V3 会话 ID 完整显示**: 侧边栏应显示完整的 `agent:agentId:deviceId:timestamp` 格式。
+- [x] **V3 AI 头像同步**: AI 回复的头像应与经典模式一致（蓝色 Bot 图标）。
+- [x] **V3 思考中动效**: 验证思考中状态仅显示一个气泡，且包含打点动画。
+- [x] **V3 快捷指令支持**: 验证快捷指令面板在 V3 模式下能正常展开、收起并触发消息发送。
+- [x] **V3 自动静默重连**: 模拟 `NOT_PAIRED` 错误，验证前端是否能自动延迟重试并最终认证成功。
+- [x] **V3 全屏加载 UI**: 验证认证过程中的毛玻璃背景、脉冲动画及状态文案显示。
+- [x] **V3 状态流转**: 确认从 `connecting` 到 `challenging` 再到 `authenticated` 的完整流转。
+- [x] **V3 会话管理增强**: 验证侧边栏会话 Tooltip 是否显示完整 key，以及复制图标是否有效。
+- [x] **V3 停止生成**: 在 AI 生成过程中点击红色的“停止”按钮，验证打字机效果立即中断。
+- [x] **V3 消息操作栏**: 验证消息下方的“复制”、“引用”按钮功能是否正常。
+- [x] **V3 重新生成 (Regenerate)**: 点击最后一条 AI 消息的重试按钮，验证 AI 是否重新开始回复（且历史消息已正确清理）。
+- [x] **V3 顶栏 Session ID 完整展示**: 验证顶栏 Session Key 不再截断，并支持长 ID 水平滚动及点击复制。
+- [x] **V3 引用消息多行截断**: 验证超长引用文本已实现 `-webkit-line-clamp: 2` 截断，防止横向溢出且不遮挡发送区域。
+- [x] **V3 移动端顶栏适配**: 验证 Session ID 在极窄屏幕下 (414px) 自动截断并支持 Ellipsis 显示。
+- [x] **V3 移动端快捷指令滚动**: 验证快捷指令按钮栏在超过屏幕宽度时可平滑水平滑动（-webkit-overflow-scrolling），不产生页面级滚动条。
+- [x] **V3 移动端输入框适配**: 验证机器人选择器（Select）在移动端为弹性宽度，在桌面端为固定宽度 (180px)。
+- [x] **V3 移动端引导页居中**: 验证无消息时的引导文字在手机端强制水平垂直居中，且不因 Flex 溢出导致右偏。
+- [x] **V3 发送按钮视觉一致性**: 验证发送按钮颜色已调整为蓝色 (`#2563eb`)，与经典 HTTP 模式保持一致。
+- [x] **V3 实时健康监测**: 验证顶栏集成 `health` 事件捕获，实时显示毫秒级延迟（如 `0ms`）。
+- [x] **V3 心跳脉冲动画**: 验证每当收到 `health` 事件时，状态圆点产生 `v3-heartbeat` 缩放动画。
+- [x] **V3 系统日志过滤**: 验证控制台已不再输出 `health`, `tick`, `presence` 等高频心跳原始 JSON。
+
+- [x] **网关控制加固 (GatewayController)**: 验证重启逻辑包含“官方重启 -> 端口监听轮询 -> 强杀兜底”的完整闭环。
+- [x] **专家克隆自动化**: 验证从市场克隆 Bot 后自动触发网关重启，且前端在 1.5s 延迟后自动同步数据。
+- [x] **任务中心刷新按钮**: 验证针对 `clone-expert` 任务，成功通知卡片右下角会出现“立即刷新”按钮。
+
 > [!NOTE]
-> 记录于 2026-04-01：完成了 Dashboard 移动端布局深度优化及 Buddy 版本全链路监控。引入了响应式 Grid 布局，并打通了前端与各端版本号的动态同步及手动对账功能。
+> 记录于 2026-04-05：完成了 1.0.4 版本 Linux 全量打包，同步了 web/package.json 版本号，验证了构建脚本在 Mac 上的交叉编译稳定性。
+> 记录于 2026-04-04：深度优化了 V3 聊天模式的全平台体验，加固了网关重启的高可靠性，实现了自动化克隆后的即刻生效与 UI 实时对账。

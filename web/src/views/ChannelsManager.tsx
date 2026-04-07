@@ -1,8 +1,9 @@
 import React from 'react';
-import { Card, Tag, Spin, Button } from 'antd';
+import { Card, Tag, Spin, Button, Modal } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle, Cloud, RefreshCw, Zap, AlertCircle, Smartphone, Radar } from 'lucide-react';
+import { CheckCircle, Cloud, RefreshCw, Zap, AlertCircle, Smartphone, Radar, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
+import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 interface ChannelsManagerProps {
   chatChannels: any;
@@ -14,7 +15,11 @@ interface ChannelsManagerProps {
   onInstallWeixin: () => void;
   onGetQRCode: () => void;
   onRefreshChannels: () => void;
+  onUnbindWeixin?: (id: string) => void;
+  activeTasks?: any[]; // 新增：用于检测解绑任务状态
   isMobile?: boolean; // 新增
+  isRunning?: boolean;
+  onNavigateToDashboard?: () => void;
 }
 
 const ChannelsManager: React.FC<ChannelsManagerProps> = ({ 
@@ -27,7 +32,11 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   onInstallWeixin,
   onGetQRCode,
   onRefreshChannels,
-  isMobile
+  onUnbindWeixin,
+  activeTasks = [],
+  isMobile,
+  isRunning,
+  onNavigateToDashboard
 }) => {
   const { t } = useTranslation();
   const channelsList = chatChannels?.data || [];
@@ -35,7 +44,9 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   const hasWeixinConfig = configuredChannels.some((c: any) => c.name.toLowerCase().includes('weixin'));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ height: '100%', minHeight: 'calc(100vh - 100px)', width: '100%', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
+      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0' : '8px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* 已绑定渠道概览 */}
       <Card
         title={
@@ -74,12 +85,65 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
             {t('channels.noChannels')}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {configuredChannels.map((c: any) => (
-              <Tag key={c.name} color="blue" icon={<CheckCircle size={10} />} style={{ borderRadius: 4, padding: '2px 8px' }}>
-                {c.name}
-              </Tag>
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {configuredChannels.map((c: any) => {
+              const weixinId = c.name.toLowerCase().includes('weixin') ? (() => {
+                const match = c.name.match(/openclaw-weixin\s+([^:]+)/i);
+                return match ? match[1].trim() : null;
+              })() : null;
+
+              return (
+                <div key={c.name} style={{ display: 'flex', alignItems: 'center', gap: 8, maxWidth: '100%' }}>
+                  <Tag 
+                    color="blue" 
+                    icon={<CheckCircle size={12} />} 
+                    style={{ 
+                      borderRadius: 8, 
+                      padding: '6px 12px', 
+                      margin: 0,
+                      fontSize: 13,
+                      display: 'flex',
+                      alignItems: 'center',
+                      background: '#f0f7ff',
+                      border: '1px solid #dbeafe',
+                      color: '#1d4ed8',
+                      flex: 1,
+                      maxWidth: 'fit-content',
+                      whiteSpace: 'normal',
+                      height: 'auto',
+                      lineHeight: '1.5'
+                    }}
+                  >
+                    {c.name}
+                  </Tag>
+                  {weixinId && onUnbindWeixin && (
+                    <Button
+                      type="text"
+                      danger
+                      size="small"
+                      icon={<Trash2 size={14} />}
+                      loading={activeTasks.some(t => 
+                        t.module === 'wechat' && 
+                        t.action === 'unbind' && 
+                        t.target === weixinId && 
+                        (t.status === 'Running' || t.status === 'Pending')
+                      )}
+                      onClick={() => {
+                        Modal.confirm({
+                          title: t('common.confirmAction'),
+                          content: t('channels.unbindConfirm', { id: weixinId }),
+                          okText: t('channels.unbind'),
+                          okButtonProps: { danger: true },
+                          cancelText: t('common.cancel'),
+                          onOk: () => onUnbindWeixin(weixinId)
+                        });
+                      }}
+                      style={{ flexShrink: 0, padding: '0 4px' }}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>
@@ -247,6 +311,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
             )}
           </div>
         </Card>
+      </div>
       </div>
     </div>
   );

@@ -90,27 +90,14 @@ const ShellView: React.FC = () => {
     term.open(terminalRef.current);
     term.focus();
     
-    // 给 DOM 渲染留一点时间后再计算尺寸
-    const initialFit = setTimeout(() => {
-      fitAddon.fit();
-      term.focus();
-      if (socketRef.current?.readyState === WebSocket.OPEN) {
-        sendResize();
-      }
-    }, 200);
-
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
     const token = storage.getItem('guardian_token');
-    const wsUrl = getWsUrl(`/v1/ws/shell?token=${token}`);
-    
-    const socket = new WebSocket(wsUrl);
-    socket.binaryType = 'arraybuffer';
-    socketRef.current = socket;
+    let socket: WebSocket | null = null;
 
     const sendResize = () => {
-      if (socket.readyState === WebSocket.OPEN) {
+      if (socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({
           type: 'resize',
           cols: term.cols,
@@ -119,32 +106,60 @@ const ShellView: React.FC = () => {
       }
     };
 
-    socket.onopen = () => {
-      sendResize();
-    };
-
-    socket.onmessage = (event) => {
-      term.write(new Uint8Array(event.data));
-    };
-
-    socket.onerror = (error) => {
-      console.error('Shell WebSocket error:', error);
-      message.error(t('common.connectionError'));
-    };
-
-    socket.onclose = () => {
-      term.write('\r\n\x1b[31m[Session Closed]\x1b[0m\r\n');
-    };
-
-    term.onData((data) => {
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(data);
+    const connect = async () => {
+      // 优先获取短效票据 (Ticket)
+      const res = await api.post('/v1/auth/ticket').catch(() => null);
+      const ticket = res?.data?.ticket;
+      
+      let wsUrl = '';
+      if (ticket) {
+        wsUrl = getWsUrl(`/v1/ws/shell?ticket=${ticket}`);
+      } else {
+        // 回退到长效 Token
+        wsUrl = getWsUrl(`/v1/ws/shell?token=${token}`);
       }
-    });
 
-    term.onResize(() => {
+      if (xtermRef.current === null) return; // Component unmounted
+
+      socket = new WebSocket(wsUrl);
+      socket.binaryType = 'arraybuffer';
+      socketRef.current = socket;
+
+      socket.onopen = () => {
+        sendResize();
+      };
+
+      socket.onmessage = (event) => {
+        term.write(new Uint8Array(event.data));
+      };
+
+      socket.onerror = (error) => {
+        console.error('Shell WebSocket error:', error);
+        message.error(t('common.connectionError'));
+      };
+
+      socket.onclose = () => {
+        term.write('\r\n\x1b[31m[Session Closed]\x1b[0m\r\n');
+      };
+
+      term.onData((data) => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(data);
+        }
+      });
+
+      term.onResize(() => {
+        sendResize();
+      });
+    };
+
+    connect();
+
+    const initialFit = setTimeout(() => {
+      fitAddon.fit();
+      term.focus();
       sendResize();
-    });
+    }, 200);
 
     const handleResize = () => {
       fitAddon.fit();
@@ -154,7 +169,7 @@ const ShellView: React.FC = () => {
     return () => {
       window.removeEventListener('resize', handleResize);
       clearTimeout(initialFit);
-      socket.close();
+      if (socket) socket.close();
       term.dispose();
       xtermRef.current = null;
     };

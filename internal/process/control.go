@@ -4,30 +4,58 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"time"
 )
 
-func ForceStartGateway() error {
-	// 使用 nohup 方式或直接 Start() 且不等待，确保网关在后台启动
-	cmd := exec.Command("openclaw", "gateway", "--force")
-	
-	// 我们不使用 Run()，因为 gateway 是一个常驻进程，Run() 会一直阻塞直到进程退出
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start gateway: %v", err)
+// GatewayController 定义了网关控制的标准化接口
+type GatewayController interface {
+	Restart(port int) error
+	Stop(port int) error
+	Start() error
+}
+
+// DefaultGatewayController 是网关控制的默认实现
+type DefaultGatewayController struct{}
+
+var (
+	// DefaultController 提供了一个默认的控制器单例，方便直接调用
+	DefaultController = &DefaultGatewayController{}
+)
+
+// Restart 实现了高可靠的重启逻辑：直接执行 restart 命令，并监控端口状态作为反馈
+func (c *DefaultGatewayController) Restart(port int) error {
+	// 1. 直接执行官方推荐的 restart 命令
+	// 这通常比手动组合 Stop + Start 更健壮，因为 restart 内部会处理锁文件和 PID
+	_ = c.Start()
+
+	// 2. 轮询检查端口是否成功启动 (最多等待 10 秒)
+	success := false
+	for i := 0; i < 10; i++ {
+		time.Sleep(1 * time.Second)
+		if IsPortListening(port) {
+			success = true
+			break
+		}
 	}
 
-	// 启动成功后，我们立即释放对该进程的控制权（不等待它结束）
-	go func() {
-		_ = cmd.Wait()
-	}()
-	
+	// 3. 兜底逻辑：如果端口仍未监听到，说明 restart 可能失败（例如旧进程死锁）
+	// 此时执行暴力清理并再次尝试启动
+	if !success {
+		fmt.Printf("⚠️  Gateway port %d not responding after restart, executing force recovery...\n", port)
+		_ = c.Stop(port)
+		time.Sleep(500 * time.Millisecond)
+		return c.Start()
+	}
+
 	return nil
 }
 
-func StopGateway(port int) error {
+// Stop 尝试停止网关进程，如果无法优雅停止则执行强制杀进程
+func (c *DefaultGatewayController) Stop(port int) error {
 	// 1. 尝试标准停止命令
-	cmd := exec.Command("openclaw", "gateway", "stop")
-	_ = cmd.Run() // 忽略错误，因为可能是散装进程
+	cmd := exec.Command(GetOpenClawBinary(), "gateway", "stop")
+	_ = cmd.Run() 
 
 	// 2. 等待一小会儿让进程自行退出
 	time.Sleep(1500 * time.Millisecond)
@@ -36,14 +64,18 @@ func StopGateway(port int) error {
 	if IsPortListening(port) {
 		pid, err := GetPIDByPort(port)
 		if err == nil && pid > 0 {
-			// 安全防护：检查是否是 Buddy 进程自身 (Self-kill Prevention)
+			// 安全防护：检查是否是 Buddy 进程自身
 			myPid := os.Getpid()
 			if pid == myPid {
-				fmt.Printf("⚠️ Averted self-kill! Target port %d is listening by Buddy process (PID: %d). Skipping kill.\n", port, pid)
 				return nil
 			}
 
-			killCmd := exec.Command("kill", "-9", fmt.Sprintf("%d", pid))
+			var killCmd *exec.Cmd
+			if runtime.GOOS == "windows" {
+				killCmd = exec.Command("taskkill", "/F", "/PID", fmt.Sprintf("%d", pid))
+			} else {
+				killCmd = exec.Command("kill", "-9", fmt.Sprintf("%d", pid))
+			}
 			_ = killCmd.Run()
 		}
 	}
@@ -51,20 +83,40 @@ func StopGateway(port int) error {
 	return nil
 }
 
+// Start 在后台执行网关的重启/启动命令
+func (c *DefaultGatewayController) Start() error {
+	// 使用 restart 确保官方逻辑介入清理
+	cmd := exec.Command(GetOpenClawBinary(), "gateway", "restart")
+
+	// 启动进程
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start gateway: %v", err)
+	}
+
+	// 立即释放对该进程的控制权
+	go func() {
+		_ = cmd.Wait()
+	}()
+
+	return nil
+}
+
+// --- 为了保持向下兼容，保留包级函数，内部调用 DefaultController ---
+
 func RestartGateway(port int) error {
-	// 1. 先执行带强杀逻辑的停止
-	_ = StopGateway(port)
+	return DefaultController.Restart(port)
+}
 
-	// 2. 确保旧进程释放资源 (StopGateway 内部已有等待，这里加 500ms 缓冲)
-	time.Sleep(500 * time.Millisecond)
+func StopGateway(port int) error {
+	return DefaultController.Stop(port)
+}
 
-	// 3. 重新启动
-	return ForceStartGateway()
+func ForceStartGateway() error {
+	return DefaultController.Start()
 }
 
 func RunDoctorFix() error {
-	// doctor --fix 通常是一次性执行的命令，可以使用 Run()
-	cmd := exec.Command("openclaw", "doctor", "--fix")
+	cmd := exec.Command(GetOpenClawBinary(), "doctor", "--fix")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to run openclaw doctor --fix: %v", err)
 	}

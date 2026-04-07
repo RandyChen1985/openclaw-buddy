@@ -1,3 +1,5 @@
+import storage from './storage';
+
 // Get base URL dynamically at runtime if available
 export const getBaseURL = () => {
   // Try to read from global variable injected by Go backend
@@ -20,8 +22,20 @@ export const getWsUrl = (path: string) => {
   // path should start with /
   const normalizedPath = path.startsWith('/') ? path : '/' + path;
   
+  // 添加认证 Token
+  const token = storage.getItem('guardian_token');
+  let authUrl = '';
   if (import.meta.env.DEV && !(window as any).__WEB_ROOT__) {
-    return `ws://localhost:3000${base}${normalizedPath}`;
+    authUrl = `ws://localhost:3000${base}${normalizedPath}`;
+  } else {
+    authUrl = `${protocol}//${host}${base}${normalizedPath}`;
   }
-  return `${protocol}//${host}${base}${normalizedPath}`;
+
+  // 拼接 Token 参数（Tag 不参与鉴权，故移除）
+  if (token) {
+    const separator = authUrl.includes('?') ? '&' : '?';
+    authUrl += `${separator}token=${encodeURIComponent(token)}`;
+  }
+
+  return authUrl;
 };

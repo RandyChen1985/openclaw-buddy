@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api';
-import { notification, Progress } from 'antd';
+import { notification, Progress, Button } from 'antd';
 import { Loader2, CheckCircle2, XCircle, AlertCircle, Clock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -74,6 +74,9 @@ export const useTaskCenter = () => {
       };
 
       const getStatusText = () => {
+        if (task.module === 'system' && task.action === 'upgrade' && task.status === 'Completed') {
+          return "核心文件已替换，请点击重启生效";
+        }
         switch (task.status) {
           case 'Running': return t('common.waitingGateway');
           case 'Completed': return t('common.success');
@@ -113,7 +116,18 @@ export const useTaskCenter = () => {
       placement: 'bottomRight' as const, 
       duration: updatedTask.status === 'Running' ? 8 : 4.5,
       className: `premium-notification premium-notification-${updatedTask.status.toLowerCase()}`,
-      style: { width: 340 }
+      style: { width: 340 },
+      // 针对克隆并重启这类重型任务，如果已完成，提供一个手动刷新的按钮作为兜底
+      btn: (updatedTask.status === 'Completed' && updatedTask.action === 'clone-expert') ? (
+        <Button 
+          type="primary" 
+          size="small" 
+          onClick={() => window.location.reload()}
+          style={{ background: '#2563eb' }}
+        >
+          {t('common.refreshNow', { defaultValue: '立即刷新' })}
+        </Button>
+      ) : undefined
     };
 
     // --- 逻辑：决定是否需要弹窗 ---

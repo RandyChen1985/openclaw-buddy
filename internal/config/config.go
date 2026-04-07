@@ -1,13 +1,18 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
 
-var Version = "0.0.0-dev"
+var Version = "1.0.4"
 
 type Config struct {
 	OpenClawConfigDir    string
@@ -30,9 +35,12 @@ type Config struct {
 	WebPort              int
 	WebRoot              string
 	ExternalDashboardURL string
+	GUIDisableFeatures   string
+	ShowExternalTools    bool
 }
 
 func LoadConfig() (*Config, error) {
+	_ = ensureEnvFile()
 	_ = godotenv.Load("env") // Load the file named "env" instead of ".env"
 
 	interval, _ := strconv.Atoi(getEnv("CHECK_INTERVAL_SECONDS", "60"))
@@ -40,6 +48,7 @@ func LoadConfig() (*Config, error) {
 	healthPort, _ := strconv.Atoi(getEnv("HEALTH_PORT", "18789"))
 	webPort, _ := strconv.Atoi(getEnv("WEB_PORT", "3000"))
 	feishuEnabled, _ := strconv.ParseBool(getEnv("FEISHU_ENABLED", "false"))
+	showExternalTools, _ := strconv.ParseBool(getEnv("SHOW_EXTERNAL_TOOLS", "false"))
 
 	// 规范化 WebRoot
 	webRoot := getEnv("WEB_ROOT", "/")
@@ -61,26 +70,28 @@ func LoadConfig() (*Config, error) {
 	compress, _ := strconv.ParseBool(getEnv("LOG_COMPRESS", "true"))
 
 	return &Config{
-		OpenClawConfigDir:    expandPath(getEnv("OPENCLAW_CONFIG_DIR", "~/.openclaw")),
-		BackupDir:            getEnv("BACKUP_DIR", "./backups"),
+		OpenClawConfigDir:    filepath.Clean(expandPath(getEnv("OPENCLAW_CONFIG_DIR", "~/.openclaw"))),
+		BackupDir:            filepath.Clean(getEnv("BACKUP_DIR", "./backups")),
 		CheckIntervalSeconds: interval,
 		MaxRetries:           maxRetries,
-		LogFile:              getEnv("LOG_FILE", "./logs/guardian.log"),
+		LogFile:              filepath.Clean(getEnv("LOG_FILE", "./logs/guardian.log")),
 		LogMaxSize:           maxSize,
 		LogMaxBackups:        maxBackups,
 		LogMaxAge:            maxAge,
 		LogCompress:          compress,
-		ReportDir:            getEnv("REPORT_DIR", "./reports"),
+		ReportDir:            filepath.Clean(getEnv("REPORT_DIR", "./reports")),
 		HealthPort:           healthPort,
 		FeishuEnabled:        feishuEnabled,
 		FeishuAppID:          getEnv("FEISHU_APP_ID", ""),
 		FeishuAppSecret:      getEnv("FEISHU_APP_SECRET", ""),
 		FeishuChatID:         getEnv("FEISHU_CHAT_ID", ""),
-		DBFile:               getEnv("DB_FILE", "./data/guardian.db"),
-		Token:                getEnv("BUDDY_TOKEN", "sk-replace-me-on-first-run"),
+		DBFile:               filepath.Clean(getEnv("DB_FILE", "./data/guardian.db")),
+		Token:                strings.TrimSpace(getEnv("BUDDY_TOKEN", "sk-replace-me-on-first-run")),
 		WebPort:              webPort,
 		WebRoot:              webRoot,
 		ExternalDashboardURL: getEnv("EXTERNAL_DASHBOARD_URL", ""),
+		GUIDisableFeatures:   getEnv("GUI_DISABLE_FEATURES", ""),
+		ShowExternalTools:    showExternalTools,
 	}, nil
 }
 
@@ -98,7 +109,54 @@ func expandPath(path string) string {
 		if err != nil {
 			return path
 		}
-		return home + path[1:]
+		// 使用 filepath.Join 确保跨平台路径分隔符正确
+		return filepath.Join(home, path[1:])
 	}
 	return path
+}
+
+func ensureEnvFile() error {
+	_ = os.MkdirAll("data", 0755)
+	_ = os.MkdirAll("pid", 0755)
+
+	if _, err := os.Stat("env"); err == nil {
+		return nil
+	}
+
+	// Generate random token
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	token := "sk-" + hex.EncodeToString(b)
+
+	content := fmt.Sprintf(`# 🦞 OpenClaw Buddy (Auto-generated)
+# Guardian 面板监听端口
+WEB_PORT=3000
+# 基础路径
+WEB_ROOT="/"
+# 访问面板所需的认证令牌 (已自动生成)
+BUDDY_TOKEN="%s"
+
+# [存储与目录]
+DB_FILE="./data/guardian.db"
+OPENCLAW_CONFIG_DIR="~/.openclaw"
+BACKUP_DIR="./backups"
+LOG_FILE="./logs/guardian.log"
+REPORT_DIR="./reports"
+
+# [监控策略]
+CHECK_INTERVAL_SECONDS=60
+HEALTH_PORT=18789
+MAX_RETRIES=3
+
+# [高级选项]
+EXTERNAL_DASHBOARD_URL=""
+GUI_DISABLE_FEATURES=""
+# 是否在侧边栏显示“外部工具”菜单组 (龙虾面板跳转)
+SHOW_EXTERNAL_TOOLS=false
+
+# [飞书通知]
+FEISHU_ENABLED=false
+`, token)
+
+	return os.WriteFile("env", []byte(content), 0644)
 }

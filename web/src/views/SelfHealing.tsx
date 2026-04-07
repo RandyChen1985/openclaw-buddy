@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Badge, Button, List, Tag, Modal, Spin, message } from 'antd';
+import { Card, Badge, Button, List, Tag, Modal, Spin, message, Tabs, Table, Typography, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Zap, Terminal, FileText, ChevronRight, RefreshCw, Clock, HardDrive, AlertCircle } from 'lucide-react';
+import { Zap, Terminal, FileText, ChevronRight, RefreshCw, Clock, HardDrive, AlertCircle, History, FileSearch, Code } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -28,36 +28,45 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
 }) => {
   const { t } = useTranslation();
   const isMobile = window.innerWidth < 768;
+  
+  // Reports State
   const [reports, setReports] = useState<any[]>([]);
   const [loadingReports, setLoadingReports] = useState(false);
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [reportContent, setReportContent] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  
+  // Backups State
+  const [backups, setBackups] = useState<any[]>([]);
+  const [loadingBackups, setLoadingBackups] = useState(false);
+  const [backupContent, setBackupContent] = useState('');
+  const [backupDiff, setBackupDiff] = useState('');
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'content' | 'diff'>('content');
+  const [selectedBackup, setSelectedBackup] = useState<any>(null);
+
   const [loadingContent, setLoadingContent] = useState(false);
 
-  // --- Markdown 预处理逻辑，修复模型输出不规范导致的渲染问题 ---
+  // --- Markdown 预处理逻辑 ---
   const preprocessMarkdown = (content: string) => {
     if (!content) return '';
     return content
-      // 1. 确保标题 (#) 前后有空行
       .replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2')
       .replace(/(#{1,6}\s.*)\n([^\n])/g, '$1\n\n$2')
-      // 2. 确保代码块 (```) 前后有空行
       .replace(/([^\n])\n(```)/g, '$1\n\n$2')
       .replace(/(```[\s\S]*?```)\n([^\n])/g, '$1\n\n$2')
-      // 3. 强化表格 (|) 前后空行，确保表格不被普通文本截断
       .replace(/([^\n])\n(\|)/g, (match, p1, p2) => {
         return p1.trim().endsWith('|') ? match : p1 + '\n\n' + p2;
       })
       .replace(/(\|)\n([^|\n][^\n]*)/g, (match, p1, p2) => {
         return p2.trim().startsWith('|') ? match : p1 + '\n\n' + p2;
       })
-      // 4. 修复模型输出中可能存在的非标准表格分隔线
       .replace(/(\n\|[^\n]+\|)\n(\|(?:\s*:-+\s*\|)+)/g, '$1\n$2');
   };
 
   useEffect(() => {
     fetchReports();
+    fetchBackups();
   }, []);
 
   const fetchReports = async () => {
@@ -72,9 +81,21 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
     }
   };
 
+  const fetchBackups = async () => {
+    setLoadingBackups(true);
+    try {
+      const res = await api.get('/v1/heal/backups');
+      setBackups(res.data || []);
+    } catch (err) {
+      console.error('Failed to fetch backups:', err);
+    } finally {
+      setLoadingBackups(false);
+    }
+  };
+
   const viewReport = async (report: any) => {
     setSelectedReport(report);
-    setIsModalOpen(true);
+    setIsReportModalOpen(true);
     setLoadingContent(true);
     setReportContent('');
     try {
@@ -82,7 +103,41 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
       setReportContent(res.data.content);
     } catch (err) {
       message.error(t('heal.readReportFailed'));
-      setIsModalOpen(false);
+      setIsReportModalOpen(false);
+    } finally {
+      setLoadingContent(false);
+    }
+  };
+
+  const viewBackupContent = async (backup: any) => {
+    setSelectedBackup(backup);
+    setModalMode('content');
+    setIsBackupModalOpen(true);
+    setLoadingContent(true);
+    setBackupContent('');
+    try {
+      const res = await api.get(`/v1/heal/backups/${backup.name}`);
+      setBackupContent(res.data.content);
+    } catch (err) {
+      message.error(t('heal.readBackupFailed'));
+      setIsBackupModalOpen(false);
+    } finally {
+      setLoadingContent(false);
+    }
+  };
+
+  const viewBackupDiff = async (backup: any) => {
+    setSelectedBackup(backup);
+    setModalMode('diff');
+    setIsBackupModalOpen(true);
+    setLoadingContent(true);
+    setBackupDiff('');
+    try {
+      const res = await api.get(`/v1/heal/backups/${backup.name}/diff`);
+      setBackupDiff(res.data.diff);
+    } catch (err) {
+      message.error(t('heal.diffFailed'));
+      setIsBackupModalOpen(false);
     } finally {
       setLoadingContent(false);
     }
@@ -96,42 +151,63 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  // --- Styles for Markdown Content (Copied from OnlineChat for consistency) ---
   const markdownStyles = (
     <style>{`
-      .markdown-body {
-        font-size: 13.5px;
-        line-height: 1.5;
-        word-wrap: break-word;
-        color: #334155;
-      }
-      .markdown-body h1, .markdown-body h2, .markdown-body h3 {
-        margin-top: 16px;
-        margin-bottom: 8px;
-        font-weight: 700;
-        color: #1e293b;
-        border-bottom: 1px solid #f1f5f9;
-        padding-bottom: 4px;
-      }
+      .markdown-body { font-size: 13.5px; line-height: 1.5; word-wrap: break-word; color: #334155; }
+      .markdown-body h1, .markdown-body h2, .markdown-body h3 { margin-top: 16px; margin-bottom: 8px; font-weight: 700; color: #1e293b; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px; }
       .markdown-body p { margin-bottom: 8px; }
-      .markdown-body table th {
-        background-color: #f8fafc;
-        font-weight: 600;
-        text-align: left;
-      }
-      .markdown-body pre {
-        margin-bottom: 10px !important;
-        border-radius: 8px;
-        overflow: hidden;
-      }
-      .markdown-body blockquote {
-        margin: 0 0 10px 0;
-        padding: 0 12px;
-        color: #64748b;
-        border-left: 4px solid #e2e8f0;
-      }
+      .markdown-body table th { background-color: #f8fafc; font-weight: 600; text-align: left; }
+      .markdown-body pre { margin-bottom: 10px !important; border-radius: 8px; overflow: hidden; }
+      .markdown-body blockquote { margin: 0 0 10px 0; padding: 0 12px; color: #64748b; border-left: 4px solid #e2e8f0; }
+      .heal-tabs .ant-tabs-nav { margin-bottom: 0px !important; }
+      .heal-tabs .ant-tabs-tab { padding: 12px 16px !important; }
     `}</style>
   );
+
+  const backupColumns = [
+    {
+      title: t('common.name'),
+      dataIndex: 'name',
+      key: 'name',
+      render: (text: string) => (
+        <Space size={8}>
+          <HardDrive size={14} color="#64748b" />
+          <Typography.Text strong style={{ fontSize: 13 }}>{text}</Typography.Text>
+          {text === 'openclaw.json.bak' && <Tag color="blue">{t('heal.latest')}</Tag>}
+        </Space>
+      )
+    },
+    {
+      title: t('common.time'),
+      dataIndex: 'time',
+      key: 'time',
+      width: 180,
+      render: (text: string) => (
+        <Space size={4} style={{ color: '#94a3b8', fontSize: 12 }}>
+          <Clock size={12} />
+          {text}
+        </Space>
+      )
+    },
+    {
+      title: t('common.size'),
+      dataIndex: 'size',
+      key: 'size',
+      width: 100,
+      render: (size: number) => <span style={{ color: '#94a3b8', fontSize: 12 }}>{formatSize(size)}</span>
+    },
+    {
+      title: t('common.action'),
+      key: 'action',
+      width: 220,
+      render: (_: any, record: any) => (
+        <Space size={8}>
+          <Button size="small" icon={<Code size={12} />} onClick={() => viewBackupContent(record)}>{t('heal.viewContent')}</Button>
+          <Button size="small" type="primary" ghost icon={<FileSearch size={12} />} onClick={() => viewBackupDiff(record)}>{t('heal.viewDiff')}</Button>
+        </Space>
+      )
+    }
+  ];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -141,6 +217,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
         styles={{ body: { padding: isMobile ? '20px' : '24px 28px' } }}
         style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
       >
+        {/* ... (原有开关 UI 逻辑保持不变) ... */}
         <div style={{ 
           display: 'flex', 
           flexDirection: isMobile ? 'column' : 'row',
@@ -164,7 +241,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
                 {t('heal.title')}
                 <Badge status={selfHealingEnabled ? 'processing' : 'default'} />
               </div>
-              <div style={{ color: '#64748b', fontSize: 13, maxWidth: 500, lineHeight: 1.5 }}>
+              <div style={{ color: '#64748b', fontSize: 13, maxWidth: 600, lineHeight: 1.5 }}>
                 {t('heal.description')}
                 {ocInstalled === false && (
                   <div style={{ marginTop: 8, color: '#ef4444', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -206,175 +283,150 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
         </div>
       </Card>
 
-
-      {/* 自愈日志列表 */}
-      <Card
-        title={<span style={{ fontSize: 14, fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: 8 }}><Terminal size={16} /> {t('heal.historyEvents')}</span>}
-        styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 48 }, body: { padding: '0 24px' } }}
-        style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
-      >
-        {healEvents.length === 0 ? (
-          <div style={{ padding: '60px 0', textAlign: 'center', color: '#94a3b8' }}>
-            <div style={{ fontSize: 40, marginBottom: 16 }}>☕</div>
-            <div style={{ fontSize: 13 }}>{t('heal.noEvents')}</div>
-          </div>
-        ) : (
-          <List
-            dataSource={healEvents}
-            renderItem={(item: any) => (
-              <List.Item style={{ padding: '20px 0', borderBottom: '1px solid #f8fafc' }}>
-                <div style={{ width: '100%' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <Tag color="warning" style={{ borderRadius: 4, fontWeight: 600 }}>{item.reason}</Tag>
-                    <span style={{ fontSize: 12, color: '#94a3b8', fontFamily: 'monospace' }}>{dayjs(item.timestamp).format('YYYY-MM-DD HH:mm:ss')}</span>
-                  </div>
-                  <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: 8, border: '1px solid #f1f5f9' }}>
-                    <div style={{ display: 'flex', gap: 12, fontSize: 13 }}>
-                      <span style={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>{t('heal.recoveryMethod')}:</span>
-                      <span style={{ color: '#1e293b' }}>{item.method}</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: 12, fontSize: 13, marginTop: 4 }}>
-                      <span style={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>{t('heal.disposalResult')}:</span>
-                      <span style={{ color: item.result === 'Success' ? '#16a34a' : '#ef4444', fontWeight: 600 }}>{item.result === 'Success' ? '✅ ' + t('heal.recovered') : '❌ ' + t('heal.failed')}</span>
-                    </div>
-                  </div>
-                </div>
-              </List.Item>
-            )}
-          />
-        )}
-      </Card>
-
-      {/* 诊断报表列表 */}
-      <Card
-        title={
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <FileText size={16} /> {t('heal.reports')}
-            </span>
-            <Button size="small" type="text" icon={<RefreshCw size={12} />} onClick={fetchReports} loading={loadingReports}>
-              {t('common.refresh')}
-            </Button>
-          </div>
-        }
-        styles={{ header: { borderBottom: '1px solid #f1f5f9', minHeight: 48 }, body: { padding: isMobile ? '8px 16px' : '12px 24px' } }}
-        style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
-      >
-        {reports.length === 0 ? (
-          <div style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8' }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📄</div>
-            <div style={{ fontSize: 12 }}>{t('heal.noReports')}</div>
-          </div>
-        ) : (
-          <List
-            dataSource={reports}
-            renderItem={(item: any) => (
-              <List.Item 
-                style={{ padding: '12px 0', borderBottom: '1px solid #f8fafc', cursor: 'pointer' }}
-                onClick={() => viewReport(item)}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 8, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <FileText size={16} color="#64748b" />
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 13 }}>{item.name}</div>
-                      <div style={{ display: 'flex', gap: 12, marginTop: 2 }}>
-                        <span style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={10} /> {item.time}</span>
-                        <span style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}><HardDrive size={10} /> {formatSize(item.size)}</span>
+      {/* 核心内容 Tabs */}
+      <Tabs 
+        className="heal-tabs"
+        type="card"
+        items={[
+          {
+            key: 'events',
+            label: <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Terminal size={14} /> {t('heal.historyEvents')}</span>,
+            children: (
+              <Card style={{ borderTopLeftRadius: 0, border: '1px solid #e2e8f0', borderTop: 'none' }}>
+                <List
+                  dataSource={healEvents}
+                  locale={{ emptyText: t('heal.noEvents') }}
+                  renderItem={(item: any) => (
+                    <List.Item style={{ padding: '16px 0' }}>
+                      <div style={{ width: '100%' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                          <Tag color="warning" style={{ borderRadius: 4, fontWeight: 600 }}>{item.reason}</Tag>
+                          <span style={{ fontSize: 12, color: '#94a3b8', fontFamily: 'monospace' }}>{dayjs(item.timestamp).format('YYYY-MM-DD HH:mm:ss')}</span>
+                        </div>
+                        <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: 8, border: '1px solid #f1f5f9' }}>
+                          <div style={{ display: 'flex', gap: 12, fontSize: 13 }}>
+                            <span style={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>{t('heal.recoveryMethod')}:</span>
+                            <span style={{ color: '#1e293b' }}>{item.method}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: 12, fontSize: 13, marginTop: 4 }}>
+                            <span style={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>{t('heal.disposalResult')}:</span>
+                            <span style={{ color: item.result === 'Success' ? '#16a34a' : '#ef4444', fontWeight: 600 }}>{item.result === 'Success' ? '✅ ' + t('heal.recovered') : '❌ ' + t('heal.failed')}</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  <ChevronRight size={16} color="#cbd5e1" />
-                </div>
-              </List.Item>
-            )}
-          />
-        )}
-      </Card>
+                    </List.Item>
+                  )}
+                />
+              </Card>
+            )
+          },
+          {
+            key: 'backups',
+            label: <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><History size={14} /> {t('heal.backupHistory')}</span>,
+            children: (
+              <Card 
+                style={{ borderTopLeftRadius: 0, border: '1px solid #e2e8f0', borderTop: 'none' }}
+                title={null}
+                extra={<Button size="small" type="text" icon={<RefreshCw size={12} />} onClick={fetchBackups} loading={loadingBackups}>{t('common.refresh')}</Button>}
+              >
+                <Table 
+                  dataSource={backups}
+                  columns={backupColumns}
+                  pagination={{ pageSize: 10 }}
+                  loading={loadingBackups}
+                  size="small"
+                  rowKey="name"
+                  scroll={{ x: 'max-content' }}
+                />
+              </Card>
+            )
+          },
+          {
+            key: 'reports',
+            label: <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FileText size={14} /> {t('heal.reports')}</span>,
+            children: (
+              <Card style={{ borderTopLeftRadius: 0, border: '1px solid #e2e8f0', borderTop: 'none' }}>
+                <List
+                  dataSource={reports}
+                  locale={{ emptyText: t('heal.noReports') }}
+                  loading={loadingReports}
+                  renderItem={(item: any) => (
+                    <List.Item 
+                      style={{ padding: '12px 0', cursor: 'pointer' }}
+                      onClick={() => viewReport(item)}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: 8, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <FileText size={16} color="#64748b" />
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 13 }}>{item.name}</div>
+                            <div style={{ display: 'flex', gap: 12, marginTop: 2 }}>
+                              <span style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={10} /> {item.time}</span>
+                              <span style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}><HardDrive size={10} /> {formatSize(item.size)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <ChevronRight size={16} color="#cbd5e1" />
+                      </div>
+                    </List.Item>
+                  )}
+                />
+              </Card>
+            )
+          }
+        ]}
+      />
 
-      {/* 报表内容弹窗 */}
+      {/* 报表查看 Modal */}
+      <Modal
+        title={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FileText size={18} color="#3b82f6" /><span>{t('heal.reportDetail')}: {selectedReport?.name}</span></div>}
+        open={isReportModalOpen}
+        onCancel={() => setIsReportModalOpen(false)}
+        footer={[<Button key="close" type="primary" onClick={() => setIsReportModalOpen(false)}>{t('common.close')}</Button>]}
+        width={isMobile ? '95%' : 800}
+        centered
+        styles={{ body: { maxHeight: '70vh', overflowY: 'auto' } }}
+      >
+        {loadingContent ? <div style={{ padding: '60px 0', textAlign: 'center' }}><Spin /></div> : (
+          <div className="markdown-body">
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeSanitize]} components={{
+              code: ({ node, inline, className, children, ...props }: any) => {
+                const match = /language-(\w+)/.exec(className || '');
+                return !inline && match ? <SyntaxHighlighter {...props} style={vscDarkPlus} language={match[1]} PreTag="div">{String(children).replace(/\n$/, '')}</SyntaxHighlighter> : <code className={className} {...props}>{children}</code>;
+              }
+            }}>
+              {preprocessMarkdown(reportContent)}
+            </ReactMarkdown>
+          </div>
+        )}
+      </Modal>
+
+      {/* 备份内容/Diff 查看 Modal */}
       <Modal
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <FileText size={18} color="#3b82f6" />
-            <span>{t('heal.reportDetail')}: {selectedReport?.name}</span>
+            {modalMode === 'content' ? <Code size={18} color="#3b82f6" /> : <FileSearch size={18} color="#16a34a" />}
+            <span>{modalMode === 'content' ? t('heal.viewContent') : t('heal.currentDiff')}: {selectedBackup?.name}</span>
           </div>
         }
-        open={isModalOpen}
-        onCancel={() => setIsModalOpen(false)}
-        footer={[
-          <Button key="close" type="primary" onClick={() => setIsModalOpen(false)}>{t('common.close')}</Button>
-        ]}
-        width={isMobile ? '95%' : 800}
+        open={isBackupModalOpen}
+        onCancel={() => setIsBackupModalOpen(false)}
+        footer={[<Button key="close" type="primary" onClick={() => setIsBackupModalOpen(false)}>{t('common.close')}</Button>]}
+        width={isMobile ? '95%' : 900}
         centered
-        styles={{ body: { maxHeight: '70vh', overflowY: 'auto', padding: '20px 24px' } }}
+        styles={{ body: { maxHeight: '70vh', overflowY: 'auto', padding: 12 } }}
       >
-        {loadingContent ? (
-          <div style={{ padding: '60px 0', textAlign: 'center' }}><Spin tip={t('heal.loadingReport')} /></div>
-        ) : (
-          <div className="markdown-body">
-            <ReactMarkdown 
-              remarkPlugins={[remarkGfm, remarkBreaks]}
-              rehypePlugins={[rehypeSanitize]}
-              components={{
-                table: ({ node, ...props }: any) => (
-                  <div style={{ 
-                    width: '100%', 
-                    overflowX: 'auto', 
-                    marginBottom: 12, 
-                    borderRadius: 8,
-                    border: '1px solid #e2e8f0',
-                    background: '#fff'
-                  }}>
-                    <table {...props} style={{ 
-                      width: '100%', 
-                      borderCollapse: 'collapse',
-                      fontSize: '13px',
-                      minWidth: isMobile ? '500px' : 'auto'
-                    }} />
-                  </div>
-                ),
-                th: ({ node, ...props }: any) => (
-                  <th {...props} style={{ 
-                    padding: '8px 12px', 
-                    background: '#f8fafc', 
-                    borderBottom: '1px solid #e2e8f0', 
-                    borderRight: '1px solid #e2e8f0',
-                    textAlign: 'left',
-                    fontWeight: 600
-                  }} />
-                ),
-                td: ({ node, ...props }: any) => (
-                  <td {...props} style={{ 
-                    padding: '8px 12px', 
-                    borderBottom: '1px solid #e2e8f0', 
-                    borderRight: '1px solid #e2e8f0'
-                  }} />
-                ),
-                code: ({ node, inline, className, children, ...props }: any) => {
-                  const match = /language-(\w+)/.exec(className || '');
-                  const language = match ? match[1] : '';
-                  return !inline && language ? (
-                    <SyntaxHighlighter
-                      {...props}
-                      style={vscDarkPlus}
-                      language={language}
-                      PreTag="div"
-                    >
-                      {String(children).replace(/\n$/, '')}
-                    </SyntaxHighlighter>
-                  ) : (
-                    <code className={className} {...props}>
-                      {children}
-                    </code>
-                  );
-                }
-              }}
+        {loadingContent ? <div style={{ padding: '60px 0', textAlign: 'center' }}><Spin tip="Loading..." /></div> : (
+          <div style={{ borderRadius: 8, overflow: 'hidden' }}>
+            <SyntaxHighlighter 
+              style={vscDarkPlus} 
+              language={modalMode === 'content' ? 'json' : 'diff'}
+              customStyle={{ margin: 0, fontSize: 12 }}
             >
-              {preprocessMarkdown(reportContent)}
-            </ReactMarkdown>
+              {modalMode === 'content' ? backupContent : (backupDiff || 'No changes detected between this backup and current config.')}
+            </SyntaxHighlighter>
           </div>
         )}
       </Modal>

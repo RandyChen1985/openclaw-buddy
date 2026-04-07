@@ -4,6 +4,7 @@ import { Card, Table, Tag, Button, Input, message, Tooltip, Segmented, Modal, St
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import api from '../api';
+import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 interface Skill {
   name: string;
@@ -26,9 +27,15 @@ interface SkillManagementProps {
   onRefresh?: (force?: boolean, isSilent?: boolean) => Promise<void>;
   loading?: boolean;
   skills?: any[];
+  activeTasks?: any[];
+  isRunning?: boolean;
+  onNavigateToDashboard?: () => void;
 }
 
-const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, loading: globalLoading, skills: globalSkills }) => {
+const SkillManagement: React.FC<SkillManagementProps> = ({ 
+  isMobile, onRefresh, loading: globalLoading, skills: globalSkills, 
+  activeTasks = [], isRunning, onNavigateToDashboard 
+}) => {
   const { t } = useTranslation();
   const [localSkills, setLocalSkills] = useState<Skill[]>([]);
   const [localLoading, setLocalLoading] = useState(true);
@@ -36,9 +43,36 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, 
   const [updatedAt, setUpdatedAt] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | number>('ready');
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [processingNames, setProcessingNames] = useState<Set<string>>(new Set());
+  const processingRef = React.useRef(new Set<string>());
+  const lastActionTimeRef = React.useRef<Record<string, number>>({});
 
   const loading = globalLoading !== undefined ? globalLoading : localLoading;
   const skills = globalSkills !== undefined ? globalSkills : localSkills;
+
+  // 必须导入遮罩组件
+  // (我在 import 处会补上)
+
+  // 检查是否有相同的任务正在进行中
+  const hasActiveTask = (name: string, action?: string) => {
+    return activeTasks.some(task => 
+      task.module === 'skills' && 
+      task.target === name && 
+      (action ? task.action === action : true) &&
+      task.status === 'Running'
+    );
+  };
+
+  // 当全局 skills 变化时，清空处理中的锁
+  const lastUpdateRef = React.useRef(updatedAt);
+  useEffect(() => {
+    // 严格锁定：只有当同步时间戳真正发生变化时，才释放锁定
+    if (updatedAt && updatedAt !== lastUpdateRef.current) {
+      setProcessingNames(new Set());
+      processingRef.current.clear();
+      lastUpdateRef.current = updatedAt;
+    }
+  }, [globalSkills, updatedAt]);
 
   const fetchSkills = async (force = false) => {
     // 如果存在父级分发的 onRefresh，优先使用 (同步阻塞)
@@ -87,28 +121,52 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, 
     return matchesSearch && matchesStatus;
   });
 
-  const handleUninstall = (name: string) => {
+  const handleUninstall = (name: string, e?: React.BaseSyntheticEvent) => {
+    // 1. [物理拦截] 立即停止传播
+    if (e) e.stopPropagation();
+
+    const now = Date.now();
+    const lastTime = lastActionTimeRef.current[name] || 0;
+    
+    // 2. [同步哨兵] 秒级拦截，防止穿透，并检查全局任务
+    if (processingRef.current.has(name) || now - lastTime < 1000 || hasActiveTask(name, 'uninstall')) {
+      message.warning(t('common.taskAlreadyRunning') || '已有相同任务正在进行中，请耐心等待');
+      return;
+    }
+
     Modal.confirm({
       title: t('skills.uninstallConfirmTitle'),
       content: t('skills.uninstallConfirmContent', { name }),
       okText: t('skills.confirmUninstall'),
       cancelText: t('common.cancel'),
-      okButtonProps: { danger: true },
+      okButtonProps: { danger: true, loading: processingNames.has(name) || hasActiveTask(name, 'uninstall') },
       centered: true,
+      onCancel: () => {
+        // 用户取消，解锁
+        processingRef.current.delete(name);
+        setProcessingNames(new Set(processingRef.current));
+      },
       onOk: async () => {
+        // 确认瞬间再次加锁
+        if (processingRef.current.has(name) || hasActiveTask(name, 'uninstall')) return;
+        
+        lastActionTimeRef.current[name] = Date.now();
+        processingRef.current.add(name);
+        setProcessingNames(new Set(processingRef.current));
+
         try {
-          // 物理接入异步任务机制：卸载逻辑走异步
+          // 物理接入异步任务机制
           const res = await api.delete(`/v1/openclaw/skills/${name}`);
           if (res.data.taskId) {
-            // 后端返回 TaskID，前端只需提示。数据拉取由 App.tsx 的 Task Observer 在任务完成后自动触发。
             message.info(t('chat.waitingGatewaySync'));
           } else {
-            // 兜底逻辑
             message.success(t('skills.uninstallSuccess', { name }));
-            fetchSkills();
+            if (onRefresh) onRefresh(true);
           }
         } catch (err: any) {
           message.error(err.response?.data?.error || t('skills.uninstallFailed'));
+          processingRef.current.delete(name);
+          setProcessingNames(new Set(processingRef.current));
         }
       }
     });
@@ -174,23 +232,29 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, 
       title: t('skills.actions'),
       key: 'action',
       width: 80,
-      render: (_: any, record: Skill) => (
-        !record.bundled && (
-          <Button 
-            type="text" 
-            danger 
-            size="small" 
-            icon={<Trash2 size={14} />} 
-            onClick={() => handleUninstall(record.name)}
-            style={{ borderRadius: 6 }}
-          />
-        )
-      )
+      render: (_: any, record: Skill) => {
+        const isProcessing = processingNames.has(record.name) || hasActiveTask(record.name, 'uninstall');
+        return !record.bundled && (
+          <Tooltip title={isProcessing ? t('common.processing') : ''}>
+            <Button 
+              type="text" 
+              danger 
+              size="small" 
+              icon={<Trash2 size={14} />} 
+              onClick={(e) => handleUninstall(record.name, e)}
+              disabled={isProcessing}
+              style={{ borderRadius: 6, cursor: isProcessing ? 'not-allowed' : 'pointer' }}
+            />
+          </Tooltip>
+        );
+      }
     }
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ height: '100%', minHeight: 'calc(100vh - 100px)', width: '100%', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
+      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0' : '8px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <Card 
         title={
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12 }}>
@@ -293,14 +357,17 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, 
                                 <span style={{ fontWeight: 600, color: '#1e293b' }}>{skill.name}</span>
                             </div>
                             {!skill.bundled && (
-                                <Button 
-                                    type="text" 
-                                    danger 
-                                    size="small" 
-                                    icon={<Trash2 size={16} />} 
-                                    onClick={() => handleUninstall(skill.name)}
-                                    style={{ padding: 0, height: 24 }}
-                                />
+                                <Tooltip title={processingNames.has(skill.name) || hasActiveTask(skill.name, 'uninstall') ? t('common.processing') : ''}>
+                                    <Button 
+                                        type="text" 
+                                        danger 
+                                        size="small" 
+                                        icon={<Trash2 size={16} />} 
+                                        onClick={(e) => handleUninstall(skill.name, e)}
+                                        disabled={processingNames.has(skill.name) || hasActiveTask(skill.name, 'uninstall')}
+                                        style={{ padding: 0, height: 24, cursor: (processingNames.has(skill.name) || hasActiveTask(skill.name, 'uninstall')) ? 'not-allowed' : 'pointer' }}
+                                    />
+                                </Tooltip>
                             )}
                             {skill.eligible ? (
                                 <Tag color="success" style={{ margin: 0, borderRadius: 4 }}>{t('skills.ready')}</Tag>
@@ -388,6 +455,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({ isMobile, onRefresh, 
           ]}
         />
       </Modal>
+      </div>
     </div>
   );
 };
