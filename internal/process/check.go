@@ -214,3 +214,18 @@ func GetPIDByPort(port int) (int, error) {
 	}
 	return pid, nil
 }
+
+// IsProcessRunning checks if a process with the given name is currently running.
+func IsProcessRunning(name string) bool {
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("cmd", "/c", "tasklist /FI \"IMAGENAME eq "+name+"\" /NH")
+		out, _ := cmd.Output()
+		return strings.Contains(string(out), name)
+	}
+
+	// Linux/Mac: ps -ef | grep [name] (avoiding grep itself)
+	// We use a simple pgrep if available, or ps with grep
+	cmd := exec.Command("sh", "-c", "ps -ef | grep \""+name+"\" | grep -v grep")
+	err := cmd.Run()
+	return err == nil
+}

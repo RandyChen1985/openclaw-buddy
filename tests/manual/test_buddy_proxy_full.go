@@ -21,8 +21,8 @@ func base64URLNoPadding(data []byte) string {
 }
 
 func main() {
-	// 1. 配置参数
-	url := "ws://127.0.0.1:18789/v1/gateway"
+	// 1. 配置参数 (使用 Buddy Proxy 转发，但内部协议使用 OpenClaw Token)
+	url := "ws://127.0.0.1:3000/console/claw/v1/ws/gateway?token=openclaw-buddy-2026"
 	token := "71937201d0ba32c6c14047dd15487a0cbf0cd1f3a05e07f8"
 
 	// 2. 生成密钥对
