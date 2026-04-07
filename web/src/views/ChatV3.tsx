@@ -10,6 +10,7 @@ import rehypeSanitize from 'rehype-sanitize';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import nacl from 'tweetnacl';
+import { sha256 } from 'js-sha256';
 import storage from '../utils/storage';
 import { Mermaid, CodeBlock } from '../components/ChatComponents';
 import GatewayOfflineMask from '../components/GatewayOfflineMask';
@@ -140,8 +141,16 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       setKeyPair(kp as any);
 
       // SHA256 of raw public key bytes (与 Go 测试文件对齐)
-      const hashBuffer = await crypto.subtle.digest('SHA-256', kp.publicKey.buffer as ArrayBuffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      let hashArray: number[];
+      if (typeof crypto !== 'undefined' && crypto.subtle) {
+        const hashBuffer = await crypto.subtle.digest('SHA-256', kp.publicKey.buffer as ArrayBuffer);
+        hashArray = Array.from(new Uint8Array(hashBuffer));
+      } else {
+        // Fallback for non-secure contexts (e.g., LAN IP)
+        const hashHex = sha256(kp.publicKey);
+        hashArray = Array.from(hexToUint8Array(hashHex));
+      }
+      
       const did = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
       setDeviceId(did);
     };

@@ -187,6 +187,7 @@
 - [ ] **回退机制**: 访问不存在的翻译 Key 时，应能正确回退至中文原文或显示原始 Key 路径。
 - [x] **聊天引用翻译修复**: 验证 `chat.reply` 键在 `zh.json` 中已正确定义为“引用”（由 `quote` 重命名），且与 `en.json` 保持同步。
 - [x] **国际化键位对齐**: 验证 `zh.json` 和 `en.json` 中的 `chat` 对象键位已完全对齐（含 `v3Status`, `newSession`, `deleteSessionConfirm` 等），且移除了冗余定义。
+- [x] **非安全上下文兼容性 (SHA-256)**: 验证在局域网 IP 访问时（crypto.subtle 不可用），`js-sha256` 回退方案能正常生成 `deviceId` 而不报错。
 
 ---
 ## 9. 视觉动效与鲁棒性 (WOW Effect & Robustness)
