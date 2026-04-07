@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<body style="background-color: #ffffff; color: #1d1d1f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; margin: 0; padding: 40px 20px;">
+    <div style="max-width: 650px; margin: 0 auto;">
+        
+        <header style="text-align: center; margin-bottom: 60px;">
+            <p style="color: #86868b; font-size: 14px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;">OpenClaw Buddy</p>
+            <h1 style="font-size: 40px; font-weight: 700; letter-spacing: -0.015em; margin: 10px 0;">v1.0.4 发布。</h1>
+            <p style="color: #86868b; font-size: 21px; font-weight: 400;">疾速的回响，安全的重塑。</p>
+        </header>
+
+        <img src="./banner.png" alt="Release Banner" style="width: 100%; border-radius: 18px; margin-bottom: 60px;">
+
+        <section style="margin-bottom: 80px; text-align: center;">
+            <p style="font-size: 18px; color: #515154; max-width: 550px; margin: 0 auto; line-height: 1.8; font-style: italic;">
+                “有人说，速度是一场关于遗忘的竞赛。我在 18789 端口的深处，听见了 WebSocket V3 的第一次回响... 当你按下回车的那一瞬间，你会听见，这个世界正以更快的方式向你走来。”
+            </p>
+        </section>
+
+        <section style="margin-bottom: 80px;">
+            <div style="margin-bottom: 60px;">
+                <h2 style="font-size: 32px; font-weight: 600; margin-bottom: 20px;">在线聊天 V3。毫秒级。</h2>
+                <p style="font-size: 17px; color: #1d1d1f; margin-bottom: 15px;">全量接入 WebSocket V3 协议。不仅是消息，连思考状态与元数据均实现流式同步。支持多端实时状态对账。</p>
+                <p style="font-size: 15px; color: #86868b; border-left: 2px solid #3b82f6; padding-left: 15px;">💡 大白话：以前聊天像发邮件，回一下等一下。现在像面对面说话，你刚打完字，所有终端都同步了，主打一个“快”和“准”。</p>
+            </div>
+
+            <div style="margin-bottom: 60px;">
+                <h2 style="font-size: 32px; font-weight: 600; margin-bottom: 20px;">认证模块。安全性重塑。</h2>
+                <p style="font-size: 17px; color: #1d1d1f; margin-bottom: 15px;">引入 Ticket 票据机制与多实例存储空间隔离。彻底解决了 Token 泄露与多实例数据冲突的潜在风险。</p>
+                <p style="font-size: 15px; color: #86868b; border-left: 2px solid #10b981; padding-left: 15px;">💡 大白话：以前你的“通行证”可能会被人窥见，现在换成了阅后即焚的任务密电。而且即便你开了好几个窗口，它们也不会再搞混。</p>
+            </div>
+
+            <div style="margin-bottom: 60px;">
+                <h2 style="font-size: 32px; font-weight: 600; margin-bottom: 20px;">Windows 支持。基础架构。</h2>
+                <p style="font-size: 17px; color: #1d1d1f; margin-bottom: 15px;">建立了基于 Wails 的 Windows 编译流，初步实现了窗口初始化与系统托盘骨架。</p>
+                <p style="font-size: 15px; color: #86868b; border-left: 2px solid #8b5cf6; padding-left: 15px;">💡 大白话：虽然 Windows 版的影子已经出现了，但它还在“练习生”阶段。目前仅具备基础架构，更多黑科技还在紧张调试中。</p>
+            </div>
+
+            <div style="margin-bottom: 60px;">
+                <h2 style="font-size: 32px; font-weight: 600; margin-bottom: 20px;">全量修复。稳定性加固。</h2>
+                <p style="font-size: 17px; color: #1d1d1f;">清理了 30 余项已知 Bug，涵盖备份 Diff 对比、一键自动更新机制以及 UI 锁定释放优化。</p>
+            </div>
+        </section>
+
+        <section style="margin-bottom: 80px;">
+            <h3 style="font-size: 24px; font-weight: 600; margin-bottom: 25px;">细节改进与修复。</h3>
+            <ul style="padding-left: 20px; color: #515154;">
+                <li style="margin-bottom: 15px;"><b>备份 Diff 引擎</b>：支持源码预览与历史差异比对。</li>
+                <li style="margin-bottom: 15px;"><b>API 保护</b>：为 chatProxy 增加了 3 分钟强制超时机制。</li>
+                <li style="margin-bottom: 15px;"><b>UI 打磨</b>：修复 ChatV3 模拟光标位置，优化 i18n 翻译。</li>
+            </ul>
+        </section>
+
+        <section style="margin-bottom: 80px;">
+            <h3 style="font-size: 24px; font-weight: 600; margin-bottom: 25px;">发布产物。</h3>
+            <div style="background-color: #f5f5f7; padding: 25px; border-radius: 12px; font-size: 15px; color: #1d1d1f; line-height: 1.8;">
+                📂 Linux (amd64): openclaw-buddy-linux-1.0.4.tar.gz<br>
+                📂 macOS (Universal): openclaw-buddy-mac-1.0.4.tar.gz<br>
+                📂 Windows (x64): openclaw-buddy-windows-1.0.4.zip (调试中)<br><br>
+                🔗 下载地址: <a href="https://github.com/RandyChen1985/openclaw-buddy/releases/tag/1.0.4" style="color: #06c; text-decoration: none;">GitHub Releases v1.0.4</a>
+            </div>
+        </section>
+
+        <footer style="text-align: center; color: #86868b; font-size: 13px; border-top: 1px solid #d2d2d7; padding-top: 40px;">
+            <p>RandyChen1985 / OpenClaw Buddy</p>
+            <p style="margin-top: 10px; font-style: italic;">“速度之外，我们更在意你对每一行代码的掌控感。”</p>
+            <p style="margin-top: 20px;">© 2026 Powered by OpenClaw Buddy Guardian</p>
+        </footer>
+    </div>
+</body>
+</html>
