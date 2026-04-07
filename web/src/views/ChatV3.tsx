@@ -1914,8 +1914,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                         display: 'flex', alignItems: 'center', pointerEvents: 'none' 
                       }}
                     >
+                      <div className="v3-mock-cursor" style={{ height: 14, marginRight: 4, background: '#2563eb' }} />
                       <span style={{ fontSize: 13, color: '#94a3b8', opacity: 0.6 }}>{t('chat.v3InputPlaceholder')}</span>
-                      <div className="v3-mock-cursor" style={{ height: 14, marginLeft: 2, background: '#2563eb' }} />
                     </div>
                   )}
                 </div>

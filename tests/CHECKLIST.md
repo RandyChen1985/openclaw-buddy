@@ -19,7 +19,8 @@
 - [ ] **微信二维码**: `GET /v1/wechat/qrcode` 应返回 `qrcode_url` 且支持 5 分钟缓存。
 - [ ] **资产查询 (带缓存)**: `GET /v1/openclaw/bots-models` 应返回 `data` 和 `updated_at` 包装格式，而非原始数组。
 - [ ] **强制刷新**: `GET /v1/openclaw/bots-models?refresh=true` 应绕过数据库缓存直接触发实时爬取并同步。
-- [ ] **解析鲁棒性**: `openclaw models list` 输出中包含插件日志（带 ANSI 颜色、时间戳）时，不应将其误识别为模型。
+- [ ] **解析鲁棒性 (Bots)**: `openclaw agents list` 输出中不包含 `Identity:` 的机器人应被自动跳过，不返回给前端。
+- [ ] **解析鲁棒性 (Models)**: `openclaw models list` 输出中包含插件日志（带 ANSI 颜色、时间戳）时，不应将其误识别为模型。
 - [ ] **外部地址前缀**: 设置 `EXTERNAL_DASHBOARD_URL` 后，龙虾面板跳转链接应包含该前缀。
 - [x] **环境检测状态锁定**: 确认 Dashboard 控制按钮在环境检测期间处于禁用状态。
 - [x] **API 统一重构**: 全站（含 SSE 聊天流）已迁移至 api 实例，各路径均支持自定义 WebRoot 补全。
