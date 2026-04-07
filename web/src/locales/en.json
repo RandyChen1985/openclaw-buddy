@@ -283,7 +283,10 @@
     },
     "userLabel": "User",
     "requestReceived": "Request received, thinking...",
-    "waitingGatewaySync": "Syncing gateway task status..."
+    "waitingGatewaySync": "Syncing gateway task status...",
+    "modelSwitchSuccess": "Model switched successfully",
+    "defaultModel": "Use Default Model",
+    "defaultSuffix": "(Default)"
   },
   "channels": {
     "boundChannels": "Bound Channels",

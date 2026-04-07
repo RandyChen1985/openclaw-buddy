@@ -289,7 +289,10 @@
     },
     "userLabel": "用户",
     "requestReceived": "已收到你的请求，正在思考回复中...",
-    "waitingGatewaySync": "正在同步网关任务状态..."
+    "waitingGatewaySync": "正在同步网关任务状态...",
+    "modelSwitchSuccess": "模型切换成功",
+    "defaultModel": "使用默认模型",
+    "defaultSuffix": "(默认)"
   },
   "channels": {
     "boundChannels": "已绑定渠道",

@@ -67,6 +67,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [isFocused, setIsFocused] = useState(false);
   const [showThinking, setShowThinking] = useState<boolean>(() => storage.getItem('v3_show_thinking') === 'true');
   const [thinkingLevel, setThinkingLevel] = useState<'low' | 'medium' | 'high' | 'pro'>('medium');
+  const [sessionModel, setSessionModel] = useState<string>('');
   const [lastHealth, setLastHealth] = useState<{ ok: boolean, latency: number, ts: number } | null>(null);
   const [pulse, setPulse] = useState(0);
   
@@ -519,6 +520,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     // 从列表中找到该会话并提取 label
     const currentSession = sessions.find(s => s.key === key);
     setSessionLabel(currentSession?.label || null);
+    setSessionModel(currentSession?.model || '');
 
     loadSessionHistory(key);
     
@@ -560,6 +562,26 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       console.error('Update label error:', err);
     } finally {
       setIsUpdatingLabel(false);
+    }
+  };
+
+  const handleModelChange = async (newModel: string) => {
+    setSessionModel(newModel);
+    if (!sessionKey) return;
+
+    try {
+      const res = await sendRPC('sessions.patch', { 
+        key: sessionKey, 
+        model: newModel || null 
+      });
+      if (res.ok) {
+        message.success(t('chat.modelSwitchSuccess', { defaultValue: '模型切换成功' }));
+        fetchSessions(); // 刷新列表以同步新状态
+      } else {
+        message.error('Failed to switch model: ' + (res.error?.message || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Switch model error:', err);
     }
   };
 
@@ -823,8 +845,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       if (res.ok) {
         currentKey = res.payload.key;
         setSessionKey(currentKey);
-        // Apply initial patch
-        await sendRPC('sessions.patch', { sessionKey: currentKey, thinkingLevel });
+        // Apply initial patch (using current thinkingLevel and sessionModel if selected)
+        await sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel });
       }
     }
 
@@ -972,53 +994,52 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                   </div>
               )}
               {sessions.filter(s => !sessionSearch || (s.key || '').toLowerCase().includes(sessionSearch.toLowerCase())).map(s => (
-                  <Tooltip title={s.key} key={s.key} placement="right" mouseEnterDelay={0.5}>
-                      <div 
-                          onClick={() => handleSelectSession(s.key)}
-                          style={{ 
-                              padding: '12px', 
-                              borderRadius: 10, 
-                              cursor: 'pointer',
-                              marginBottom: 4,
-                              transition: 'all 0.2s',
-                              background: sessionKey === s.key ? '#eff6ff' : 'transparent',
-                              border: '1px solid',
-                              borderColor: sessionKey === s.key ? '#bfdbfe' : 'transparent',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 10,
-                              position: 'relative'
-                          }}
-                          className="session-item"
-                      >
-                          <Avatar size={32} src={s.avatar} icon={<Bot size={16} />} style={{ background: s.key === sessionKey ? '#2563eb' : '#f1f5f9', color: s.key === sessionKey ? '#fff' : '#64748b', flexShrink: 0 }} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: sessionKey === s.key ? '#1e40af' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {s.label || t('chat.noLabel', { defaultValue: '未命名会话' })}
-                              </div>
-                              <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 1, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {s.key}
-                              </div>
-                              <div style={{ fontSize: 9, color: '#cbd5e1', marginTop: 1 }}>
-                                  {new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleString([], { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
-                              </div>
+                  <div 
+                      key={s.key}
+                      onClick={() => handleSelectSession(s.key)}
+                      style={{ 
+                          padding: '12px', 
+                          borderRadius: 10, 
+                          cursor: 'pointer',
+                          marginBottom: 4,
+                          transition: 'all 0.2s',
+                          background: sessionKey === s.key ? '#eff6ff' : 'transparent',
+                          border: '1px solid',
+                          borderColor: sessionKey === s.key ? '#bfdbfe' : 'transparent',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          position: 'relative'
+                      }}
+                      className="session-item"
+                  >
+                      <Avatar size={32} src={s.avatar} icon={<Bot size={16} />} style={{ background: s.key === sessionKey ? '#2563eb' : '#f1f5f9', color: s.key === sessionKey ? '#fff' : '#64748b', flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: sessionKey === s.key ? '#1e40af' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {s.label || t('chat.noLabel', { defaultValue: '未命名会话' })}
                           </div>
-                          <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>
-                              <Button 
-                                  size="small" 
-                                  type="text" 
-                                  icon={<Copy size={12} />} 
-                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(s.key); }}
-                              />
-                              <Button 
-                                  size="small" 
-                                  type="text" 
-                                  icon={<Trash2 size={12} />} 
-                                  onClick={(e) => handleDeleteSession(e, s.key)}
-                              />
+                          <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 1, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {s.key}
+                          </div>
+                          <div style={{ fontSize: 9, color: '#cbd5e1', marginTop: 1 }}>
+                              {new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleString([], { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
                           </div>
                       </div>
-                  </Tooltip>
+                      <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>
+                          <Button 
+                              size="small" 
+                              type="text" 
+                              icon={<Copy size={12} />} 
+                              onClick={(e) => { e.stopPropagation(); copyToClipboard(s.key); }}
+                          />
+                          <Button 
+                              size="small" 
+                              type="text" 
+                              icon={<Trash2 size={12} />} 
+                              onClick={(e) => handleDeleteSession(e, s.key)}
+                          />
+                      </div>
+                  </div>
               ))}
             </div>
           </div>
@@ -1027,7 +1048,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa', position: 'relative', width: '100%', minWidth: 0, overflow: 'hidden' }}>
         <style>{`
-            .session-item:hover { background: #f8fafc; }
+            .session-item:hover { background: #f0f7ff; border-color: #dbeafe !important; }
             .session-item:hover .session-actions { opacity: 1 !important; }
             
             .typing-indicator { display: flex; align-items: center; gap: 4px; height: 12px; }
@@ -1845,8 +1866,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               display: 'flex', 
               background: '#fff', 
               borderRadius: 20, 
-              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)', 
-              border: '1px solid #e2e8f0', 
+              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 0 0 2px rgba(99, 102, 241, 0.1)', 
+              border: '1.5px solid #6366f1', 
               flexDirection: 'column',
               overflow: 'hidden',
               transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -1856,18 +1877,19 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               <div style={{ width: '100%', display: 'flex', alignItems: 'center', padding: isMobile ? '6px 12px 0' : '12px 16px 0', gap: isMobile ? 4 : 8, boxSizing: 'border-box' }}>
                  <div style={{ 
                    padding: '2px 4px', 
-                   background: '#f8fafc', 
-                   borderRadius: 8, 
-                   border: '1px solid #f1f5f9', 
+                    background: '#eef2ff', 
+                    borderRadius: 8, 
+                    border: '1px solid #c7d2fe',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                    display: 'flex', 
                    alignItems: 'center', 
                    flex: isMobile ? 1 : '0 0 auto', 
-                   width: isMobile ? 'auto' : 180,
+                   width: isMobile ? 'auto' : 420,
                    minWidth: 0 
                  }}>
                    <Select
                        placeholder={t('chat.selectBotTip')}
-                       style={{ width: '100%', fontSize: isMobile ? 11 : 13 }}
+                       style={{ width: isMobile ? '45%' : 220, fontSize: isMobile ? 11 : 13 }}
                        value={selectedBot}
                        onChange={setSelectedBot}
                        loading={loadingBots}
@@ -1888,13 +1910,52 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                                            {bot.name || bot.id}
                                        </span>
                                        <span style={{ fontSize: 9, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                           {bot.model || '---'}
+                                           {bot.model || '---'} {t('chat.defaultSuffix', { defaultValue: '(默认)' })}
                                        </span>
                                    </div>
                                </div>
                            </Select.Option>
                        ))}
                    </Select>
+                    <div style={{ width: 1, height: 14, background: "#e2e8f0", margin: "0 4px" }}></div>
+                    <Select
+                        placeholder={t("chat.sessionModelPlaceholder", { defaultValue: "自由切换会话模型" })}
+                        style={{ flex: 1, fontSize: isMobile ? 11 : 13, minWidth: 0 }}
+                        value={sessionModel}
+                        onChange={handleModelChange}
+                        loading={loadingBots}
+                        disabled={isTyping}
+                        variant="borderless"
+                        dropdownStyle={{ borderRadius: 10, minWidth: 200 }}
+                        dropdownMatchSelectWidth={false}
+                    >
+                        <Select.Option value="">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#94a3b8' }}>
+                                <RefreshCw size={14} />
+                                <span style={{ fontSize: 13 }}>{t('chat.defaultModel', { defaultValue: '使用默认模型' })}</span>
+                            </div>
+                        </Select.Option>
+                        {(() => {
+                            const groups = (botsModels?.data?.models || []).reduce((acc: Record<string, any[]>, m: any) => {
+                                const p = m.provider || 'Others';
+                                if (!acc[p]) acc[p] = [];
+                                acc[p].push(m);
+                                return acc;
+                            }, {});
+                            return (Object.entries(groups) as any[][]).map(([provider, models]) => (
+                                <Select.OptGroup label={provider.toUpperCase()} key={provider}>
+                                    {models.map((m: any) => (
+                                        <Select.Option key={m.id} value={m.id}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <Cpu size={14} style={{ color: '#6366f1' }} />
+                                                <span style={{ fontSize: 13 }}>{m.name || m.id}</span>
+                                            </div>
+                                        </Select.Option>
+                                    ))}
+                                </Select.OptGroup>
+                            ));
+                        })()}
+                    </Select>
                  </div>
                  <Tooltip title={t('bots.editSoul', { defaultValue: '编辑灵魂 (Prompt)' })}>
                     <Button 
@@ -1905,12 +1966,14 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                       disabled={!selectedBot || status !== 'authenticated'}
                       style={{ 
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: '#f8fafc', borderRadius: 8, height: 28, width: 28, padding: 0
+                        background: '#eef2ff', 
+                        border: '1px solid #c7d2fe',
+                        borderRadius: 8, height: 32, width: 32, padding: 0,
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
                       }}
                     />
                  </Tooltip>
-                 <div style={{ height: 16, width: 1, background: '#e2e8f0', flexShrink: 0 }}></div>
-                 <span style={{ fontSize: isMobile ? 10 : 11, color: '#94a3b8', fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 0, opacity: 0.8 }}>V3 WebSocket</span>
+                 
                </div>
               
               {quotedMsg && (

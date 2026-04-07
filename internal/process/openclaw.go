@@ -641,7 +641,7 @@ func ReloadOpenClawSkills() error {
 }
 
 func GetOpenClawSessions() ([]OpenClawSession, error) {
-	cmd := exec.Command("openclaw", "sessions", "--all-agent", "--json")
+	cmd := exec.Command("openclaw", "sessions", "--all-agents", "--json")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sessions: %v. Output: %s", err, string(out))
