@@ -194,6 +194,8 @@
     "v3SecureDesc": "安全通道 V3 // ED25519 硬件密钥",
     "v3RetryBtn": "重试连接",
     "v3InputPlaceholder": "输入消息...",
+    "chatQuote": "引用消息",
+    "saveAndRegenerate": "保存并重新生成",
     "v3Connecting": "连接网关中...",
     "selectBot": "请先在右上方选择一个对话机器人 ☝️",
     "welcomeTitle": "欢迎来到对话实验室",

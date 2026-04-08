@@ -115,7 +115,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
             />
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <Button size="small" ghost={isUser} onClick={onCancelEdit}>{t('common.cancel')}</Button>
-              <Button size="small" style={{ background: '#fff', color: '#2563eb', border: 'none', fontWeight: 600 }} onClick={onSaveEdit}>{t('chat.saveAndRegenerate')}</Button>
+              <Button size="small" style={{ background: '#fff', color: '#2563eb', border: 'none', fontWeight: 600 }} onClick={onSaveEdit}>{t('chat.saveAndRegenerate', { defaultValue: '重新生成' })}</Button>
             </div>
           </div>
         ) : (
@@ -173,10 +173,10 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: isUser ? 'flex-end' : 'flex-start', gap: 6, marginTop: 6, fontSize: 10, color: isUser ? 'rgba(255,255,255,0.7)' : '#94a3b8' }} className="msg-footer">
                 {!(isTyping && isLast) && (
                   <div style={{ display: 'flex', gap: 2 }}>
-                    <Tooltip title={t('chat.copy')}><Button type="text" size="small" icon={<Copy size={11} />} onClick={() => copyToClipboard(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
-                    <Tooltip title={t('chat.quote')}><Button type="text" size="small" icon={<Quote size={11} />} onClick={() => onQuote(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
-                    {isUser && <Tooltip title={t('common.edit')}><Button type="text" size="small" icon={<Pencil size={11} />} onClick={() => onEdit(index, msg.content)} style={{ color: 'rgba(255,255,255,0.85)' }} /></Tooltip>}
-                    {!isUser && isLast && <Tooltip title={t('chat.retry')}><Button type="text" size="small" icon={<RefreshCw size={11} />} onClick={onRegenerate} style={{ color: '#64748b' }} /></Tooltip>}
+                    <Tooltip title={t('chat.copy', { defaultValue: '复制' })}><Button type="text" size="small" icon={<Copy size={11} />} onClick={() => copyToClipboard(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
+                    <Tooltip title={t('chat.reply', { defaultValue: '引用' })}><Button type="text" size="small" icon={<Quote size={11} />} onClick={() => onQuote(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
+                    {isUser && <Tooltip title={t('common.edit', { defaultValue: '编辑' })}><Button type="text" size="small" icon={<Pencil size={11} />} onClick={() => onEdit(index, msg.content)} style={{ color: 'rgba(255,255,255,0.85)' }} /></Tooltip>}
+                    {!isUser && isLast && <Tooltip title={t('chat.retry', { defaultValue: '重试' })}><Button type="text" size="small" icon={<RefreshCw size={11} />} onClick={onRegenerate} style={{ color: '#64748b' }} /></Tooltip>}
                   </div>
                 )}
                 <span>{msg.timestamp}</span>

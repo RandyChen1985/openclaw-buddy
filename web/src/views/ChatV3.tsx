@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Select, Input, Button, Spin, message, Tag, Badge, Modal, Form, Tooltip, Drawer, Switch } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Bot, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, History, LayoutPanelLeft, Activity, Settings, ChevronUp, ChevronDown, Clock, Key, Sparkles, Save, X, Zap, Quote } from 'lucide-react';
+import { Bot, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, History, LayoutPanelLeft, Activity, Settings, ChevronUp, ChevronDown, Clock, Key, Sparkles, Save, X, Zap, Quote, Wand2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -17,7 +17,7 @@ import V3SessionList from '../components/Chat/V3SessionList';
 import V3InputArea from '../components/Chat/V3InputArea';
 import V3MessageItem from '../components/Chat/V3MessageItem';
 import { getWsUrl } from '../utils/url';
-import { getTicket } from '../api';
+import { getTicket, summarizeSession } from '../api';
 
 
 // --- Types ---
@@ -66,6 +66,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [isEditingLabel, setIsEditingLabel] = useState(false);
   const [editingLabelText, setEditingLabelText] = useState('');
   const [isUpdatingLabel, setIsUpdatingLabel] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [showThinking, setShowThinking] = useState<boolean>(() => storage.getItem('v3_show_thinking') === 'true');
   const [thinkingLevel, setThinkingLevel] = useState<'low' | 'medium' | 'high' | 'pro'>('medium');
@@ -98,7 +99,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
   const [form] = Form.useForm();
-  const [showSider, setShowSider] = useState(false);
+  const [showSider, setShowSider] = useState(!isMobile);
   const [quotedMsg, setQuotedMsg] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -130,11 +131,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const ttftRecordedRef = useRef<boolean>(false);
   const tokenCountRef = useRef<number>(0);
   const firstTokenTimeRef = useRef<number>(0);
-
-  // 响应式处理：进入 V3 模式时默认折叠侧边栏
-  useEffect(() => {
-    setShowSider(false);
-  }, []);
 
   // --- Key Management ---
   const [keyPair, setKeyPair] = useState<nacl.BoxKeyPair | null>(null);
@@ -433,6 +429,11 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       // 兼容不同返回格式：items 数组 或直接是数组
       const list = res.payload?.items || res.payload?.sessions || (Array.isArray(res.payload) ? res.payload : []);
       setSessions(list);
+      
+      // 核心优化：默认加载最后一次会话
+      if (!sessionKey && list.length > 0) {
+        handleSelectSession(list[0].key, list[0].label);
+      }
     }
     setLoadingSessions(false);
   };
@@ -491,12 +492,19 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     return;
   };
 
-  const handleSelectSession = (key: string) => {
+  const handleSelectSession = (key: string, initialLabel?: string) => {
     setSessionKey(key);
     
-    // 从列表中找到该会话并提取 label
+    // 从当前已加载的列表中查找该会话的完整对象
     const currentSession = sessions.find(s => s.key === key);
-    setSessionLabel(currentSession?.label || null);
+
+    // 如果有传入初始标题（自动加载场景），直接使用，否则从对象中提取
+    if (initialLabel) {
+      setSessionLabel(initialLabel);
+    } else {
+      setSessionLabel(currentSession?.label || null);
+    }
+    
     setSessionModel(currentSession?.model || '');
 
     loadSessionHistory(key);
@@ -539,6 +547,39 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       console.error('Update label error:', err);
     } finally {
       setIsUpdatingLabel(false);
+    }
+  };
+
+  const handleAutoSummarize = async () => {
+    if (!sessionKey || messages.length === 0) return;
+    
+    setIsSummarizing(true);
+    try {
+      // 提取当前选中机器人的模型 ID
+      const agentId = selectedBot.replace('openclaw:', '');
+      const bot = botsModels?.data?.bots?.find((b: any) => b.id === agentId);
+      const currentModelID = bot?.model || '';
+
+      // 过滤掉“正在思考”等临时消息，并只取 role/content 字段
+      const validMessages = messages
+        .filter(m => m.content !== t('chat.thinking'))
+        .map(m => ({ role: m.role, content: m.content }));
+        
+      const newTitle = await summarizeSession(validMessages, currentModelID);
+      if (newTitle) {
+        // 自动保存到后端
+        const res = await sendRPC('sessions.patch', { key: sessionKey, label: newTitle });
+        if (res.ok) {
+          setSessionLabel(newTitle);
+          message.success(t('chat.titleSummarized', { defaultValue: '标题已自动总结' }));
+          fetchSessions();
+        }
+      }
+    } catch (err) {
+      console.error('Summarize error:', err);
+      message.error(t('chat.summarizeFailed', { defaultValue: '总结标题失败' }));
+    } finally {
+      setIsSummarizing(false);
     }
   };
 
@@ -1160,16 +1201,28 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                       <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile ? 150 : 300 }}>
                         {sessionLabel || t('chat.noLabel', { defaultValue: '未命名会话' })}
                       </span>
-                      <Button 
-                        size="small" 
-                        type="text" 
-                        icon={isUpdatingLabel ? <RefreshCw size={10} className="animate-spin" /> : <Save size={10} />} 
-                        onClick={() => {
-                          setEditingLabelText(sessionLabel || '');
-                          setIsEditingLabel(true);
-                        }}
-                        style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}
-                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Tooltip title={t('chat.autoSummarize', { defaultValue: 'AI 自动总结标题' })}>
+                          <Button 
+                            size="small" 
+                            type="text" 
+                            icon={isSummarizing ? <RefreshCw size={10} className="animate-spin" /> : <Wand2 size={10} />} 
+                            onClick={handleAutoSummarize}
+                            disabled={isSummarizing || messages.length === 0}
+                            style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}
+                          />
+                        </Tooltip>
+                        <Button 
+                          size="small" 
+                          type="text" 
+                          icon={isUpdatingLabel ? <RefreshCw size={10} className="animate-spin" /> : <Save size={10} />} 
+                          onClick={() => {
+                            setEditingLabelText(sessionLabel || '');
+                            setIsEditingLabel(true);
+                          }}
+                          style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}
+                        />
+                      </div>
                     </>
                   )}
                 </div>

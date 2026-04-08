@@ -81,4 +81,17 @@ export const getTicket = async (): Promise<string | null> => {
   }
 };
 
+/**
+ * 自动总结会话标题
+ */
+export const summarizeSession = async (messages: any[], modelID?: string): Promise<string | null> => {
+  try {
+    const response = await api.post('/v1/openclaw/chat/summarize', { messages, modelID });
+    return response.data.title;
+  } catch (err) {
+    console.error('Failed to summarize session:', err);
+    return null;
+  }
+};
+
 export default api;

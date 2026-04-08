@@ -188,6 +188,8 @@
     "v3SecureDesc": "SECURE_CHANNEL_V3 // ED25519_HARDWARE_KEY",
     "v3RetryBtn": "RETRY_CONNECTION",
     "v3InputPlaceholder": "Type a message...",
+    "chatQuote": "Quote Message",
+    "saveAndRegenerate": "Save & Regenerate",
     "v3Connecting": "Connecting to Gateway...",
     "selectBot": "Please select a bot in the top right corner ☝️",
     "welcomeTitle": "Welcome to Chat Lab",

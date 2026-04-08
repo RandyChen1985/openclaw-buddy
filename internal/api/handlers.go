@@ -1625,3 +1625,164 @@ func (s *Server) unbindWeChatAccount(c *gin.Context) {
 		return "tasks.results.unbound", nil
 	})
 }
+
+func (s *Server) summarizeSession(c *gin.Context) {
+	var req struct {
+		Messages []map[string]interface{} `json:"messages" binding:"required"`
+		ModelID  string                   `json:"modelID"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "参数错误: "+err.Error())
+		return
+	}
+
+	// 1. 获取模型和提供商配置
+	providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "无法加载模型配置: "+err.Error())
+		return
+	}
+
+	// 优先级：请求传参 > 全局默认模型 > 第一个可用模型
+	defaultModelID := req.ModelID
+	if defaultModelID == "" {
+		// 尝试获取全局默认模型 (原来的逻辑)
+		data, err := os.ReadFile(filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json"))
+		if err == nil {
+			var fullCfg map[string]interface{}
+			if err := json.Unmarshal(data, &fullCfg); err == nil {
+				if gateway, ok := fullCfg["gateway"].(map[string]interface{}); ok {
+					if chat, ok := gateway["chat"].(map[string]interface{}); ok {
+						defaultModelID, _ = chat["defaultModel"].(string)
+					}
+				}
+			}
+		}
+	}
+
+	// 如果没有全局默认，使用第一个可用的
+	if defaultModelID == "" {
+		for _, p := range providers {
+			if pm, ok := p.(map[string]interface{}); ok {
+				if models, ok := pm["models"].([]interface{}); ok && len(models) > 0 {
+					if m, ok := models[0].(map[string]interface{}); ok {
+						defaultModelID, _ = m["id"].(string)
+						break
+					}
+				}
+			}
+		}
+	}
+
+	if defaultModelID == "" {
+		s.Error(c, http.StatusInternalServerError, "未找到可用的 AI 模型配置")
+		return
+	}
+
+	// 2. 找到提供商并解析真正的模型 ID
+	var providerName string
+	actualModelID := defaultModelID
+	if strings.Contains(defaultModelID, "/") {
+		parts := strings.SplitN(defaultModelID, "/", 2)
+		providerName = parts[0]
+		actualModelID = parts[1]
+	} else {
+		// 遍历查找
+		for name, p := range providers {
+			if pm, ok := p.(map[string]interface{}); ok {
+				if models, ok := pm["models"].([]interface{}); ok {
+					for _, m := range models {
+						if mo, ok := m.(map[string]interface{}); ok {
+							if id, _ := mo["id"].(string); id == defaultModelID {
+								providerName = name
+								break
+							}
+						}
+					}
+				}
+			}
+			if providerName != "" {
+				break
+			}
+		}
+	}
+
+	rawProv, ok := providers[providerName].(map[string]interface{})
+	if !ok {
+		s.Error(c, http.StatusNotFound, "找不到对应提供商配置: "+providerName)
+		return
+	}
+
+	baseUrl, _ := rawProv["baseUrl"].(string)
+	apiKey, _ := rawProv["apiKey"].(string)
+
+	// 3. 构造总结请求
+	summarizePrompt := "请为以下对话总结一个 10 字以内的简短标题。只需输出标题文本，不要包含引号或任何解释说明性文字。"
+	historyText := ""
+	for i, msg := range req.Messages {
+		if i > 5 { break } // 只取前 6 条以节省 token
+		role, _ := msg["role"].(string)
+		content, _ := msg["content"].(string)
+		historyText += fmt.Sprintf("[%s]: %s\n", role, content)
+	}
+
+	chatReqBody := map[string]interface{}{
+		"model": actualModelID, // 使用解析后的纯模型名
+		"messages": []map[string]string{
+			{"role": "system", "content": summarizePrompt},
+			{"role": "user", "content": historyText},
+		},
+		"stream": false,
+	}
+	jsonBody, _ := json.Marshal(chatReqBody)
+
+	targetUrl := strings.TrimSuffix(baseUrl, "/") + "/chat/completions"
+	log.Printf("🤖 [Summarize] Requesting AI Provider: %s (Model: %s)", targetUrl, defaultModelID)
+	
+	httpReq, err := http.NewRequest("POST", targetUrl, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "创建请求失败: "+err.Error())
+		return
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+
+	client := &http.Client{Timeout: 60 * time.Second} // 延长至 60s
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		log.Printf("❌ [Summarize] AI Request Failed: %v", err)
+		s.Error(c, http.StatusBadGateway, "请求 AI 提供商失败: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("❌ [Summarize] AI Provider Error (%d): %s", resp.StatusCode, string(body))
+		s.Error(c, resp.StatusCode, "AI提供商响应异常: "+string(body))
+		return
+	}
+
+	var chatRes struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&chatRes); err != nil {
+		s.Error(c, http.StatusInternalServerError, "解析 AI 响应失败: "+err.Error())
+		return
+	}
+
+	title := "未命名会话"
+	if len(chatRes.Choices) > 0 {
+		title = strings.TrimSpace(chatRes.Choices[0].Message.Content)
+		title = strings.Trim(title, "\"'\"") // 去掉引号
+	}
+
+	s.Success(c, gin.H{"title": title})
+}

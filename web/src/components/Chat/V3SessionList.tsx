@@ -120,8 +120,19 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                       >
                           <Avatar size={32} src={s.avatar} icon={<Bot size={16} />} style={{ background: isActive ? '#2563eb' : '#f1f5f9', color: isActive ? '#fff' : '#64748b', flexShrink: 0 }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: isActive ? '#1e40af' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {s.label || t('chat.noLabel', { defaultValue: '未命名会话' })}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                                <div style={{ fontSize: 13, fontWeight: 700, color: isActive ? '#1e40af' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                    {s.label || t('chat.noLabel', { defaultValue: '未命名会话' })}
+                                </div>
+                                {s.messagesCount !== undefined && (
+                                  <div style={{ 
+                                    fontSize: 10, background: isActive ? 'rgba(37, 99, 235, 0.1)' : '#f1f5f9', 
+                                    color: isActive ? '#2563eb' : '#94a3b8', padding: '0 6px', 
+                                    borderRadius: 6, fontWeight: 600, flexShrink: 0
+                                  }}>
+                                    {s.messagesCount}
+                                  </div>
+                                )}
                               </div>
                               <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 1, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   {new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {s.key.substring(0,8)}
