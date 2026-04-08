@@ -201,6 +201,7 @@
     "welcomeTitle": "欢迎来到对话实验室",
     "welcomeSubtitle": "选择一个 AI 机器人开始对话。您的请求将通过 Guardian 网关进行安全审计和高效转发。",
     "thinking": "Lobster 正在思考回复中",
+    "terminated": "用户已经终止会话",
     "inputPlaceholder": "输入消息，Shift + Enter 换行...",
     "selectBotTip": "选机器人",
     "v3Status": "WebSocket V3",

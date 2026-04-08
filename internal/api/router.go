@@ -43,6 +43,10 @@ func NewServer(cfg *config.Config) *Server {
 	s.setupRoutes()
 	// 显式拉起全局任务调度器，确保串行队列就绪
 	_ = scheduler.GetScheduler()
+	
+	// 移除 s.engine.Static("/v1/openclaw/chat/files", "./data/uploads")
+	// 该功能已迁移至 v1 路由组下的 handleGetChatFile 动态处理
+
 	return s
 }
 
@@ -114,6 +118,8 @@ func (s *Server) setupRoutes() {
 			oc.POST("/chat/summarize", s.summarizeSession)
 			oc.GET("/chat/status", s.getChatStatus)
 			oc.POST("/chat/enable", s.enableChat)
+			oc.POST("/chat/upload", s.handleChatUpload)
+			oc.GET("/chat/files/:botId/:filename", s.handleGetChatFile)
 			oc.GET("/chat/quick-commands", s.getQuickCommands)
 			oc.POST("/chat/quick-commands", s.addQuickCommand)
 			oc.DELETE("/chat/quick-commands/:id", s.deleteQuickCommand)

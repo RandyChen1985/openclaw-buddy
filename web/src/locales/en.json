@@ -195,6 +195,7 @@
     "welcomeTitle": "Welcome to Chat Lab",
     "welcomeSubtitle": "Select an AI bot to start the conversation. Your requests will be audited and forwarded by the Guardian gateway.",
     "thinking": "Lobster is thinking...",
+    "terminated": "User has terminated the session",
     "inputPlaceholder": "Type a message, Shift + Enter for new line...",
     "selectBotTip": "Select Bot",
     "v3Status": "WebSocket V3",

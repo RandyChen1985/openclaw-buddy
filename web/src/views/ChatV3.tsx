@@ -21,6 +21,15 @@ import { getTicket, summarizeSession } from '../api';
 
 
 // --- Types ---
+interface FileInfo {
+  url: string;
+  thumbUrl?: string;
+  path: string;
+  filename: string;
+  size: number;
+  ext: string;
+}
+
 interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -429,13 +438,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       // 兼容不同返回格式：items 数组 或直接是数组
       const list = res.payload?.items || res.payload?.sessions || (Array.isArray(res.payload) ? res.payload : []);
       setSessions(list);
-      
-      // 核心优化：默认加载最后一次会话
-      if (!sessionKey && list.length > 0) {
-        handleSelectSession(list[0].key, list[0].label);
       }
-    }
-    setLoadingSessions(false);
+      setLoadingSessions(false);
+
   };
 
   const parseHistoryMessages = (messagesData: any[]) => {
@@ -843,11 +848,11 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     handleSend(newText);
   };
 
-  const handleSend = async (content?: any) => {
+  const handleSend = async (content?: any, attachedFiles?: FileInfo[]) => {
     // 优先使用直接传入的内容
     const text = (typeof content === 'string' ? content : inputText).trim();
     
-    if (!text || (!sessionKey && !selectedBot) || status !== 'authenticated') return;
+    if ((!text && (!attachedFiles || attachedFiles.length === 0)) || (!sessionKey && !selectedBot) || status !== 'authenticated') return;
 
     setIsTyping(true);
     setTpsData([]);
@@ -859,11 +864,24 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     tokenCountRef.current = 0;
     firstTokenTimeRef.current = 0;
 
-    const newUserMsg: Message = { role: 'user', content: text, timestamp: new Date().toLocaleTimeString() };
-    // /stop 指令作为控制指令，不显示在聊天历史中
-    if (text !== '/stop') {
-      setMessages(prev => [...prev, newUserMsg]);
+    // 整合文件信息到文本中 (Markdown 格式)
+    let finalContent = text;
+    if (attachedFiles && attachedFiles.length > 0) {
+      const fileLinks = attachedFiles.map(f => {
+        const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
+        if (isImage) {
+          return `\n![${f.filename}](${f.url})\n(File path: ${f.path})`;
+        }
+        return `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
+      }).join('');
+      
+      // 增加明确的专家指令
+      const fileInstruction = `\n\n**System Note for Expert:** The user has uploaded files. For any file analysis, reading, or processing tasks, please access the files directly using the absolute **"File path"** provided above. Do not attempt to download via URL.`;
+      finalContent += fileLinks + fileInstruction;
     }
+
+    const newUserMsg: Message = { role: 'user', content: finalContent, timestamp: new Date().toLocaleTimeString() };
+    setMessages(prev => [...prev, newUserMsg]);
 
     // Ensure session exists
     let currentKey = sessionKey;
@@ -878,15 +896,13 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     }
 
     if (currentKey) {
-      // 只有非控制指令才显示“思考中”占位
-      if (text !== '/stop') {
-        setMessages(prev => [...prev, { role: 'assistant', content: t('chat.thinking'), timestamp: new Date().toLocaleTimeString() }]);
-        resetStallTimer();
-      }
+      const assistantInitialMsg = text === '/stop' ? t('chat.terminated', { defaultValue: '用户已经终止会话' }) : t('chat.thinking');
+      setMessages(prev => [...prev, { role: 'assistant', content: assistantInitialMsg, timestamp: new Date().toLocaleTimeString() }]);
+      resetStallTimer();
       
       const res = await sendRPC('chat.send', { 
         sessionKey: currentKey, 
-        message: text,
+        message: finalContent,
         idempotencyKey: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
       });
       if (!res.ok) {
@@ -1821,6 +1837,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                 setIsComposing={setIsComposing}
                 isFocused={isFocused}
                 setIsFocused={setIsFocused}
+                selectedBot={selectedBot}
               />
             </div>
 

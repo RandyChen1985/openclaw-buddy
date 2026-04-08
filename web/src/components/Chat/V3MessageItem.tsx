@@ -136,6 +136,13 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                   rehypePlugins={[rehypeSanitize, rehypeKatex]}
                   components={{
                     p: ({children}: any) => <p style={{margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere'}}>{children}</p>,
+                    img: ({ node, ...props }: any) => (
+                      <img 
+                        {...props} 
+                        style={{ maxWidth: '100%', borderRadius: 8, marginTop: 8, cursor: 'zoom-in', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} 
+                        onClick={() => window.open(props.src, '_blank')}
+                      />
+                    ),
                     pre: ({children}: any) => <pre style={{ overflowX: 'auto', maxWidth: '100%', margin: '8px 0', padding: '10px', background: '#f8fafc', borderRadius: 8 }}>{children}</pre>,
                     blockquote: ({ children }: any) => {
                       const extractText = (node: any): string => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip } from 'antd';
+import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip, Upload } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2, ArrowDown, ZapOff, Activity } from 'lucide-react';
+import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2, ArrowDown, ZapOff, Activity, Paperclip, FileText, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -18,6 +18,15 @@ import GatewayOfflineMask from '../components/GatewayOfflineMask';
 const { Option } = Select;
 
 // Components moved to ChatComponents.tsx
+
+interface FileInfo {
+  url: string;
+  thumbUrl?: string;
+  path: string;
+  filename: string;
+  size: number;
+  ext: string;
+}
 
 interface Message {
   role: 'user' | 'assistant' | 'system';
@@ -52,6 +61,8 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
     return saved ? JSON.parse(saved) : [];
   });
   const [quotedMsg, setQuotedMsg] = useState<string | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<FileInfo[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   // --- Provider Icon Component ---
   const ProviderIcon = ({ provider, size = 18 }: { provider: string, size?: number }) => {
@@ -283,17 +294,36 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
 
   const handleSend = async (textOverride?: string) => {
     const text = textOverride || inputText;
-    if (!text.trim() || isTyping || !selectedBot) return;
+    if ((!text.trim() && attachedFiles.length === 0) || isTyping || !selectedBot || isUploading) return;
 
     if (!textOverride) setInputText('');
     const currentQuoted = quotedMsg;
+    const currentFiles = [...attachedFiles];
+    
     setQuotedMsg(null); 
+    setAttachedFiles([]); // 清空已上传文件
     setIsTyping(true);
     
     abortControllerRef.current = new AbortController();
 
+    // 整合文件信息到文本中 (Markdown 格式)
+    let finalContent = text;
+    if (currentFiles.length > 0) {
+      const fileLinks = currentFiles.map(f => {
+        const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
+        if (isImage) {
+          return `\n![${f.filename}](${f.url})\n(File path: ${f.path})`;
+        }
+        return `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
+      }).join('');
+      
+      // 增加明确的专家指令
+      const fileInstruction = `\n\n**System Note for Expert:** The user has uploaded files. For any file analysis, reading, or processing tasks, please access the files directly using the absolute **"File path"** provided above. Do not attempt to download via URL.`;
+      finalContent += fileLinks + fileInstruction;
+    }
+
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const newUserMessage: Message = { role: 'user', content: text, timestamp, quotedMessage: currentQuoted || undefined };
+    const newUserMessage: Message = { role: 'user', content: finalContent, timestamp, quotedMessage: currentQuoted || undefined };
     const newMessages = [...messages, newUserMessage];
     setMessages(newMessages);
 
@@ -1214,23 +1244,141 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
           </div>
 
           <div style={{ display: 'flex', gap: isMobile ? 8 : 12, alignItems: 'flex-end' }}>
-            <Input.TextArea 
-              ref={inputRef}
-              placeholder={selectedBot ? t('chat.inputPlaceholder') : t('chat.selectBotTip')}
-              autoSize={{ minRows: 1, maxRows: 4 }}
-              value={inputText}
-              onChange={e => setInputText(e.target.value)}
-              onCompositionStart={() => setIsComposing(true)}
-              onCompositionEnd={() => setIsComposing(false)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              style={{ borderRadius: 12, padding: isMobile ? '8px 12px' : '10px 16px', fontSize: isMobile ? 15 : 14 }}
-              disabled={!selectedBot || (isTyping && !abortControllerRef.current)}
-            />
+            <div style={{ flexShrink: 0, marginBottom: 2 }}>
+              <Upload
+                name="file"
+                action={`${getBaseURL()}/v1/openclaw/chat/upload`}
+                data={{ botId: selectedBot.replace('openclaw:', '') }}
+                headers={{
+                  Authorization: `Bearer ${storage.getItem('guardian_token')}`
+                }}
+                showUploadList={false}
+                disabled={isUploading || isTyping}
+                onChange={(info) => {
+                  if (info.file.status === 'uploading') {
+                    setIsUploading(true);
+                  }
+                  if (info.file.status === 'done') {
+                    setIsUploading(false);
+                    const res = info.file.response;
+                    if (res && res.code === 200) {
+                      setAttachedFiles(prev => [...prev, res.data]);
+                    } else {
+                      message.error(res?.message || 'Upload failed');
+                    }
+                  } else if (info.file.status === 'error') {
+                    setIsUploading(false);
+                    message.error(`${info.file.name} upload failed.`);
+                  }
+                }}
+              >
+                <Tooltip title={
+                  isUploading ? t('chat.uploading', { defaultValue: '正在上传...' }) : 
+                  isTyping ? t('chat.responding', { defaultValue: '回复中...' }) : 
+                  t('chat.uploadFile', { defaultValue: '上传文件' })
+                }>
+                  <Button 
+                    type="text" 
+                    icon={<Paperclip size={20} />} 
+                    disabled={isUploading || isTyping}
+                    style={{ 
+                      color: (isUploading || isTyping) ? '#cbd5e1' : '#94a3b8', 
+                      borderRadius: 10, 
+                      height: 40, width: 40, 
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      opacity: (isUploading || isTyping) ? 0.5 : 1
+                    }} 
+                  />
+                </Tooltip>
+              </Upload>
+            </div>
+
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* 文件预览区域 */}
+              {(attachedFiles.length > 0 || isUploading) && (
+                <div style={{ 
+                  display: 'flex', 
+                  flexWrap: 'wrap', 
+                  gap: 8, 
+                  padding: '8px 0', 
+                  maxHeight: 120,
+                  overflowY: 'auto'
+                }}>
+                  {attachedFiles.map((file, idx) => (
+                    <div key={idx} style={{ 
+                      position: 'relative', 
+                      width: 56, 
+                      height: 56, 
+                      borderRadius: 8, 
+                      border: '1px solid #e2e8f0',
+                      background: '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                    }}>
+                      {file.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? (
+                        <img src={file.thumbUrl || file.url} alt={file.filename} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                          <FileText size={18} color="#64748b" />
+                          <span style={{ fontSize: 8, color: '#94a3b8', maxWidth: 48, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {file.filename}
+                          </span>
+                        </div>
+                      )}
+                      <button 
+                        onClick={() => setAttachedFiles(prev => prev.filter((_, i) => i !== idx))}
+                        style={{ 
+                          position: 'absolute', top: 2, right: 2, 
+                          background: 'rgba(0,0,0,0.4)', color: '#fff', 
+                          border: 'none', borderRadius: '50%', 
+                          width: 14, height: 14, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          padding: 0
+                        }}
+                      >
+                        <X size={10} />
+                      </button>
+                    </div>
+                  ))}
+                  {isUploading && (
+                    <div style={{ 
+                      width: 56, 
+                      height: 56, 
+                      borderRadius: 8, 
+                      border: '1px dashed #3b82f6',
+                      background: '#eff6ff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <Loader2 size={18} className="animate-spin" color="#3b82f6" />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <Input.TextArea 
+                ref={inputRef}
+                placeholder={selectedBot ? t('chat.inputPlaceholder') : t('chat.selectBotTip')}
+                autoSize={{ minRows: 1, maxRows: 4 }}
+                value={inputText}
+                onChange={e => setInputText(e.target.value)}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={() => setIsComposing(false)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                style={{ borderRadius: 12, padding: isMobile ? '8px 12px' : '10px 16px', fontSize: isMobile ? 15 : 14 }}
+                disabled={!selectedBot || (isTyping && !abortControllerRef.current)}
+              />
+            </div>
+
             {isTyping ? (
               <Button 
                 danger 
