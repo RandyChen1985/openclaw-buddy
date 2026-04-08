@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Select, Input, Button, Avatar, Spin, message, Tag, Badge, Modal, Form, Tooltip, Drawer, Switch } from 'antd';
+import { Select, Input, Button, Spin, message, Tag, Badge, Modal, Form, Tooltip, Drawer, Switch } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Send, Bot, User, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, History, LayoutPanelLeft, Zap, Activity, Settings, ChevronUp, ChevronDown, Search, Clock, Pencil, Key, Copy, Square, Quote, Sparkles, Save, X, Terminal, CheckCircle } from 'lucide-react';
+import { Bot, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, History, LayoutPanelLeft, Activity, Settings, ChevronUp, ChevronDown, Clock, Key, Sparkles, Save, X, Zap, Quote } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -9,11 +9,13 @@ import remarkMath from 'remark-math';
 import rehypeSanitize from 'rehype-sanitize';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
-import nacl from 'tweetnacl';
+import * as nacl from 'tweetnacl';
 import { sha256 } from 'js-sha256';
 import storage from '../utils/storage';
-import { Mermaid, CodeBlock } from '../components/ChatComponents';
 import GatewayOfflineMask from '../components/GatewayOfflineMask';
+import V3SessionList from '../components/Chat/V3SessionList';
+import V3InputArea from '../components/Chat/V3InputArea';
+import V3MessageItem from '../components/Chat/V3MessageItem';
 import { getWsUrl } from '../utils/url';
 import { getTicket } from '../api';
 
@@ -50,66 +52,6 @@ const hexToUint8Array = (hex: string): Uint8Array => {
   return new Uint8Array(matched ? matched.map(byte => parseInt(byte, 16)) : []);
 };
 
-// --- Internal High Performance Components ---
-const V3InputArea = React.memo(({ 
-  status, isMobile, isTyping, onSend, onStop, t, isComposing, setIsComposing, isFocused, setIsFocused 
-}: any) => {
-  const [text, setText] = useState('');
-
-  const handleInnerSend = () => {
-    if (!text.trim() || status !== 'authenticated' || isTyping) return;
-    onSend(text);
-    setText('');
-  };
-
-  return (
-    <div style={{ width: '100%', display: 'flex', alignItems: 'flex-end', gap: 8, padding: isMobile ? '4px 12px 8px' : '8px 16px 16px', position: 'relative' }}>
-      <div style={{ flex: 1, position: 'relative' }}>
-        <Input.TextArea
-          value={text}
-          onChange={e => setText(e.target.value)}
-          placeholder={(status === 'authenticated' && !text && !isFocused && !isTyping) ? "" : (status === 'authenticated' ? t('chat.v3InputPlaceholder') : t('chat.v3Connecting'))}
-          autoSize={{ minRows: 1, maxRows: 6 }}
-          onCompositionStart={() => setIsComposing(true)}
-          onCompositionEnd={() => setIsComposing(false)}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-              e.preventDefault();
-              handleInnerSend();
-            }
-          }}
-          disabled={status !== 'authenticated' || isTyping}
-          variant="borderless"
-          style={{ padding: '4px 0', opacity: isTyping ? 0.6 : 1 }}
-        />
-        {status === 'authenticated' && !text && !isFocused && !isTyping && (
-          <div style={{ position: 'absolute', left: 0, top: 4, display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-            <div className="v3-mock-cursor" style={{ height: 14, marginRight: 4, background: '#2563eb' }} />
-            <span style={{ fontSize: 13, color: '#94a3b8', opacity: 0.6 }}>{t('chat.v3InputPlaceholder')}</span>
-          </div>
-        )}
-      </div>
-      <Button
-        type="primary"
-        icon={isTyping ? <Square size={16} fill="#fff" /> : <Send size={17} />}
-        onClick={isTyping ? onStop : handleInnerSend}
-        disabled={status !== 'authenticated' || (!isTyping && !text.trim())}
-        style={{ 
-          width: isMobile ? 36 : 40, height: isMobile ? 36 : 40, borderRadius: 12,
-          background: (status !== 'authenticated' || (!isTyping && !text.trim())) ? '#e2e8f0' : (isTyping ? '#ef4444' : '#2563eb'), 
-          border: 'none', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: (status !== 'authenticated' || (!isTyping && !text.trim())) ? 'none' : (isTyping ? '0 4px 12px rgba(239,68,68,0.25)' : (text.trim() ? '0 4px 12px rgba(37,99,235,0.25)' : 'none')),
-          transition: 'all 0.2s',
-          color: (status !== 'authenticated' || (!isTyping && !text.trim())) ? '#94a3b8' : '#fff'
-        }}
-      />
-    </div>
-  );
-});
-
 const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRunning, onNavigateToDashboard }) => {
   const { t } = useTranslation();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -129,6 +71,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [thinkingLevel, setThinkingLevel] = useState<'low' | 'medium' | 'high' | 'pro'>('medium');
   const [sessionModel, setSessionModel] = useState<string>('');
   const [lastHealth, setLastHealth] = useState<{ ok: boolean, latency: number, ts: number } | null>(null);
+  const [latencyHistory, setLatencyHistory] = useState<number[]>([]);
   const [pulse, setPulse] = useState(0);
   
   // --- Soul Quick Edit States ---
@@ -151,7 +94,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [sessionSearch, setSessionSearch] = useState('');
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
-  const [showQuickActions, setShowQuickActions] = useState<boolean>(() => storage.getItem('v3_show_quick_actions') !== 'false');
+  const [showQuickActions, setShowQuickActions] = useState<boolean>(() => storage.getItem('v3_show_quick_actions') === 'true');
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
   const [form] = Form.useForm();
@@ -300,34 +243,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     return <div style={wrapStyle}><Bot size={size * 0.55} color="#2563eb" /></div>;
   };
 
-  const Sparkline = ({ data }: { data: number[] }) => {
-    if (data.length < 2) return null;
-    const width = 36;
-    const height = 10;
-    const max = Math.max(...data, 1);
-    const min = Math.min(...data);
-    const range = max - min || 1;
-    const points = data.map((v, i) => {
-      const x = (i / (data.length - 1)) * width;
-      const y = height - ((v - min) / range) * height;
-      return `${x},${y}`;
-    }).join(' ');
-
-    return (
-      <svg width={width} height={height} style={{ overflow: 'visible', marginLeft: 4, opacity: 0.8 }}>
-        <polyline
-          fill="none"
-          stroke="#10b981"
-          strokeWidth="1.2"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          points={points}
-          style={{ transition: 'all 0.3s ease' }}
-        />
-      </svg>
-    );
-  };
-
   const handleAddQuickCommand = async (values: any) => {
     try {
       const res = await import('../api').then(m => m.default.post('/v1/openclaw/chat/quick-commands', values));
@@ -391,7 +306,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       if (data.type === 'event') {
         if (data.event === 'health') {
           const { ok, durationMs, ts } = data.payload;
-          setLastHealth({ ok, latency: durationMs || 0, ts });
+          const latency = durationMs || 0;
+          setLastHealth({ ok, latency, ts });
+          setLatencyHistory(prev => [...prev.slice(-29), latency]);
           setPulse(p => p + 1);
           return;
         }
@@ -747,6 +664,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   };
 
   const streamContentRef = useRef('');
+  const lastUpdateRef = useRef(0);
+  const scrollTimerRef = useRef<number | null>(null);
 
   const clearStallTimer = useCallback(() => {
     if (stallTimerRef.current) {
@@ -779,7 +698,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         firstTokenTimeRef.current = now;
       }
 
-      // 深度提取：同时提取 text 和 thinking 并格式化（引用块形式显示思维链）
+      // 深度提取内容
       const blocks = payload.message?.content || [];
       const fullText = blocks.map((c: any) => {
           const textPart = c.text || '';
@@ -788,32 +707,44 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       }).join('');
 
       streamContentRef.current = fullText;
-      const currentContent = streamContentRef.current;
-      tokenCountRef.current = currentContent.length;
+      tokenCountRef.current = fullText.length;
 
-      // Calculate real-time TPS
-      const elapsedFromFirst = (now - firstTokenTimeRef.current) / 1000;
-      const currentTPS = elapsedFromFirst > 0 ? (tokenCountRef.current / elapsedFromFirst) : 0;
-      const ttft = firstTokenTimeRef.current - startTimeRef.current;
+      // 核心优化：节流合并更新 UI
+      if (now - lastUpdateRef.current > 64) {
+        lastUpdateRef.current = now;
+        
+        const elapsedFromFirst = (now - firstTokenTimeRef.current) / 1000;
+        const currentTPS = elapsedFromFirst > 0 ? (tokenCountRef.current / elapsedFromFirst) : 0;
+        const ttft = firstTokenTimeRef.current - startTimeRef.current;
 
-      // 性能采样：每秒最多记录 2 次，保持最近 20 个点
-      if (tokenCountRef.current % 5 === 0) {
-        setTpsData(prev => [...prev.slice(-19), currentTPS]);
-      }
-
-      setMessages(prev => {        const last = prev[prev.length - 1];
-        if (last && last.role === 'assistant') {
-          return [...prev.slice(0, -1), { 
-            ...last, 
-            content: currentContent,
-            metrics: {
-                ttft,
-                tps: currentTPS
-            }
-          }];
+        if (tokenCountRef.current % 5 === 0) {
+          setTpsData(prev => [...prev.slice(-19), currentTPS]);
         }
-        return prev;
-      });
+
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === 'assistant') {
+            return [...prev.slice(0, -1), { 
+              ...last, 
+              content: fullText,
+              metrics: { ttft, tps: currentTPS }
+            }];
+          }
+          return prev;
+        });
+
+        // 智能滚动优化
+        if (scrollRef.current) {
+          const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+          const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
+          if (isNearBottom) {
+            if (scrollTimerRef.current) cancelAnimationFrame(scrollTimerRef.current);
+            scrollTimerRef.current = requestAnimationFrame(() => {
+              if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            });
+          }
+        }
+      }
     } else if (payload.state === 'final' || payload.state === 'finished') {
         clearStallTimer();
         const now = Date.now();
@@ -983,8 +914,29 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
   return (
     <>
+      <style>{`
+        @keyframes v3-blob-animate {
+          0% { transform: translate(0, 0) scale(1); }
+          33% { transform: translate(30px, -50px) scale(1.1); }
+          66% { transform: translate(-20px, 20px) scale(0.9); }
+          100% { transform: translate(0, 0) scale(1); }
+        }
+        @keyframes v3-message-enter {
+          from { opacity: 0; transform: translateY(12px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .v3-blob {
+          position: absolute; width: 500px; height: 500px; border-radius: 50%; filter: blur(80px); opacity: 0.12; animation: v3-blob-animate 20s infinite alternate;
+        }
+      `}</style>
       {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
-      <div style={{ flex: 1, display: 'flex', background: '#fff', overflowX: 'hidden', height: '100%', position: 'relative', width: '100%' }}>
+      <div style={{ flex: 1, display: 'flex', background: '#f8fafc', overflowX: 'hidden', height: '100%', position: 'relative', width: '100%' }}>
+        {/* 动态背景光斑 */}
+        <div style={{ position: 'absolute', width: '100%', height: '100%', overflow: 'hidden', zIndex: 0, pointerEvents: 'none' }}>
+          <div className="v3-blob" style={{ background: '#6366f1', top: '-10%', left: '-10%', animationDelay: '0s' }} />
+          <div className="v3-blob" style={{ background: '#ec4899', bottom: '10%', right: '-5%', animationDelay: '-5s', width: 600, height: 600 }} />
+          <div className="v3-blob" style={{ background: '#3b82f6', top: '40%', left: '30%', animationDelay: '-10s', opacity: 0.08 }} />
+        </div>
       {/* Session Sider */}
       {showSider && (
         <>
@@ -1007,96 +959,22 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             boxShadow: isMobile ? '4px 0 20px rgba(0,0,0,0.15)' : 'none',
             flexShrink: 0
           }}>
-            <div style={{ padding: '16px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 8 }}>
-              <Button 
-                  type="primary" 
-                  icon={<Plus size={16} />} 
-                  style={{ flex: 1, borderRadius: 8, height: 38, background: '#2563eb' }}
-                  onClick={startNewSession}
-              >
-                {t('chat.v3NewSession', { defaultValue: '开启新会话' })}
-              </Button>
-              <Button icon={<RefreshCw size={14} />} onClick={fetchSessions} loading={loadingSessions} />
-              {isMobile && <Button icon={<Plus size={14} rotate={45} />} onClick={() => setShowSider(false)} />}
-            </div>
-            
-            <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-              <div style={{ padding: '4px 8px 8px', display: 'flex', gap: 6, alignItems: 'center' }}>
-                <Input
-                  size="small"
-                  prefix={<Search size={12} style={{ color: '#94a3b8' }} />}
-                  placeholder={t('chat.searchSessions', { defaultValue: '搜索会话 ID...' })}
-                  value={sessionSearch}
-                  onChange={e => setSessionSearch(e.target.value)}
-                  allowClear
-                  style={{ borderRadius: 8, fontSize: 12, flex: 1 }}
-                />
-                <Tooltip title={t('chat.clearAllHistory', { defaultValue: '清除全部历史' })}>
-                    <Button 
-                        size="small" 
-                        type="text" 
-                        icon={<Trash2 size={13} />} 
-                        onClick={handleClearAllHistory}
-                        style={{ color: '#94a3b8', background: '#f8fafc', borderRadius: 8 }}
-                    />
-                </Tooltip>
-              </div>
-              {loadingSessions && <div style={{ textAlign: 'center', padding: 20 }}><Spin size="small" /></div>}
-              {!loadingSessions && sessions.length === 0 && (
-                  <div style={{ padding: '40px 20px', textAlign: 'center', color: '#cbd5e1' }}>
-                      <History size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
-                      <div style={{ fontSize: 13 }}>{t('chat.noHistory', { defaultValue: '暂无历史会话' })}</div>
-                  </div>
-              )}
-              {sessions.filter(s => !sessionSearch || (s.key || '').toLowerCase().includes(sessionSearch.toLowerCase())).map(s => (
-                  <div 
-                      key={s.key}
-                      onClick={() => handleSelectSession(s.key)}
-                      style={{ 
-                          padding: '12px', 
-                          borderRadius: 10, 
-                          cursor: 'pointer',
-                          marginBottom: 4,
-                          transition: 'all 0.2s',
-                          background: sessionKey === s.key ? '#eff6ff' : 'transparent',
-                          border: '1px solid',
-                          borderColor: sessionKey === s.key ? '#bfdbfe' : 'transparent',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          position: 'relative'
-                      }}
-                      className="session-item"
-                  >
-                      <Avatar size={32} src={s.avatar} icon={<Bot size={16} />} style={{ background: s.key === sessionKey ? '#2563eb' : '#f1f5f9', color: s.key === sessionKey ? '#fff' : '#64748b', flexShrink: 0 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: sessionKey === s.key ? '#1e40af' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {s.label || t('chat.noLabel', { defaultValue: '未命名会话' })}
-                          </div>
-                          <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 1, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {s.key}
-                          </div>
-                          <div style={{ fontSize: 9, color: '#cbd5e1', marginTop: 1 }}>
-                              {new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleString([], { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
-                          </div>
-                      </div>
-                      <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>
-                          <Button 
-                              size="small" 
-                              type="text" 
-                              icon={<Copy size={12} />} 
-                              onClick={(e) => { e.stopPropagation(); copyToClipboard(s.key); }}
-                          />
-                          <Button 
-                              size="small" 
-                              type="text" 
-                              icon={<Trash2 size={12} />} 
-                              onClick={(e) => handleDeleteSession(e, s.key)}
-                          />
-                      </div>
-                  </div>
-              ))}
-            </div>
+            <V3SessionList
+              sessions={sessions}
+              sessionKey={sessionKey}
+              loadingSessions={loadingSessions}
+              sessionSearch={sessionSearch}
+              setSessionSearch={setSessionSearch}
+              onSelectSession={handleSelectSession}
+              onNewSession={startNewSession}
+              onDeleteSession={handleDeleteSession}
+              onClearAll={handleClearAllHistory}
+              fetchSessions={fetchSessions}
+              isMobile={!!isMobile}
+              setShowSider={setShowSider}
+              copyToClipboard={copyToClipboard}
+              t={t}
+            />
           </div>
         </>
       )}
@@ -1308,7 +1186,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 8, flexShrink: 0, marginLeft: 4 }}>
                 <div style={{ height: 12, width: 1, background: '#f1f5f9', marginRight: 2 }}></div>
                 <span style={{ fontSize: 11, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600, marginRight: 2 }}>
-                    {lastHealth?.ok === false ? '网关波动中' : '网关已连接'}
+                    {lastHealth?.ok === false ? '网关波动' : '网关已连接'}
                 </span>
                 <div key={pulse} style={{ 
                   width: 7, height: 7, borderRadius: '50%', 
@@ -1317,9 +1195,18 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                   flexShrink: 0
                 }} />
                 {!isMobile && (
-                  <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', width: 35 }}>
-                    {lastHealth ? `${lastHealth.latency}ms` : '---'}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', width: 35 }}>
+                      {lastHealth ? `${lastHealth.latency}ms` : '---'}
+                    </span>
+                    {/* 微型延迟趋势图 */}
+                    <svg width="30" height="12" style={{ opacity: 0.6 }}>
+                      <polyline
+                        fill="none" stroke="#10b981" strokeWidth="1"
+                        points={latencyHistory.map((l, i) => `${(i / 29) * 30},${12 - (Math.min(l, 200) / 200) * 12}`).join(' ')}
+                      />
+                    </svg>
+                  </div>
                 )}
               </div>
             )}
@@ -1412,240 +1299,34 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             </div>
           )}
 
-          {messages.map((msg, index) => {
-            // 彻底隐藏逻辑：如果“显示思考”关闭，且该消息仅包含元信息块，则不渲染整个消息气泡
-            if (!showThinking) {
-              const isMetaOnly = msg.content.includes(':::thinking') || 
-                                 msg.content.includes(':::toolCall') || 
-                                 msg.content.includes(':::toolResult');
-              
-              // 如果内容只包含这些标记且没有普通文本（简单判断：标记外的长度极短）
-              // 或者标记占据了绝大部分内容，则视为纯元信息消息
-              const cleanText = msg.content
-                .replace(/> :::thinking[\s\S]*?:::/g, '')
-                .replace(/> :::toolCall[\s\S]*?:::/g, '')
-                .replace(/> :::toolResult[\s\S]*?:::/g, '')
-                .trim();
-              
-              if (isMetaOnly && !cleanText) {
-                return null;
-              }
-            }
-
-            return (
-              <div key={index} className="message-in" style={{ display: 'flex', gap: 14, flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}>
-                {msg.role === 'user' ? (
-                  <Avatar icon={<User size={18} />} style={{ background: '#1e293b', flexShrink: 0, marginTop: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} />
-                ) : (
-                  <div style={{ flexShrink: 0, marginTop: 4 }}>
-                    <BotAvatar provider={selectedBot?.split(':')?.[1] || ''} size={isMobile ? 32 : 36} />
-                  </div>
-                )}
-                <div style={{ 
-                  maxWidth: isMobile ? '92%' : '85%', padding: isMobile ? '10px 14px' : '12px 18px', borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '4px 18px 18px 18px', 
-                  background: msg.role === 'user' ? '#2563eb' : '#fff',
-                  color: msg.role === 'user' ? '#fff' : '#1e293b',
-                  boxShadow: msg.role === 'user' ? '0 4px 15px rgba(37, 99, 235, 0.15)' : '0 4px 12px rgba(0,0,0,0.03)',
-                  border: msg.role === 'assistant' ? '1px solid #e8eff6' : 'none',
-                  position: 'relative',
-                  wordBreak: 'break-word',
-                  overflowWrap: 'anywhere',
-                  minWidth: 0,
-                  overflowX: 'auto',
-                  WebkitOverflowScrolling: 'touch'
-                }}>
-                {editingMsgIndex === index ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: isMobile ? 220 : 400 }}>
-                    <Input.TextArea
-                      autoFocus
-                      autoSize={{ minRows: 2, maxRows: 15 }}
-                      value={editContent}
-                      onChange={e => setEditContent(e.target.value)}
-                      style={{ 
-                        borderRadius: 12, 
-                        border: '1px solid rgba(255,255,255,0.3)',
-                        background: 'rgba(255,255,255,0.1)',
-                        color: '#fff',
-                        fontSize: isMobile ? 13 : 14
-                      }}
-                    />
-                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                      <Button size="small" ghost onClick={() => setEditingMsgIndex(null)} style={{ fontSize: 11, height: 24 }}>{t('common.cancel')}</Button>
-                      <Button size="small" style={{ background: '#fff', color: '#2563eb', border: 'none', fontSize: 11, height: 24, fontWeight: 600 }} onClick={handleSaveEdit}>{t('chat.saveAndRegenerate', { defaultValue: '重新生成' })}</Button>
-                    </div>
-                  </div>
-                ) : (
-                  msg.content === t('chat.thinking') ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 13, color: '#64748b' }}>{msg.content}</span>
-                      <div className="typing-indicator" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                        <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>
-                        <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>
-                        <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <ReactMarkdown 
-                        remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
-                        rehypePlugins={[rehypeSanitize, rehypeKatex]}
-                        components={{
-                          p: ({children}: any) => <p style={{margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere'}}>{children}</p>,
-                          pre: ({children}: any) => <pre style={{ overflowX: 'auto', maxWidth: '100%', margin: '8px 0', padding: '10px', background: '#f8fafc', borderRadius: 8 }}>{children}</pre>,
-                          blockquote: ({ children }: any) => {
-                            // 1. 更稳健的字符串提取：递归展平所有子节点文本
-                            const extractText = (node: any): string => {
-                              if (typeof node === 'string') return node;
-                              if (Array.isArray(node)) return node.map(extractText).join('');
-                              if (node?.props?.children) return extractText(node.props.children);
-                              return '';
-                            };
-                            const fullText = extractText(children);
-                            
-                            const isThinking = fullText.includes(':::thinking');
-                            const isToolCall = fullText.includes(':::toolCall');
-                            const isToolResult = fullText.includes(':::toolResult');
-
-                            // 全局开关：如果关闭，则不显示这些辅助信息
-                            if ((isThinking || isToolCall || isToolResult) && !showThinking) {
-                              return null;
-                            }
-
-                            // 2. 根据内容动态选择容器渲染样式卡片
-                            if (isThinking) {
-                              return (
-                                <div className="v3-thought-container">
-                                  <div className="v3-thought-header">
-                                    <Cpu size={12} />
-                                    <span>Thinking Process</span>
-                                  </div>
-                                  {children}
-                                </div>
-                              );
-                            }
-                            if (isToolCall) {
-                              return (
-                                <div className="v3-tool-call-container">
-                                  <div className="v3-tool-header">
-                                    <Terminal size={12} />
-                                    <span>Invoking System Tool</span>
-                                  </div>
-                                  <div style={{ fontSize: 12 }}>{children}</div>
-                                </div>
-                              );
-                            }
-                            if (isToolResult) {
-                              return (
-                                <div className="v3-tool-result-container">
-                                  <div className="v3-tool-result-header">
-                                    <CheckCircle size={12} />
-                                    <span>Tool Output</span>
-                                  </div>
-                                  <div style={{ color: '#166534' }}>{children}</div>
-                                </div>
-                              );
-                            }
-                            return <blockquote style={{ borderLeft: '4px solid #e2e8f0', paddingLeft: '12px', color: '#64748b', fontStyle: 'italic', margin: '8px 0' }}>{children}</blockquote>;
-                          },
-                          table: ({ ...props }: any) => (
-                            <div style={{ width: '100%', overflowX: 'auto', marginBottom: 12, borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff' }}>
-                              <table {...props} style={{ width: '100%', borderCollapse: 'collapse', fontSize: isMobile ? '12px' : '13px' }} />
-                            </div>
-                          ),
-                          th: ({ ...props }: any) => <th {...props} style={{ padding: '8px 12px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left', fontWeight: 600 }} />,
-                          td: ({ ...props }: any) => <td {...props} style={{ padding: '8px 12px', borderBottom: '1px solid #e2e8f0', color: '#475569' }} />,
-                          code: ({ inline, className, children, ...props }: any) => {
-                            const match = /language-(\w+)/.exec(className || '');
-                            const language = match ? match[1] : '';
-                            const codeContent = String(children).replace(/\n$/, '');
-                            if (!inline && language === 'mermaid') return <Mermaid chart={codeContent} />;
-                            if (!inline && language) return <CodeBlock language={language} value={codeContent} isMobile={isMobile} {...props} />;
-                            return <code {...props} style={{ padding: '0.2em 0.4em', backgroundColor: msg.role === 'user' ? 'rgba(255,255,255,0.1)' : 'rgba(175, 184, 193, 0.2)', borderRadius: '6px', fontSize: '85%' }}>{children}</code>;
-                          }
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
-                    </>
-                  )
-                )}
-
-                {isStalled && isTyping && index === messages.length - 1 && msg.role === 'assistant' && (
-                  <div style={{ 
-                      marginTop: 8, padding: '4px 10px', background: '#f8fafc', borderRadius: 8, 
-                      border: '1px dashed #e2e8f0', display: 'flex', alignItems: 'center', gap: 6,
-                      animation: 'v3-fade-in 0.5s ease'
-                  }}>
-                      <div className="typing-dot" style={{ width: 4, height: 4, background: '#94a3b8' }}></div>
-                      <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
-                          AI 正在深度思考中，请耐心等待...
-                      </span>
-                  </div>
-                )}
-
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                  gap: 6, 
-                  marginTop: 6,
-                  opacity: 1,
-                  transition: 'opacity 0.2s',
-                  fontSize: 10, 
-                  fontWeight: 500, 
-                  color: msg.role === 'user' ? 'rgba(255,255,255,0.7)' : '#94a3b8'
-                }} className="msg-footer">
-                  {!(isTyping && index === messages.length - 1) && (
-                    <div style={{ display: 'flex', gap: 2 }}>
-                      <Tooltip title={t('chat.copy')}>
-                        <Button type="text" size="small" icon={<Copy size={11} />} onClick={() => copyToClipboard(msg.content)}
-                          style={{ padding: '0 3px', height: 18, width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: msg.role === 'user' ? 'rgba(255,255,255,0.85)' : '#64748b' }} />
-                      </Tooltip>
-                      <Tooltip title={t('chat.quote')}>
-                        <Button type="text" size="small" icon={<Quote size={11} />} onClick={() => setQuotedMsg(msg.content)}
-                          style={{ padding: '0 3px', height: 18, width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: msg.role === 'user' ? 'rgba(255,255,255,0.85)' : '#64748b' }} />
-                        </Tooltip>
-                        {msg.role === 'user' && (
-                        <Tooltip title={t('common.edit')}>
-                          <Button type="text" size="small" icon={<Pencil size={11} />} onClick={() => { setEditingMsgIndex(index); setEditContent(msg.content); }}
-                            style={{ padding: '0 3px', height: 18, width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              color: 'rgba(255,255,255,0.85)' }} />
-                        </Tooltip>
-                        )}
-                        {msg.role === 'assistant' && index === messages.length - 1 && (                        <Tooltip title={t('chat.retry')}>
-                          <Button type="text" size="small" icon={<RefreshCw size={11} />} onClick={handleRegenerate}
-                            style={{ padding: '0 3px', height: 18, width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }} />
-                        </Tooltip>
-                      )}
-                    </div>
-                  )}
-                  <span>{msg.timestamp}</span>                  {!isMobile && msg.role === 'assistant' && msg.metrics && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4 }}>
-                      <div style={{ width: 1, height: 8, background: '#e2e8f0' }}></div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 9, color: '#94a3b8', fontFamily: 'monospace' }}>
-                          <Zap size={10} color="#f59e0b" fill="#f59e0b" />
-                          <span>{msg.metrics.ttft}ms</span>
-                      </div>
-                      {msg.metrics.tps && (
-                          <div style={{ display: 'flex', alignItems: 'center' }}>
-                              <span style={{ fontSize: 9, color: '#94a3b8', fontFamily: 'monospace' }}>
-                                  {msg.metrics.tps.toFixed(1)} ch/s
-                              </span>
-                              {isTyping && index === messages.length - 1 && <Sparkline data={tpsData} />}
-                          </div>
-                      )}
-                      {msg.metrics.duration && (                          <span style={{ fontSize: 9, color: '#10b981', fontFamily: 'monospace', fontWeight: 600 }}>
-                              {msg.metrics.duration.toFixed(1)}s
-                          </span>
-                      )}
-                    </div>
-                  )}
-                </div>              </div>
-            </div>
-          );
-        })}
+          {messages.map((msg, index) => (
+            <V3MessageItem
+              key={index}
+              msg={msg}
+              index={index}
+              isMobile={!!isMobile}
+              showThinking={showThinking}
+              selectedBot={selectedBot}
+              editingMsgIndex={editingMsgIndex}
+              editContent={editContent}
+              setEditContent={setEditContent}
+              onEdit={(idx, content) => {
+                setEditingMsgIndex(idx);
+                setEditContent(content);
+              }}
+              onSaveEdit={handleSaveEdit}
+              onCancelEdit={() => setEditingMsgIndex(null)}
+              onDelete={(idx) => setMessages(prev => prev.filter((_, i) => i !== idx))}
+              onQuote={setQuotedMsg}
+              onRegenerate={handleRegenerate}
+              copyToClipboard={copyToClipboard}
+              isTyping={isTyping}
+              isLast={index === messages.length - 1}
+              isStalled={isStalled}
+              tpsData={tpsData}
+              t={t}
+            />
+          ))}
         </div>
 
         {/* 返回顶部浮动按钮 */}
@@ -1677,7 +1358,14 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
         {/* 返回底部浮动按钮 */}
         {showScrollBtn && (
-            <div style={{ position: 'absolute', bottom: isMobile ? 130 : 160, left: '50%', transform: 'translateX(-50%)', zIndex: 100, animation: 'v3-fade-in 0.3s' }}>
+            <div style={{ 
+                position: 'absolute', 
+                bottom: isMobile ? (showQuickActions ? 170 : 130) : (showQuickActions ? 210 : 160), 
+                left: '50%', 
+                transform: 'translateX(-50%)', 
+                zIndex: 100, 
+                animation: 'v3-fade-in 0.3s' 
+            }}>
                 <Button
                     shape="round"
                     type={hasNewMessages ? 'primary' : 'default'}
@@ -1929,18 +1617,19 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               width: '100%',
               boxSizing: 'border-box'
             }} className="input-container-v3">
-              <div style={{ width: '100%', display: 'flex', alignItems: 'center', padding: isMobile ? '6px 12px 0' : '12px 16px 0', gap: isMobile ? 4 : 8, boxSizing: 'border-box' }}>
+              <div style={{ width: '100%', display: 'flex', alignItems: 'center', padding: isMobile ? '6px 12px 0' : '12px 16px 0', gap: 8, boxSizing: 'border-box' }}>
                  <div style={{ 
-                   padding: '2px 4px', 
-                    background: '#eef2ff', 
-                    borderRadius: 8, 
-                    border: '1px solid #c7d2fe',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                   display: 'flex', 
-                   alignItems: 'center', 
-                   flex: isMobile ? 1 : '0 0 auto', 
-                   width: isMobile ? 'auto' : 420,
-                   minWidth: 0 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    background: '#f8fafc', 
+                    borderRadius: 10, 
+                    border: '1px solid #e2e8f0',
+                    padding: '2px 4px',
+                    height: 38,
+                    flex: isMobile ? 1 : '0 0 auto',
+                    width: isMobile ? 'auto' : 420,
+                    minWidth: 0,
+                    boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.01)'
                  }}>
                    <Select
                        placeholder={t('chat.selectBotTip')}
@@ -1972,7 +1661,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                            </Select.Option>
                        ))}
                    </Select>
-                    <div style={{ width: 1, height: 14, background: "#e2e8f0", margin: "0 4px" }}></div>
+                    <div style={{ width: 1, height: 16, background: "#bfdbfe", margin: "0 4px" }}></div>
                     <Select
                         placeholder={t("chat.sessionModelPlaceholder", { defaultValue: "自由切换会话模型" })}
                         style={{ flex: 1, fontSize: isMobile ? 11 : 13, minWidth: 0 }}
@@ -1992,14 +1681,23 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                         </Select.Option>
                         {(() => {
                             const groups = (botsModels?.data?.models || []).reduce((acc: Record<string, any[]>, m: any) => {
-                                const p = m.provider || 'Others';
+                                // 核心修复：解析 id 中的 provider 部分 (e.g. "aliyun/qwen" -> "aliyun")
+                                let p = 'Others';
+                                if (m.id && m.id.includes('/')) {
+                                    p = m.id.split('/')[0];
+                                } else if (m.provider) {
+                                    p = m.provider;
+                                }
+                                
                                 if (!acc[p]) acc[p] = [];
                                 acc[p].push(m);
                                 return acc;
                             }, {});
-                            return (Object.entries(groups) as any[][]).map(([provider, models]) => (
+                            
+                            // 按照提供商名称排序，让列表更稳定
+                            return Object.keys(groups).sort().map(provider => (
                                 <Select.OptGroup label={provider.toUpperCase()} key={provider}>
-                                    {models.map((m: any) => (
+                                    {groups[provider].map((m: any) => (
                                         <Select.Option key={m.id} value={m.id}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                                 <Cpu size={14} style={{ color: '#6366f1' }} />
@@ -2012,23 +1710,24 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                         })()}
                     </Select>
                  </div>
-                 <Tooltip title={t('bots.editSoul', { defaultValue: '编辑灵魂 (Prompt)' })}>
-                    <Button 
-                      type="text" 
-                      size="small" 
-                      icon={<Sparkles size={16} color="#eab308" />} 
-                      onClick={handleOpenSoulEditor}
-                      disabled={!selectedBot || status !== 'authenticated'}
-                      style={{ 
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: '#eef2ff', 
-                        border: '1px solid #c7d2fe',
-                        borderRadius: 8, height: 32, width: 32, padding: 0,
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-                      }}
-                    />
-                 </Tooltip>
                  
+                 <Button 
+                   type="text" 
+                   size="small" 
+                   icon={<Sparkles size={18} color="#eab308" />} 
+                   onClick={handleOpenSoulEditor}
+                   disabled={!selectedBot || status !== 'authenticated'}
+                   style={{ 
+                     display: 'flex', alignItems: 'center', justifyContent: 'center',
+                     background: '#fffbeb', 
+                     border: '1px solid #fef3c7',
+                     borderRadius: 10, 
+                     height: 38, 
+                     width: 38, 
+                     padding: 0,
+                     boxShadow: '0 2px 4px rgba(234, 179, 8, 0.05)'
+                   }}
+                 />
                </div>
               
               {quotedMsg && (
