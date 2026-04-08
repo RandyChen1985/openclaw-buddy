@@ -116,7 +116,7 @@ const Dashboard = () => {
   // Hooks
   const { tasks: activeTasks, updateTask: baseUpdateTask, loading: tasksLoading, fetchActiveTasks } = useTaskCenter();
   const { status, history, fetching, refreshCountdown, fetchData } = useStatusPolling(
-    isTransitioning, targetStatus, () => {
+    isTransitioning, targetStatus, activeTab, () => {
       setIsTransitioning(false);
       setTargetStatus(null);
       setTransitionSeconds(0);

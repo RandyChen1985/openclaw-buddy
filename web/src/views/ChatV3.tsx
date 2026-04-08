@@ -50,10 +50,70 @@ const hexToUint8Array = (hex: string): Uint8Array => {
   return new Uint8Array(matched ? matched.map(byte => parseInt(byte, 16)) : []);
 };
 
+// --- Internal High Performance Components ---
+const V3InputArea = React.memo(({ 
+  status, isMobile, isTyping, onSend, onStop, t, isComposing, setIsComposing, isFocused, setIsFocused 
+}: any) => {
+  const [text, setText] = useState('');
+
+  const handleInnerSend = () => {
+    if (!text.trim() || status !== 'authenticated' || isTyping) return;
+    onSend(text);
+    setText('');
+  };
+
+  return (
+    <div style={{ width: '100%', display: 'flex', alignItems: 'flex-end', gap: 8, padding: isMobile ? '4px 12px 8px' : '8px 16px 16px', position: 'relative' }}>
+      <div style={{ flex: 1, position: 'relative' }}>
+        <Input.TextArea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder={(status === 'authenticated' && !text && !isFocused && !isTyping) ? "" : (status === 'authenticated' ? t('chat.v3InputPlaceholder') : t('chat.v3Connecting'))}
+          autoSize={{ minRows: 1, maxRows: 6 }}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={() => setIsComposing(false)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
+              e.preventDefault();
+              handleInnerSend();
+            }
+          }}
+          disabled={status !== 'authenticated' || isTyping}
+          variant="borderless"
+          style={{ padding: '4px 0', opacity: isTyping ? 0.6 : 1 }}
+        />
+        {status === 'authenticated' && !text && !isFocused && !isTyping && (
+          <div style={{ position: 'absolute', left: 0, top: 4, display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+            <div className="v3-mock-cursor" style={{ height: 14, marginRight: 4, background: '#2563eb' }} />
+            <span style={{ fontSize: 13, color: '#94a3b8', opacity: 0.6 }}>{t('chat.v3InputPlaceholder')}</span>
+          </div>
+        )}
+      </div>
+      <Button
+        type="primary"
+        icon={isTyping ? <Square size={16} fill="#fff" /> : <Send size={17} />}
+        onClick={isTyping ? onStop : handleInnerSend}
+        disabled={status !== 'authenticated' || (!isTyping && !text.trim())}
+        style={{ 
+          width: isMobile ? 36 : 40, height: isMobile ? 36 : 40, borderRadius: 12,
+          background: (status !== 'authenticated' || (!isTyping && !text.trim())) ? '#e2e8f0' : (isTyping ? '#ef4444' : '#2563eb'), 
+          border: 'none', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: (status !== 'authenticated' || (!isTyping && !text.trim())) ? 'none' : (isTyping ? '0 4px 12px rgba(239,68,68,0.25)' : (text.trim() ? '0 4px 12px rgba(37,99,235,0.25)' : 'none')),
+          transition: 'all 0.2s',
+          color: (status !== 'authenticated' || (!isTyping && !text.trim())) ? '#94a3b8' : '#fff'
+        }}
+      />
+    </div>
+  );
+});
+
 const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRunning, onNavigateToDashboard }) => {
   const { t } = useTranslation();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState('');
+  const [inputText] = useState('');
   const [selectedBot, setSelectedBot] = useState<string>('');
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error'>('disconnected');
   const [isTyping, setIsTyping] = useState(false);
@@ -812,16 +872,11 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   };
 
   const handleSend = async (content?: any) => {
-    // 兼容快捷指令直接发送和手动输入发送
+    // 优先使用直接传入的内容
     const text = (typeof content === 'string' ? content : inputText).trim();
     
-    // 如果没有 sessionKey，则必须有 selectedBot 才能创建新会话
     if (!text || (!sessionKey && !selectedBot) || status !== 'authenticated') return;
 
-    // 只有点击发送按钮（非快捷指令）时清空输入框
-    if (typeof content !== 'string') {
-        setInputText('');
-    }
     setIsTyping(true);
     setTpsData([]);
     streamContentRef.current = '';
@@ -1986,55 +2041,18 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                  </div>
                )}
 
-              <div style={{ width: '100%', display: 'flex', alignItems: 'flex-end', gap: 8, padding: isMobile ? '4px 12px 8px' : '8px 16px 16px', position: 'relative' }}>
-                <div style={{ flex: 1, position: 'relative' }}>
-                  <Input.TextArea
-                    value={inputText}
-                    onChange={e => setInputText(e.target.value)}
-                    placeholder={(status === 'authenticated' && !inputText && !isFocused && !isTyping) ? "" : (status === 'authenticated' ? t('chat.v3InputPlaceholder') : t('chat.v3Connecting'))}
-                    autoSize={{ minRows: 1, maxRows: 6 }}
-                    onCompositionStart={() => setIsComposing(true)}
-                    onCompositionEnd={() => setIsComposing(false)}
-                    onFocus={() => setIsFocused(true)}
-                    onBlur={() => setIsFocused(false)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-                        e.preventDefault();
-                        handleSend();
-                      }
-                    }}
-                    disabled={status !== 'authenticated' || isTyping}
-                    variant="borderless"
-                    style={{ padding: '4px 0', opacity: isTyping ? 0.6 : 1 }}
-                  />
-                  {status === 'authenticated' && !inputText && !isFocused && !isTyping && (
-                    <div 
-                      style={{ 
-                        position: 'absolute', left: 0, top: 4, 
-                        display: 'flex', alignItems: 'center', pointerEvents: 'none' 
-                      }}
-                    >
-                      <div className="v3-mock-cursor" style={{ height: 14, marginRight: 4, background: '#2563eb' }} />
-                      <span style={{ fontSize: 13, color: '#94a3b8', opacity: 0.6 }}>{t('chat.v3InputPlaceholder')}</span>
-                    </div>
-                  )}
-                </div>
-                <Button
-                   type="primary"
-                   icon={isTyping ? <Square size={16} fill="#fff" /> : <Send size={17} />}
-                   onClick={isTyping ? handleStopGeneration : () => handleSend()}
-                   disabled={status !== 'authenticated' || (!isTyping && !inputText.trim())}
-                   style={{ 
-                     width: isMobile ? 36 : 40, height: isMobile ? 36 : 40, borderRadius: 12,
-                     background: (status !== 'authenticated' || (!isTyping && !inputText.trim())) ? '#e2e8f0' : (isTyping ? '#ef4444' : '#2563eb'), 
-                     border: 'none', flexShrink: 0,
-                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                     boxShadow: (status !== 'authenticated' || (!isTyping && !inputText.trim())) ? 'none' : (isTyping ? '0 4px 12px rgba(239,68,68,0.25)' : (inputText.trim() ? '0 4px 12px rgba(37,99,235,0.25)' : 'none')),
-                     transition: 'all 0.2s',
-                     color: (status !== 'authenticated' || (!isTyping && !inputText.trim())) ? '#94a3b8' : '#fff'
-                   }}
-                 />
-              </div>
+              <V3InputArea
+                status={status}
+                isMobile={!!isMobile}
+                isTyping={isTyping}
+                onSend={handleSend}
+                onStop={handleStopGeneration}
+                t={t}
+                isComposing={isComposing}
+                setIsComposing={setIsComposing}
+                isFocused={isFocused}
+                setIsFocused={setIsFocused}
+              />
             </div>
 
           </div>
