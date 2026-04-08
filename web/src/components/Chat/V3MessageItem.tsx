@@ -207,12 +207,13 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
 };
 
 export default React.memo(V3MessageItem, (prev, next) => {
-  // 核心优化：只有在内容、编辑状态或是否为“正在打字”的最后一条发生变化时才重绘
-  return prev.msg.content === next.msg.content &&
+  // 核心优化：只有在内容、编辑状态或关键状态发生变化时才重绘
+  return prev.editContent === next.editContent && // 必须包含编辑内容，否则无法输入
          prev.editingMsgIndex === next.editingMsgIndex &&
+         prev.msg.content === next.msg.content &&
          prev.showThinking === next.showThinking &&
          prev.isTyping === next.isTyping &&
          prev.isLast === next.isLast &&
          prev.isStalled === next.isStalled &&
-         prev.tpsData === next.tpsData;
+         (prev.tpsData?.length === next.tpsData?.length);
 });

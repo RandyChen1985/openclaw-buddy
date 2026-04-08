@@ -382,7 +382,7 @@ func copyFile(src, dst string) error {
 }
 
 func (g *Guardian) checkVersionUpdate() {
-	url := "https://raw.githubusercontent.com/RandyChen1985/openclaw-buddy/main/VERSION"
+	url := "https://ghproxy.net/https://raw.githubusercontent.com/RandyChen1985/openclaw-buddy/main/VERSION"
 	client := http.Client{
 		Timeout: 10 * time.Second,
 	}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Select, Input, Button, Spin, message, Tag, Badge, Modal, Form, Tooltip, Drawer, Switch } from 'antd';
+import { Select, Input, Button, Spin, message, Tag, Badge, Modal, Form, Tooltip, Drawer, Switch, Tabs } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Bot, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, History, LayoutPanelLeft, Activity, Settings, ChevronUp, ChevronDown, Clock, Key, Sparkles, Save, X, Zap, Quote, Wand2 } from 'lucide-react';
+import { Bot, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, History, LayoutPanelLeft, Activity, Settings, ChevronUp, ChevronDown, Clock, Key, Sparkles, Save, X, Zap, Quote, Wand2, PenLine, Eye } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -89,6 +89,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [soulContent, setSoulContent] = useState('');
   const [isSoulLoading, setIsSoulLoading] = useState(false);
   const [isSoulSaving, setIsSoulSaving] = useState(false);
+  const [activeSoulTab, setActiveSoulTab] = useState('edit');
 
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);
@@ -199,6 +200,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     const botId = selectedBot.replace('openclaw:', '');
     try {
       setIsSoulLoading(true);
+      setActiveSoulTab('edit');
       setIsSoulDrawerOpen(true);
       const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
       const workspaceParam = bot?.workspace ? `&workspace=${encodeURIComponent(bot.workspace)}` : '';
@@ -497,19 +499,20 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     return;
   };
 
-  const handleSelectSession = (key: string, initialLabel?: string) => {
+  const handleSelectSession = (key: string) => {
+    if (key === sessionKey) return;
+    
+    // --- 自动化增强：离开当前未命名会话时自动尝试总结 ---
+    if (sessionKey && !sessionLabel && messages.length >= 2) {
+      console.log('🤖 [Auto] 切换会话，静默总结老会话标题:', sessionKey);
+      handleAutoSummarize(messages, true, sessionKey);
+    }
+
     setSessionKey(key);
     
     // 从当前已加载的列表中查找该会话的完整对象
     const currentSession = sessions.find(s => s.key === key);
-
-    // 如果有传入初始标题（自动加载场景），直接使用，否则从对象中提取
-    if (initialLabel) {
-      setSessionLabel(initialLabel);
-    } else {
-      setSessionLabel(currentSession?.label || null);
-    }
-    
+    setSessionLabel(currentSession?.label || null);
     setSessionModel(currentSession?.model || '');
 
     loadSessionHistory(key);
@@ -522,7 +525,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       }
     }
 
-    // 移动端选中会话后自动关闭侧边栏
     if (isMobile) {
       setShowSider(false);
     }
@@ -544,7 +546,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         message.success(t('common.success'));
         setSessionLabel(editingLabelText.trim());
         setIsEditingLabel(false);
-        fetchSessions(); // 刷新列表以同步新 Label
+        fetchSessions(); // 刷新列表以同步新状态
       } else {
         message.error('Failed to update label: ' + (res.error?.message || 'Unknown error'));
       }
@@ -555,36 +557,46 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     }
   };
 
-  const handleAutoSummarize = async () => {
-    if (!sessionKey || messages.length === 0) return;
+  const handleAutoSummarize = async (messagesOverride?: Message[], silent = false, targetKey?: string) => {
+    const activeKey = targetKey || sessionKey;
+    const targetMessages = messagesOverride || messages;
     
-    setIsSummarizing(true);
+    if (!activeKey || targetMessages.length === 0) return;
+    
+    if (!targetKey) setIsSummarizing(true); // 只有手动点击时才显示 loading
+
     try {
       // 提取当前选中机器人的模型 ID
       const agentId = selectedBot.replace('openclaw:', '');
       const bot = botsModels?.data?.bots?.find((b: any) => b.id === agentId);
       const currentModelID = bot?.model || '';
 
-      // 过滤掉“正在思考”等临时消息，并只取 role/content 字段
-      const validMessages = messages
+      // 过滤文本
+      const validMessages = targetMessages
         .filter(m => m.content !== t('chat.thinking'))
         .map(m => ({ role: m.role, content: m.content }));
         
       const newTitle = await summarizeSession(validMessages, currentModelID);
       if (newTitle) {
         // 自动保存到后端
-        const res = await sendRPC('sessions.patch', { key: sessionKey, label: newTitle });
+        const res = await sendRPC('sessions.patch', { key: activeKey, label: newTitle });
         if (res.ok) {
-          setSessionLabel(newTitle);
-          message.success(t('chat.titleSummarized', { defaultValue: '标题已自动总结' }));
+          if (activeKey === sessionKey) {
+            setSessionLabel(newTitle);
+          }
+          if (!silent) {
+            message.success(t('chat.titleSummarized', { defaultValue: '标题已自动总结' }));
+          }
           fetchSessions();
         }
       }
     } catch (err) {
-      console.error('Summarize error:', err);
-      message.error(t('chat.summarizeFailed', { defaultValue: '总结标题失败' }));
+      if (!silent) {
+        console.error('Summarize error:', err);
+        message.error(t('chat.summarizeFailed', { defaultValue: '总结标题失败' }));
+      }
     } finally {
-      setIsSummarizing(false);
+      if (!targetKey) setIsSummarizing(false);
     }
   };
 
@@ -668,6 +680,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           if (sessionKey === key) {
             setSessionKey(null);
             setMessages([]);
+            setSessionLabel(null);
           }
           fetchSessions();
         }
@@ -695,6 +708,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           message.success({ content: t('chat.clearAllSuccess', { defaultValue: '已清除全部历史记录' }), key: 'clearingAll' });
           setSessionKey(null);
           setMessages([]);
+          setSessionLabel(null);
           setSessions([]);
           fetchSessions();
         } catch (err) {
@@ -705,8 +719,15 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   };
 
   const startNewSession = () => {
+    // --- 自动化增强：离开当前未命名会话时自动尝试总结 ---
+    if (sessionKey && !sessionLabel && messages.length >= 2) {
+      console.log('🤖 [Auto] 开启新会话，静默总结老会话标题:', sessionKey);
+      handleAutoSummarize(messages, true, sessionKey);
+    }
+
     setSessionKey(null);
     setMessages([]);
+    setSessionLabel(null);
   };
 
   const streamContentRef = useRef('');
@@ -802,17 +823,25 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         
         setMessages(prev => {
             const last = prev[prev.length - 1];
-            if (last && last.role === 'assistant') {
-              return [...prev.slice(0, -1), { 
+            const updated = (last && last.role === 'assistant') ? [...prev.slice(0, -1), { 
                 ...last, 
                 metrics: {
                     ttft,
                     duration,
                     tps: finalTPS
                 }
-              }];
+              }] : prev;
+
+            // --- 自动化增强：首轮对话完成后自动总结标题 ---
+            // 如果正好 4 条消息且没有标题，或者正好 2 条（第一轮完成）且暂时没有后续动作
+            if (!sessionLabel && (updated.length === 4 || updated.length === 2) && !isSummarizing) {
+                console.log(`🤖 [Auto] 对话达到 ${updated.length} 条，触发自动总结...`);
+                setTimeout(() => {
+                    handleAutoSummarize(updated, true);
+                }, 1000);
             }
-            return prev;
+
+            return updated;
         });
 
         setIsTyping(false);
@@ -890,6 +919,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       if (res.ok) {
         currentKey = res.payload.key;
         setSessionKey(currentKey);
+        setSessionLabel(null); // 明确重置标题，防止残留上一个会话的状态
         // Apply initial patch (using current thinkingLevel and sessionModel if selected)
         await sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel });
       }
@@ -1162,6 +1192,32 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                font-style: normal !important;
                color: inherit !important;
             }
+
+            /* --- Markdown 增强样式 --- */
+            .markdown-body-v3 { line-height: 1.6; font-size: 14px; }
+            .markdown-body-v3 h1, .markdown-body-v3 h2, .markdown-body-v3 h3 { margin-top: 16px; margin-bottom: 8px; font-weight: 700; color: inherit; }
+            .markdown-body-v3 h1 { font-size: 1.5em; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+            .markdown-body-v3 h2 { font-size: 1.3em; }
+            .markdown-body-v3 h3 { font-size: 1.1em; }
+            .markdown-body-v3 ul, .markdown-body-v3 ol { padding-left: 20px; margin: 8px 0; }
+            .markdown-body-v3 li { margin-bottom: 4px; }
+            .markdown-body-v3 hr { height: 1px; background: #e2e8f0; border: none; margin: 16px 0; }
+            .markdown-body-v3 strong { font-weight: 800; color: #1e293b; }
+            .markdown-body-v3 table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+            .markdown-body-v3 th, .markdown-body-v3 td { border: 1px solid #e2e8f0; padding: 6px 10px; }
+            .markdown-body-v3 th { background: #f8fafc; font-weight: 700; }
+            .markdown-body-v3 blockquote:not([class]) { border-left: 4px solid #cbd5e1; padding-left: 12px; color: #64748b; margin: 10px 0; font-style: italic; }
+            
+            /* 用户消息中的 Markdown 颜色适配 */
+            .message-in[style*="row-reverse"] .markdown-body-v3 strong,
+            .message-in[style*="row-reverse"] .markdown-body-v3 h1,
+            .message-in[style*="row-reverse"] .markdown-body-v3 h2,
+            .message-in[style*="row-reverse"] .markdown-body-v3 h3 { color: #fff; }
+            .message-in[style*="row-reverse"] .markdown-body-v3 hr { background: rgba(255,255,255,0.2); }
+            .message-in[style*="row-reverse"] .markdown-body-v3 th, 
+            .message-in[style*="row-reverse"] .markdown-body-v3 td { border-color: rgba(255,255,255,0.2); }
+            .message-in[style*="row-reverse"] .markdown-body-v3 th { background: rgba(255,255,255,0.1); }
+        
         `}</style>
         
         <div style={{ padding: isMobile ? '6px 10px' : '10px 16px', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 10, gap: 8, width: '100%', boxSizing: 'border-box' }}>
@@ -1220,7 +1276,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                             size="small" 
                             type="text" 
                             icon={isSummarizing ? <RefreshCw size={10} className="animate-spin" /> : <Wand2 size={10} />} 
-                            onClick={handleAutoSummarize}
+                            onClick={() => handleAutoSummarize()}
                             disabled={isSummarizing || messages.length === 0}
                             style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}
                           />
@@ -1927,12 +1983,28 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           </div>
         ) : (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100%' }}>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: isMobile ? 'none' : '1px solid #f1f5f9' }}>
-                    <div style={{ padding: '8px 16px', background: '#f8fafc', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>
-                        Soul Source (Markdown)
+            <Tabs
+              activeKey={activeSoulTab}
+              onChange={setActiveSoulTab}
+              centered
+              className="v3-soul-tabs"
+              style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+              tabBarStyle={{ marginBottom: 0, padding: '0 16px', borderBottom: '1px solid #f1f5f9', background: '#fff' }}
+              items={[
+                {
+                  key: 'edit',
+                  label: (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0' }}>
+                      <PenLine size={16} />
+                      <span>{t('common.edit', { defaultValue: '编辑内容' })}</span>
                     </div>
-                    <Input.TextArea
+                  ),
+                  children: (
+                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 'calc(100vh - 250px)' }}>
+                      <div style={{ padding: '8px 16px', background: '#f8fafc', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>
+                        Soul Source (Markdown)
+                      </div>
+                      <Input.TextArea
                         value={soulContent}
                         onChange={e => setSoulContent(e.target.value)}
                         placeholder="Enter expert's soul (Prompt)..."
@@ -1945,26 +2017,41 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                           fontSize: 13,
                           padding: 20,
                           background: '#fff',
-                          lineHeight: 1.6
+                          lineHeight: 1.6,
+                          minHeight: 400
                         }}
-                    />
-                </div>
-                {!isMobile && (
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa' }}>
+                      />
+                    </div>
+                  )
+                },
+                {
+                  key: 'preview',
+                  label: (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0' }}>
+                      <Eye size={16} />
+                      <span>{t('common.preview', { defaultValue: '实时预览' })}</span>
+                    </div>
+                  ),
+                  children: (
+                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 'calc(100vh - 250px)', background: '#fafafa' }}>
                       <div style={{ padding: '8px 16px', background: '#f1f5f9', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>
-                          Live Preview
+                        Live Preview
                       </div>
-                      <div style={{ flex: 1, padding: 20, overflowY: 'auto', background: '#fafafa' }}>
+                      <div style={{ flex: 1, padding: 20, overflowY: 'auto' }}>
+                        <div style={{ maxWidth: 800, margin: '0 auto', background: '#fff', padding: 24, borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.02)', minHeight: '100%' }}>
                           <ReactMarkdown 
                             remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
                             rehypePlugins={[rehypeSanitize, rehypeKatex]}
                           >
-                            {soulContent}
+                            {soulContent || '*No content to preview*'}
                           </ReactMarkdown>
+                        </div>
                       </div>
-                  </div>
-                )}
-            </div>
+                    </div>
+                  )
+                }
+              ]}
+            />
             <div style={{ padding: '12px 20px', background: '#fff', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fbbf24', animation: 'v3-heartbeat 1.5s infinite' }} />
                 <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
