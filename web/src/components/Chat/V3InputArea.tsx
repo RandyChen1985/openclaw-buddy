@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Input, Button, Upload, message, Tooltip } from 'antd';
+import { Input, Button, Upload, message } from 'antd';
 import { Send, Square, Paperclip, X, FileText, Loader2 } from 'lucide-react';
 import storage from '../../utils/storage';
 import { getBaseURL } from '../../utils/url';
@@ -101,7 +101,7 @@ const V3InputArea: React.FC<V3InputAreaProps> = ({
               boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
             }}>
               {file.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? (
-                <img src={file.url} alt={file.filename} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={file.thumbUrl || file.url} alt={file.filename} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                   <FileText size={20} color="#64748b" />
@@ -171,11 +171,6 @@ const V3InputArea: React.FC<V3InputAreaProps> = ({
               }
             }}
           >
-            <Tooltip title={
-              uploading ? t('chat.uploading', { defaultValue: '正在上传...' }) : 
-              isTyping ? t('chat.responding', { defaultValue: '回复中...' }) : 
-              t('chat.uploadFile', { defaultValue: '上传文件' })
-            }>
               <Button 
                 type="text" 
                 icon={<Paperclip size={18} />} 
@@ -188,7 +183,6 @@ const V3InputArea: React.FC<V3InputAreaProps> = ({
                   opacity: (uploading || isTyping) ? 0.5 : 1
                 }} 
               />
-            </Tooltip>
           </Upload>
         </div>
 

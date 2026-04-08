@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"openclaw-buddy/internal/utils"
 
 	"github.com/joho/godotenv"
 )
@@ -70,7 +71,7 @@ func LoadConfig() (*Config, error) {
 	compress, _ := strconv.ParseBool(getEnv("LOG_COMPRESS", "true"))
 
 	return &Config{
-		OpenClawConfigDir:    filepath.Clean(expandPath(getEnv("OPENCLAW_CONFIG_DIR", "~/.openclaw"))),
+		OpenClawConfigDir:    filepath.Clean(utils.ExpandPath(getEnv("OPENCLAW_CONFIG_DIR", "~/.openclaw"))),
 		BackupDir:            filepath.Clean(getEnv("BACKUP_DIR", "./backups")),
 		CheckIntervalSeconds: interval,
 		MaxRetries:           maxRetries,
@@ -102,18 +103,6 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-// expandPath 将路径中的 ~ 展开为当前用户的主目录
-func expandPath(path string) string {
-	if len(path) > 0 && path[0] == '~' {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return path
-		}
-		// 使用 filepath.Join 确保跨平台路径分隔符正确
-		return filepath.Join(home, path[1:])
-	}
-	return path
-}
 
 func ensureEnvFile() error {
 	_ = os.MkdirAll("data", 0755)

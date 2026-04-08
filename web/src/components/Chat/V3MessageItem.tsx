@@ -140,7 +140,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                       <img 
                         {...props} 
                         style={{ maxWidth: '100%', borderRadius: 8, marginTop: 8, cursor: 'zoom-in', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} 
-                        onClick={() => window.open(props.src, '_blank')}
+                        onClick={() => window.open(props.title || props.src, '_blank')}
                       />
                     ),
                     pre: ({children}: any) => <pre style={{ overflowX: 'auto', maxWidth: '100%', margin: '8px 0', padding: '10px', background: '#f8fafc', borderRadius: 8 }}>{children}</pre>,

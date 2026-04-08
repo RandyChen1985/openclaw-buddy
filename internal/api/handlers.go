@@ -1823,7 +1823,7 @@ func (s *Server) handleChatUpload(c *gin.Context) {
 			for _, bot := range botsData.Bots {
 				if bot.ID == botId && bot.Workspace != "" {
 					// 如果机器人有专属 workspace，则在其下创建 uploads 目录
-					uploadDir = filepath.Join(bot.Workspace, "uploads")
+					uploadDir = filepath.Join(utils.ExpandPath(bot.Workspace), "uploads")
 					break
 				}
 			}
@@ -1837,8 +1837,8 @@ func (s *Server) handleChatUpload(c *gin.Context) {
 	}
 
 	// 3. 生成唯一文件名，防止冲突 & 路径注入
-	// 仅保留字母、数字、中文、点和下划线，防止特殊字符导致 URL 404
-	reg, _ := regexp.Compile(`[^\p{L}\p{N}._-]+`)
+	// 仅保留基本 ASCII 字母、数字、点、下划线和短横线，防止中文乱码或特殊字符导致路径解析问题
+	reg, _ := regexp.Compile(`[^a-zA-Z0-9._-]+`)
 	cleanBaseName := reg.ReplaceAllString(file.Filename, "_")
 	if cleanBaseName == "" || cleanBaseName == filepath.Ext(file.Filename) {
 		cleanBaseName = "file" + filepath.Ext(file.Filename)
@@ -1950,7 +1950,7 @@ func (s *Server) handleGetChatFile(c *gin.Context) {
 		if err == nil {
 			for _, bot := range botsData.Bots {
 				if bot.ID == botId && bot.Workspace != "" {
-					uploadDir = filepath.Join(bot.Workspace, "uploads")
+					uploadDir = filepath.Join(utils.ExpandPath(bot.Workspace), "uploads")
 					break
 				}
 			}

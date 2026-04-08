@@ -312,7 +312,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
       const fileLinks = currentFiles.map(f => {
         const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
         if (isImage) {
-          return `\n![${f.filename}](${f.url})\n(File path: ${f.path})`;
+          return `\n![${f.filename}](${f.thumbUrl || f.url} "${f.url}")\n(File path: ${f.path})`;
         }
         return `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
       }).join('');
@@ -712,6 +712,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
               value={selectedBot}
               onChange={setSelectedBot}
               loading={loadingBots}
+              variant="borderless"
               dropdownStyle={{ borderRadius: 8, minWidth: 260 }}
               listHeight={400}
             >
@@ -1034,7 +1035,14 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                                     {children}
                                   </code>
                                 );
-                              }
+                              },
+                              img: ({ node, ...props }: any) => (
+                                <img 
+                                  {...props} 
+                                  style={{ maxWidth: '100%', borderRadius: 8, marginTop: 8, cursor: 'zoom-in', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} 
+                                  onClick={() => window.open(props.title || props.src, '_blank')}
+                                />
+                              )
                             }}
                           >
                             {preprocessMarkdown(msg.content)}
@@ -1272,11 +1280,6 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                   }
                 }}
               >
-                <Tooltip title={
-                  isUploading ? t('chat.uploading', { defaultValue: '正在上传...' }) : 
-                  isTyping ? t('chat.responding', { defaultValue: '回复中...' }) : 
-                  t('chat.uploadFile', { defaultValue: '上传文件' })
-                }>
                   <Button 
                     type="text" 
                     icon={<Paperclip size={20} />} 
@@ -1289,7 +1292,6 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                       opacity: (isUploading || isTyping) ? 0.5 : 1
                     }} 
                   />
-                </Tooltip>
               </Upload>
             </div>
 

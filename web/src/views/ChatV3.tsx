@@ -870,7 +870,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       const fileLinks = attachedFiles.map(f => {
         const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
         if (isImage) {
-          return `\n![${f.filename}](${f.url})\n(File path: ${f.path})`;
+          return `\n![${f.filename}](${f.thumbUrl || f.url} "${f.url}")\n(File path: ${f.path})`;
         }
         return `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
       }).join('');
@@ -1060,10 +1060,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); opacity: 1; }
             }
 
-            .input-container-v3:focus-within {
-                border-color: #2563eb !important;
-                box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.1), 0 8px 10px -6px rgba(37, 99, 235, 0.1) !important;
-            }
             .msg-footer { opacity: 1; transition: opacity 0.2s; }
             .message-in:hover .msg-footer { opacity: 1; }
 
@@ -1696,7 +1692,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               background: '#fff', 
               borderRadius: 20, 
               boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 0 0 2px rgba(99, 102, 241, 0.1)', 
-              border: '1.5px solid #6366f1', 
+              border: 'none',
               flexDirection: 'column',
               overflow: 'hidden',
               transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -1709,13 +1705,13 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                     alignItems: 'center', 
                     background: '#f8fafc', 
                     borderRadius: 10, 
-                    border: '1px solid #e2e8f0',
+                    border: 'none',
                     padding: '2px 4px',
                     height: 38,
                     flex: isMobile ? 1 : '0 0 auto',
                     width: isMobile ? 'auto' : 420,
                     minWidth: 0,
-                    boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.01)'
+                    boxShadow: 'none'
                  }}>
                    <Select
                        placeholder={t('chat.selectBotTip')}
@@ -1806,7 +1802,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                    style={{ 
                      display: 'flex', alignItems: 'center', justifyContent: 'center',
                      background: '#fffbeb', 
-                     border: '1px solid #fef3c7',
+                     border: 'none',
                      borderRadius: 10, 
                      height: 38, 
                      width: 38, 
