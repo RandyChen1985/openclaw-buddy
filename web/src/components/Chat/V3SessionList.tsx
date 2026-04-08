@@ -134,8 +134,8 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                   </div>
                                 )}
                               </div>
-                              <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 1, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {s.key.substring(0,8)}
+                              <div className="session-id-container" style={{ fontSize: 9, color: '#94a3b8', marginTop: 1, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {s.key.includes(':') ? s.key.substring(s.key.indexOf(':') + 1).substring(0, 30) : s.key.substring(0, 8)}...
                               </div>
                           </div>
                           <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>

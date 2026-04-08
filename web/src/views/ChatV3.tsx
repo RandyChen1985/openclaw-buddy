@@ -1023,9 +1023,10 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa', position: 'relative', width: '100%', minWidth: 0, overflow: 'hidden' }}>
         <style>{`
             .session-item:hover { background: #f0f7ff; border-color: #dbeafe !important; }
-            .session-item:hover .session-actions { opacity: 1 !important; }
-            
-            .typing-indicator { display: flex; align-items: center; gap: 4px; height: 12px; }
+            .session-actions { display: none !important; }
+            .session-item:hover .session-actions { display: flex !important; opacity: 1 !important; }
+            .session-id-container { transition: all 0.2s; max-width: 100%; }
+            .session-item:hover .session-id-container { max-width: 140px; }            .typing-indicator { display: flex; align-items: center; gap: 4px; height: 12px; }
             .typing-dot { width: 5px; height: 5px; background: #2563eb; border-radius: 50%; opacity: 0.4; animation: typing-bounce 1.4s infinite ease-in-out; }
             .typing-dot:nth-child(1) { animation-delay: 0s; }
             .typing-dot:nth-child(2) { animation-delay: 0.2s; }
@@ -1235,7 +1236,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               )
             )}
             
-            {status === 'authenticated' && (
+            {status === 'authenticated' && !sessionKey && !isMobile && (
               <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 8, flexShrink: 0, marginLeft: 4 }}>
                 <div style={{ height: 12, width: 1, background: '#f1f5f9', marginRight: 2 }}></div>
                 <span style={{ fontSize: 11, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600, marginRight: 2 }}>
@@ -1287,6 +1288,22 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                       <Select.Option value="pro">Pro</Select.Option>
                   </Select>
                 </>
+              )}
+              {status === 'authenticated' && !isMobile && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px', background: '#f8fafc', borderRadius: 8, height: 24, marginLeft: 4 }}>
+                    <span style={{ fontSize: 10, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600 }}>
+                        {lastHealth?.ok === false ? '网关波动' : '网关已连接'}
+                    </span>
+                    <div key={pulse} style={{ 
+                      width: 6, height: 6, borderRadius: '50%', 
+                      background: lastHealth?.ok === false ? '#f59e0b' : (lastHealth?.ok ? '#10b981' : '#94a3b8'),
+                      animation: lastHealth?.ok ? 'v3-heartbeat 0.8s ease-out' : 'none',
+                      flexShrink: 0
+                    }} />
+                    <span style={{ fontSize: 9, color: '#94a3b8', fontFamily: 'monospace', minWidth: 30 }}>
+                      {lastHealth ? `${lastHealth.latency}ms` : '---'}
+                    </span>
+                  </div>
               )}
               <Button size="small" type="text" icon={<RefreshCw size={13} />} onClick={connect} title={t('common.restart')} />
           </div>
