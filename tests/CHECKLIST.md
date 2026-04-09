@@ -148,6 +148,7 @@
 - [ ] **备份前置深度校验**: 模拟 `openclaw.json` 配置逻辑错误（如 API 协议错误），检查守护进程是否通过 `openclaw health` 识别出 `Problem:` 并跳过备份。
 - [ ] **MD5 变变更检测**: 连续多次保存相同配置，不应触发冗余备份，日志应显示“Configuration unchanged, skipping backup”。
 - [ ] **进程自杀防护**: 模拟 `HEALTH_PORT` 与 `WEB_PORT` 相同的情景，执行停止网关操作时，日志应显示 `⚠️ Averted self-kill!` 且 Buddy 进程不应退出。
+- [x] **升级路径偏移修正**: 验证当程序以 `.old` 备份文件运行时，`SelfRestart` 能自动识别并拉起原路径的新二进制文件。 `2026-04-09`
 
 
 ## 5. 构建与部署 (Build)
