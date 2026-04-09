@@ -116,7 +116,7 @@ const Dashboard = () => {
   // Hooks
   const { tasks: activeTasks, updateTask: baseUpdateTask, loading: tasksLoading, fetchActiveTasks } = useTaskCenter();
   const { status, history, fetching, refreshCountdown, fetchData } = useStatusPolling(
-    isTransitioning, targetStatus, () => {
+    isTransitioning, targetStatus, activeTab, () => {
       setIsTransitioning(false);
       setTargetStatus(null);
       setTransitionSeconds(0);
@@ -153,7 +153,7 @@ const Dashboard = () => {
           fetchPlugins();
         } else if (task.module === 'bots') {
           // 如果是模型相关变更（添加、删除、设置默认、新增渠道），触发物理对账
-          const modelActions = ['delete-model', 'add-model', 'add-provider', 'set-default-model', 'clone-expert'];
+          const modelActions = ['delete-model', 'add-model', 'add-provider', 'set-default-model', 'clone-expert', 'add', 'update'];
           if (modelActions.includes(task.action || '')) {
             console.log(`🔄 [Task Observer] 机器人/模型变更任务 (${task.action}) 完成，将在延迟后物理刷新...`);
             

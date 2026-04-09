@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"openclaw-buddy/internal/utils"
 )
 
 //go:embed experts
@@ -276,14 +277,8 @@ func GetOpenClawBotFileContent(configDir, id, fileType, workspace string) (strin
 		return "", fmt.Errorf("bot %s not found and no workspace provided", id)
 	}
 
-	if strings.HasPrefix(botWorkspace, "~") {
-		home, _ := os.UserHomeDir()
-		if botWorkspace == "~" {
-			botWorkspace = home
-		} else if strings.HasPrefix(botWorkspace, "~/") {
-			botWorkspace = filepath.Join(home, botWorkspace[2:])
-		}
-	}
+	botWorkspace = utils.ExpandPath(botWorkspace)
+
 
 	fileName := ""
 	switch strings.ToLower(fileType) {
@@ -341,14 +336,8 @@ func SaveOpenClawBotFileContent(configDir, id, fileType, content, workspace stri
 		return fmt.Errorf("bot %s not found and no workspace provided", id)
 	}
 
-	if strings.HasPrefix(botWorkspace, "~") {
-		home, _ := os.UserHomeDir()
-		if botWorkspace == "~" {
-			botWorkspace = home
-		} else if strings.HasPrefix(botWorkspace, "~/") {
-			botWorkspace = filepath.Join(home, botWorkspace[2:])
-		}
-	}
+	botWorkspace = utils.ExpandPath(botWorkspace)
+
 
 	fileName := ""
 	switch strings.ToLower(fileType) {
@@ -641,7 +630,7 @@ func ReloadOpenClawSkills() error {
 }
 
 func GetOpenClawSessions() ([]OpenClawSession, error) {
-	cmd := exec.Command("openclaw", "sessions", "--all-agent", "--json")
+	cmd := exec.Command("openclaw", "sessions", "--all-agents", "--json")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sessions: %v. Output: %s", err, string(out))

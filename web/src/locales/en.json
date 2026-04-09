@@ -188,11 +188,14 @@
     "v3SecureDesc": "SECURE_CHANNEL_V3 // ED25519_HARDWARE_KEY",
     "v3RetryBtn": "RETRY_CONNECTION",
     "v3InputPlaceholder": "Type a message...",
+    "chatQuote": "Quote Message",
+    "saveAndRegenerate": "Save & Regenerate",
     "v3Connecting": "Connecting to Gateway...",
     "selectBot": "Please select a bot in the top right corner ☝️",
     "welcomeTitle": "Welcome to Chat Lab",
     "welcomeSubtitle": "Select an AI bot to start the conversation. Your requests will be audited and forwarded by the Guardian gateway.",
     "thinking": "Lobster is thinking...",
+    "terminated": "User has terminated the session",
     "inputPlaceholder": "Type a message, Shift + Enter for new line...",
     "selectBotTip": "Select Bot",
     "v3Status": "WebSocket V3",
@@ -283,7 +286,10 @@
     },
     "userLabel": "User",
     "requestReceived": "Request received, thinking...",
-    "waitingGatewaySync": "Syncing gateway task status..."
+    "waitingGatewaySync": "Syncing gateway task status...",
+    "modelSwitchSuccess": "Model switched successfully",
+    "defaultModel": "Use Default Model",
+    "defaultSuffix": "(Default)"
   },
   "channels": {
     "boundChannels": "Bound Channels",

@@ -22,6 +22,10 @@ import (
 	"openclaw-buddy/internal/utils"
 	"openclaw-buddy/internal/scheduler"
 	"openclaw-buddy/internal/analyzer"
+	"image"
+	_ "image/gif"
+	"image/jpeg"
+	_ "image/png"
 
 	"github.com/gin-gonic/gin"
 	"context"
@@ -1625,3 +1629,353 @@ func (s *Server) unbindWeChatAccount(c *gin.Context) {
 		return "tasks.results.unbound", nil
 	})
 }
+
+func (s *Server) summarizeSession(c *gin.Context) {
+	var req struct {
+		Messages []map[string]interface{} `json:"messages" binding:"required"`
+		ModelID  string                   `json:"modelID"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "参数错误: "+err.Error())
+		return
+	}
+
+	// 1. 获取模型和提供商配置
+	providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "无法加载模型配置: "+err.Error())
+		return
+	}
+
+	// 优先级：请求传参 > 全局默认模型 > 第一个可用模型
+	defaultModelID := req.ModelID
+	if defaultModelID == "" {
+		// 尝试获取全局默认模型 (原来的逻辑)
+		data, err := os.ReadFile(filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json"))
+		if err == nil {
+			var fullCfg map[string]interface{}
+			if err := json.Unmarshal(data, &fullCfg); err == nil {
+				if gateway, ok := fullCfg["gateway"].(map[string]interface{}); ok {
+					if chat, ok := gateway["chat"].(map[string]interface{}); ok {
+						defaultModelID, _ = chat["defaultModel"].(string)
+					}
+				}
+			}
+		}
+	}
+
+	// 如果没有全局默认，使用第一个可用的
+	if defaultModelID == "" {
+		for _, p := range providers {
+			if pm, ok := p.(map[string]interface{}); ok {
+				if models, ok := pm["models"].([]interface{}); ok && len(models) > 0 {
+					if m, ok := models[0].(map[string]interface{}); ok {
+						defaultModelID, _ = m["id"].(string)
+						break
+					}
+				}
+			}
+		}
+	}
+
+	if defaultModelID == "" {
+		s.Error(c, http.StatusInternalServerError, "未找到可用的 AI 模型配置")
+		return
+	}
+
+	// 2. 找到提供商并解析真正的模型 ID
+	var providerName string
+	actualModelID := defaultModelID
+	if strings.Contains(defaultModelID, "/") {
+		parts := strings.SplitN(defaultModelID, "/", 2)
+		providerName = parts[0]
+		actualModelID = parts[1]
+	} else {
+		// 遍历查找
+		for name, p := range providers {
+			if pm, ok := p.(map[string]interface{}); ok {
+				if models, ok := pm["models"].([]interface{}); ok {
+					for _, m := range models {
+						if mo, ok := m.(map[string]interface{}); ok {
+							if id, _ := mo["id"].(string); id == defaultModelID {
+								providerName = name
+								break
+							}
+						}
+					}
+				}
+			}
+			if providerName != "" {
+				break
+			}
+		}
+	}
+
+	rawProv, ok := providers[providerName].(map[string]interface{})
+	if !ok {
+		s.Error(c, http.StatusNotFound, "找不到对应提供商配置: "+providerName)
+		return
+	}
+
+	baseUrl, _ := rawProv["baseUrl"].(string)
+	apiKey, _ := rawProv["apiKey"].(string)
+
+	// 3. 构造总结请求
+	summarizePrompt := "请为以下对话总结一个 10 字以内的简短标题。只需输出标题文本，不要包含引号或任何解释说明性文字。"
+	historyText := ""
+	for i, msg := range req.Messages {
+		if i > 5 { break } // 只取前 6 条以节省 token
+		role, _ := msg["role"].(string)
+		content, _ := msg["content"].(string)
+		historyText += fmt.Sprintf("[%s]: %s\n", role, content)
+	}
+
+	chatReqBody := map[string]interface{}{
+		"model": actualModelID, // 使用解析后的纯模型名
+		"messages": []map[string]string{
+			{"role": "system", "content": summarizePrompt},
+			{"role": "user", "content": historyText},
+		},
+		"stream": false,
+	}
+	jsonBody, _ := json.Marshal(chatReqBody)
+
+	targetUrl := strings.TrimSuffix(baseUrl, "/") + "/chat/completions"
+	log.Printf("🤖 [Summarize] Requesting AI Provider: %s (Model: %s)", targetUrl, defaultModelID)
+	
+	httpReq, err := http.NewRequest("POST", targetUrl, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "创建请求失败: "+err.Error())
+		return
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+
+	client := &http.Client{Timeout: 60 * time.Second} // 延长至 60s
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		log.Printf("❌ [Summarize] AI Request Failed: %v", err)
+		s.Error(c, http.StatusBadGateway, "请求 AI 提供商失败: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("❌ [Summarize] AI Provider Error (%d): %s", resp.StatusCode, string(body))
+		s.Error(c, resp.StatusCode, "AI提供商响应异常: "+string(body))
+		return
+	}
+
+	var chatRes struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&chatRes); err != nil {
+		s.Error(c, http.StatusInternalServerError, "解析 AI 响应失败: "+err.Error())
+		return
+	}
+
+	title := "未命名会话"
+	if len(chatRes.Choices) > 0 {
+		title = strings.TrimSpace(chatRes.Choices[0].Message.Content)
+		title = strings.Trim(title, "\"'\"") // 去掉引号
+	}
+
+	s.Success(c, gin.H{"title": title})
+	}
+
+func (s *Server) handleChatUpload(c *gin.Context) {
+	// 0. 安全限制：50MB 大小限制
+	const maxFileSize = 50 * 1024 * 1024
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxFileSize)
+
+	botId := c.PostForm("botId") // 获取机器人 ID
+	file, err := c.FormFile("file")
+	if err != nil {
+		s.Error(c, http.StatusBadRequest, "文件上传失败 (大小可能超过 50MB): "+err.Error())
+		return
+	}
+
+	// 0.1 类型过滤：禁止危险文件类型直接执行
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	forbiddenExts := map[string]bool{
+		".exe": true, ".bat": true, ".cmd": true, ".msi": true, ".com": true,
+	}
+	if forbiddenExts[ext] {
+		s.Error(c, http.StatusForbidden, "禁止上传可执行文件: "+ext)
+		return
+	}
+
+	// 1. 确定存储基准目录
+	uploadDir := "./data/uploads" // 默认路径
+
+	if botId != "" {
+		// 查找机器人对应的 workspace
+		botsData, err := process.GetOpenClawBotsModels(s.cfg.OpenClawConfigDir)
+		if err == nil {
+			for _, bot := range botsData.Bots {
+				if bot.ID == botId && bot.Workspace != "" {
+					// 如果机器人有专属 workspace，则在其下创建 uploads 目录
+					uploadDir = filepath.Join(utils.ExpandPath(bot.Workspace), "uploads")
+					break
+				}
+			}
+		}
+	}
+
+	// 2. 确保目录存在
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		s.Error(c, http.StatusInternalServerError, "创建存储目录失败: "+err.Error())
+		return
+	}
+
+	// 3. 生成唯一文件名，防止冲突 & 路径注入
+	// 仅保留基本 ASCII 字母、数字、点、下划线和短横线，防止中文乱码或特殊字符导致路径解析问题
+	reg, _ := regexp.Compile(`[^a-zA-Z0-9._-]+`)
+	cleanBaseName := reg.ReplaceAllString(file.Filename, "_")
+	if cleanBaseName == "" || cleanBaseName == filepath.Ext(file.Filename) {
+		cleanBaseName = "file" + filepath.Ext(file.Filename)
+	}
+	uniqueName := fmt.Sprintf("%d_%s", time.Now().UnixNano(), cleanBaseName)
+	filePath := filepath.Join(uploadDir, uniqueName)
+
+	if err := c.SaveUploadedFile(file, filePath); err != nil {
+		s.Error(c, http.StatusInternalServerError, "保存文件失败: "+err.Error())
+		return
+	}
+
+	// 3.1 如果是图片，生成缩略图
+	thumbName := ""
+	if strings.HasPrefix(c.Request.Header.Get("Content-Type"), "image/") || 
+	   matchExt(ext, ".jpg", ".jpeg", ".png", ".webp", ".gif") {
+		// 统一缩略图后缀为 .thumb.jpg，方便辨认
+		thumbName = uniqueName + ".thumb.jpg"
+		err := generateThumbnail(filePath, filepath.Join(uploadDir, thumbName))
+		if err != nil {
+			log.Printf("⚠️ [Upload] 生成缩略图失败: %v", err)
+			thumbName = "" // 失败则清空，前端会自动降级到原图
+		}
+	}
+
+	// 获取绝对路径，方便专家直接调用
+	absPath, _ := filepath.Abs(filePath)
+
+	// 4. 返回文件的访问 URL 和 实际物理路径
+	var fullURL, thumbURL string
+	escapedName := url.PathEscape(uniqueName)
+	webRoot := s.cfg.WebRoot
+	if webRoot == "/" { webRoot = "" }
+
+	if botId != "" {
+		fullURL = fmt.Sprintf("%s/v1/openclaw/chat/files/%s/%s", webRoot, botId, escapedName)
+		if thumbName != "" {
+			thumbURL = fmt.Sprintf("%s/v1/openclaw/chat/files/%s/%s", webRoot, botId, url.PathEscape(thumbName))
+		}
+	} else {
+		fullURL = fmt.Sprintf("%s/v1/openclaw/chat/files/default/%s", webRoot, escapedName)
+		if thumbName != "" {
+			thumbURL = fmt.Sprintf("%s/v1/openclaw/chat/files/default/%s", webRoot, url.PathEscape(thumbName))
+		}
+	}
+
+	s.Success(c, gin.H{
+		"url":      fullURL,
+		"thumbUrl": thumbURL, // 增加缩略图地址
+		"path":     absPath,
+		"filename": file.Filename,
+		"size":     file.Size,
+		"ext":      ext,
+	})
+}
+
+// 辅助函数：匹配后缀
+func matchExt(ext string, targets ...string) bool {
+	for _, t := range targets {
+		if ext == t { return true }
+	}
+	return false
+}
+
+// 简单的缩略图生成逻辑 (使用原生 image 库)
+func generateThumbnail(srcPath, dstPath string) error {
+	file, err := os.Open(srcPath)
+	if err != nil { return err }
+	defer file.Close()
+
+	img, _, err := image.Decode(file)
+	if err != nil { return err }
+
+	// 计算缩放比例 (宽度固定 200px)
+	bounds := img.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	
+	newWidth := 200
+	if width < 200 { newWidth = width } // 如果原图就很小，保持原宽
+	
+	newHeight := (height * newWidth) / width
+	
+	newImg := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
+	// 简单的重采样 (Nearest Neighbor)
+	for y := 0; y < newHeight; y++ {
+		for x := 0; x < newWidth; x++ {
+			newImg.Set(x, y, img.At(x*width/newWidth, y*height/newHeight))
+		}
+	}
+
+	out, err := os.Create(dstPath)
+	if err != nil { return err }
+	defer out.Close()
+
+	// 统一存为 JPEG 提高加载速度，质量设为 75
+	return jpeg.Encode(out, newImg, &jpeg.Options{Quality: 75})
+}
+
+// handleGetChatFile 动态读取聊天文件，支持多 workspace 隔离
+func (s *Server) handleGetChatFile(c *gin.Context) {
+	botId := c.Param("botId")
+	filename := c.Param("filename")
+
+	// 1. 确定物理路径
+	uploadDir := "./data/uploads"
+	if botId != "" && botId != "default" {
+		botsData, err := process.GetOpenClawBotsModels(s.cfg.OpenClawConfigDir)
+		if err == nil {
+			for _, bot := range botsData.Bots {
+				if bot.ID == botId && bot.Workspace != "" {
+					uploadDir = filepath.Join(utils.ExpandPath(bot.Workspace), "uploads")
+					break
+				}
+			}
+		}
+	}
+
+	filePath := filepath.Join(uploadDir, filename)
+	
+	// 安全校验：防止路径穿越 (Path Traversal)
+	absUploadDir, err := filepath.Abs(uploadDir)
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	cleanPath, err := filepath.Abs(filePath)
+	if err != nil || !strings.HasPrefix(cleanPath, absUploadDir) {
+		c.Status(http.StatusForbidden)
+		return
+	}
+
+	if _, err := os.Stat(cleanPath); os.IsNotExist(err) {
+		c.Status(http.StatusNotFound)
+		return
+	}
+
+	c.File(cleanPath)
+}
+

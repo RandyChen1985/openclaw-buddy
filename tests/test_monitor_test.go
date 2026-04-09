@@ -16,7 +16,7 @@ func TestAuthVerify(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	token := "verify-token"
 	router := gin.New()
-	router.Use(api.AuthMiddleware(token))
+	router.Use(api.AuthMiddleware(token, nil))
 	router.GET("/v1/secure", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
