@@ -98,9 +98,9 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       
       <div style={{ 
         maxWidth: isMobile ? '92%' : '85%', padding: isMobile ? '10px 14px' : '12px 18px', borderRadius: isUser ? '18px 18px 4px 18px' : '4px 18px 18px 18px', 
-        background: isUser ? '#2563eb' : '#fff',
+        background: isUser ? '#4f46e5' : '#fff',
         color: isUser ? '#fff' : '#1e293b',
-        boxShadow: isUser ? '0 4px 15px rgba(37, 99, 235, 0.15)' : '0 4px 12px rgba(0,0,0,0.03)',
+        boxShadow: isUser ? '0 4px 15px rgba(79, 70, 229, 0.15)' : '0 4px 12px rgba(0,0,0,0.03)',
         border: !isUser ? '1px solid #e8eff6' : 'none',
         position: 'relative', wordBreak: 'break-word', overflowWrap: 'anywhere', minWidth: 0,
       }}>

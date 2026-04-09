@@ -710,6 +710,47 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     });
   };
 
+  const handleDeleteGroup = (label: string, sessionKeys: string[]) => {
+    if (sessionKeys.length === 0) return;
+    
+    const labelMap: Record<string, string> = {
+      today: t('chat.today', { defaultValue: '今天' }),
+      yesterday: t('chat.yesterday', { defaultValue: '昨天' }),
+      lastWeek: t('chat.lastSevenDays', { defaultValue: '最近一周' }),
+      older: t('chat.older', { defaultValue: '更早记录' })
+    };
+
+    Modal.confirm({
+      title: t('chat.deleteGroupConfirm', { defaultValue: '确认删除分组？' }),
+      content: t('chat.deleteGroupContent', { 
+        defaultValue: '将删除 {{label}} 下的 {{count}} 个会话，此操作不可恢复。',
+        label: labelMap[label] || label,
+        count: sessionKeys.length 
+      }),
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          message.loading({ content: t('chat.clearingGroup', { defaultValue: '正在清理分组...' }), key: 'clearingGroup' });
+          // 并发删除该分组下的所有会话
+          await Promise.all(sessionKeys.map(key => sendRPC('sessions.delete', { key })));
+          message.success({ content: t('common.success'), key: 'clearingGroup' });
+          
+          // 如果当前选中的会话在被删除的列表中，则清空
+          if (sessionKey && sessionKeys.includes(sessionKey)) {
+            setSessionKey(null);
+            setMessages([]);
+            setSessionLabel(null);
+          }
+          fetchSessions();
+        } catch (err) {
+          message.error({ content: t('common.error'), key: 'clearingGroup' });
+        }
+      }
+    });
+  };
+
   const handleClearAllHistory = () => {
     if (sessions.length === 0) {
       message.info(t('chat.noHistory', { defaultValue: '暂无历史会话' }));
@@ -1067,6 +1108,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               onSelectSession={handleSelectSession}
               onNewSession={startNewSession}
               onDeleteSession={handleDeleteSession}
+              onDeleteGroup={handleDeleteGroup}
               onClearAll={handleClearAllHistory}
               fetchSessions={fetchSessions}
               isMobile={!!isMobile}
@@ -1085,7 +1127,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             .session-item:hover .session-actions { display: flex !important; opacity: 1 !important; }
             .session-id-container { transition: all 0.2s; max-width: 100%; }
             .session-item:hover .session-id-container { max-width: 140px; }            .typing-indicator { display: flex; align-items: center; gap: 4px; height: 12px; }
-            .typing-dot { width: 5px; height: 5px; background: #2563eb; border-radius: 50%; opacity: 0.4; animation: typing-bounce 1.4s infinite ease-in-out; }
+            .typing-dot { width: 5px; height: 5px; background: #4f46e5; border-radius: 50%; opacity: 0.4; animation: typing-bounce 1.4s infinite ease-in-out; }
             .typing-dot:nth-child(1) { animation-delay: 0s; }
             .typing-dot:nth-child(2) { animation-delay: 0.2s; }
             .typing-dot:nth-child(3) { animation-delay: 0.4s; }
@@ -1113,7 +1155,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               display: inline-block;
               width: 2px;
               height: 1.2em;
-              background: #2563eb;
+              background: #4f46e5;
               margin-left: 2px;
               vertical-align: middle;
               animation: v3-cursor-blink 1s step-end infinite;
@@ -1207,6 +1249,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
             /* --- Markdown 增强样式 --- */
             .markdown-body-v3 { line-height: 1.6; font-size: 14px; }
+            .markdown-body-v3 a { color: #2563eb; text-decoration: none; }
+            .markdown-body-v3 a:hover { text-decoration: underline; }
             .markdown-body-v3 h1, .markdown-body-v3 h2, .markdown-body-v3 h3 { margin-top: 16px; margin-bottom: 8px; font-weight: 700; color: inherit; }
             .markdown-body-v3 h1 { font-size: 1.5em; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
             .markdown-body-v3 h2 { font-size: 1.3em; }
@@ -1225,6 +1269,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             .message-in[style*="row-reverse"] .markdown-body-v3 h1,
             .message-in[style*="row-reverse"] .markdown-body-v3 h2,
             .message-in[style*="row-reverse"] .markdown-body-v3 h3 { color: #fff; }
+            .message-in[style*="row-reverse"] .markdown-body-v3 a { color: #fff; text-decoration: underline; text-underline-offset: 2px; }
+            .message-in[style*="row-reverse"] .markdown-body-v3 a:hover { color: #dbeafe; }
             .message-in[style*="row-reverse"] .markdown-body-v3 hr { background: rgba(255,255,255,0.2); }
             .message-in[style*="row-reverse"] .markdown-body-v3 th, 
             .message-in[style*="row-reverse"] .markdown-body-v3 td { border-color: rgba(255,255,255,0.2); }
