@@ -10,18 +10,20 @@ import (
 	"time"
 	"openclaw-buddy/internal/config"
 	"openclaw-buddy/internal/scheduler"
+	"openclaw-buddy/internal/guardian"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 type Server struct {
-	cfg     *config.Config
-	engine  *gin.Engine
-	tickets *TicketStore
+	cfg      *config.Config
+	engine   *gin.Engine
+	tickets  *TicketStore
+	guardian *guardian.Guardian
 }
 
-func NewServer(cfg *config.Config) *Server {
+func NewServer(cfg *config.Config, g *guardian.Guardian) *Server {
 	engine := gin.Default()
 
 	// Configure CORS
@@ -35,9 +37,10 @@ func NewServer(cfg *config.Config) *Server {
 	}))
 
 	s := &Server{
-		cfg:     cfg,
-		engine:  engine,
-		tickets: NewTicketStore(1 * time.Minute), // Ticket valid for 1 minute
+		cfg:      cfg,
+		engine:   engine,
+		tickets:  NewTicketStore(1 * time.Minute), // Ticket valid for 1 minute
+		guardian: g,
 	}
 
 	s.setupRoutes()

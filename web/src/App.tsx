@@ -410,9 +410,9 @@ const Dashboard = () => {
     setGlobalLoadingCountdown(Math.ceil(duration / 1000)); // 初始化倒计时秒数
   };
 
-  const checkVersionUpdate = async () => {
+  const checkVersionUpdate = async (refresh = false) => {
     try {
-      const res = await api.get('/v1/system/version');
+      const res = await api.get(`/v1/system/version${refresh ? '?refresh=true' : ''}`);
       if (res.data) {
         setVersionUpdate(res.data);
         return res.data;

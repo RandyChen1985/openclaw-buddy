@@ -1241,8 +1241,15 @@ func (s *Server) testOpenClawModelDirect(c *gin.Context) {
 }
 func (s *Server) getSystemVersion(c *gin.Context) {
 	current := strings.TrimPrefix(config.Version, "v")
+
+	// 如果请求带了 refresh=true，则立即触发一次物理对账
+	if c.Query("refresh") == "true" && s.guardian != nil {
+		log.Printf("🌐 [API] 收到手动版本刷新请求，正在联网对账...")
+		s.guardian.CheckVersionUpdate()
+	}
+
 	latest := strings.TrimPrefix(utils.GetSetting("latest_version", current), "v")
-	
+
 	s.Success(c, gin.H{
 		"current":              current,
 		"latest":               latest,

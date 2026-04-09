@@ -148,6 +148,7 @@
 - [ ] **备份前置深度校验**: 模拟 `openclaw.json` 配置逻辑错误（如 API 协议错误），检查守护进程是否通过 `openclaw health` 识别出 `Problem:` 并跳过备份。
 - [ ] **MD5 变变更检测**: 连续多次保存相同配置，不应触发冗余备份，日志应显示“Configuration unchanged, skipping backup”。
 - [ ] **进程自杀防护**: 模拟 `HEALTH_PORT` 与 `WEB_PORT` 相同的情景，执行停止网关操作时，日志应显示 `⚠️ Averted self-kill!` 且 Buddy 进程不应退出。
+- [x] **升级路径偏移修正**: 验证当程序以 `.old` 备份文件运行时，`SelfRestart` 能自动识别并拉起原路径的新二进制文件。 `2026-04-09`
 
 
 ## 5. 构建与部署 (Build)
@@ -246,6 +247,7 @@
 - [x] **Dashboard 移动端布局优化**: 验证快捷操作卡片在窄屏下使用 Grid 布局呈 2x2 对齐，移除多余占位。
 - [x] **Buddy 版本显示对账**: 验证顶部环境栏成功从 `/v1/system/version` 获取并在 UI 中显示 Buddy 版本号。
 - [x] **版本手动刷新交互**: 点击版本号旁的 🔄 图标，应触发旋转动画并根据对比结果（current vs latest）弹出 `message.success` 或 `notification.info`。
+- [x] **版本实时对账 (?refresh=true)**: 点击刷新按钮时，API 请求应带上 `refresh=true` 参数，强制后端绕过缓存联网抓取 GitHub 镜像站的最新版本号。 `2026-04-09`
 - [x] **发布说明外链校验**: 发现新版本时，通知卡片内应包含指向 `github.com/.../tag/{version}` 的正确超链接。
 
 ## 七、多实例隔离测试 (Storage Isolation)
