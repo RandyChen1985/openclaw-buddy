@@ -145,6 +145,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       }} {...props} style={{ ...(props.style || {}), overflowX: 'hidden' }} />
     ))
   }), []);
+  
+  const handleChatDeltaRef = useRef<any>(null);
+  const showScrollBtnRef = useRef(showScrollBtn);
+  useEffect(() => { showScrollBtnRef.current = showScrollBtn; }, [showScrollBtn]);
+  const messagesCountRef = useRef(messages.length);
+  useEffect(() => { messagesCountRef.current = messages.length; }, [messages.length]);
 
   useEffect(() => {
     const initKeys = async () => {
@@ -320,6 +326,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
+    // 绑定 Ref 以在闭包中使用最新逻辑
+    handleChatDeltaRef.current = handleChatDelta;
+
     ws.onopen = () => {
       console.log('✅ [V3] Connection established, waiting for challenge...');
       setStatus('challenging');
@@ -344,7 +353,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         if (data.event === 'connect.challenge') {
           handleChallenge(data.payload.nonce);
         } else if (data.event === 'chat') {
-          handleChatDelta(data.payload);
+          handleChatDeltaRef.current?.(data.payload);
         } else if (data.event === 'sessions.changed') {
           fetchSessions(true);
         }
@@ -829,8 +838,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       resetStallTimer();
       const now = Date.now();
       
-      // 如果用户当前没有滚动到底部，显示“有新消息”提醒
-      if (showScrollBtn) {
+      // 使用 Ref 避免闭包陷阱
+      if (showScrollBtnRef.current) {
         setHasNewMessages(true);
       }
 
@@ -874,9 +883,24 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           return prev;
         });
 
-        // 智能滚动优化 (Virtuoso 的 followOutput 会自动处理大部分滚动，这里作为补充)
-        if (!showScrollBtn && virtuosoRef.current) {
-          virtuosoRef.current.scrollToIndex({ index: 'LAST', behavior: 'auto' });
+        // 智能滚动优化 (Virtuoso 的 followOutput 会自动处理大部分滚动)
+        // 核心增强：如果正在打字且接近底部，强制保持滚动，不再单纯依赖 showScrollBtn
+        if (virtuosoRef.current) {
+          const isNearBottom = scrollRef.current 
+            ? (scrollRef.current.scrollHeight - scrollRef.current.scrollTop - scrollRef.current.clientHeight < 40)
+            : true;
+
+          if (!showScrollBtnRef.current || isNearBottom) {
+            virtuosoRef.current.scrollToIndex({ 
+              index: messagesCountRef.current - 1, 
+              align: 'end',
+              behavior: 'auto' 
+            });
+            if (isNearBottom && showScrollBtnRef.current) {
+              setShowScrollBtn(false);
+              setHasNewMessages(false);
+            }
+          }
         }
       }
     } else if (payload.state === 'final' || payload.state === 'finished' || payload.state === 'done') {
@@ -1149,6 +1173,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     }
     message.success(t('chat.dropUploadSuccess', { defaultValue: `已添加 ${droppedFiles.length} 个文件` }));
   }, [status, isTyping, selectedBot, t]);
+
+  // 每当函数刷新，同步更新 Ref
+  useEffect(() => { handleChatDeltaRef.current = handleChatDelta; });
 
   return (
     <>
@@ -1619,17 +1646,23 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               ref={virtuosoRef}
               data={messages}
               overscan={200}
-              followOutput={(isAtBottom) => isAtBottom ? 'smooth' : false}
+              followOutput={(isAtBottom) => isAtBottom ? (isTyping ? 'auto' : 'smooth') : false}
               atBottomStateChange={(atBottom) => {
+                // 如果正在打字且判定为“离开底部”，增加容差检查
+                if (isTyping && !atBottom && scrollRef.current) {
+                  const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+                  if (scrollHeight - scrollTop - clientHeight < 40) {
+                    return; // 容差范围内，不触发状态变更
+                  }
+                }
                 setShowScrollBtn(!atBottom);
                 if (atBottom) setHasNewMessages(false);
               }}
               isScrolling={(scrolling) => {
                 if (!scrolling && scrollRef.current) {
                   const { scrollTop } = scrollRef.current;
-                  const isScrollingUp = scrollTop < lastScrollTopRef.current;
-                  const shouldShow = isScrollingUp && scrollTop > 150;
-                  // 只有当显示状态真正改变时才更新，减少不必要的重绘
+                  // 只要向下滚动超过阈值就显示返回顶部，不再要求必须是“上滑”状态才显示
+                  const shouldShow = scrollTop > 200;
                   if (showScrollTopBtn !== shouldShow) {
                     setShowScrollTopBtn(shouldShow);
                   }
@@ -1678,7 +1711,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                 <Button
                     shape="round"
                     onClick={() => {
-                        virtuosoRef.current?.scrollToIndex({ index: 0, behavior: 'smooth' });
+                        virtuosoRef.current?.scrollToIndex({ index: 0, behavior: 'smooth', align: 'start' });
+                        setShowScrollTopBtn(false);
                     }}
                     icon={<ChevronUp size={14} />}
                     style={{ 
@@ -1713,8 +1747,14 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                     shape="round"
                     type={hasNewMessages ? 'primary' : 'default'}
                     onClick={() => {
-                        virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'smooth' });
+                        // 显式指定最后一项的索引并强制对齐到底部，解决 behavior: 'smooth' 在变高内容下可能不彻底的问题
+                        virtuosoRef.current?.scrollToIndex({ 
+                            index: messages.length - 1, 
+                            behavior: 'smooth', 
+                            align: 'end' 
+                        });
                         setHasNewMessages(false);
+                        setShowScrollBtn(false);
                     }}
                     icon={hasNewMessages ? <Activity size={14} className="animate-pulse" /> : <ChevronDown size={14} />}
                     style={{ 
