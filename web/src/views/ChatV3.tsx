@@ -18,6 +18,7 @@ import V3InputArea from '../components/Chat/V3InputArea';
 import V3MessageItem from '../components/Chat/V3MessageItem';
 import { getWsUrl } from '../utils/url';
 import { getTicket, summarizeSession } from '../api';
+import { APP_VERSION } from '../version';
 
 
 // --- Types ---
@@ -396,7 +397,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           id: clientId,
           mode: clientMode,
           platform,
-          version: '1.0.4'
+          version: APP_VERSION
         },
         device: {
           id: deviceId,
