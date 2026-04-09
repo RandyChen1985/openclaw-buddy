@@ -5,6 +5,17 @@
 
 set -e
 
+# 🦞 MacOS 开发环境路径补丁 (针对 Homebrew 与 /usr/local)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    EXTRA_PATHS="/opt/homebrew/bin:/usr/local/bin"
+    IFS=':' read -ra ADDR <<< "$EXTRA_PATHS"
+    for p in "${ADDR[@]}"; do
+        if [[ ":$PATH:" != *":$p:"* ]] && [ -d "$p" ]; then
+            export PATH="$p:$PATH"
+        fi
+    done
+fi
+
 BINARY_NAME="openclaw-buddy-mac"
 RELEASE_ROOT="release"
 PKG_PREFIX="openclaw-buddy-mac"
