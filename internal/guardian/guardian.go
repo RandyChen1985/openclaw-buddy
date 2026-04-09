@@ -58,7 +58,7 @@ func (g *Guardian) Run(ctx context.Context) {
 		}
 		process.CleanupOrphanedTasks()
 		process.SyncAll(g.config.OpenClawConfigDir)
-		g.checkVersionUpdate()
+		g.CheckVersionUpdate()
 	}()
 
 	// 启动飞书 WebSocket 长链接
@@ -98,7 +98,7 @@ func (g *Guardian) Run(ctx context.Context) {
 			process.SyncAll(g.config.OpenClawConfigDir)
 		case <-versionTicker.C:
 			log.Printf("🌐 [Update] 执行定时版本更新检查...")
-			g.checkVersionUpdate()
+			g.CheckVersionUpdate()
 		case <-ctx.Done():
 			hostname, _ := os.Hostname()
 			g.notifyFeishu(context.Background(), "👋 OpenClaw Buddy 监控服务已停止", fmt.Sprintf("节点: %s\n状态: ⏹️ 服务已正常退出", hostname))
@@ -381,7 +381,7 @@ func copyFile(src, dst string) error {
 	return err
 }
 
-func (g *Guardian) checkVersionUpdate() {
+func (g *Guardian) CheckVersionUpdate() {
 	url := "https://ghproxy.net/https://raw.githubusercontent.com/RandyChen1985/openclaw-buddy/main/VERSION"
 	client := http.Client{
 		Timeout: 10 * time.Second,
@@ -414,7 +414,8 @@ func (g *Guardian) checkVersionUpdate() {
 	if err := utils.SetSetting("latest_version", latestVersion); err != nil {
 		log.Printf("❌ [Update] 存储最新版本号失败: %v", err)
 	} else {
-		utils.RecordSystemEvent("UPDATE", fmt.Sprintf("发现新版本: %s", latestVersion))
-		log.Printf("📡 [Update] 版本检查完成，当前最新版本: %s", latestVersion)
+		// 记录系统事件，方便在 UI 时间轴看到
+		utils.RecordSystemEvent("UPDATE", fmt.Sprintf("同步远程版本库成功: %s", latestVersion))
+		log.Printf("📡 [Update] 版本对账完成，远程最新版本: %s", latestVersion)
 	}
 }

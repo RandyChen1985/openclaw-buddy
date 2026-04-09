@@ -21,7 +21,7 @@ interface DashboardOverviewProps {
   activeTasks?: any[];
   isTransitioning?: boolean; // 新增：正在执行过渡动作
   loading?: boolean;
-  onRefreshVersion?: () => Promise<any>;
+  onRefreshVersion?: (refresh?: boolean) => Promise<any>;
   onUpgrade?: (version: string) => void;
   onRestart?: () => void;
 }
@@ -74,7 +74,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     if (!onRefreshVersion || verLoading) return;
     setVerLoading(true);
     try {
-      const data = await onRefreshVersion();
+      const data = await onRefreshVersion(true);
       if (data) {
         // 只有远程版本 > 本地版本时才提示更新
         if (hasNewVersion(APP_VERSION, data.latest)) {
