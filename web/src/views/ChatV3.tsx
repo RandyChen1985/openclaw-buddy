@@ -571,6 +571,11 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     if (isMobile) {
       setShowSider(false);
     }
+    
+    // 切换会话时重置所有滚动按钮状态
+    setShowScrollBtn(false);
+    setShowScrollTopBtn(false);
+    setHasNewMessages(false);
   };
 
   const handleUpdateLabel = async () => {
@@ -686,6 +691,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     setIsTyping(false);
     clearStallTimer();
     streamContentRef.current = '';
+    
+    // 释放状态后自动聚焦输入框
+    setTimeout(() => inputAreaRef.current?.focus(), 100);
     
     // 更新最后一条助手消息的状态
     setMessages(prev => {
@@ -812,6 +820,11 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     setSessionKey(null);
     setMessages([]);
     setSessionLabel(null);
+    
+    // 新建会话时重置所有滚动按钮状态
+    setShowScrollBtn(false);
+    setShowScrollTopBtn(false);
+    setHasNewMessages(false);
   };
 
   const streamContentRef = useRef('');
@@ -928,6 +941,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         streamContentRef.current = '';
         // 刷新会话列表（新会话可能会出现在列表中）
         fetchSessions(true);
+        // 生成结束后自动聚焦输入框
+        setTimeout(() => inputAreaRef.current?.focus(), 100);
     }
   };
 
@@ -977,6 +992,17 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     setIsTyping(true);
     setTpsData([]);
     streamContentRef.current = '';
+    
+    // 核心优化：发送新消息时，强制重置滚动状态，关闭“回到底部”按钮并立即滑向底部
+    setShowScrollBtn(false);
+    setHasNewMessages(false);
+    setTimeout(() => {
+      virtuosoRef.current?.scrollToIndex({ 
+        index: messagesCountRef.current + 1, // 预估新消息后的索引（用户消息 + 思考消息）
+        align: 'end',
+        behavior: 'smooth' 
+      });
+    }, 50);
     
     // Reset performance counters
     startTimeRef.current = Date.now();
@@ -1032,10 +1058,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         message.error('Failed to send message: ' + errMsg);
         setIsTyping(false);
         clearStallTimer();
+        setTimeout(() => inputAreaRef.current?.focus(), 100);
       } else if (text === '/stop') {
         // /stop 指令成功返回后，立即释放状态，因为它不会产生流式响应
         setIsTyping(false);
         clearStallTimer();
+        setTimeout(() => inputAreaRef.current?.focus(), 100);
       }
     }
   };

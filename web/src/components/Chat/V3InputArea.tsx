@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useMemo, useImperativeHandle, forwardRef, useRef } from 'react';
 import { Input, Button, Upload, message } from 'antd';
 import { Send, Square, Paperclip, X, FileText, Loader2 } from 'lucide-react';
 import storage from '../../utils/storage';
@@ -15,6 +15,7 @@ interface FileInfo {
 
 export interface InputAreaHandle {
   addFiles: (files: FileInfo[]) => void;
+  focus: () => void;
 }
 
 interface V3InputAreaProps {
@@ -37,11 +38,15 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
   const [text, setText] = useState('');
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [uploading, setUploading] = useState(false);
+  const textAreaRef = useRef<any>(null);
 
   // 暴露 addFiles 方法供拖拽上传调用
   useImperativeHandle(ref, () => ({
     addFiles: (newFiles: FileInfo[]) => {
       setFiles(prev => [...prev, ...newFiles]);
+    },
+    focus: () => {
+      textAreaRef.current?.focus();
     }
   }));
 
@@ -199,10 +204,15 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
 
         <div style={{ flex: 1, position: 'relative' }}>
           <Input.TextArea
+            ref={textAreaRef}
             value={text}
             onChange={e => setText(e.target.value)}
             // 优化 4: 回归原生占位符，移除模拟光标和额外层
-            placeholder={status === 'authenticated' ? t('chat.v3InputPlaceholder') : t('chat.v3Connecting')}
+            placeholder={
+              status !== 'authenticated' ? t('chat.v3Connecting') : 
+              isTyping ? 'AI内容生成中,请稍后...' : 
+              t('chat.v3InputPlaceholder')
+            }
             // 优化 1: 保持 autoSize 但精简配置
             autoSize={{ minRows: 1, maxRows: 6 }}
             onCompositionStart={() => setIsComposing(true)}
