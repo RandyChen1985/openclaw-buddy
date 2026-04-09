@@ -234,6 +234,7 @@
     "confirmClear": "确认开启新会话？",
     "confirmClearContent": "开启后将清空当前的对话记录数据，以便为您开启一段全新的对话体验。",
     "newSession": "新会话",
+    "noLabel": "未命名会话",
     "enableChatTitle": "确认一键开启聊天功能？",
     "enableChatContent": "开启后需要自动重启 OpenClaw 网关以使配置生效，重启期间网关服务将短时间不可用。",
     "enableChatButton": "确认开启并重启",

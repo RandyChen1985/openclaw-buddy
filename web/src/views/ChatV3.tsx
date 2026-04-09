@@ -73,6 +73,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const stallTimerRef = useRef<any>(null);
   const [sessionKey, setSessionKey] = useState<string | null>(null);
   const [sessionLabel, setSessionLabel] = useState<string | null>(null);
+  const sessionLabelRef = useRef<string | null>(null);
+  useEffect(() => { sessionLabelRef.current = sessionLabel; }, [sessionLabel]);
   const [isEditingLabel, setIsEditingLabel] = useState(false);
   const [editingLabelText, setEditingLabelText] = useState('');
   const [isUpdatingLabel, setIsUpdatingLabel] = useState(false);
@@ -171,11 +173,30 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         const hashHex = sha256(kp.publicKey);
         hashArray = Array.from(hexToUint8Array(hashHex));
       }
-      
       const did = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
       setDeviceId(did);
     };
     initKeys();
+  }, []);
+
+  // --- 自动化增强：对话完成后自动总结标题 (React 统一调度模式) ---
+  useEffect(() => {
+    // 只要打字停止，且目前消息数 >= 2，且标题未定义，就尝试自动生成
+    if (!isTyping && messages.length >= 2 && sessionKey) {
+      const isUntitled = !sessionLabel || sessionLabel === '未命名会话' || sessionLabel === t('chat.noLabel');
+      if (isUntitled && !isSummarizing) {
+        console.log(`🤖 [Auto-Effect] 状态检测：对话结束，准备执行自动总结...`);
+        // 延迟 1 秒以确保后端状态同步完成
+        const timer = setTimeout(() => {
+          handleAutoSummarize(messages, true);
+        }, 1000);
+        return () => clearTimeout(timer);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTyping, sessionKey, sessionLabel]);
+
+  useEffect(() => {
     fetchQuickCommands();
   }, []);
 
@@ -504,7 +525,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     if (key === sessionKey) return;
     
     // --- 自动化增强：离开当前未命名会话时自动尝试总结 ---
-    if (sessionKey && !sessionLabel && messages.length >= 2) {
+    if (sessionKey && (!sessionLabel || sessionLabel === '未命名会话' || sessionLabel === t('chat.noLabel')) && messages.length >= 2) {
       console.log('🤖 [Auto] 切换会话，静默总结老会话标题:', sessionKey);
       handleAutoSummarize(messages, true, sessionKey);
     }
@@ -721,7 +742,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
   const startNewSession = () => {
     // --- 自动化增强：离开当前未命名会话时自动尝试总结 ---
-    if (sessionKey && !sessionLabel && messages.length >= 2) {
+    if (sessionKey && (!sessionLabel || sessionLabel === '未命名会话' || sessionLabel === t('chat.noLabel')) && messages.length >= 2) {
       console.log('🤖 [Auto] 开启新会话，静默总结老会话标题:', sessionKey);
       handleAutoSummarize(messages, true, sessionKey);
     }
@@ -813,7 +834,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           }
         }
       }
-    } else if (payload.state === 'final' || payload.state === 'finished') {
+    } else if (payload.state === 'final' || payload.state === 'finished' || payload.state === 'done') {
         clearStallTimer();
         const now = Date.now();
         const duration = (now - startTimeRef.current) / 1000;
@@ -824,7 +845,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         
         setMessages(prev => {
             const last = prev[prev.length - 1];
-            const updated = (last && last.role === 'assistant') ? [...prev.slice(0, -1), { 
+            return (last && last.role === 'assistant') ? [...prev.slice(0, -1), { 
                 ...last, 
                 metrics: {
                     ttft,
@@ -832,17 +853,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                     tps: finalTPS
                 }
               }] : prev;
-
-            // --- 自动化增强：首轮对话完成后自动总结标题 ---
-            // 如果正好 4 条消息且没有标题，或者正好 2 条（第一轮完成）且暂时没有后续动作
-            if (!sessionLabel && (updated.length === 4 || updated.length === 2) && !isSummarizing) {
-                console.log(`🤖 [Auto] 对话达到 ${updated.length} 条，触发自动总结...`);
-                setTimeout(() => {
-                    handleAutoSummarize(updated, true);
-                }, 1000);
-            }
-
-            return updated;
         });
 
         setIsTyping(false);
@@ -923,6 +933,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         setSessionLabel(null); // 明确重置标题，防止残留上一个会话的状态
         // Apply initial patch (using current thinkingLevel and sessionModel if selected)
         await sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel });
+        fetchSessions(); // 刷新会话列表，确保侧边栏能及时出现新会话
       }
     }
 
