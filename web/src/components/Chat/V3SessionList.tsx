@@ -84,7 +84,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
           <Input
             size="small"
             prefix={<Search size={12} style={{ color: '#94a3b8' }} />}
-            placeholder={t('chat.searchSessions', { defaultValue: '搜索会话 ID...' })}
+            placeholder={t('chat.searchSessions', { defaultValue: '搜索会话...' })}
             value={sessionSearch}
             onChange={e => setSessionSearch(e.target.value)}
             allowClear
@@ -110,7 +110,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
           </div>
         ) : (
           (() => {
-            const filtered = sessions.filter((s: any) => !sessionSearch || (s.key || '').toLowerCase().includes(sessionSearch.toLowerCase()));
+            const filtered = sessions.filter((s: any) => !sessionSearch || (s.key || '').toLowerCase().includes(sessionSearch.toLowerCase()) || (s.label || '').toLowerCase().includes(sessionSearch.toLowerCase()));
             
             // 分组逻辑
             const groups: Record<string, any[]> = { today: [], yesterday: [], lastWeek: [], older: [] };
@@ -182,9 +182,43 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                   </div>
                                 )}
                               </div>
-                              <div className="session-id-container" style={{ fontSize: 9, color: '#94a3b8', marginTop: 1, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {s.key.includes(':') ? s.key.substring(s.key.indexOf(':') + 1).substring(0, 30) : s.key.substring(0, 8)}...
+                              <div className="session-id-container" style={{ fontSize: 9, color: '#94a3b8', marginTop: 1, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
+                                  <span>{new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                  <span>•</span>
+                                  <span style={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                    {s.key.includes(':') ? s.key.substring(s.key.indexOf(':') + 1) : s.key}
+                                  </span>
+                                  {s.model && (
+                                    <>
+                                      <span>•</span>
+                                      <span style={{ fontSize: 8, background: isActive ? 'rgba(79, 70, 229, 0.05)' : '#f8fafc', padding: '0 4px', borderRadius: 4, fontWeight: 600, color: isActive ? '#6366f1' : '#94a3b8' }}>
+                                        {s.model.split('/').pop() || s.model}
+                                      </span>
+                                    </>
+                                  )}
                               </div>
+                              {/* Token 水位线 */}
+                              {s.contextTokens > 0 && (
+                                <div style={{ marginTop: 6, width: '100%' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, fontSize: 9, fontWeight: 600 }}>
+                                     <span style={{ color: '#94a3b8', transform: 'scale(0.9)', transformOrigin: 'left' }}>CONTEXT</span>
+                                     <span style={{ 
+                                       color: (s.totalTokens / s.contextTokens) > 0.8 ? '#ef4444' : (isActive ? '#4f46e5' : '#64748b'),
+                                       opacity: 0.8
+                                     }}>
+                                       {Math.round((s.totalTokens / s.contextTokens) * 100)}%
+                                     </span>
+                                  </div>
+                                  <div style={{ height: 3, width: '100%', background: isActive ? 'rgba(79, 70, 229, 0.1)' : '#f1f5f9', borderRadius: 2, overflow: 'hidden' }}>
+                                    <div style={{ 
+                                      height: '100%', 
+                                      width: `${Math.min(100, (s.totalTokens / s.contextTokens) * 100)}%`,
+                                      background: (s.totalTokens / s.contextTokens) > 0.8 ? '#ef4444' : (isActive ? '#4f46e5' : '#94a3b8'),
+                                      transition: 'width 0.3s ease'
+                                    }} />
+                                  </div>
+                                </div>
+                              )}
                           </div>
                           <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>
                               <Button size="small" type="text" icon={<Copy size={12} />} onClick={(e) => { e.stopPropagation(); copyToClipboard(s.key); }} />

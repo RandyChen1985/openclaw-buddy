@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useImperativeHandle, forwardRef } from 'react';
 import { Input, Button, Upload, message } from 'antd';
 import { Send, Square, Paperclip, X, FileText, Loader2 } from 'lucide-react';
 import storage from '../../utils/storage';
@@ -11,6 +11,10 @@ interface FileInfo {
   filename: string;
   size: number;
   ext: string;
+}
+
+export interface InputAreaHandle {
+  addFiles: (files: FileInfo[]) => void;
 }
 
 interface V3InputAreaProps {
@@ -27,12 +31,19 @@ interface V3InputAreaProps {
   selectedBot: string;
 }
 
-const V3InputArea: React.FC<V3InputAreaProps> = ({ 
+const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputAreaProps> = ({ 
   status, isMobile, isTyping, onSend, onStop, t, isComposing, setIsComposing, setIsFocused, selectedBot
-}) => {
+}, ref) => {
   const [text, setText] = useState('');
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [uploading, setUploading] = useState(false);
+
+  // 暴露 addFiles 方法供拖拽上传调用
+  useImperativeHandle(ref, () => ({
+    addFiles: (newFiles: FileInfo[]) => {
+      setFiles(prev => [...prev, ...newFiles]);
+    }
+  }));
 
   const handleInnerSend = () => {
     if ((!text.trim() && files.length === 0) || status !== 'authenticated' || isTyping || uploading) return;
@@ -222,7 +233,7 @@ const V3InputArea: React.FC<V3InputAreaProps> = ({
 };
 
 // 优化 3: 严格的重绘控制
-export default React.memo(V3InputArea, (prev, next) => {
+const V3InputArea = React.memo(forwardRef(V3InputAreaInner), (prev, next) => {
   return prev.status === next.status &&
          prev.isMobile === next.isMobile &&
          prev.isTyping === next.isTyping &&
@@ -230,3 +241,5 @@ export default React.memo(V3InputArea, (prev, next) => {
          prev.isFocused === next.isFocused &&
          prev.selectedBot === next.selectedBot;
 });
+
+export default V3InputArea;

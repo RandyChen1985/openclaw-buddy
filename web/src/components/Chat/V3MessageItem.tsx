@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
-import { Avatar, Tooltip, Button, Input } from 'antd';
-import { User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, CheckCircle } from 'lucide-react';
+import { Avatar, Tooltip, Button, Input, message } from 'antd';
+import { User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, CheckCircle, FileText } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -130,7 +130,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
             </div>
           ) : (
             <>
-              <div className="markdown-body-v3">
+              <div className="markdown-body-v3" id={`msg-content-v3-${index}`}>
                 <ReactMarkdown 
                   remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
                   rehypePlugins={[rehypeSanitize, rehypeKatex]}
@@ -183,6 +183,59 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                   <div style={{ display: 'flex', gap: 2 }}>
                     <Tooltip title={t('chat.copy', { defaultValue: '复制' })}><Button type="text" size="small" icon={<Copy size={11} />} onClick={() => copyToClipboard(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
                     <Tooltip title={t('chat.reply', { defaultValue: '引用' })}><Button type="text" size="small" icon={<Quote size={11} />} onClick={() => onQuote(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
+                    {!isUser && (
+                      <Tooltip title={t('chat.exportPDF', { defaultValue: '导出 PDF' })}>
+                        <Button 
+                          type="text" 
+                          size="small" 
+                          icon={<FileText size={11} />} 
+                          onClick={async () => {
+                            const element = document.getElementById(`msg-content-v3-${index}`);
+                            if (!element) return;
+                            const hide = message.loading(t('chat.exporting', { defaultValue: '正在生成 PDF...' }), 0);
+                            try {
+                              const html2pdf = (await import('html2pdf.js')).default;
+                              
+                              const opt = {
+                                margin: 10,
+                                filename: `Message_${index + 1}.pdf`,
+                                image: { type: 'jpeg' as const, quality: 0.98 },
+                                html2canvas: { 
+                                  scale: 2, 
+                                  useCORS: true, 
+                                  logging: false,
+                                  onclone: (clonedDoc: Document) => {
+                                    // 在克隆的文档中找到目标元素并强制拉宽
+                                    const clonedEl = clonedDoc.getElementById(`msg-content-v3-${index}`);
+                                    if (clonedEl) {
+                                      clonedEl.style.width = '1100px';
+                                      clonedEl.style.padding = '40px';
+                                      clonedEl.style.background = '#fff';
+                                      clonedEl.style.color = '#000';
+                                      clonedEl.style.borderRadius = '0';
+                                      clonedEl.style.boxShadow = 'none';
+                                      clonedEl.style.border = 'none';
+                                      // 移除 max-width 限制
+                                      clonedEl.style.maxWidth = 'none';
+                                    }
+                                  }
+                                },
+                                jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'landscape' as const }
+                              };
+                              
+                              await html2pdf().from(element).set(opt).save();
+                              message.success(t('chat.exportSuccess', { defaultValue: '导出成功' }));
+                            } catch (err) {
+                              console.error('PDF Export Error:', err);
+                              message.error(t('chat.exportFailed', { defaultValue: '导出失败' }));
+                            } finally {
+                              hide();
+                            }
+                          }} 
+                          style={{ color: '#64748b' }} 
+                        />
+                      </Tooltip>
+                    )}
                     {isUser && <Tooltip title={t('common.edit', { defaultValue: '编辑' })}><Button type="text" size="small" icon={<Pencil size={11} />} onClick={() => onEdit(index, msg.content)} style={{ color: 'rgba(255,255,255,0.85)' }} /></Tooltip>}
                     {!isUser && isLast && <Tooltip title={t('chat.retry', { defaultValue: '重试' })}><Button type="text" size="small" icon={<RefreshCw size={11} />} onClick={onRegenerate} style={{ color: '#64748b' }} /></Tooltip>}
                   </div>

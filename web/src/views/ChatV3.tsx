@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Virtuoso } from 'react-virtuoso';
+import type { VirtuosoHandle } from 'react-virtuoso';
 import { Select, Input, Button, Spin, message, Tag, Badge, Modal, Form, Tooltip, Drawer, Switch, Tabs } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Bot, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, History, LayoutPanelLeft, Activity, Settings, ChevronUp, ChevronDown, Clock, Key, Sparkles, Save, X, Zap, Quote, Wand2, PenLine, Eye } from 'lucide-react';
+import { Bot, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, History, LayoutPanelLeft, Activity, Settings, ChevronUp, ChevronDown, Key, Sparkles, Save, X, Zap, Quote, Wand2, PenLine, Eye } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -15,6 +17,7 @@ import storage from '../utils/storage';
 import GatewayOfflineMask from '../components/GatewayOfflineMask';
 import V3SessionList from '../components/Chat/V3SessionList';
 import V3InputArea from '../components/Chat/V3InputArea';
+import type { InputAreaHandle } from '../components/Chat/V3InputArea';
 import V3MessageItem from '../components/Chat/V3MessageItem';
 import { getWsUrl } from '../utils/url';
 import { getTicket, summarizeSession } from '../api';
@@ -32,6 +35,7 @@ interface FileInfo {
 }
 
 interface Message {
+  id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp?: string;
@@ -103,9 +107,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
   const [sessions, setSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
-  // @ts-ignore: Temporarily unused since pagination is disabled
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [sessionSearch, setSessionSearch] = useState('');
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
   const [showQuickActions, setShowQuickActions] = useState<boolean>(() => storage.getItem('v3_show_quick_actions') === 'true');
@@ -116,28 +117,13 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [quotedMsg, setQuotedMsg] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const inputAreaRef = useRef<InputAreaHandle>(null);
   const lastScrollTopRef = useRef(0);
   const requestIdRef = useRef(1);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
   const pendingRequests = useRef<Map<string, (res: any) => void>>(new Map());
-
-  const handleScroll = () => {
-    if (!scrollRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    
-    // 1. 处理返回底部按钮逻辑
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 150;
-    setShowScrollBtn(!isAtBottom);
-    if (isAtBottom) {
-      setHasNewMessages(false);
-    }
-
-    // 2. 处理返回顶部按钮逻辑 (仅当向上滚动且超过 150px 时显示)
-    const isScrollingUp = scrollTop < lastScrollTopRef.current;
-    setShowScrollTopBtn(isScrollingUp && scrollTop > 150);
-
-    // 记录本次滚动位置
-    lastScrollTopRef.current = scrollTop;
-  };
 
   // --- Performance Tracking Refs ---
   const startTimeRef = useRef<number>(0);
@@ -148,6 +134,17 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   // --- Key Management ---
   const [keyPair, setKeyPair] = useState<nacl.BoxKeyPair | null>(null);
   const [deviceId, setDeviceId] = useState<string>('');
+
+  // --- Virtuoso Components Stability ---
+  const VirtuosoComponents = useMemo(() => ({
+    Scroller: React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>((props, ref) => (
+      <div ref={(el) => {
+        if (typeof ref === 'function') ref(el); 
+        else if (ref) (ref as any).current = el;
+        (scrollRef as any).current = el;
+      }} {...props} style={{ ...(props.style || {}), overflowX: 'hidden' }} />
+    ))
+  }), []);
 
   useEffect(() => {
     const initKeys = async () => {
@@ -349,7 +346,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         } else if (data.event === 'chat') {
           handleChatDelta(data.payload);
         } else if (data.event === 'sessions.changed') {
-          fetchSessions();
+          fetchSessions(true);
         }
         return;
       }
@@ -369,6 +366,25 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     ws.onclose = () => {
       console.log('🔌 [V3] Connection closed');
       setStatus('disconnected');
+      // 断连保护：清理可能正在进行的流式状态
+      setIsTyping(false);
+      clearStallTimer();
+      if (streamContentRef.current) {
+        streamContentRef.current = '';
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === 'assistant') {
+            const lostLabel = t('chat.connectionLost', { defaultValue: '连接中断' });
+            if (last.content === t('chat.thinking') || last.content === '') {
+              return [...prev.slice(0, -1), { ...last, content: `(${lostLabel})` }];
+            }
+            if (!last.content.endsWith(`(${lostLabel})`)) {
+              return [...prev.slice(0, -1), { ...last, content: last.content + ` (${lostLabel})` }];
+            }
+          }
+          return prev;
+        });
+      }
     };
 
     ws.onerror = (err) => {
@@ -454,18 +470,24 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     console.log('📤 [V3] Handshake sent (id:', authId, ')');
   };
 
-  const fetchSessions = async () => {
-    setLoadingSessions(true);
+  const lastFetchTimeRef = useRef(0);
+
+  const fetchSessions = useCallback(async (isSilent = false) => {
+    // 防抖：2秒内不重复请求 (除非是非静默的手动刷新)
+    const now = Date.now();
+    if (isSilent && now - lastFetchTimeRef.current < 2000) {
+      return;
+    }
+    lastFetchTimeRef.current = now;
+
+    if (!isSilent) setLoadingSessions(true);
     const res = await sendRPC('sessions.list', { limit: 50 });
-    console.log('📋 [V3] sessions.list response:', res);
     if (res.ok) {
-      // 兼容不同返回格式：items 数组 或直接是数组
       const list = res.payload?.items || res.payload?.sessions || (Array.isArray(res.payload) ? res.payload : []);
       setSessions(list);
-      }
-      setLoadingSessions(false);
-
-  };
+    }
+    if (!isSilent) setLoadingSessions(false);
+  }, []);
 
   const parseHistoryMessages = (messagesData: any[]) => {
     return messagesData
@@ -492,6 +514,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                 content = `\n> :::toolResult\n> **${toolName}**\n> ${resultText.split('\n').join('\n> ')}\n> :::\n`;
             }
             return {
+                id: item.id || `msg-${new Date(item.createdAt || item.timestamp || Date.now()).getTime()}-${Math.random().toString(36).substring(2, 7)}`,
                 role: item.role === 'toolResult' ? 'assistant' : item.role,
                 content: content || '',
                 timestamp: new Date(item.createdAt || item.timestamp || Date.now()).toLocaleTimeString()
@@ -500,26 +523,15 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   };
 
   const loadSessionHistory = async (key: string) => {
-    setHasMoreHistory(true);
-    // 调大 limit 到 500，弥补分页功能暂不可用的问题
+    // 分页暂不可用
     const res = await sendRPC('chat.history', { sessionKey: key, limit: 500 });
     if (res.ok) {
         const messagesData = res.payload.messages || res.payload.items || [];
         const history = parseHistoryMessages(messagesData);
         setMessages(history);
-        // 如果返回的数据少于 500 条，说明已经到底了
-        if (messagesData.length < 500) {
-            setHasMoreHistory(false);
-        }
     }
   };
 
-  const loadMoreHistory = async () => {
-    // 由于后端网关目前不支持 offset/before 分页参数，
-    // 暂时停用此功能以避免无效请求报错。
-    setHasMoreHistory(false);
-    return;
-  };
 
   const handleSelectSession = (key: string) => {
     if (key === sessionKey) return;
@@ -795,7 +807,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
   const streamContentRef = useRef('');
   const lastUpdateRef = useRef(0);
-  const scrollTimerRef = useRef<number | null>(null);
 
   const clearStallTimer = useCallback(() => {
     if (stallTimerRef.current) {
@@ -863,16 +874,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           return prev;
         });
 
-        // 智能滚动优化
-        if (scrollRef.current) {
-          const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-          const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
-          if (isNearBottom) {
-            if (scrollTimerRef.current) cancelAnimationFrame(scrollTimerRef.current);
-            scrollTimerRef.current = requestAnimationFrame(() => {
-              if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-            });
-          }
+        // 智能滚动优化 (Virtuoso 的 followOutput 会自动处理大部分滚动，这里作为补充)
+        if (!showScrollBtn && virtuosoRef.current) {
+          virtuosoRef.current.scrollToIndex({ index: 'LAST', behavior: 'auto' });
         }
       }
     } else if (payload.state === 'final' || payload.state === 'finished' || payload.state === 'done') {
@@ -899,7 +903,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         setIsTyping(false);
         streamContentRef.current = '';
         // 刷新会话列表（新会话可能会出现在列表中）
-        fetchSessions();
+        fetchSessions(true);
     }
   };
 
@@ -907,7 +911,18 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     return new Promise((resolve) => {
       const id = `${method}-${requestIdRef.current++}`;
       const req = { type: 'req', id, method, params };
-      pendingRequests.current.set(id, resolve);
+      // 超时保护：30 秒无响应自动返回错误
+      const timer = setTimeout(() => {
+        if (pendingRequests.current.has(id)) {
+          pendingRequests.current.delete(id);
+          console.warn(`⏰ [V3] RPC 超时: ${method} (${id})`);
+          resolve({ ok: false, error: { message: 'RPC timeout (30s)' } });
+        }
+      }, 30000);
+      pendingRequests.current.set(id, (res: any) => {
+        clearTimeout(timer);
+        resolve(res);
+      });
       wsRef.current?.send(JSON.stringify(req));
     });
   };
@@ -961,7 +976,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       finalContent += fileLinks + fileInstruction;
     }
 
-    const newUserMsg: Message = { role: 'user', content: finalContent, timestamp: new Date().toLocaleTimeString() };
+    const newUserMsg: Message = { id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, role: 'user', content: finalContent, timestamp: new Date().toLocaleTimeString() };
     setMessages(prev => [...prev, newUserMsg]);
 
     // Ensure session exists
@@ -980,7 +995,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
     if (currentKey) {
       const assistantInitialMsg = text === '/stop' ? t('chat.terminated', { defaultValue: '用户已经终止会话' }) : t('chat.thinking');
-      setMessages(prev => [...prev, { role: 'assistant', content: assistantInitialMsg, timestamp: new Date().toLocaleTimeString() }]);
+      setMessages(prev => [...prev, { id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, role: 'assistant', content: assistantInitialMsg, timestamp: new Date().toLocaleTimeString() }]);
       resetStallTimer();
       
       const res = await sendRPC('chat.send', { 
@@ -1046,11 +1061,94 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     };
   }, []);
 
+  // --- 键盘快捷键 ---
   useEffect(() => {
-    if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMod = e.metaKey || e.ctrlKey;
+      // Escape: 取消编辑 / 清除引用
+      if (e.key === 'Escape') {
+        if (editingMsgIndex !== null) { setEditingMsgIndex(null); return; }
+        if (quotedMsg) { setQuotedMsg(null); return; }
+      }
+      // Cmd/Ctrl + K: 新建会话
+      if (isMod && e.key === 'k') {
+        e.preventDefault();
+        startNewSession();
+        return;
+      }
+      // Cmd/Ctrl + \: 切换侧边栏
+      if (isMod && e.key === '\\') {
+        e.preventDefault();
+        setShowSider(prev => !prev);
+        return;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  });
+
+  // Virtuoso 的 followOutput 已接管自动滚动，不再需要手动 scrollTop
+
+  // --- 拖拽上传处理 ---
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragging(true);
     }
-  }, [messages]);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounterRef.current = 0;
+
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length === 0 || status !== 'authenticated' || isTyping) return;
+
+    const botId = selectedBot.replace('openclaw:', '');
+    const token = storage.getItem('guardian_token');
+    const { getBaseURL } = await import('../utils/url');
+
+    for (const file of droppedFiles) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('botId', botId);
+
+        const res = await fetch(`${getBaseURL()}/v1/openclaw/chat/upload`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData
+        });
+        const json = await res.json();
+        if (json.code === 200 && json.data) {
+          inputAreaRef.current?.addFiles([json.data]);
+        } else {
+          message.error(json.message || `${file.name} 上传失败`);
+        }
+      } catch (err) {
+        message.error(`${file.name} 上传失败`);
+      }
+    }
+    message.success(t('chat.dropUploadSuccess', { defaultValue: `已添加 ${droppedFiles.length} 个文件` }));
+  }, [status, isTyping, selectedBot, t]);
 
   return (
     <>
@@ -1123,10 +1221,21 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa', position: 'relative', width: '100%', minWidth: 0, overflow: 'hidden' }}>
         <style>{`
             .session-item:hover { background: #f0f7ff; border-color: #dbeafe !important; }
-            .session-actions { display: none !important; }
+            .session-actions { 
+              display: none !important; 
+              position: absolute;
+              right: 4px;
+              top: 0;
+              bottom: 0;
+              padding-left: 20px;
+              background: linear-gradient(to right, transparent, #f0f7ff 40%, #f0f7ff);
+              align-items: center;
+              z-index: 10;
+              border-radius: 0 10px 10px 0;
+            }
             .session-item:hover .session-actions { display: flex !important; opacity: 1 !important; }
             .session-id-container { transition: all 0.2s; max-width: 100%; }
-            .session-item:hover .session-id-container { max-width: 140px; }            .typing-indicator { display: flex; align-items: center; gap: 4px; height: 12px; }
+            .typing-indicator { display: flex; align-items: center; gap: 4px; height: 12px; }
             .typing-dot { width: 5px; height: 5px; background: #4f46e5; border-radius: 50%; opacity: 0.4; animation: typing-bounce 1.4s infinite ease-in-out; }
             .typing-dot:nth-child(1) { animation-delay: 0s; }
             .typing-dot:nth-child(2) { animation-delay: 0.2s; }
@@ -1297,21 +1406,24 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             
             {status === 'authenticated' && sessionKey ? (
               <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <Tooltip title={t('chat.clickToCopy', { defaultValue: '点击复制会话 ID' })}>
-                  <span 
-                    style={{ 
-                      fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', cursor: 'pointer',
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                      maxWidth: isMobile ? 120 : 'none',
-                      lineHeight: '12px'
-                    }}
-                    className="v3-session-id-header"
-                    onClick={() => copyToClipboard(sessionKey)}
-                  >
-                    {sessionKey}
-                  </span>
-                </Tooltip>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                    <Tooltip title={t('chat.clickToCopy', { defaultValue: '点击复制会话 ID' })}>
+                    <span 
+                        style={{ 
+                        fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', cursor: 'pointer',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        maxWidth: isMobile ? 120 : 'none',
+                        lineHeight: '12px'
+                        }}
+                        className="v3-session-id-header"
+                        onClick={() => copyToClipboard(sessionKey)}
+                    >
+                        {sessionKey}
+                    </span>
+                    </Tooltip>
+                    
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {isEditingLabel ? (
                     <Input
                       size="small"
@@ -1415,7 +1527,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                   </Select>
                 </>
               )}
-              {status === 'authenticated' && !isMobile && (
+              {status === 'authenticated' && sessionKey && !isMobile && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px', background: '#f8fafc', borderRadius: 8, height: 24, marginLeft: 4 }}>
                     <span style={{ fontSize: 10, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600 }}>
                         {lastHealth?.ok === false ? '网关波动' : '网关已连接'}
@@ -1435,94 +1547,129 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           </div>
         </div>
   
-        <div ref={scrollRef} onScroll={handleScroll} style={{ 
-            flex: 1, 
-            overflowY: 'auto', 
-            overflowX: 'hidden',
-            padding: isMobile ? '12px' : '24px', 
-            display: 'flex', 
-            flexDirection: 'column', 
-            gap: 20,
-            justifyContent: messages.length === 0 ? 'center' : 'flex-start',
-            width: '100%',
-            boxSizing: 'border-box',
-            position: 'relative'
-        }}>
-          {messages.length === 0 && (
-            <div style={{ margin: '0 auto', textAlign: 'center', maxWidth: isMobile ? '100%' : 400, padding: isMobile ? '20px 0' : '40px', width: '100%', boxSizing: 'border-box' }}>
-              <div style={{ background: '#eff6ff', width: isMobile ? 64 : 80, height: isMobile ? 64 : 80, borderRadius: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', color: '#2563eb' }}>
-                <Cpu size={isMobile ? 32 : 40} />
+        <div 
+          ref={scrollRef}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          style={{ flex: 1, position: 'relative', width: '100%', overflow: 'hidden' }}
+        >
+          {/* 拖拽上传覆盖层 */}
+          {isDragging && (
+            <div style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(79, 70, 229, 0.08)',
+              backdropFilter: 'blur(4px)',
+              border: '3px dashed #6366f1',
+              borderRadius: 16,
+              zIndex: 200,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexDirection: 'column', gap: 12,
+              pointerEvents: 'none',
+              animation: 'v3-fade-in 0.2s'
+            }}>
+              <div style={{ width: 64, height: 64, borderRadius: 20, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Plus size={32} color="#4f46e5" />
               </div>
-              <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800, color: '#1e293b', marginBottom: 12 }}>{t('chat.v3Ready')}</h3>
-              <p style={{ color: '#64748b', lineHeight: 1.6, fontSize: isMobile ? 13 : 14, padding: isMobile ? '0 10px' : 0 }}>{t('chat.v3ReadyDesc')}</p>
-              
-              {sessions.length > 0 && (
-                <div style={{ marginTop: 24, animation: 'v3-fade-in 0.8s ease-out' }}>
-                  <Button 
-                    type="primary" 
-                    icon={<History size={18} />} 
-                    onClick={() => setShowSider(true)}
-                    style={{ 
-                      height: 44, borderRadius: 12, background: '#4f46e5', border: 'none', 
-                      padding: '0 24px', fontWeight: 600, boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)' 
+              <span style={{ fontSize: 16, fontWeight: 700, color: '#4f46e5' }}>{t('chat.dropToUpload', { defaultValue: '松开即可上传文件' })}</span>
+              <span style={{ fontSize: 12, color: '#94a3b8' }}>{t('chat.dropHint', { defaultValue: '支持图片、文档等文件类型' })}</span>
+            </div>
+          )}
+
+          {messages.length === 0 ? (
+            <div style={{ 
+              flex: 1, height: '100%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: isMobile ? '12px' : '24px',
+              boxSizing: 'border-box'
+            }}>
+              <div style={{ margin: '0 auto', textAlign: 'center', maxWidth: isMobile ? '100%' : 400, padding: isMobile ? '20px 0' : '40px', width: '100%', boxSizing: 'border-box' }}>
+                <div style={{ background: '#eff6ff', width: isMobile ? 64 : 80, height: isMobile ? 64 : 80, borderRadius: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', color: '#2563eb' }}>
+                  <Cpu size={isMobile ? 32 : 40} />
+                </div>
+                <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800, color: '#1e293b', marginBottom: 12 }}>{t('chat.v3Ready')}</h3>
+                <p style={{ color: '#64748b', lineHeight: 1.6, fontSize: isMobile ? 13 : 14, padding: isMobile ? '0 10px' : 0 }}>{t('chat.v3ReadyDesc')}</p>
+                
+                {sessions.length > 0 && (
+                  <div style={{ marginTop: 24, animation: 'v3-fade-in 0.8s ease-out' }}>
+                    <Button 
+                      type="primary" 
+                      icon={<History size={18} />} 
+                      onClick={() => setShowSider(true)}
+                      style={{ 
+                        height: 44, borderRadius: 12, background: '#4f46e5', border: 'none', 
+                        padding: '0 24px', fontWeight: 600, boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)' 
+                      }}
+                    >
+                      {t('chat.continueFromHistory', { defaultValue: '从历史会话中继续' })}
+                    </Button>
+                  </div>
+                )}
+
+                <div style={{ marginTop: 24, display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>{t('chat.v3LowLatency', { defaultValue: '⚡ 低延迟' })}</Tag>
+                  <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>{t('chat.v3Secure', { defaultValue: '🔒 Ed25519' })}</Tag>
+                  <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>{t('chat.v3CloudSync', { defaultValue: '🌐 云同步' })}</Tag>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <Virtuoso
+              ref={virtuosoRef}
+              data={messages}
+              overscan={200}
+              followOutput={(isAtBottom) => isAtBottom ? 'smooth' : false}
+              atBottomStateChange={(atBottom) => {
+                setShowScrollBtn(!atBottom);
+                if (atBottom) setHasNewMessages(false);
+              }}
+              isScrolling={(scrolling) => {
+                if (!scrolling && scrollRef.current) {
+                  const { scrollTop } = scrollRef.current;
+                  const isScrollingUp = scrollTop < lastScrollTopRef.current;
+                  const shouldShow = isScrollingUp && scrollTop > 150;
+                  // 只有当显示状态真正改变时才更新，减少不必要的重绘
+                  if (showScrollTopBtn !== shouldShow) {
+                    setShowScrollTopBtn(shouldShow);
+                  }
+                  lastScrollTopRef.current = scrollTop;
+                }
+              }}
+              style={{ flex: 1, width: '100%' }}
+              components={VirtuosoComponents}
+              itemContent={(index, msg) => (
+                <div style={{ padding: isMobile ? '0 12px' : '0 24px', paddingTop: index === 0 ? (isMobile ? 12 : 24) : 0, paddingBottom: 20 }}>
+                  <V3MessageItem
+                    key={msg.id || index}
+                    msg={msg}
+                    index={index}
+                    isMobile={!!isMobile}
+                    showThinking={showThinking}
+                    selectedBot={selectedBot}
+                    editingMsgIndex={editingMsgIndex}
+                    editContent={editContent}
+                    setEditContent={setEditContent}
+                    onEdit={(idx, content) => {
+                      setEditingMsgIndex(idx);
+                      setEditContent(content);
                     }}
-                  >
-                    {t('chat.continueFromHistory', { defaultValue: '从历史会话中继续' })}
-                  </Button>
+                    onSaveEdit={handleSaveEdit}
+                    onCancelEdit={() => setEditingMsgIndex(null)}
+                    onDelete={(idx) => setMessages(prev => prev.filter((_, i) => i !== idx))}
+                    onQuote={setQuotedMsg}
+                    onRegenerate={handleRegenerate}
+                    copyToClipboard={copyToClipboard}
+                    isTyping={isTyping}
+                    isLast={index === messages.length - 1}
+                    isStalled={isStalled}
+                    tpsData={tpsData}
+                    t={t}
+                  />
                 </div>
               )}
-
-              <div style={{ marginTop: 24, display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>{t('chat.v3LowLatency', { defaultValue: '⚡ 低延迟' })}</Tag>
-                <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>{t('chat.v3Secure', { defaultValue: '🔒 Ed25519' })}</Tag>
-                <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>{t('chat.v3CloudSync', { defaultValue: '🌐 云同步' })}</Tag>
-              </div>
-            </div>
-          )}
-          
-          {hasMoreHistory && messages.length > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20, marginTop: 10 }}>
-                <Button 
-                    size="small" 
-                    type="text" 
-                    loading={loadingMore} 
-                    onClick={loadMoreHistory}
-                    icon={<Clock size={14} />}
-                    style={{ fontSize: 12, color: '#94a3b8', background: '#f8fafc', borderRadius: 20, padding: '0 16px', height: 28 }}
-                >
-                    {loadingMore ? '正在拉取历史...' : '查看更早的消息'}
-                </Button>
-            </div>
-          )}
-
-          {messages.map((msg, index) => (
-            <V3MessageItem
-              key={index}
-              msg={msg}
-              index={index}
-              isMobile={!!isMobile}
-              showThinking={showThinking}
-              selectedBot={selectedBot}
-              editingMsgIndex={editingMsgIndex}
-              editContent={editContent}
-              setEditContent={setEditContent}
-              onEdit={(idx, content) => {
-                setEditingMsgIndex(idx);
-                setEditContent(content);
-              }}
-              onSaveEdit={handleSaveEdit}
-              onCancelEdit={() => setEditingMsgIndex(null)}
-              onDelete={(idx) => setMessages(prev => prev.filter((_, i) => i !== idx))}
-              onQuote={setQuotedMsg}
-              onRegenerate={handleRegenerate}
-              copyToClipboard={copyToClipboard}
-              isTyping={isTyping}
-              isLast={index === messages.length - 1}
-              isStalled={isStalled}
-              tpsData={tpsData}
-              t={t}
             />
-          ))}
+          )}
         </div>
 
         {/* 返回顶部浮动按钮 */}
@@ -1531,7 +1678,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                 <Button
                     shape="round"
                     onClick={() => {
-                        scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                        virtuosoRef.current?.scrollToIndex({ index: 0, behavior: 'smooth' });
                     }}
                     icon={<ChevronUp size={14} />}
                     style={{ 
@@ -1566,7 +1713,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                     shape="round"
                     type={hasNewMessages ? 'primary' : 'default'}
                     onClick={() => {
-                        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+                        virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'smooth' });
                         setHasNewMessages(false);
                     }}
                     icon={hasNewMessages ? <Activity size={14} className="animate-pulse" /> : <ChevronDown size={14} />}
@@ -1937,6 +2084,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                )}
 
               <V3InputArea
+                ref={inputAreaRef}
                 status={status}
                 isMobile={!!isMobile}
                 isTyping={isTyping}
