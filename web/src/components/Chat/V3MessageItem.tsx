@@ -7,7 +7,7 @@ import remarkBreaks from 'remark-breaks';
 import remarkMath from 'remark-math';
 import rehypeSanitize from 'rehype-sanitize';
 import rehypeKatex from 'rehype-katex';
-import { Mermaid, CodeBlock } from '../ChatComponents';
+import { Mermaid, CodeBlock, ECharts } from '../ChatComponents';
 
 interface V3MessageItemProps {
   msg: any;
@@ -161,6 +161,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                       const match = /language-(\w+)/.exec(className || '');
                       const language = match ? match[1] : '';
                       if (!inline && language === 'mermaid') return <Mermaid chart={String(children).replace(/\n$/, '')} />;
+                      if (!inline && language === 'echarts') return <ECharts optionStr={String(children).replace(/\n$/, '')} isTyping={isLast && isTyping} />;
                       if (!inline && language) return <CodeBlock language={language} value={String(children).replace(/\n$/, '')} isMobile={isMobile} {...props} />;
                       return <code {...props} style={{ padding: '0.2em 0.4em', backgroundColor: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(175, 184, 193, 0.2)', borderRadius: '6px', fontSize: '85%' }}>{children}</code>;
                     }
