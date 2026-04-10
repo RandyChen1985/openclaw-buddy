@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import type { VirtuosoHandle } from 'react-virtuoso';
 import { Select, Input, Button, Spin, message, Tag, Badge, Modal, Form, Tooltip, Drawer, Switch, Tabs } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Bot, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, LayoutPanelLeft, Activity, Settings, ChevronUp, ChevronDown, Key, Sparkles, Save, X, Zap, Quote, Wand2, PenLine, Eye } from 'lucide-react';
+import { Bot, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, LayoutPanelLeft, Activity, Settings, ChevronUp, ChevronDown, Sparkles, Save, X, Zap, Quote, Wand2, PenLine, Eye, Activity as ActivityIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -19,33 +19,13 @@ import V3SessionList from '../components/Chat/V3SessionList';
 import V3InputArea from '../components/Chat/V3InputArea';
 import type { InputAreaHandle } from '../components/Chat/V3InputArea';
 import V3MessageItem from '../components/Chat/V3MessageItem';
-import { getWsUrl } from '../utils/url';
-import { getTicket, summarizeSession } from '../api';
-import { APP_VERSION } from '../version';
+import ChatV3Auth from '../components/Chat/ChatV3Auth';
+import ChatV3EmptyState from '../components/Chat/ChatV3EmptyState';
+import { useChatV3WebSocket } from '../hooks/useChatV3WebSocket';
+import '../styles/ChatV3.css';
 
 
 // --- Types ---
-interface FileInfo {
-  url: string;
-  thumbUrl?: string;
-  path: string;
-  filename: string;
-  size: number;
-  ext: string;
-}
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp?: string;
-  metrics?: {
-    ttft?: number;
-    tps?: number;
-    duration?: number;
-  }
-}
-
 interface ChatV3Props {
   botsModels: any;
   loadingBots: boolean;
@@ -56,11 +36,6 @@ interface ChatV3Props {
 }
 
 // --- Utils ---
-const base64URLNoPadding = (data: Uint8Array): string => {
-  const base64 = btoa(String.fromCharCode(...data));
-  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-};
-
 const hexToUint8Array = (hex: string): Uint8Array => {
   const matched = hex.match(/.{1,2}/g);
   return new Uint8Array(matched ? matched.map(byte => parseInt(byte, 16)) : []);
@@ -68,92 +43,92 @@ const hexToUint8Array = (hex: string): Uint8Array => {
 
 const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRunning, onNavigateToDashboard }) => {
   const { t } = useTranslation();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText] = useState('');
+  
+  // Local UI States
   const [selectedBot, setSelectedBot] = useState<string>('');
-  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error'>('disconnected');
-  const [isTyping, setIsTyping] = useState(false);
-  const [isStalled, setIsStalled] = useState(false);
-  const stallTimerRef = useRef<any>(null);
-  const [sessionKey, setSessionKey] = useState<string | null>(null);
-  const sessionKeyRef = useRef<string | null>(null);
-  useEffect(() => { sessionKeyRef.current = sessionKey; }, [sessionKey]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [sessionLabel, setSessionLabel] = useState<string | null>(null);
-  const sessionLabelRef = useRef<string | null>(null);
-  useEffect(() => { sessionLabelRef.current = sessionLabel; }, [sessionLabel]);
+  const [keyPair, setKeyPair] = useState<nacl.BoxKeyPair | null>(null);
+  const [deviceId, setDeviceId] = useState<string>('');
+  
+  // Refs
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const inputAreaRef = useRef<InputAreaHandle>(null);
+  
+  // Hook usage
+  const {
+    messages, setMessages,
+    status,
+    sessionKey,
+    sessionLabel,
+    sessionModel,
+    thinkingLevel,
+    sessions,
+    loadingSessions,
+    isLoadingHistory,
+    isTyping,
+    isStalled,
+    lastHealth,
+    latencyHistory,
+    pulse,
+    tpsData,
+    hasNewMessages, setHasNewMessages,
+    isSummarizing,
+    isUpdatingLabel,
+    fetchSessions,
+    handleSelectSession,
+    startNewSession,
+    handleSend,
+    handleStopGeneration,
+    handleRegenerate,
+    handleDeleteSession,
+    handleDeleteGroup,
+    handleClearAllHistory,
+    handleSaveEdit,
+    handleUpdateLabel,
+    handleAutoSummarize,
+    handleModelChange,
+    handleThinkingLevelChange,
+    connect,
+    showScrollBtnRef
+  } = useChatV3WebSocket({
+    keyPair,
+    deviceId,
+    selectedBot,
+    setSelectedBot: (bot: string) => setSelectedBot(bot),
+    botsModels,
+    t,
+    inputAreaRef,
+    virtuosoRef,
+    scrollRef
+  });
+
+
+  // Local UI States
   const [isEditingLabel, setIsEditingLabel] = useState(false);
   const [editingLabelText, setEditingLabelText] = useState('');
-  const [isUpdatingLabel, setIsUpdatingLabel] = useState(false);
-  const [isSummarizing, setIsSummarizing] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
   const [showThinking, setShowThinking] = useState<boolean>(() => storage.getItem('v3_show_thinking') === 'true');
-  const [thinkingLevel, setThinkingLevel] = useState<'low' | 'medium' | 'high' | 'pro'>('medium');
-  const [sessionModel, setSessionModel] = useState<string>('');
-  const [lastHealth, setLastHealth] = useState<{ ok: boolean, latency: number, ts: number } | null>(null);
-  const [latencyHistory, setLatencyHistory] = useState<number[]>([]);
-  const [pulse, setPulse] = useState(0);
-  
-  // --- Soul Quick Edit States ---
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);
+  const [quickCommands, setQuickCommands] = useState<any[]>([]);
+  const [showQuickActions, setShowQuickActions] = useState<boolean>(() => storage.getItem('v3_show_quick_actions') !== 'false');
+  const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+  const [form] = Form.useForm();
+  const [showSider, setShowSider] = useState(!isMobile);
+  const [quotedMsg, setQuotedMsg] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
+  const lastScrollTopRef = useRef(0);
+  const [editingMsgIndex, setEditingMsgIndex] = useState<number | null>(null);
+  const [editContent, setEditContent] = useState('');
   const [isSoulDrawerOpen, setIsSoulDrawerOpen] = useState(false);
   const [soulContent, setSoulContent] = useState('');
   const [isSoulLoading, setIsSoulLoading] = useState(false);
   const [isSoulSaving, setIsSoulSaving] = useState(false);
   const [activeSoulTab, setActiveSoulTab] = useState('edit');
-
-  const [showScrollBtn, setShowScrollBtn] = useState(false);
-  const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);
-  const [hasNewMessages, setHasNewMessages] = useState(false);
-  const [tpsData, setTpsData] = useState<number[]>([]);
-  const [editingMsgIndex, setEditingMsgIndex] = useState<number | null>(null);
-  const [editContent, setEditContent] = useState('');
-
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [loadingSessions, setLoadingSessions] = useState(false);
-  const [sessionSearch, setSessionSearch] = useState('');
-  const [quickCommands, setQuickCommands] = useState<any[]>([]);
-  const [showQuickActions, setShowQuickActions] = useState<boolean>(() => storage.getItem('v3_show_quick_actions') !== 'false');
-  const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
-  const [form] = Form.useForm();
-  const [showSider, setShowSider] = useState(!isMobile);
-  const [quotedMsg, setQuotedMsg] = useState<string | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
-  const inputAreaRef = useRef<InputAreaHandle>(null);
-  const lastScrollTopRef = useRef(0);
-  const requestIdRef = useRef(1);
-  const [isDragging, setIsDragging] = useState(false);
-  const dragCounterRef = useRef(0);
-  const pendingRequests = useRef<Map<string, (res: any) => void>>(new Map());
+  const [isFocused, setIsFocused] = useState(false);
+  const [sessionSearch, setSessionSearch] = useState('');
 
-  // --- Performance Tracking Refs ---
-  const startTimeRef = useRef<number>(0);
-  const ttftRecordedRef = useRef<boolean>(false);
-  const tokenCountRef = useRef<number>(0);
-  const firstTokenTimeRef = useRef<number>(0);
-
-  // --- Key Management ---
-  const [keyPair, setKeyPair] = useState<nacl.BoxKeyPair | null>(null);
-  const [deviceId, setDeviceId] = useState<string>('');
-
-  // --- Virtuoso Components Stability ---
-  const VirtuosoComponents = useMemo(() => ({
-    Scroller: React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>((props, ref) => (
-      <div ref={(el) => {
-        if (typeof ref === 'function') ref(el); 
-        else if (ref) (ref as any).current = el;
-        (scrollRef as any).current = el;
-      }} {...props} style={{ ...(props.style || {}), overflowX: 'hidden' }} />
-    ))
-  }), []);
-  
-  const handleChatDeltaRef = useRef<any>(null);
-  const showScrollBtnRef = useRef(showScrollBtn);
-  useEffect(() => { showScrollBtnRef.current = showScrollBtn; }, [showScrollBtn]);
-  const messagesCountRef = useRef(messages.length);
-  useEffect(() => { messagesCountRef.current = messages.length; }, [messages.length]);
 
   useEffect(() => {
     const initKeys = async () => {
@@ -165,48 +140,34 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       } else {
         seed = hexToUint8Array(seedHex);
       }
-      
       const kp = nacl.sign.keyPair.fromSeed(seed);
       setKeyPair(kp as any);
-
-      // SHA256 of raw public key bytes (与 Go 测试文件对齐)
       let hashArray: number[];
       if (typeof crypto !== 'undefined' && crypto.subtle) {
         const hashBuffer = await crypto.subtle.digest('SHA-256', kp.publicKey.buffer as ArrayBuffer);
         hashArray = Array.from(new Uint8Array(hashBuffer));
       } else {
-        // Fallback for non-secure contexts (e.g., LAN IP)
-        const hashHex = sha256(kp.publicKey);
-        hashArray = Array.from(hexToUint8Array(hashHex));
+        hashArray = Array.from(hexToUint8Array(sha256(kp.publicKey)));
       }
-      const did = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-      setDeviceId(did);
+      setDeviceId(hashArray.map(b => b.toString(16).padStart(2, '0')).join(''));
     };
     initKeys();
   }, []);
 
-  // --- 自动化增强：对话完成后自动总结标题 (React 统一调度模式) ---
-  useEffect(() => {
-    // 只要打字停止，且目前消息数 >= 2，且标题未定义，就尝试自动生成
-    if (!isTyping && messages.length >= 2 && sessionKey) {
-      const isUntitled = !sessionLabel || sessionLabel === '未命名会话' || sessionLabel === t('chat.noLabel');
-      if (isUntitled && !isSummarizing) {
-        console.log(`🤖 [Auto-Effect] 状态检测：对话结束，准备执行自动总结...`);
-        // 延迟 1 秒以确保后端状态同步完成
-        const timer = setTimeout(() => {
-          handleAutoSummarize(messages, true);
-        }, 1000);
-        return () => clearTimeout(timer);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTyping, sessionKey, sessionLabel]);
+  const VirtuosoComponents = useMemo(() => ({
+    Scroller: React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>((props, ref) => (
+      <div ref={(el) => {
+        if (typeof ref === 'function') ref(el); 
+        else if (ref) (ref as any).current = el;
+        (scrollRef as any).current = el;
+      }} {...props} style={{ ...(props.style || {}), overflowX: 'hidden' }} />
+    ))
+  }), []);
 
   useEffect(() => {
     fetchQuickCommands();
   }, []);
 
-  // 默认选中首个机器人
   useEffect(() => {
     if (!selectedBot && botsModels?.data?.bots?.length > 0) {
       const firstBot = botsModels.data.bots[0];
@@ -231,9 +192,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       setActiveSoulTab('edit');
       setIsSoulDrawerOpen(true);
       const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
-      const workspaceParam = bot?.workspace ? `&workspace=${encodeURIComponent(bot.workspace)}` : '';
       const api = await import('../api').then(m => m.default);
-      const res = await api.get(`/v1/openclaw/bots/file?id=${botId}&type=soul${workspaceParam}`);
+      const res = await api.get(`/v1/openclaw/bots/file?id=${botId}&type=soul${bot?.workspace ? `&workspace=${encodeURIComponent(bot.workspace)}` : ''}`);
       setSoulContent(res.data.content || '');
     } catch (err: any) {
       message.error(t('common.loadFailed'));
@@ -249,12 +209,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       setIsSoulSaving(true);
       const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
       const api = await import('../api').then(m => m.default);
-      await api.post('/v1/openclaw/bots/file', {
-        id: botId,
-        type: 'soul',
-        content: soulContent,
-        workspace: bot?.workspace
-      });
+      await api.post('/v1/openclaw/bots/file', { id: botId, type: 'soul', content: soulContent, workspace: bot?.workspace });
       message.success(t('bots.saveSuccess'));
       setIsSoulDrawerOpen(false);
     } catch (err: any) {
@@ -264,900 +219,93 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     }
   };
 
-  // 头像组件：稳定 img，不每次重新加载图片
   const BotAvatar = ({ provider, size = 34 }: { provider: string, size?: number }) => {
     const p = (provider || '').toLowerCase();
     const wrapStyle = { width: size, height: size, borderRadius: '50%', background: '#fff', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', flexShrink: 0 as const };
-    
     if (p.includes('openai')) return <div style={wrapStyle}><Bot size={size * 0.55} color="#10a37f" /></div>;
-    if (p.includes('anthropic') || p.includes('claude')) return <div style={{ ...wrapStyle, fontSize: size * 0.45, fontWeight: 900, color: '#d97706', fontFamily: 'serif' }}>A</div>;
+    if (p.includes('anthropic')) return <div style={{ ...wrapStyle, fontSize: size * 0.45, fontWeight: 900, color: '#d97706', fontFamily: 'serif' }}>A</div>;
     if (p.includes('google') || p.includes('gemini')) return <div style={wrapStyle}><Zap size={size * 0.55} color="#4285f4" fill="#4285f4" /></div>;
-    if (p.includes('deepseek')) return <div style={wrapStyle}><Activity size={size * 0.55} color="#0891b2" /></div>;
-    
-    // 默认/OpenClaw：统一使用经典模式中的蓝白 Bot 图标风格
+    if (p.includes('deepseek')) return <div style={wrapStyle}><ActivityIcon size={size * 0.55} color="#0891b2" /></div>;
     return <div style={wrapStyle}><Bot size={size * 0.55} color="#2563eb" /></div>;
   };
 
   const handleAddQuickCommand = async (values: any) => {
     try {
       const res = await import('../api').then(m => m.default.post('/v1/openclaw/chat/quick-commands', values));
-      if (res.data.status === 'success') {
-        message.success(t('common.success'));
-        form.resetFields();
-        fetchQuickCommands();
-      }
-    } catch (err) {
-      message.error(t('common.error'));
-    }
+      if (res.data.status === 'success') { message.success(t('common.success')); form.resetFields(); fetchQuickCommands(); }
+    } catch (err) { message.error(t('common.error')); }
   };
 
   const handleDeleteQuickCommand = async (id: number) => {
     try {
       const res = await import('../api').then(m => m.default.delete(`/v1/openclaw/chat/quick-commands/${id}`));
-      if (res.data.status === 'success') {
-        message.success(t('common.success'));
-        fetchQuickCommands();
-      }
-    } catch (err) {
-      message.error(t('common.error'));
-    }
-  };
-
-  // --- WebSocket Logic ---
-  const connect = useCallback(async () => {
-    if (!keyPair || !deviceId) return;
-    
-    // Close existing
-    if (wsRef.current) wsRef.current.close();
-
-    setStatus('connecting');
-
-    // 1. 获取认证票据 (Ticket)
-    const ticket = await getTicket();
-    const token = storage.getItem('guardian_token');
-    
-    let wsUrl = '';
-    if (ticket) {
-      wsUrl = getWsUrl(`/v1/ws/gateway?ticket=${ticket}`);
-    } else {
-      // 回退到长效 Token (确保嵌入或旧版本兼容)
-      wsUrl = getWsUrl(`/v1/ws/gateway?token=${token}`);
-    }
-    
-    console.log('🔌 [V3] Connecting to:', wsUrl);
-    
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    // 绑定 Ref 以在闭包中使用最新逻辑
-    handleChatDeltaRef.current = handleChatDelta;
-
-    ws.onopen = () => {
-      console.log('✅ [V3] Connection established, waiting for challenge...');
-      setStatus('challenging');
-    };
-
-    ws.onmessage = async (event) => {
-      const data = JSON.parse(event.data);
-      
-      // Handle Events
-      if (data.type === 'event') {
-        if (data.event === 'health') {
-          const { ok, durationMs, ts } = data.payload;
-          const latency = durationMs || 0;
-          setLastHealth({ ok, latency, ts });
-          setLatencyHistory(prev => [...prev.slice(-29), latency]);
-          setPulse(p => p + 1);
-          return;
-        }
-        if (['tick', 'presence'].includes(data.event)) return; // 过滤高频系统包
-        
-        console.log('📥 [V3] Received:', data);
-        if (data.event === 'connect.challenge') {
-          handleChallenge(data.payload.nonce);
-        } else if (data.event === 'chat') {
-          handleChatDeltaRef.current?.(data.payload);
-        } else if (data.event === 'sessions.changed') {
-          fetchSessions(true);
-        }
-        return;
-      }
-
-      console.log('📥 [V3] Received:', data);
-
-      // Handle Responses
-      if (data.type === 'res') {
-        const resolve = pendingRequests.current.get(data.id);
-        if (resolve) {
-          resolve(data);
-          pendingRequests.current.delete(data.id);
-        }
-      }
-    };
-
-    ws.onclose = () => {
-      console.log('🔌 [V3] Connection closed');
-      setStatus('disconnected');
-      // 断连保护：清理可能正在进行的流式状态
-      setIsTyping(false);
-      clearStallTimer();
-      if (streamContentRef.current) {
-        streamContentRef.current = '';
-        setMessages(prev => {
-          const last = prev[prev.length - 1];
-          if (last && last.role === 'assistant') {
-            const lostLabel = t('chat.connectionLost', { defaultValue: '连接中断' });
-            if (last.content === t('chat.thinking') || last.content === '') {
-              return [...prev.slice(0, -1), { ...last, content: `(${lostLabel})` }];
-            }
-            if (!last.content.endsWith(`(${lostLabel})`)) {
-              return [...prev.slice(0, -1), { ...last, content: last.content + ` (${lostLabel})` }];
-            }
-          }
-          return prev;
-        });
-      }
-    };
-
-    ws.onerror = (err) => {
-      console.error('❌ [V3] WebSocket error:', err);
-      setStatus('error');
-    };
-  }, [keyPair, deviceId, t]); // Add t for i18n stability
-
-  const handleChallenge = async (nonce: string) => {
-    if (!keyPair || !deviceId) return;
-
-    // 从后端获取 OpenClaw Gateway 的真实 Token (而非 Buddy 的 guardian token)
-    let gatewayToken = '';
-    try {
-      const res = await import('../api').then(m => m.default.get('/v1/openclaw/gateway-token'));
-      gatewayToken = res.data?.token || '';
-    } catch (e) {
-      console.error('❌ [V3] 获取 Gateway Token 失败:', e);
-      setStatus('error');
-      return;
-    }
-
-    const signedAt = Date.now();
-    const role = 'operator';
-    const scopes = 'operator.admin,operator.read,operator.write';
-    const clientId = 'openclaw-control-ui';
-    const clientMode = 'cli';
-    const platform = navigator.platform.toLowerCase().includes('mac') ? 'macos' : 'windows';
-
-    // v3|{deviceId}|{clientId}|{clientMode}|{role}|{scopes}|{signedAtMs}|{token}|{nonce}|{platform}|{deviceFamily}
-    const handshakeStr = `v3|${deviceId}|${clientId}|${clientMode}|${role}|${scopes}|${signedAt}|${gatewayToken}|${nonce}|${platform}|`;
-    console.log('🔑 [V3] Handshake payload:', handshakeStr);
-    const signature = nacl.sign.detached(new TextEncoder().encode(handshakeStr), (keyPair as any).secretKey);
-
-    const authId = `auth-${Date.now()}`;
-    const req = {
-      type: 'req',
-      id: authId,
-      method: 'connect',
-      params: {
-        minProtocol: 3,
-        maxProtocol: 3,
-        role,
-        scopes: scopes.split(','),
-        auth: { token: gatewayToken },
-        client: {
-          id: clientId,
-          mode: clientMode,
-          platform,
-          version: APP_VERSION
-        },
-        device: {
-          id: deviceId,
-          publicKey: base64URLNoPadding(keyPair.publicKey),
-          signature: base64URLNoPadding(signature),
-          signedAt,
-          nonce
-        }
-      }
-    };
-
-    // 注册到 pending requests，等待网关真正的认证响应
-    pendingRequests.current.set(authId, (res: any) => {
-      if (res.ok) {
-        console.log('✅ [V3] 握手成功！');
-        setStatus('authenticated');
-        setTimeout(() => {
-          fetchSessions();
-          // 断线重连后自动恢复当前打开的会话历史
-          const currentKey = sessionKeyRef.current;
-          if (currentKey) {
-            console.log('🔄 [V3] 断线重连：自动恢复会话历史', currentKey);
-            loadSessionHistory(currentKey);
-          }
-        }, 300);
-      } else {
-        const errMsg = typeof res.error === 'object' ? JSON.stringify(res.error) : String(res.error);
-        if (errMsg.includes('NOT_PAIRED') || errMsg.includes('NOT_AUTHORIZED')) {
-            console.warn('🛡️ [V3] 设备未授权 (NOT_PAIRED)，触发静默授权重试...');
-            setStatus('authorizing');
-            // 等待后台自动 Approval 完成
-            setTimeout(() => connect(), 1500);
-        } else {
-            console.error('❌ [V3] 握手失败:', res.error);
-            setStatus('error');
-        }
-      }
-    });
-
-    wsRef.current?.send(JSON.stringify(req));
-    console.log('📤 [V3] Handshake sent (id:', authId, ')');
-  };
-
-  const lastFetchTimeRef = useRef(0);
-
-  const fetchSessions = useCallback(async (isSilent = false) => {
-    // 防抖：2秒内不重复请求 (除非是非静默的手动刷新)
-    const now = Date.now();
-    if (isSilent && now - lastFetchTimeRef.current < 2000) {
-      return;
-    }
-    lastFetchTimeRef.current = now;
-
-    if (!isSilent) setLoadingSessions(true);
-    const res = await sendRPC('sessions.list', { limit: 50 });
-    if (res.ok) {
-      const list = res.payload?.items || res.payload?.sessions || (Array.isArray(res.payload) ? res.payload : []);
-      setSessions(list);
-    }
-    if (!isSilent) setLoadingSessions(false);
-  }, []);
-
-  const parseHistoryMessages = (messagesData: any[]) => {
-    return messagesData
-        .sort((a: any, b: any) => {
-            const timeA = new Date(a.createdAt || a.timestamp || 0).getTime();
-            const timeB = new Date(b.createdAt || b.timestamp || 0).getTime();
-            return timeA - timeB;
-        })
-        .map((item: any) => {
-            let content = item.content;
-            if (Array.isArray(content)) {
-                content = content.map((c: any) => {
-                    const textPart = c.text || '';
-                    const thinkingPart = c.thinking ? `> :::thinking\n> ${c.thinking.replace(/\n/g, '\n> ')}\n> :::\n\n` : '';
-                    if (c.type === 'toolCall') {
-                        return `\n> :::toolCall\n> **${c.name}**\n> \`\`\`json\n> ${JSON.stringify(c.arguments, null, 2).replace(/\n/g, '\n> ')}\n> \`\`\`\n> :::\n`;
-                    }
-                    return thinkingPart + textPart;
-                }).join('');
-            }
-            if (item.role === 'toolResult') {
-                const toolName = item.toolName || 'unknown';
-                const resultText = typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
-                content = `\n> :::toolResult\n> **${toolName}**\n> ${resultText.split('\n').join('\n> ')}\n> :::\n`;
-            }
-            return {
-                id: item.id || `msg-${new Date(item.createdAt || item.timestamp || Date.now()).getTime()}-${Math.random().toString(36).substring(2, 7)}`,
-                role: item.role === 'toolResult' ? 'assistant' : item.role,
-                content: content || '',
-                timestamp: new Date(item.createdAt || item.timestamp || Date.now()).toLocaleTimeString()
-            };
-        });
-  };
-
-  const loadSessionHistory = async (key: string) => {
-    setIsLoadingHistory(true);
-    // 分页暂不可用
-    const res = await sendRPC('chat.history', { sessionKey: key, limit: 500 });
-    if (res.ok) {
-        const messagesData = res.payload.messages || res.payload.items || [];
-        const history = parseHistoryMessages(messagesData);
-        setMessages(history);
-    }
-    setIsLoadingHistory(false);
-  };
-
-
-  const handleSelectSession = (key: string) => {
-    if (key === sessionKey) return;
-    
-    // --- 自动化增强：离开当前未命名会话时自动尝试总结 ---
-    if (sessionKey && (!sessionLabel || sessionLabel === '未命名会话' || sessionLabel === t('chat.noLabel')) && messages.length >= 2) {
-      console.log('🤖 [Auto] 切换会话，静默总结老会话标题:', sessionKey);
-      handleAutoSummarize(messages, true, sessionKey);
-    }
-
-    setSessionKey(key);
-    
-    // 从当前已加载的列表中查找该会话的完整对象
-    const currentSession = sessions.find(s => s.key === key);
-    setSessionLabel(currentSession?.label || null);
-    setSessionModel(currentSession?.model || '');
-
-    loadSessionHistory(key);
-    
-    // 从 sessionKey 中解析 botId (格式: agent:botId:deviceId:timestamp)
-    if (key.startsWith('agent:')) {
-      const parts = key.split(':');
-      if (parts.length >= 2) {
-        setSelectedBot(`openclaw:${parts[1]}`);
-      }
-    }
-
-    if (isMobile) {
-      setShowSider(false);
-    }
-    
-    // 切换会话时重置所有滚动按钮状态
-    setShowScrollBtn(false);
-    setShowScrollTopBtn(false);
-    setHasNewMessages(false);
-  };
-
-  const handleUpdateLabel = async () => {
-    if (!sessionKey || !editingLabelText.trim()) {
-      setIsEditingLabel(false);
-      return;
-    }
-
-    setIsUpdatingLabel(true);
-    try {
-      const res = await sendRPC('sessions.patch', { 
-        key: sessionKey, 
-        label: editingLabelText.trim() 
-      });
-      if (res.ok) {
-        message.success(t('common.success'));
-        setSessionLabel(editingLabelText.trim());
-        setIsEditingLabel(false);
-        fetchSessions(); // 刷新列表以同步新状态
-      } else {
-        message.error('Failed to update label: ' + (res.error?.message || 'Unknown error'));
-      }
-    } catch (err) {
-      console.error('Update label error:', err);
-    } finally {
-      setIsUpdatingLabel(false);
-    }
-  };
-
-  const handleAutoSummarize = async (messagesOverride?: Message[], silent = false, targetKey?: string) => {
-    const activeKey = targetKey || sessionKey;
-    const targetMessages = messagesOverride || messages;
-    
-    if (!activeKey || targetMessages.length === 0) return;
-    
-    if (!targetKey) setIsSummarizing(true); // 只有手动点击时才显示 loading
-
-    try {
-      // 提取当前选中机器人的模型 ID
-      const agentId = selectedBot.replace('openclaw:', '');
-      const bot = botsModels?.data?.bots?.find((b: any) => b.id === agentId);
-      const currentModelID = bot?.model || '';
-
-      // 过滤文本
-      const validMessages = targetMessages
-        .filter(m => m.content !== t('chat.thinking'))
-        .map(m => ({ role: m.role, content: m.content }));
-        
-      const newTitle = await summarizeSession(validMessages, currentModelID);
-      if (newTitle) {
-        // 自动保存到后端
-        const res = await sendRPC('sessions.patch', { key: activeKey, label: newTitle });
-        if (res.ok) {
-          if (activeKey === sessionKey) {
-            setSessionLabel(newTitle);
-          }
-          if (!silent) {
-            message.success(t('chat.titleSummarized', { defaultValue: '标题已自动总结' }));
-          }
-          fetchSessions();
-        }
-      }
-    } catch (err) {
-      if (!silent) {
-        console.error('Summarize error:', err);
-        message.error(t('chat.summarizeFailed', { defaultValue: '总结标题失败' }));
-      }
-    } finally {
-      if (!targetKey) setIsSummarizing(false);
-    }
-  };
-
-  const handleModelChange = async (newModel: string) => {
-    setSessionModel(newModel);
-    if (!sessionKey) return;
-
-    try {
-      const res = await sendRPC('sessions.patch', { 
-        key: sessionKey, 
-        model: newModel || null 
-      });
-      if (res.ok) {
-        message.success(t('chat.modelSwitchSuccess', { defaultValue: '模型切换成功' }));
-        fetchSessions(); // 刷新列表以同步新状态
-      } else {
-        message.error('Failed to switch model: ' + (res.error?.message || 'Unknown error'));
-      }
-    } catch (err) {
-      console.error('Switch model error:', err);
-    }
-  };
-
-  const handleThinkingLevelChange = async (newLevel: 'low' | 'medium' | 'high' | 'pro') => {
-    setThinkingLevel(newLevel);
-    if (!sessionKey) return; // 无会话时不需同步，新建会话时会自动带入
-    try {
-      await sendRPC('sessions.patch', { key: sessionKey, thinkingLevel: newLevel });
-    } catch (err) {
-      console.error('Sync thinkingLevel error:', err);
-    }
+      if (res.data.status === 'success') { message.success(t('common.success')); fetchQuickCommands(); }
+    } catch (err) { message.error(t('common.error')); }
   };
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      message.success(t('chat.copySuccess', { defaultValue: '复制成功' }));
-    });
+    navigator.clipboard.writeText(text).then(() => { message.success(t('chat.copySuccess')); });
   };
 
-  const handleRegenerate = () => {
-    // 找到最后一条用户消息
-    const lastUserIndex = [...messages].reverse().findIndex(m => m.role === 'user');
-    if (lastUserIndex !== -1) {
-      const actualIndex = messages.length - 1 - lastUserIndex;
-      const lastUserMsg = messages[actualIndex];
-      // 移除该用户消息之后的所有 AI 消息
-      setMessages(prev => prev.slice(0, actualIndex + 1));
-      // 重新触发发送
-      handleSend(lastUserMsg.content);
-    }
-  };
-
-  const handleStopGeneration = () => {
-    setIsTyping(false);
-    clearStallTimer();
-    streamContentRef.current = '';
-    
-    // 释放状态后自动聚焦输入框
-    setTimeout(() => inputAreaRef.current?.focus(), 100);
-    
-    // 更新最后一条助手消息的状态
-    setMessages(prev => {
-      if (prev.length === 0) return prev;
-      const last = prev[prev.length - 1];
-      if (last.role === 'assistant') {
-        const stopLabel = t('chat.manuallyStopped', { defaultValue: '用户已手动停止' });
-        // 情况 1: 还在思考中，直接替换
-        if (last.content === t('chat.thinking') || last.content === '') {
-          return [...prev.slice(0, -1), { ...last, content: stopLabel }];
-        }
-        // 情况 2: 已有内容输出，在末尾追加提示（带括号）
-        const stopSuffix = ` (${stopLabel})`;
-        if (!last.content.endsWith(stopSuffix)) {
-          return [...prev.slice(0, -1), { ...last, content: last.content + stopSuffix }];
-        }
-      }
-      return prev;
-    });
-
-    // 发送 /stop 指令到后端，相当于用户输入了 /stop
-    handleSend('/stop');
-    message.info(t('chat.stopGenerating', { defaultValue: '已发送停止指令' }));
-  };
-
-  const handleDeleteSession = (e: React.MouseEvent, key: string) => {
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
     e.stopPropagation();
-    Modal.confirm({
-      title: t('chat.deleteSessionConfirm', { defaultValue: '确认删除会话？' }),
-      content: t('chat.deleteSessionContent', { defaultValue: '删除后无法找回，所有上下文都将被清理。' }),
-      onOk: async () => {
-        const res = await sendRPC('sessions.delete', { key });
-        if (res.ok) {
-          message.success(t('common.success'));
-          if (sessionKey === key) {
-            setSessionKey(null);
-            setMessages([]);
-            setSessionLabel(null);
-          }
-          fetchSessions();
-        }
-      }
-    });
-  };
-
-  const handleDeleteGroup = (label: string, sessionKeys: string[]) => {
-    if (sessionKeys.length === 0) return;
-    
-    const labelMap: Record<string, string> = {
-      today: t('chat.today', { defaultValue: '今天' }),
-      yesterday: t('chat.yesterday', { defaultValue: '昨天' }),
-      lastWeek: t('chat.lastSevenDays', { defaultValue: '最近一周' }),
-      older: t('chat.older', { defaultValue: '更早记录' })
-    };
-
-    Modal.confirm({
-      title: t('chat.deleteGroupConfirm', { defaultValue: '确认删除分组？' }),
-      content: t('chat.deleteGroupContent', { 
-        defaultValue: '将删除 {{label}} 下的 {{count}} 个会话，此操作不可恢复。',
-        label: labelMap[label] || label,
-        count: sessionKeys.length 
-      }),
-      okText: t('common.confirm'),
-      cancelText: t('common.cancel'),
-      okButtonProps: { danger: true },
-      onOk: async () => {
-        try {
-          message.loading({ content: t('chat.clearingGroup', { defaultValue: '正在清理分组...' }), key: 'clearingGroup' });
-          // 并发删除该分组下的所有会话
-          await Promise.all(sessionKeys.map(key => sendRPC('sessions.delete', { key })));
-          message.success({ content: t('common.success'), key: 'clearingGroup' });
-          
-          // 如果当前选中的会话在被删除的列表中，则清空
-          if (sessionKey && sessionKeys.includes(sessionKey)) {
-            setSessionKey(null);
-            setMessages([]);
-            setSessionLabel(null);
-          }
-          fetchSessions();
-        } catch (err) {
-          message.error({ content: t('common.error'), key: 'clearingGroup' });
-        }
-      }
-    });
-  };
-
-  const handleClearAllHistory = () => {
-    if (sessions.length === 0) {
-      message.info(t('chat.noHistory', { defaultValue: '暂无历史会话' }));
-      return;
-    }
-    
-    Modal.confirm({
-      title: t('chat.clearAllHistoryConfirm', { defaultValue: '确认清除全部会话？' }),
-      content: t('chat.clearAllHistoryContent', { defaultValue: '此操作将物理删除所有历史记录，且无法恢复。' }),
-      okText: t('common.confirm', { defaultValue: '确认清除' }),
-      cancelText: t('common.cancel', { defaultValue: '取消' }),
-      okButtonProps: { danger: true },
-      onOk: async () => {
-        try {
-          message.loading({ content: t('chat.clearingAll', { defaultValue: '正在清除...' }), key: 'clearingAll' });
-          // 并发删除所有会话
-          await Promise.all(sessions.map(s => sendRPC('sessions.delete', { key: s.key })));
-          message.success({ content: t('chat.clearAllSuccess', { defaultValue: '已清除全部历史记录' }), key: 'clearingAll' });
-          setSessionKey(null);
-          setMessages([]);
-          setSessionLabel(null);
-          setSessions([]);
-          fetchSessions();
-        } catch (err) {
-          message.error({ content: t('common.error'), key: 'clearingAll' });
-        }
-      }
-    });
-  };
-
-  const startNewSession = () => {
-    // --- 自动化增强：离开当前未命名会话时自动尝试总结 ---
-    if (sessionKey && (!sessionLabel || sessionLabel === '未命名会话' || sessionLabel === t('chat.noLabel')) && messages.length >= 2) {
-      console.log('🤖 [Auto] 开启新会话，静默总结老会话标题:', sessionKey);
-      handleAutoSummarize(messages, true, sessionKey);
-    }
-
-    setSessionKey(null);
-    setMessages([]);
-    setSessionLabel(null);
-    
-    // 新建会话时重置所有滚动按钮状态
-    setShowScrollBtn(false);
-    setShowScrollTopBtn(false);
-    setHasNewMessages(false);
-  };
-
-  const streamContentRef = useRef('');
-  const lastUpdateRef = useRef(0);
-
-  const clearStallTimer = useCallback(() => {
-    if (stallTimerRef.current) {
-      clearTimeout(stallTimerRef.current);
-      stallTimerRef.current = null;
-    }
-    setIsStalled(false);
-  }, []);
-
-  const resetStallTimer = useCallback(() => {
-    clearStallTimer();
-    // 3.5 秒无数据则认为进入长考状态
-    stallTimerRef.current = setTimeout(() => {
-      setIsStalled(true);
-    }, 3500);
-  }, [clearStallTimer]);
-
-  const handleChatDelta = (payload: any) => {
-    if (payload.state === 'delta') {
-      resetStallTimer();
-      const now = Date.now();
-      
-      // 使用 Ref 避免闭包陷阱
-      if (showScrollBtnRef.current) {
-        setHasNewMessages(true);
-      }
-
-      if (!ttftRecordedRef.current) {
-        ttftRecordedRef.current = true;
-        firstTokenTimeRef.current = now;
-      }
-
-      // 深度提取内容
-      const blocks = payload.message?.content || [];
-      const fullText = blocks.map((c: any) => {
-          const textPart = c.text || '';
-          const thinkingPart = c.thinking ? `> :::thinking\n> ${c.thinking.replace(/\n/g, '\n> ')}\n> :::\n\n` : '';
-          return thinkingPart + textPart;
-      }).join('');
-
-      streamContentRef.current = fullText;
-      tokenCountRef.current = fullText.length;
-
-      // 核心优化：节流合并更新 UI
-      if (now - lastUpdateRef.current > 64) {
-        lastUpdateRef.current = now;
-        
-        const elapsedFromFirst = (now - firstTokenTimeRef.current) / 1000;
-        const currentTPS = elapsedFromFirst > 0 ? (tokenCountRef.current / elapsedFromFirst) : 0;
-        const ttft = firstTokenTimeRef.current - startTimeRef.current;
-
-        if (tokenCountRef.current % 5 === 0) {
-          setTpsData(prev => [...prev.slice(-19), currentTPS]);
-        }
-
-        setMessages(prev => {
-          const last = prev[prev.length - 1];
-          if (last && last.role === 'assistant') {
-            return [...prev.slice(0, -1), { 
-              ...last, 
-              content: fullText,
-              metrics: { ttft, tps: currentTPS }
-            }];
-          }
-          return prev;
-        });
-
-        // 智能滚动优化 (Virtuoso 的 followOutput 会自动处理大部分滚动)
-        // 核心增强：如果正在打字且接近底部，强制保持滚动，不再单纯依赖 showScrollBtn
-        if (virtuosoRef.current) {
-          const isNearBottom = scrollRef.current 
-            ? (scrollRef.current.scrollHeight - scrollRef.current.scrollTop - scrollRef.current.clientHeight < 40)
-            : true;
-
-          if (!showScrollBtnRef.current || isNearBottom) {
-            virtuosoRef.current.scrollToIndex({ 
-              index: messagesCountRef.current - 1, 
-              align: 'end',
-              behavior: 'auto' 
-            });
-            if (isNearBottom && showScrollBtnRef.current) {
-              setShowScrollBtn(false);
-              setHasNewMessages(false);
-            }
-          }
-        }
-      }
-    } else if (payload.state === 'final' || payload.state === 'finished' || payload.state === 'done') {
-        clearStallTimer();
-        const now = Date.now();
-        const duration = (now - startTimeRef.current) / 1000;
-        const ttft = ttftRecordedRef.current ? (firstTokenTimeRef.current - startTimeRef.current) : 0;
-        const finalTPS = duration > 0 ? (tokenCountRef.current / (duration - (ttft/1000))) : 0;
-
-        console.log('✅ [V3] Stream completed, state:', payload.state);
-        
-        setMessages(prev => {
-            const last = prev[prev.length - 1];
-            return (last && last.role === 'assistant') ? [...prev.slice(0, -1), { 
-                ...last, 
-                metrics: {
-                    ttft,
-                    duration,
-                    tps: finalTPS
-                }
-              }] : prev;
-        });
-
-        setIsTyping(false);
-        streamContentRef.current = '';
-        // 刷新会话列表（新会话可能会出现在列表中）
-        fetchSessions(true);
-        // 生成结束后自动聚焦输入框
-        setTimeout(() => inputAreaRef.current?.focus(), 100);
+    dragCounterRef.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
     }
   };
 
-  const sendRPC = (method: string, params: any): Promise<any> => {
-    return new Promise((resolve) => {
-      // 提前检查：WS 未连接时立即返回错误，不等待 30s 超时
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-        console.warn(`⚡ [V3] RPC 跳过 (WS 未就绪): ${method}`);
-        resolve({ ok: false, error: { message: 'WebSocket not connected' } });
-        return;
-      }
-      const id = `${method}-${requestIdRef.current++}`;
-      const req = { type: 'req', id, method, params };
-      // 超时保护：30 秒无响应自动返回错误
-      const timer = setTimeout(() => {
-        if (pendingRequests.current.has(id)) {
-          pendingRequests.current.delete(id);
-          console.warn(`⏰ [V3] RPC 超时: ${method} (${id})`);
-          resolve({ ok: false, error: { message: 'RPC timeout (30s)' } });
-        }
-      }, 30000);
-      pendingRequests.current.set(id, (res: any) => {
-        clearTimeout(timer);
-        resolve(res);
-      });
-      wsRef.current.send(JSON.stringify(req));
-    });
-  };
-
-  const handleSaveEdit = async () => {
-    if (editingMsgIndex === null) return;
-    const newText = editContent.trim();
-    if (!newText) {
-      setEditingMsgIndex(null);
-      return;
-    }
-    
-    // 截断数组：保留该条消息之前的所有消息
-    setMessages(prev => prev.slice(0, editingMsgIndex));
-    setEditingMsgIndex(null);
-    setEditContent('');
-    
-    // 重新发送
-    handleSend(newText);
-  };
-
-  const handleSend = async (content?: any, attachedFiles?: FileInfo[]) => {
-    // 优先使用直接传入的内容
-    const text = (typeof content === 'string' ? content : inputText).trim();
-    
-    if ((!text && (!attachedFiles || attachedFiles.length === 0)) || (!sessionKey && !selectedBot) || status !== 'authenticated') return;
-
-    setIsTyping(true);
-    setTpsData([]);
-    streamContentRef.current = '';
-    
-    // 核心优化：发送新消息时，强制重置滚动状态，关闭“回到底部”按钮并立即滑向底部
-    setShowScrollBtn(false);
-    setHasNewMessages(false);
-    setTimeout(() => {
-      virtuosoRef.current?.scrollToIndex({ 
-        index: messagesCountRef.current + 1, // 预估新消息后的索引（用户消息 + 思考消息）
-        align: 'end',
-        behavior: 'smooth' 
-      });
-    }, 50);
-    
-    // Reset performance counters
-    startTimeRef.current = Date.now();
-    ttftRecordedRef.current = false;
-    tokenCountRef.current = 0;
-    firstTokenTimeRef.current = 0;
-
-    // 整合文件信息到文本中 (Markdown 格式)
-    let finalContent = text;
-    if (attachedFiles && attachedFiles.length > 0) {
-      const fileLinks = attachedFiles.map(f => {
-        const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
-        if (isImage) {
-          return `\n![${f.filename}](${f.thumbUrl || f.url} "${f.url}")\n(File path: ${f.path})`;
-        }
-        return `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
-      }).join('');
-      
-      // 增加明确的专家指令
-      const fileInstruction = `\n\n**System Note for Expert:** The user has uploaded files. For any file analysis, reading, or processing tasks, please access the files directly using the absolute **"File path"** provided above. Do not attempt to download via URL.`;
-      finalContent += fileLinks + fileInstruction;
-    }
-
-    const newUserMsg: Message = { id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, role: 'user', content: finalContent, timestamp: new Date().toLocaleTimeString() };
-    setMessages(prev => [...prev, newUserMsg]);
-
-    // Ensure session exists
-    let currentKey = sessionKey;
-    if (!currentKey) {
-      const res = await sendRPC('sessions.create', { agentId: selectedBot.replace('openclaw:', '') });
-      if (res.ok) {
-        currentKey = res.payload.key;
-        setSessionKey(currentKey);
-        setSessionLabel(null); // 明确重置标题，防止残留上一个会话的状态
-        // Apply initial patch (using current thinkingLevel and sessionModel if selected)
-        await sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel });
-        fetchSessions(); // 刷新会话列表，确保侧边栏能及时出现新会话
-      }
-    }
-
-    if (currentKey) {
-      const assistantInitialMsg = text === '/stop' ? t('chat.terminated', { defaultValue: '用户已经终止会话' }) : t('chat.thinking');
-      setMessages(prev => [...prev, { id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, role: 'assistant', content: assistantInitialMsg, timestamp: new Date().toLocaleTimeString() }]);
-      resetStallTimer();
-      
-      const res = await sendRPC('chat.send', { 
-        sessionKey: currentKey, 
-        message: finalContent,
-        idempotencyKey: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
-      });
-      if (!res.ok) {
-        const errMsg = typeof res.error === 'object' ? JSON.stringify(res.error) : (res.error || 'Unknown error');
-        message.error('Failed to send message: ' + errMsg);
-        setIsTyping(false);
-        clearStallTimer();
-        setTimeout(() => inputAreaRef.current?.focus(), 100);
-      } else if (text === '/stop') {
-        // /stop 指令成功返回后，立即释放状态，因为它不会产生流式响应
-        setIsTyping(false);
-        clearStallTimer();
-        setTimeout(() => inputAreaRef.current?.focus(), 100);
-      }
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
     }
   };
 
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reconnectCountRef = useRef(0);
-  const MAX_RECONNECTS = 5;
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounterRef.current = 0;
+    
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0 && inputAreaRef.current) {
+      inputAreaRef.current.uploadFiles(files);
+    }
+  };
 
   useEffect(() => {
-    if (status === 'disconnected' && keyPair) {
-      // 防止无限快速重连
-      if (reconnectCountRef.current >= MAX_RECONNECTS) {
-        console.warn('⚠️ [V3] 已达到最大重连次数，停止重连');
-        setStatus('error');
-        return;
+    if (!isTyping && messages.length >= 2 && sessionKey) {
+      const isUntitled = !sessionLabel || sessionLabel === '未命名会话' || sessionLabel === t('chat.noLabel');
+      if (isUntitled && !isSummarizing) {
+        const timer = setTimeout(() => {
+          handleAutoSummarize(messages, true);
+        }, 1000);
+        return () => clearTimeout(timer);
       }
-      // 首次连接立刻尝试，重连则按阶梯延迟
-      const delay = reconnectCountRef.current === 0 ? 0 : Math.min(3000 * reconnectCountRef.current, 15000);
-      
-      if (delay > 0) {
-        console.log(`🔄 [V3] 将在 ${delay / 1000}s 后重连 (${reconnectCountRef.current}/${MAX_RECONNECTS})`);
-      }
-      
-      reconnectTimerRef.current = setTimeout(() => {
-        reconnectCountRef.current++;
-        connect();
-      }, delay);
-      
-      return () => {
-        if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      };
     }
-    // 连接成功后重置计数
-    if (status === 'authenticated') {
-      reconnectCountRef.current = 0;
-    }
-  }, [status, keyPair, connect]);
+  }, [isTyping, sessionKey, sessionLabel]);
 
-  // 组件卸载清理：彻底切断连接
-  useEffect(() => {
-    return () => {
-      if (wsRef.current) {
-        console.log('🧹 [V3] OnlineChat unmounted: closing WebSocket');
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-    };
-  }, []);
-
-  // --- 键盘快捷键 ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isMod = e.metaKey || e.ctrlKey;
-      // Escape: 取消编辑 / 清除引用
       if (e.key === 'Escape') {
         if (editingMsgIndex !== null) { setEditingMsgIndex(null); return; }
         if (quotedMsg) { setQuotedMsg(null); return; }
       }
-      // Cmd/Ctrl + K: 新建会话
       if (isMod && e.key === 'k') {
         e.preventDefault();
         startNewSession();
         return;
       }
-      // Cmd/Ctrl + \: 切换侧边栏
       if (isMod && e.key === '\\') {
         e.preventDefault();
         setShowSider(prev => !prev);
@@ -1166,101 +314,19 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingMsgIndex, quotedMsg, startNewSession]);
-
-  // Virtuoso 的 followOutput 已接管自动滚动，不再需要手动 scrollTop
-
-  // --- 拖拽上传处理 ---
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current++;
-    if (e.dataTransfer.types.includes('Files')) {
-      setIsDragging(true);
-    }
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current--;
-    if (dragCounterRef.current === 0) {
-      setIsDragging(false);
-    }
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    dragCounterRef.current = 0;
-
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    if (droppedFiles.length === 0 || status !== 'authenticated' || isTyping) return;
-
-    const botId = selectedBot.replace('openclaw:', '');
-    const token = storage.getItem('guardian_token');
-    const { getBaseURL } = await import('../utils/url');
-
-    for (const file of droppedFiles) {
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('botId', botId);
-
-        const res = await fetch(`${getBaseURL()}/v1/openclaw/chat/upload`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData
-        });
-        const json = await res.json();
-        if (json.code === 200 && json.data) {
-          inputAreaRef.current?.addFiles([json.data]);
-        } else {
-          message.error(json.message || `${file.name} 上传失败`);
-        }
-      } catch (err) {
-        message.error(`${file.name} 上传失败`);
-      }
-    }
-    message.success(t('chat.dropUploadSuccess', { defaultValue: `已添加 ${droppedFiles.length} 个文件` }));
-  }, [status, isTyping, selectedBot, t]);
-
-  // 每当函数刷新，同步更新 Ref
-  useEffect(() => { handleChatDeltaRef.current = handleChatDelta; });
 
   return (
     <>
-      <style>{`
-        @keyframes v3-blob-animate {
-          0% { transform: translate(0, 0) scale(1); }
-          33% { transform: translate(30px, -50px) scale(1.1); }
-          66% { transform: translate(-20px, 20px) scale(0.9); }
-          100% { transform: translate(0, 0) scale(1); }
-        }
-        @keyframes v3-message-enter {
-          from { opacity: 0; transform: translateY(12px) scale(0.98); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .v3-blob {
-          position: absolute; width: 500px; height: 500px; border-radius: 50%; filter: blur(80px); opacity: 0.12; animation: v3-blob-animate 20s infinite alternate;
-        }
-      `}</style>
       {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
       <div style={{ flex: 1, display: 'flex', background: '#f8fafc', overflowX: 'hidden', height: '100%', position: 'relative', width: '100%' }}>
-        {/* 动态背景光斑 */}
+        
         <div style={{ position: 'absolute', width: '100%', height: '100%', overflow: 'hidden', zIndex: 0, pointerEvents: 'none' }}>
           <div className="v3-blob" style={{ background: '#6366f1', top: '-10%', left: '-10%', animationDelay: '0s' }} />
           <div className="v3-blob" style={{ background: '#ec4899', bottom: '10%', right: '-5%', animationDelay: '-5s', width: 600, height: 600 }} />
           <div className="v3-blob" style={{ background: '#3b82f6', top: '40%', left: '30%', animationDelay: '-10s', opacity: 0.08 }} />
         </div>
-      {/* Session Sider */}
+
       {showSider && (
         <>
           {isMobile && (
@@ -1304,173 +370,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       )}
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa', position: 'relative', width: '100%', minWidth: 0, overflow: 'hidden' }}>
-        <style>{`
-            .session-item:hover { background: #f0f7ff; border-color: #dbeafe !important; }
-            .session-actions { 
-              display: none !important; 
-              position: absolute;
-              right: 4px;
-              top: 0;
-              bottom: 0;
-              padding-left: 20px;
-              background: linear-gradient(to right, transparent, #f0f7ff 40%, #f0f7ff);
-              align-items: center;
-              z-index: 10;
-              border-radius: 0 10px 10px 0;
-            }
-            .session-item:hover .session-actions { display: flex !important; opacity: 1 !important; }
-            .session-id-container { transition: all 0.2s; max-width: 100%; }
-            .typing-indicator { display: flex; align-items: center; gap: 4px; height: 12px; }
-            .typing-dot { width: 5px; height: 5px; background: #4f46e5; border-radius: 50%; opacity: 0.4; animation: typing-bounce 1.4s infinite ease-in-out; }
-            .typing-dot:nth-child(1) { animation-delay: 0s; }
-            .typing-dot:nth-child(2) { animation-delay: 0.2s; }
-            .typing-dot:nth-child(3) { animation-delay: 0.4s; }
-            @keyframes typing-bounce {
-              0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-              40% { transform: translateY(-4px); opacity: 1; }
-            }
-            .message-in { animation: message-in 0.3s ease; }
-            @keyframes message-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-            
-            @keyframes v3-heartbeat {
-              0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); opacity: 1; }
-              70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); opacity: 0.8; }
-              100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); opacity: 1; }
-            }
-
-            .msg-footer { opacity: 1; transition: opacity 0.2s; }
-            .message-in:hover .msg-footer { opacity: 1; }
-
-            @keyframes v3-cursor-blink {
-              0%, 100% { opacity: 1; }
-              50% { opacity: 0; }
-            }
-            .v3-mock-cursor {
-              display: inline-block;
-              width: 2px;
-              height: 1.2em;
-              background: #4f46e5;
-              margin-left: 2px;
-              vertical-align: middle;
-              animation: v3-cursor-blink 1s step-end infinite;
-            }
-
-            /* 思维链块样式 */
-            .v3-thought-container {
-              background: #f8fafc;
-              border-left: 3px solid #cbd5e1;
-              padding: 10px 14px;
-              margin: 8px 0;
-              border-radius: 0 8px 8px 0;
-              font-size: 13px;
-              color: #64748b;
-              font-style: italic;
-              max-width: 100%;
-              overflow-x: auto;
-            }
-            .v3-thought-header {
-              display: flex;
-              align-items: center;
-              gap: 6px;
-              font-weight: 700;
-              font-style: normal;
-              margin-bottom: 4px;
-              color: #94a3b8;
-              font-size: 11px;
-              text-transform: uppercase;
-              letter-spacing: 0.5px;
-            }
-
-            /* 工具调用块样式 */
-            .v3-tool-call-container {
-              background: #1e293b;
-              border-radius: 8px;
-              padding: 10px;
-              margin: 10px 0;
-              color: #e2e8f0;
-              font-family: 'JetBrains Mono', monospace;
-              border: 1px solid #334155;
-              max-width: 100%;
-              overflow-x: auto;
-            }
-            .v3-tool-header {
-              display: flex;
-              align-items: center;
-              gap: 8px;
-              font-size: 11px;
-              color: #94a3b8;
-              margin-bottom: 6px;
-              border-bottom: 1px solid #334155;
-              padding-bottom: 4px;
-            }
-
-            /* 工具结果块样式 */
-            .v3-tool-result-container {
-              background: #f0fdf4;
-              border: 1px solid #dcfce7;
-              border-radius: 8px;
-              padding: 10px;
-              margin: 10px 0;
-              font-size: 12px;
-              max-width: 100%;
-              overflow-x: auto;
-            }
-            .v3-tool-result-header {
-              display: flex;
-              align-items: center;
-              gap: 6px;
-              color: #16a34a;
-              font-weight: 700;
-              margin-bottom: 6px;
-              font-size: 11px;
-            }
-
-            /* 隐藏特殊的容器标记文本 */
-            .v3-thought-container p:first-child,
-            .v3-tool-call-container p:first-child,
-            .v3-tool-result-container p:first-child {
-               display: none;
-            }
-            .v3-thought-container blockquote,
-            .v3-tool-call-container blockquote,
-            .v3-tool-result-container blockquote {
-               border: none !important;
-               padding: 0 !important;
-               margin: 0 !important;
-               font-style: normal !important;
-               color: inherit !important;
-            }
-
-            /* --- Markdown 增强样式 --- */
-            .markdown-body-v3 { line-height: 1.6; font-size: 14px; }
-            .markdown-body-v3 a { color: #2563eb; text-decoration: none; }
-            .markdown-body-v3 a:hover { text-decoration: underline; }
-            .markdown-body-v3 h1, .markdown-body-v3 h2, .markdown-body-v3 h3 { margin-top: 16px; margin-bottom: 8px; font-weight: 700; color: inherit; }
-            .markdown-body-v3 h1 { font-size: 1.5em; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
-            .markdown-body-v3 h2 { font-size: 1.3em; }
-            .markdown-body-v3 h3 { font-size: 1.1em; }
-            .markdown-body-v3 ul, .markdown-body-v3 ol { padding-left: 20px; margin: 8px 0; }
-            .markdown-body-v3 li { margin-bottom: 4px; }
-            .markdown-body-v3 hr { height: 1px; background: #e2e8f0; border: none; margin: 16px 0; }
-            .markdown-body-v3 strong { font-weight: 800; color: #1e293b; }
-            .markdown-body-v3 table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
-            .markdown-body-v3 th, .markdown-body-v3 td { border: 1px solid #e2e8f0; padding: 6px 10px; }
-            .markdown-body-v3 th { background: #f8fafc; font-weight: 700; }
-            .markdown-body-v3 blockquote:not([class]) { border-left: 4px solid #cbd5e1; padding-left: 12px; color: #64748b; margin: 10px 0; font-style: italic; }
-            
-            /* 用户消息中的 Markdown 颜色适配 */
-            .message-in[style*="row-reverse"] .markdown-body-v3 strong,
-            .message-in[style*="row-reverse"] .markdown-body-v3 h1,
-            .message-in[style*="row-reverse"] .markdown-body-v3 h2,
-            .message-in[style*="row-reverse"] .markdown-body-v3 h3 { color: #fff; }
-            .message-in[style*="row-reverse"] .markdown-body-v3 a { color: #fff; text-decoration: underline; text-underline-offset: 2px; }
-            .message-in[style*="row-reverse"] .markdown-body-v3 a:hover { color: #dbeafe; }
-            .message-in[style*="row-reverse"] .markdown-body-v3 hr { background: rgba(255,255,255,0.2); }
-            .message-in[style*="row-reverse"] .markdown-body-v3 th, 
-            .message-in[style*="row-reverse"] .markdown-body-v3 td { border-color: rgba(255,255,255,0.2); }
-            .message-in[style*="row-reverse"] .markdown-body-v3 th { background: rgba(255,255,255,0.1); }
-        
-        `}</style>
         
         <div style={{ padding: isMobile ? '6px 10px' : '10px 16px', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 10, gap: 8, width: '100%', boxSizing: 'border-box' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 10, minWidth: 0, flex: 1 }}>
@@ -1515,8 +414,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                       autoFocus
                       value={editingLabelText}
                       onChange={e => setEditingLabelText(e.target.value)}
-                      onBlur={handleUpdateLabel}
-                      onPressEnter={handleUpdateLabel}
+                      onBlur={() => { handleUpdateLabel(editingLabelText); setIsEditingLabel(false); }}
+                      onPressEnter={() => { handleUpdateLabel(editingLabelText); setIsEditingLabel(false); }}
                       disabled={isUpdatingLabel}
                       style={{ height: 20, fontSize: 12, width: isMobile ? 120 : 200 }}
                     />
@@ -1576,11 +475,10 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                     <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', width: 35 }}>
                       {lastHealth ? `${lastHealth.latency}ms` : '---'}
                     </span>
-                    {/* 微型延迟趋势图 */}
                     <svg width="30" height="12" style={{ opacity: 0.6 }}>
                       <polyline
                         fill="none" stroke="#10b981" strokeWidth="1"
-                        points={latencyHistory.map((l, i) => `${(i / 29) * 30},${12 - (Math.min(l, 200) / 200) * 12}`).join(' ')}
+                        points={latencyHistory.map((l: any, i: any) => `${(i / 29) * 30},${12 - (Math.min(l, 200) / 200) * 12}`).join(' ')}
                       />
                     </svg>
                   </div>
@@ -1640,7 +538,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           onDrop={handleDrop}
           style={{ flex: 1, position: 'relative', width: '100%', overflow: 'hidden' }}
         >
-          {/* 拖拽上传覆盖层 */}
           {isDragging && (
             <div style={{
               position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
@@ -1662,7 +559,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             </div>
           )}
 
-          {/* 会话切换 Loading 遮罩 */}
           {isLoadingHistory && (
             <div style={{
               position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
@@ -1679,27 +575,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           )}
 
           {messages.length === 0 && !isLoadingHistory ? (
-            <div style={{ 
-              flex: 1, height: '100%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              padding: isMobile ? '12px' : '24px',
-              boxSizing: 'border-box'
-            }}>
-              <div style={{ margin: '0 auto', textAlign: 'center', maxWidth: isMobile ? '100%' : 400, padding: isMobile ? '20px 0' : '40px', width: '100%', boxSizing: 'border-box' }}>
-                <div style={{ background: '#eff6ff', width: isMobile ? 64 : 80, height: isMobile ? 64 : 80, borderRadius: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', color: '#2563eb' }}>
-                  <Cpu size={isMobile ? 32 : 40} />
-                </div>
-                <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800, color: '#1e293b', marginBottom: 12 }}>{t('chat.v3Ready')}</h3>
-                <p style={{ color: '#64748b', lineHeight: 1.6, fontSize: isMobile ? 13 : 14, padding: isMobile ? '0 10px' : 0 }}>{t('chat.v3ReadyDesc')}</p>
-                
-
-                <div style={{ marginTop: 24, display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>{t('chat.v3LowLatency', { defaultValue: '⚡ 低延迟' })}</Tag>
-                  <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>{t('chat.v3Secure', { defaultValue: '🔒 Ed25519' })}</Tag>
-                  <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>{t('chat.v3CloudSync', { defaultValue: '🌐 云同步' })}</Tag>
-                </div>
-              </div>
-            </div>
+            <ChatV3EmptyState isMobile={!!isMobile} t={t} />
           ) : !isLoadingHistory ? (
             <Virtuoso
               ref={virtuosoRef}
@@ -1707,20 +583,19 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               overscan={200}
               followOutput={(isAtBottom) => isAtBottom ? (isTyping ? 'auto' : 'smooth') : false}
               atBottomStateChange={(atBottom) => {
-                // 如果正在打字且判定为“离开底部”，增加容差检查
-                if (isTyping && !atBottom && scrollRef.current) {
-                  const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-                  if (scrollHeight - scrollTop - clientHeight < 40) {
-                    return; // 容差范围内，不触发状态变更
-                  }
+                const el = scrollRef.current;
+                if (el) {
+                  const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+                  lastScrollTopRef.current = el.scrollTop;
+                  setShowScrollBtn(!isNearBottom);
+                  if (showScrollBtnRef) showScrollBtnRef.current = !isNearBottom;
                 }
-                setShowScrollBtn(!atBottom);
                 if (atBottom) setHasNewMessages(false);
               }}
               isScrolling={(scrolling) => {
                 if (!scrolling && scrollRef.current) {
                   const { scrollTop } = scrollRef.current;
-                  // 只要向下滚动超过阈值就显示返回顶部，不再要求必须是“上滑”状态才显示
+                  // 只要向下滚动超过阈值就显示返回顶部
                   const shouldShow = scrollTop > 200;
                   if (showScrollTopBtn !== shouldShow) {
                     setShowScrollTopBtn(shouldShow);
@@ -1746,9 +621,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                       setEditingMsgIndex(idx);
                       setEditContent(content);
                     }}
-                    onSaveEdit={handleSaveEdit}
+                    onSaveEdit={() => handleSaveEdit(editingMsgIndex!, editContent)}
                     onCancelEdit={() => setEditingMsgIndex(null)}
-                    onDelete={(idx) => setMessages(prev => prev.filter((_, i) => i !== idx))}
+                    onDelete={(idx) => setMessages((prev: any) => prev.filter((_: any, i: any) => i !== idx))}
                     onQuote={setQuotedMsg}
                     onRegenerate={handleRegenerate}
                     copyToClipboard={copyToClipboard}
@@ -1806,7 +681,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                     shape="round"
                     type={hasNewMessages ? 'primary' : 'default'}
                     onClick={() => {
-                        // 显式指定最后一项的索引并强制对齐到底部，解决 behavior: 'smooth' 在变高内容下可能不彻底的问题
                         virtuosoRef.current?.scrollToIndex({ 
                             index: messages.length - 1, 
                             behavior: 'smooth', 
@@ -1832,173 +706,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                     {hasNewMessages && '有新消息'}
                 </Button>
             </div>
-        )}
-
-        {status !== 'authenticated' && (
-          <div style={{
-            position: 'absolute',
-            top: 0, left: 0, right: 0, bottom: 0,
-            background: '#f8fafc', // 洁净的浅色背景
-            zIndex: 1000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexDirection: 'column',
-            animation: 'v3-fade-in 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
-            width: '100%',
-            height: '100%',
-            overflow: 'hidden'
-          }}>
-            <style>{`
-              @keyframes v3-pulse-ring {
-                0% { transform: scale(0.8); opacity: 0.5; box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.3); }
-                70% { transform: scale(1.2); opacity: 0; box-shadow: 0 0 0 20px rgba(37, 99, 235, 0); }
-                100% { transform: scale(0.8); opacity: 0; box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
-              }
-              @keyframes v3-fade-in { from { opacity: 0; } to { opacity: 1; } }
-              @keyframes v3-scan-line { 
-                0% { transform: translateY(-100%); opacity: 0; } 
-                50% { opacity: 0.8; }
-                100% { transform: translateY(400%); opacity: 0; } 
-              }
-              @keyframes v3-grid-move {
-                0% { background-position: 0 0; }
-                100% { background-position: 40px 40px; }
-              }
-              @keyframes v3-glow-light {
-                0%, 100% { box-shadow: 0 10px 30px rgba(37, 99, 235, 0.05); }
-                50% { box-shadow: 0 15px 45px rgba(37, 99, 235, 0.15); }
-              }
-              
-              .v3-auth-container {
-                position: relative;
-                width: 100%;
-                height: 100%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background-image: 
-                  linear-gradient(rgba(37, 99, 235, 0.03) 1px, transparent 1px),
-                  linear-gradient(90deg, rgba(37, 99, 235, 0.03) 1px, transparent 1px);
-                background-size: 40px 40px;
-                animation: v3-grid-move 6s linear infinite;
-              }
-
-              .v3-auth-card {
-                position: relative;
-                padding: ${isMobile ? '32px 24px' : '48px'};
-                background: rgba(255, 255, 255, 0.7);
-                backdrop-filter: blur(20px) saturate(180%);
-                border-radius: ${isMobile ? '24px' : '32px'};
-                border: 1px solid rgba(37, 99, 235, 0.15);
-                text-align: center;
-                max-width: ${isMobile ? '280px' : '380px'};
-                width: 85%;
-                box-sizing: border-box;
-                animation: v3-glow-light 4s ease-in-out infinite;
-                overflow: hidden;
-              }
-
-              .v3-scan-line-element {
-                position: absolute;
-                top: 0; left: 0; right: 0;
-                height: 2px;
-                background: linear-gradient(90deg, transparent, #2563eb, transparent);
-                box-shadow: 0 0 10px rgba(37, 99, 235, 0.5);
-                z-index: 1;
-                animation: v3-scan-line 3.5s linear infinite;
-              }
-
-              .v3-icon-box {
-                width: ${isMobile ? '64px' : '80px'}; 
-                height: ${isMobile ? '64px' : '80px'};
-                border-radius: ${isMobile ? '20px' : '24px'};
-                margin: 0 auto 24px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                position: relative;
-                background: rgba(37, 99, 235, 0.05);
-                border: 1px solid rgba(37, 99, 235, 0.1);
-              }
-
-              .v3-tech-label {
-                font-family: 'JetBrains Mono', 'Fira Code', monospace;
-                font-size: 10px;
-                color: #2563eb;
-                text-transform: uppercase;
-                letter-spacing: 2px;
-                opacity: 0.5;
-                margin-bottom: 8px;
-              }
-            `}</style>
-            
-            <div className="v3-auth-container">
-              <div className="v3-auth-card">
-                <div className="v3-scan-line-element" />
-                
-                <div className="v3-tech-label">System Protocol Hook</div>
-                
-                <div className="v3-icon-box">
-                  {status !== 'error' && (
-                    <div style={{
-                      position: 'absolute',
-                      top: -4, left: -4, right: -4, bottom: -4,
-                      borderRadius: 'inherit',
-                      border: '2px solid #2563eb',
-                      animation: 'v3-pulse-ring 2s cubic-bezier(0.24, 0, 0.38, 1) infinite'
-                    }} />
-                  )}
-                  {status === 'error' ? (
-                    <ShieldCheck size={36} color="#ef4444" />
-                  ) : status === 'authorizing' ? (
-                    <Key size={36} color="#2563eb" />
-                  ) : (
-                    <Cpu size={36} color="#2563eb" className="animate-spin" style={{ animationDuration: '3s' }} />
-                  )}
-                </div>
-                
-                <div style={{ fontWeight: 800, fontSize: isMobile ? 20 : 24, color: '#1e293b', marginBottom: 12, letterSpacing: '-0.02em', fontFamily: 'monospace' }}>
-                  {status === 'error' ? t('chat.v3StatusAuthFailed', { defaultValue: 'AUTH_FAILED' }) :
-                    status === 'connecting' ? t('chat.v3StatusConnecting', { defaultValue: 'CONNECTING...' }) :
-                    status === 'challenging' ? t('chat.v3StatusHandshaking', { defaultValue: 'HANDSHAKING...' }) : 
-                    status === 'authorizing' ? t('chat.v3StatusAuthorizing', { defaultValue: 'AUTHORIZING...' }) : t('chat.v3StatusIdentifying', { defaultValue: 'IDENTIFYING...' })}
-                </div>
-                
-                <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6, marginBottom: 24, fontFamily: 'monospace' }}>
-                  {status === 'error' ? (
-                    <div style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.05)', padding: '8px 12px', borderRadius: 8, fontSize: 11, border: '1px solid rgba(239, 68, 68, 0.1)' }}>
-                      [ERROR] {t('chat.v3ErrorDesc', { defaultValue: 'TARGET_UNREACHABLE_OR_DENIED' })}
-                    </div>
-                  ) : status === 'authorizing' ? (
-                    t('chat.v3AuthorizingDesc', { defaultValue: 'DEVICE_NODE_HANDSHAKE_IN_PROGRESS...' })
-                  ) : t('chat.v3SecureDesc', { defaultValue: 'SECURE_CHANNEL_V3 // ED25519_HARDWARE_KEY' })}
-                </div>
-                
-                {status === 'error' && (
-                  <Button 
-                    type="primary" 
-                    size="large" 
-                    onClick={connect} 
-                    icon={<RefreshCw size={18} />}
-                    style={{ width: '100%', height: 46, borderRadius: 12, background: '#2563eb', fontWeight: 600, border: 'none', boxShadow: '0 4px 15px rgba(37, 99, 235, 0.3)' }}
-                  >
-                    {t('chat.v3RetryBtn', { defaultValue: 'RETRY_CONNECTION' })}
-                  </Button>
-                )}
-
-                <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 4 }}>
-                   {[1,2,3,4].map(i => (
-                     <div key={i} style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%', opacity: 0.1 + (i*0.1) }} />
-                   ))}
-                </div>
-              </div>
-            </div>
-            
-            <div style={{ position: 'absolute', bottom: 24, fontSize: 10, color: 'rgba(37, 99, 235, 0.2)', fontWeight: 600, letterSpacing: '4px', fontFamily: 'monospace' }}>
-              OPENCLAW_SECURE_TUNNEL_V3.0
-            </div>
-          </div>
         )}
 
         <div style={{ padding: isMobile ? '8px 12px' : '0 24px 20px', background: '#fafafa', borderTop: '1px solid #f1f5f9', width: '100%', boxSizing: 'border-box' }}>
@@ -2207,6 +914,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
           </div>
         </div>
+        <ChatV3Auth 
+          status={status} 
+          isMobile={!!isMobile} 
+          onConnect={connect} 
+          t={t} 
+        />
       </div>
 
       {/* 管理快捷指令 Modal */}

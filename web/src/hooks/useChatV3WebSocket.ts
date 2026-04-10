@@ -1,0 +1,697 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { message, Modal } from 'antd';
+import * as nacl from 'tweetnacl';
+import storage from '../utils/storage';
+import { getWsUrl } from '../utils/url';
+import { getTicket, summarizeSession } from '../api';
+import { APP_VERSION } from '../version';
+
+export interface FileInfo {
+  url: string;
+  thumbUrl?: string;
+  path: string;
+  filename: string;
+  size: number;
+  ext: string;
+}
+
+export interface Message {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+  metrics?: {
+    ttft?: number;
+    duration?: number;
+    tps?: number;
+  };
+}
+
+interface UseChatV3WebSocketProps {
+  keyPair: nacl.BoxKeyPair | null;
+  deviceId: string;
+  selectedBot: string;
+  setSelectedBot: (bot: string) => void;
+  botsModels: any;
+  t: any;
+  inputAreaRef: React.RefObject<any>;
+  virtuosoRef: React.RefObject<any>;
+  scrollRef: React.RefObject<HTMLDivElement>;
+}
+
+export const useChatV3WebSocket = ({
+  keyPair,
+  deviceId,
+  selectedBot,
+  setSelectedBot,
+  botsModels,
+  t,
+  inputAreaRef,
+  virtuosoRef,
+  scrollRef
+}: UseChatV3WebSocketProps) => {
+  // --- States ---
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error'>('disconnected');
+  const [isTyping, setIsTyping] = useState(false);
+  const [isStalled, setIsStalled] = useState(false);
+  const [sessionKey, setSessionKey] = useState<string | null>(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [sessionLabel, setSessionLabel] = useState<string | null>(null);
+  const [sessionModel, setSessionModel] = useState<string>('');
+  const [thinkingLevel, setThinkingLevel] = useState<'low' | 'medium' | 'high' | 'pro'>('medium');
+  const [lastHealth, setLastHealth] = useState<{ ok: boolean, latency: number, ts: number } | null>(null);
+  const [latencyHistory, setLatencyHistory] = useState<number[]>([]);
+  const [pulse, setPulse] = useState(0);
+  const [tpsData, setTpsData] = useState<number[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [isUpdatingLabel, setIsUpdatingLabel] = useState(false);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
+
+  // --- Refs ---
+  const wsRef = useRef<WebSocket | null>(null);
+  const requestIdRef = useRef(1);
+  const pendingRequests = useRef<Map<string, (res: any) => void>>(new Map());
+  const reconnectCountRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const MAX_RECONNECTS = 5;
+  
+  const sessionKeyRef = useRef<string | null>(null);
+  useEffect(() => { sessionKeyRef.current = sessionKey; }, [sessionKey]);
+  
+  const sessionLabelRef = useRef<string | null>(null);
+  useEffect(() => { sessionLabelRef.current = sessionLabel; }, [sessionLabel]);
+
+  const messagesCountRef = useRef(messages.length);
+  useEffect(() => { messagesCountRef.current = messages.length; }, [messages.length]);
+
+  const stallTimerRef = useRef<any>(null);
+  const streamContentRef = useRef('');
+  const lastUpdateRef = useRef(0);
+  const startTimeRef = useRef<number>(0);
+  const ttftRecordedRef = useRef<boolean>(false);
+  const tokenCountRef = useRef<number>(0);
+  const firstTokenTimeRef = useRef<number>(0);
+  const showScrollBtnRef = useRef(false);
+
+  // --- RPC Communication ---
+  const sendRPC = useCallback((method: string, params: any): Promise<any> => {
+    return new Promise((resolve) => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        console.warn(`⚡ [V3] RPC 跳过 (WS 未就绪): ${method}`);
+        resolve({ ok: false, error: { message: 'WebSocket not connected' } });
+        return;
+      }
+      const id = `${method}-${requestIdRef.current++}`;
+      const req = { type: 'req', id, method, params };
+      const timer = setTimeout(() => {
+        if (pendingRequests.current.has(id)) {
+          pendingRequests.current.delete(id);
+          console.warn(`⏰ [V3] RPC 超时: ${method} (${id})`);
+          resolve({ ok: false, error: { message: 'RPC timeout (30s)' } });
+        }
+      }, 30000);
+      pendingRequests.current.set(id, (res: any) => {
+        clearTimeout(timer);
+        resolve(res);
+      });
+      wsRef.current.send(JSON.stringify(req));
+    });
+  }, []);
+
+  // --- Session List actions ---
+  const fetchSessions = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoadingSessions(true);
+    const res = await sendRPC('sessions.list', { limit: 50 });
+    if (res.ok) {
+      const list = res.payload?.items || res.payload?.sessions || (Array.isArray(res.payload) ? res.payload : []);
+      setSessions(list);
+    }
+    if (!isSilent) setLoadingSessions(false);
+  }, [sendRPC]);
+
+  // --- Streaming Data Handlers ---
+  const formatMessageContent = useCallback((content: any): string => {
+    if (!content) return '';
+    
+    // 如果是字符串，尝试解析是否为 JSON (处理历史记录或双重转义情况)
+    if (typeof content === 'string') {
+      const trimmed = content.trim();
+      if (trimmed === '[]' || trimmed === '{}') return '';
+      if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          return formatMessageContent(parsed);
+        } catch (e) {
+          return content;
+        }
+      }
+      return content;
+    }
+
+    // 如果是数组，处理每一块
+    if (Array.isArray(content)) {
+      return content.map((c: any) => {
+        // 兼容不同的文本字段名 (text, content)
+        const textPart = c.text || c.content || '';
+        
+        // 处理思考过程
+        let thinkingPart = '';
+        if (c.thinking || c.thought || c.reasoning) {
+          const thought = c.thinking || c.thought || c.reasoning;
+          thinkingPart = `> :::thinking\n> ${thought.replace(/\n/g, '\n> ')}\n> :::\n\n`;
+        }
+
+        // 处理工具调用
+        let toolCallPart = '';
+        if (c.type === 'toolCall' || c.toolCall || c.tool_call) {
+          const tc = c.toolCall || c.tool_call || c;
+          const name = tc.name || tc.function?.name || 'unknown_tool';
+          const args = typeof tc.arguments === 'string' ? tc.arguments : JSON.stringify(tc.arguments || {});
+          toolCallPart = `> :::toolCall\n> **${name}**\n> \`\`\`json\n> ${args}\n> \`\`\`\n> :::\n\n`;
+        }
+
+        // 处理工具结果
+        let toolResultPart = '';
+        if (c.type === 'toolResult' || c.toolResult || c.tool_result) {
+          const tr = c.toolResult || c.tool_result || c;
+          const toolName = tr.toolName || tr.tool_name || tr.name || '';
+          const result = typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content || tr.result || {});
+          toolResultPart = `> :::toolResult\n> ${toolName ? `**${toolName}**\n> ` : ''}\`\`\`json\n> ${result}\n> \`\`\`\n> :::\n\n`;
+        }
+
+        return thinkingPart + toolCallPart + toolResultPart + textPart;
+      }).join('');
+    }
+
+    // 如果是个单对象，递归处理其生成的数组
+    if (typeof content === 'object') {
+      return formatMessageContent([content]);
+    }
+
+    return String(content);
+  }, []);
+
+  const clearStallTimer = useCallback(() => {
+    if (stallTimerRef.current) {
+      clearTimeout(stallTimerRef.current);
+      stallTimerRef.current = null;
+    }
+    setIsStalled(false);
+  }, []);
+
+  const resetStallTimer = useCallback(() => {
+    clearStallTimer();
+    stallTimerRef.current = setTimeout(() => {
+      setIsStalled(true);
+    }, 3500);
+  }, [clearStallTimer]);
+
+  const handleChatDelta = useCallback((payload: any) => {
+    if (payload.state === 'delta') {
+      resetStallTimer();
+      const now = Date.now();
+      
+      if (showScrollBtnRef.current) {
+        setHasNewMessages(true);
+      }
+
+      if (!ttftRecordedRef.current) {
+        ttftRecordedRef.current = true;
+        firstTokenTimeRef.current = now;
+      }
+
+      const fullText = formatMessageContent(payload.message?.content || []);
+
+      streamContentRef.current = fullText;
+      tokenCountRef.current = fullText.length;
+
+      if (now - lastUpdateRef.current > 64) {
+        lastUpdateRef.current = now;
+        const elapsedFromFirst = (now - firstTokenTimeRef.current) / 1000;
+        const currentTPS = elapsedFromFirst > 0 ? (tokenCountRef.current / elapsedFromFirst) : 0;
+        const ttft = firstTokenTimeRef.current - startTimeRef.current;
+
+        if (tokenCountRef.current % 5 === 0) {
+          setTpsData(prev => [...prev.slice(-19), currentTPS]);
+        }
+
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === 'assistant') {
+            return [...prev.slice(0, -1), { 
+              ...last, 
+              content: fullText,
+              metrics: { ttft, tps: currentTPS }
+            }];
+          }
+          return prev;
+        });
+
+        if (virtuosoRef.current) {
+          const isNearBottom = scrollRef.current 
+            ? (scrollRef.current.scrollHeight - scrollRef.current.scrollTop - scrollRef.current.clientHeight < 40)
+            : true;
+
+          if (!showScrollBtnRef.current || isNearBottom) {
+            virtuosoRef.current.scrollToIndex({ 
+              index: messagesCountRef.current - 1, 
+              align: 'end',
+              behavior: 'auto' 
+            });
+          }
+        }
+      }
+    } else if (payload.state === 'final' || payload.state === 'finished' || payload.state === 'done') {
+        clearStallTimer();
+        const now = Date.now();
+        const duration = (now - startTimeRef.current) / 1000;
+        const ttft = ttftRecordedRef.current ? (firstTokenTimeRef.current - startTimeRef.current) : 0;
+        const finalTPS = duration > 0 ? (tokenCountRef.current / (duration - (ttft/1000))) : 0;
+
+        setMessages(prev => {
+            const last = prev[prev.length - 1];
+            return (last && last.role === 'assistant') ? [...prev.slice(0, -1), { 
+                ...last, 
+                content: streamContentRef.current, // Ensure final text matches
+                metrics: { ttft, duration, tps: finalTPS }
+              }] : prev;
+        });
+
+        setIsTyping(false);
+        streamContentRef.current = '';
+        fetchSessions(true);
+        setTimeout(() => inputAreaRef.current?.focus(), 100);
+    }
+  }, [resetStallTimer, clearStallTimer, fetchSessions, inputAreaRef, scrollRef, virtuosoRef]);
+
+  // --- Connection Logic ---
+  const handleChallenge = useCallback(async (nonce: string, ws: WebSocket) => {
+    if (!keyPair || !deviceId) return;
+    let gatewayToken = '';
+    try {
+      const api = await import('../api').then(m => m.default);
+      const res = await api.get('/v1/openclaw/gateway-token');
+      gatewayToken = res.data?.token || '';
+    } catch (e) {
+      console.error('❌ [V3] 获取 Gateway Token 失败:', e);
+      setStatus('error');
+      return;
+    }
+
+    const signedAt = Date.now();
+    const role = 'operator';
+    const scopes = 'operator.admin,operator.read,operator.write';
+    const clientId = 'openclaw-control-ui';
+    const clientMode = 'cli';
+    const platform = navigator.platform.toLowerCase().includes('mac') ? 'macos' : 'windows';
+
+    const handshakeStr = `v3|${deviceId}|${clientId}|${clientMode}|${role}|${scopes}|${signedAt}|${gatewayToken}|${nonce}|${platform}|`;
+    const signature = nacl.sign.detached(new TextEncoder().encode(handshakeStr), (keyPair as any).secretKey);
+
+    const authId = `auth-${Date.now()}`;
+    const req = {
+      type: 'req', id: authId, method: 'connect',
+      params: {
+        minProtocol: 3, maxProtocol: 3, role,
+        scopes: scopes.split(','),
+        auth: { token: gatewayToken },
+        client: { id: clientId, mode: clientMode, platform, version: APP_VERSION },
+        device: {
+          id: deviceId,
+          publicKey: btoa(String.fromCharCode(...keyPair.publicKey)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+          signature: btoa(String.fromCharCode(...signature)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+          signedAt, nonce
+        }
+      }
+    };
+
+    pendingRequests.current.set(authId, (res: any) => {
+      if (res.ok) {
+        setStatus('authenticated');
+        setTimeout(() => {
+          fetchSessions();
+          if (sessionKeyRef.current) loadSessionHistory(sessionKeyRef.current);
+        }, 300);
+      } else {
+        const errMsg = typeof res.error === 'object' ? JSON.stringify(res.error) : String(res.error);
+        if (errMsg.includes('NOT_PAIRED') || errMsg.includes('NOT_AUTHORIZED')) {
+            setStatus('authorizing');
+        } else {
+            console.error('❌ [V3] 握手失败:', res.error);
+            setStatus('error');
+        }
+      }
+    });
+    ws.send(JSON.stringify(req));
+  }, [keyPair, deviceId, fetchSessions, APP_VERSION]);
+
+  const connect = useCallback(async () => {
+    if (!keyPair || !deviceId) return;
+    if (wsRef.current) wsRef.current.close();
+    setStatus('connecting');
+    const ticket = await getTicket();
+    const token = storage.getItem('guardian_token');
+    const wsUrl = ticket ? getWsUrl(`/v1/ws/gateway?ticket=${ticket}`) : getWsUrl(`/v1/ws/gateway?token=${token}`);
+    
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => setStatus('challenging');
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'event') {
+        if (data.event === 'health') {
+          const { ok, durationMs, ts } = data.payload;
+          setLastHealth({ ok, latency: durationMs || 0, ts });
+          setLatencyHistory(prev => [...prev.slice(-29), durationMs || 0]);
+          setPulse(p => p + 1);
+          return;
+        }
+        if (['tick', 'presence'].includes(data.event)) return;
+        if (data.event === 'connect.challenge') handleChallenge(data.payload.nonce, ws);
+        else if (data.event === 'chat') handleChatDelta(data.payload);
+        else if (data.event === 'sessions.changed') fetchSessions(true);
+        return;
+      }
+      if (data.type === 'res') {
+        const resolve = pendingRequests.current.get(data.id);
+        if (resolve) { resolve(data); pendingRequests.current.delete(data.id); }
+      }
+    };
+    ws.onclose = () => {
+      setStatus('disconnected');
+      setIsTyping(false);
+      clearStallTimer();
+    };
+    ws.onerror = () => setStatus('error');
+  }, [keyPair, deviceId, handleChallenge, handleChatDelta, fetchSessions, clearStallTimer]);
+
+  // --- More Session/Chat Logic ---
+  const loadSessionHistory = useCallback(async (key: string) => {
+    setIsLoadingHistory(true);
+    const res = await sendRPC('chat.history', { sessionKey: key, limit: 500 });
+    if (res.ok) {
+        console.log('📜 [V3] History Raw Response:', JSON.stringify(res.payload, null, 2));
+        const items = (res.payload.messages || res.payload.items || []).sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+        const history = items.map((item: any) => {
+          let content = formatMessageContent(item.content);
+          
+          // Legacy 兼容：如果角色是 toolResult 且尚未被 formatMessageContent 包装（如纯文本历史记录）
+          if (item.role === 'toolResult' && !content.includes(':::toolResult')) {
+            const toolName = item.toolName || 'unknown';
+            const text = typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
+            content = `> :::toolResult\n> **${toolName}**\n> ${text.split('\n').join('\n> ')}\n> :::\n`;
+          }
+
+          return {
+            id: item.id || `msg-${new Date(item.createdAt || 0).getTime()}-${Math.random().toString(36).substring(2, 7)}`,
+            role: item.role === 'toolResult' ? 'assistant' : item.role,
+            content: content || '',
+            timestamp: new Date(item.createdAt || item.timestamp || Date.now()).toLocaleTimeString(),
+            metrics: item.metrics
+          };
+        });
+        setMessages(history);
+    }
+    setIsLoadingHistory(false);
+  }, [sendRPC]);
+
+  const handleSelectSession = useCallback((key: string) => {
+    if (key === sessionKey) return;
+    setSessionKey(key);
+    const s = sessions.find(x => x.key === key);
+    if (s) {
+      setSessionLabel(s.label);
+      setSessionModel(s.model || '');
+      if (key.startsWith('agent:')) {
+        const parts = key.split(':');
+        if (parts.length >= 2) setSelectedBot(`openclaw:${parts[1]}`);
+      }
+    }
+    loadSessionHistory(key);
+    setHasNewMessages(false);
+  }, [sessionKey, sessions, setSelectedBot, loadSessionHistory]);
+
+  const handleUpdateLabel = useCallback(async (newLabel: string) => {
+    if (!sessionKey || !newLabel.trim()) return;
+    setIsUpdatingLabel(true);
+    try {
+      const res = await sendRPC('sessions.patch', { key: sessionKey, label: newLabel.trim() });
+      if (res.ok) {
+        message.success(t('common.success'));
+        setSessionLabel(newLabel.trim());
+        fetchSessions();
+      }
+    } finally {
+      setIsUpdatingLabel(false);
+    }
+  }, [sessionKey, sendRPC, fetchSessions, t]);
+
+  const handleAutoSummarize = useCallback(async (messagesOverride?: Message[], silent = false, targetKey?: string) => {
+    const activeKey = targetKey || sessionKey;
+    const targetMessages = messagesOverride || messages;
+    if (!activeKey || targetMessages.length === 0) return;
+    if (!targetKey) setIsSummarizing(true);
+    try {
+      const agentId = selectedBot.replace('openclaw:', '');
+      const bot = botsModels?.data?.bots?.find((b: any) => b.id === agentId);
+      const currentModelID = bot?.model || '';
+      const validMessages = targetMessages.map(m => {
+        let clean = m.content;
+        clean = clean.replace(/> :::thinking[\s\S]*?:::\n*/g, '')
+                     .replace(/> :::toolCall[\s\S]*?:::\n*/g, '')
+                     .replace(/> :::toolResult[\s\S]*?:::\n*/g, '');
+        return { role: m.role, content: clean.trim() };
+      }).filter(m => m.content.length > 0);
+      const newTitle = await summarizeSession(validMessages, currentModelID);
+      if (newTitle) {
+        const res = await sendRPC('sessions.patch', { key: activeKey, label: newTitle });
+        if (res.ok) {
+          if (activeKey === sessionKey) setSessionLabel(newTitle);
+          if (!silent) message.success(t('chat.titleSummarized'));
+          fetchSessions();
+        }
+      }
+    } catch (err) {
+      if (!silent) console.error('Summarize error:', err);
+    } finally {
+      if (!targetKey) setIsSummarizing(false);
+    }
+  }, [sessionKey, messages, selectedBot, botsModels, sendRPC, fetchSessions, t]);
+
+  const handleSend = useCallback(async (content?: any, attachedFiles?: FileInfo[]) => {
+    const text = (typeof content === 'string' ? content : '').trim();
+    if ((!text && (!attachedFiles || attachedFiles.length === 0)) || status !== 'authenticated') return;
+
+    setIsTyping(true);
+    setTpsData([]);
+    streamContentRef.current = '';
+    startTimeRef.current = Date.now();
+    ttftRecordedRef.current = false;
+    tokenCountRef.current = 0;
+    firstTokenTimeRef.current = 0;
+
+    let finalContent = text;
+    if (attachedFiles && attachedFiles.length > 0) {
+      const fileLinks = attachedFiles.map(f => {
+        const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
+        return isImage ? `\n![${f.filename}](${f.thumbUrl || f.url} "${f.url}")\n(File path: ${f.path})` : `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
+      }).join('');
+      finalContent += fileLinks + `\n\n**System Note for Expert:** The user has uploaded files. Access them via absolute "File path" provided.`;
+    }
+
+    const newUserMsg: Message = { id: `msg-${Date.now()}`, role: 'user', content: finalContent, timestamp: new Date().toLocaleTimeString() };
+    setMessages(prev => [...prev, newUserMsg]);
+
+    let currentKey = sessionKey;
+    if (!currentKey) {
+      const res = await sendRPC('sessions.create', { agentId: selectedBot.replace('openclaw:', '') });
+      if (res.ok) {
+        currentKey = res.payload.key;
+        setSessionKey(currentKey);
+        await sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel });
+        fetchSessions();
+      }
+    }
+
+    if (currentKey) {
+      const assistantInitialMsg = text === '/stop' ? t('chat.terminated') : t('chat.thinking');
+      setMessages(prev => [...prev, { id: `msg-ai-${Date.now()}`, role: 'assistant', content: assistantInitialMsg, timestamp: new Date().toLocaleTimeString() }]);
+      resetStallTimer();
+      
+      const res = await sendRPC('chat.send', { 
+        sessionKey: currentKey, message: finalContent, idempotencyKey: `ik-${Date.now()}`
+      });
+      if (!res.ok) {
+        message.error('Failed to send: ' + (res.error?.message || 'Unknown'));
+        setIsTyping(false);
+        clearStallTimer();
+      } else if (text === '/stop') {
+        setIsTyping(false);
+        clearStallTimer();
+      }
+    }
+  }, [status, sessionKey, selectedBot, thinkingLevel, sessionModel, sendRPC, fetchSessions, resetStallTimer, clearStallTimer, t]);
+
+  const handleRegenerate = useCallback(() => {
+    const lastUserIndex = [...messages].reverse().findIndex(m => m.role === 'user');
+    if (lastUserIndex !== -1) {
+      const actualIndex = messages.length - 1 - lastUserIndex;
+      const lastUserMsg = messages[actualIndex];
+      setMessages(prev => prev.slice(0, actualIndex + 1));
+      handleSend(lastUserMsg.content);
+    }
+  }, [messages, handleSend]);
+
+  const handleSaveEdit = useCallback(async (editingMsgIndex: number, editContent: string) => {
+    const newText = editContent.trim();
+    if (!newText) return;
+    setMessages(prev => prev.slice(0, editingMsgIndex));
+    handleSend(newText);
+  }, [handleSend]);
+
+  const handleStopGeneration = useCallback(() => {
+    setIsTyping(false);
+    clearStallTimer();
+    streamContentRef.current = '';
+    setMessages(prev => {
+      const last = prev[prev.length - 1];
+      if (last?.role === 'assistant') {
+        const label = t('chat.manuallyStopped');
+        const content = (last.content === t('chat.thinking') || last.content === '') ? label : last.content + ` (${label})`;
+        return [...prev.slice(0, -1), { ...last, content }];
+      }
+      return prev;
+    });
+    handleSend('/stop');
+  }, [clearStallTimer, handleSend, t]);
+
+  const handleDeleteSession = useCallback((key: string) => {
+    Modal.confirm({
+      title: t('chat.deleteSessionConfirm'),
+      content: t('chat.deleteSessionContent'),
+      onOk: async () => {
+        const res = await sendRPC('sessions.delete', { key });
+        if (res.ok) {
+          message.success(t('common.success'));
+          if (sessionKey === key) { setSessionKey(null); setMessages([]); setSessionLabel(null); }
+          fetchSessions();
+        }
+      }
+    });
+  }, [sessionKey, sendRPC, fetchSessions, t]);
+
+  const handleDeleteGroup = useCallback((label: string, sessionKeys: string[]) => {
+    if (sessionKeys.length === 0) return;
+    Modal.confirm({
+      title: t('chat.deleteGroupConfirm'),
+      content: t('chat.deleteGroupContent', { count: sessionKeys.length, label }),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          message.loading({ content: t('chat.clearingGroup'), key: 'clearingGroup' });
+          await Promise.all(sessionKeys.map(key => sendRPC('sessions.delete', { key })));
+          message.success({ content: t('common.success'), key: 'clearingGroup' });
+          if (sessionKey && sessionKeys.includes(sessionKey)) { 
+            setSessionKey(null); 
+            setMessages([]); 
+            setSessionLabel(null); 
+            setSessionModel('');
+            setThinkingLevel('medium');
+          }
+          fetchSessions();
+        } catch (err) { message.error({ content: t('common.error'), key: 'clearingGroup' }); }
+      }
+    });
+  }, [sessionKey, sendRPC, fetchSessions, t]);
+
+  const handleClearAllHistory = useCallback(() => {
+    if (sessions.length === 0) return;
+    Modal.confirm({
+      title: t('chat.clearAllHistoryConfirm'),
+      content: t('chat.clearAllHistoryContent'),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          message.loading({ content: t('chat.clearingAll'), key: 'clearingAll' });
+          await Promise.all(sessions.map(s => sendRPC('sessions.delete', { key: s.key })));
+          message.success({ content: t('chat.clearAllSuccess'), key: 'clearingAll' });
+          setSessionKey(null); setMessages([]); setSessionLabel(null); setSessions([]);
+          fetchSessions();
+        } catch (err) { message.error({ content: t('common.error'), key: 'clearingAll' }); }
+      }
+    });
+  }, [sessions, sendRPC, fetchSessions, t]);
+
+  const handleModelChange = useCallback(async (newModel: string) => {
+    setSessionModel(newModel);
+    if (!sessionKey) return;
+    const res = await sendRPC('sessions.patch', { key: sessionKey, model: newModel || null });
+    if (res.ok) {
+      message.success(t('chat.modelSwitchSuccess'));
+      fetchSessions();
+    }
+  }, [sessionKey, sendRPC, fetchSessions, t]);
+
+  const handleThinkingLevelChange = useCallback(async (newLevel: 'low' | 'medium' | 'high' | 'pro') => {
+    setThinkingLevel(newLevel);
+    if (!sessionKey) return;
+    sendRPC('sessions.patch', { key: sessionKey, thinkingLevel: newLevel });
+  }, [sessionKey, sendRPC]);
+
+  // --- Effects ---
+  useEffect(() => {
+    if (status === 'disconnected' && keyPair) {
+      if (reconnectCountRef.current >= MAX_RECONNECTS) { setStatus('error'); return; }
+      const delay = reconnectCountRef.current === 0 ? 0 : Math.min(2000 * reconnectCountRef.current, 10000);
+      reconnectTimerRef.current = setTimeout(() => { reconnectCountRef.current++; connect(); }, delay);
+      return () => { if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current); };
+    }
+    if (status === 'authenticated') reconnectCountRef.current = 0;
+  }, [status, keyPair, connect]);
+
+  useEffect(() => {
+    return () => { if (wsRef.current) { wsRef.current.close(); wsRef.current = null; } };
+  }, []);
+
+  return {
+    messages, setMessages,
+    status,
+    sessionKey, setSessionKey,
+    sessionLabel, setSessionLabel,
+    sessionModel, setSessionModel,
+    thinkingLevel, setThinkingLevel,
+    sessions,
+    loadingSessions,
+    isLoadingHistory,
+    isTyping,
+    isStalled,
+    lastHealth,
+    latencyHistory,
+    pulse,
+    tpsData,
+    hasNewMessages, setHasNewMessages,
+    isSummarizing,
+    isUpdatingLabel,
+    fetchSessions,
+    handleSelectSession,
+    startNewSession: () => { setSessionKey(null); setMessages([]); setSessionLabel(null); },
+    handleSend,
+    handleStopGeneration,
+    handleRegenerate,
+    handleDeleteSession,
+    handleDeleteGroup,
+    handleClearAllHistory,
+    handleSaveEdit,
+    handleUpdateLabel,
+    handleAutoSummarize,
+    handleModelChange,
+    handleThinkingLevelChange,
+    sendRPC,
+    connect,
+    showScrollBtnRef
+  };
+};
