@@ -117,87 +117,53 @@
   animation: v3-cursor-blink 1s step-end infinite;
 }
 
-/* --- 3. 结构化块样式 (Thinking/Tools) --- */
-.v3-thought-container {
-  background: #f8fafc;
-  border-left: 3px solid #cbd5e1;
-  padding: 10px 14px;
-  margin: 8px 0;
-  border-radius: 0 8px 8px 0;
+/* --- 3. 结构化块样式 (Thinking/Tools/Collapsible) --- */
+.v3-meta-collapsible {
+  margin: 10px 0;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.5);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.v3-meta-collapsible:hover {
+  background: rgba(241, 245, 249, 0.8);
+  border-color: rgba(37, 99, 235, 0.1);
+}
+
+.v3-meta-header {
+  padding: 6px 12px;
+  user-select: none;
+  transition: background 0.2s;
+}
+
+.v3-meta-header:hover {
+  background: rgba(37, 99, 235, 0.04);
+}
+
+.v3-meta-content {
+  padding: 0 12px 10px 12px;
   font-size: 13px;
-  color: #64748b;
-  font-style: italic;
-  max-width: 100%;
-  overflow-x: auto;
+  color: #475569;
 }
 
-.v3-thought-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 700;
-  font-style: normal;
-  margin-bottom: 4px;
-  color: #94a3b8;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
+/* 特定块的颜色适配 */
+.v3-meta-collapsible:has(.lucide-cpu) { border-left: 3px solid #6366f1; }
+.v3-meta-collapsible:has(.lucide-terminal) { border-left: 3px solid #1e293b; background: #f1f5f9; }
+.v3-meta-collapsible:has(.lucide-check-circle) { border-left: 3px solid #10b981; background: #f0fdf4; }
 
-.v3-tool-call-container {
-  background: #1e293b;
-  border-radius: 8px;
-  padding: 10px;
-  margin: 10px 0;
-  color: #e2e8f0;
-  font-family: 'JetBrains Mono', monospace;
-  border: 1px solid #334155;
-  max-width: 100%;
-  overflow-x: auto;
-}
-
-.v3-tool-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: #94a3b8;
-  margin-bottom: 6px;
-  border-bottom: 1px solid #334155;
-  padding-bottom: 4px;
-}
-
-.v3-tool-result-container {
-  background: #f0fdf4;
-  border: 1px solid #dcfce7;
-  border-radius: 8px;
-  padding: 10px;
-  margin: 10px 0;
-  font-size: 12px;
-  max-width: 100%;
-  overflow-x: auto;
-}
-
-.v3-tool-result-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #16a34a;
-  font-weight: 700;
-  margin-bottom: 6px;
-  font-size: 11px;
+/* 连发消息模式样式 */
+.message-in.threaded {
+  margin-top: -12px !important; /* 抵消大部分间距 */
 }
 
 /* 隐藏特殊的容器标记文本 */
-.v3-thought-container p:first-child,
-.v3-tool-call-container p:first-child,
-.v3-tool-result-container p:first-child {
+.v3-meta-content p:first-child {
    display: none;
 }
 
-.v3-thought-container blockquote,
-.v3-tool-call-container blockquote,
-.v3-tool-result-container blockquote {
+.v3-meta-content blockquote {
    border: none !important;
    padding: 0 !important;
    margin: 0 !important;

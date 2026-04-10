@@ -399,7 +399,6 @@ export const useChatV3WebSocket = ({
         const history = items.map((item: any) => {
           let content = formatMessageContent(item.content);
           
-          // Legacy 兼容：如果角色是 toolResult 且尚未被 formatMessageContent 包装（如纯文本历史记录）
           if (item.role === 'toolResult' && !content.includes(':::toolResult')) {
             const toolName = item.toolName || 'unknown';
             const text = typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
@@ -413,7 +412,8 @@ export const useChatV3WebSocket = ({
             timestamp: new Date(item.createdAt || item.timestamp || Date.now()).toLocaleTimeString(),
             metrics: item.metrics
           };
-        });
+        }).filter((msg: any) => msg.content && msg.content.trim() !== '');
+        
         setMessages(history);
     }
     setIsLoadingHistory(false);

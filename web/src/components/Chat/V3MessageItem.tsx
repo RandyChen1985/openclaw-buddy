@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Avatar, Tooltip, Button, Input, message } from 'antd';
-import { User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, CheckCircle, FileText } from 'lucide-react';
+import { User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, FileText, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -47,6 +47,42 @@ const Sparkline = ({ data }: { data: number[] }) => {
   );
 };
 
+/**
+ * 可折叠的元数据块组件 (用于思考过程、工具调用等)
+ */
+const CollapsibleMeta = ({ title, icon: Icon, children, defaultExpanded = true }: any) => {
+  const [isExpanded, setIsExpanded] = React.useState(defaultExpanded);
+
+  // 监听外部 defaultExpanded 的变化 (用于同步 showThinking 开关)
+  React.useEffect(() => {
+    setIsExpanded(defaultExpanded);
+  }, [defaultExpanded]);
+
+  return (
+    <div className={`v3-meta-collapsible ${isExpanded ? 'expanded' : 'collapsed'}`}>
+      <div 
+        className="v3-meta-header" 
+        onClick={() => setIsExpanded(!isExpanded)}
+        style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: 0.8, fontSize: 12, padding: '4px 0' }}
+      >
+        <div style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center' }}>
+          <ChevronRight size={12} />
+        </div>
+        <Icon size={12} />
+        <span style={{ fontWeight: 500 }}>{title}</span>
+      </div>
+      {isExpanded && (
+        <div className="v3-meta-content" style={{ animation: 'v3-fade-in 0.3s' }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
+
+
+
 const V3MessageItem: React.FC<V3MessageItemProps> = ({
   msg, index, isMobile, showThinking,
   editingMsgIndex, editContent, setEditContent,
@@ -54,27 +90,28 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   copyToClipboard, isTyping, isLast, isStalled, tpsData, t
 }) => {
   
-  // 核心优化：只有内容或设置变化时才重新处理正则
+  // 核心优化：按照最新要求处理内容过滤
   const processedContent = useMemo(() => {
     let content = msg.content;
+    
+    // 1. :::toolResult (工具输出) 永远物理隐藏
+    content = content.replace(/> :::toolResult[\s\S]*?:::\n*/g, '');
+
     if (!showThinking) {
-      const isMetaOnly = content.includes(':::thinking') || 
-                         content.includes(':::toolCall') || 
-                         content.includes(':::toolResult');
-      
-      const cleanText = content
+      // 2. 关闭思考显示时，物理隐藏所有元数据块
+      content = content
         .replace(/> :::thinking[\s\S]*?:::\n*/g, '')
         .replace(/> :::toolCall[\s\S]*?:::\n*/g, '')
-        .replace(/> :::toolResult[\s\S]*?:::\n*/g, '')
         .trim();
       
-      if (isMetaOnly && !cleanText) return null;
-      content = cleanText;
+      // 如果剔除后没有实质文本内容，则不渲染气泡
+      if (!content && (msg.content.includes(':::thinking') || msg.content.includes(':::toolCall'))) return null;
     }
-    return content;
+
+    return content.trim();
   }, [msg.content, showThinking]);
 
-  if (processedContent === null) return null;
+  if (!processedContent) return null;
 
   const isUser = msg.role === 'user';
 
@@ -82,14 +119,21 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
     <div 
       className="message-in" 
       style={{ 
-        display: 'flex', gap: 14, flexDirection: isUser ? 'row-reverse' : 'row', marginBottom: 20,
+        display: 'flex', gap: 14, flexDirection: isUser ? 'row-reverse' : 'row',
         animation: 'v3-message-enter 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards' 
       }}
     >
       {isUser ? (
-        <Avatar icon={<User size={18} />} style={{ background: '#1e293b', flexShrink: 0, marginTop: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} />
+        <Avatar 
+          icon={<User size={18} />} 
+          style={{ 
+            background: '#1e293b', flexShrink: 0, marginTop: 4, 
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            visibility: 'visible'
+          }} 
+        />
       ) : (
-        <div style={{ flexShrink: 0, marginTop: 4 }}>
+        <div style={{ flexShrink: 0, marginTop: 4, visibility: 'visible' }}>
           <div style={{ width: isMobile ? 32 : 36, height: isMobile ? 32 : 36, borderRadius: '50%', background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #c7d2fe' }}>
             <Bot size={isMobile ? 22 : 25} color="#6366f1" />
           </div>
@@ -152,9 +196,20 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                         return '';
                       };
                       const fullText = extractText(children);
-                      if (fullText.includes(':::thinking')) return <div className="v3-thought-container"><div className="v3-thought-header"><Cpu size={12} /><span>Thinking Process</span></div>{children}</div>;
-                      if (fullText.includes(':::toolCall')) return <div className="v3-tool-call-container"><div className="v3-tool-header"><Terminal size={12} /><span>System Tool</span></div>{children}</div>;
-                      if (fullText.includes(':::toolResult')) return <div className="v3-tool-result-container"><div className="v3-tool-result-header"><CheckCircle size={12} /><span>Tool Output</span></div>{children}</div>;
+                      if (fullText.includes(':::thinking')) {
+                        return (
+                          <CollapsibleMeta title={t('chat.thinkingProcess', { defaultValue: 'Thinking Process' })} icon={Cpu} defaultExpanded={false}>
+                            {children}
+                          </CollapsibleMeta>
+                        );
+                      }
+                      if (fullText.includes(':::toolCall')) {
+                        return (
+                          <CollapsibleMeta title={t('chat.systemTool', { defaultValue: 'System Tool' })} icon={Terminal} defaultExpanded={false}>
+                            {children}
+                          </CollapsibleMeta>
+                        );
+                      }
                       return <blockquote style={{ borderLeft: '4px solid #e2e8f0', paddingLeft: '12px', color: '#64748b', fontStyle: 'italic', margin: '8px 0' }}>{children}</blockquote>;
                     },
                     code: ({ inline, className, children, ...props }: any) => {
@@ -262,7 +317,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
 
 export default React.memo(V3MessageItem, (prev, next) => {
   // 核心优化：只有在内容、编辑状态或关键状态发生变化时才重绘
-  return prev.editContent === next.editContent && // 必须包含编辑内容，否则无法输入
+  return prev.editContent === next.editContent && 
          prev.editingMsgIndex === next.editingMsgIndex &&
          prev.msg.content === next.msg.content &&
          prev.showThinking === next.showThinking &&
