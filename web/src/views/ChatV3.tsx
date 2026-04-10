@@ -3,7 +3,7 @@ import { Virtuoso } from 'react-virtuoso';
 import type { VirtuosoHandle } from 'react-virtuoso';
 import { Select, Input, Button, Spin, message, Tag, Badge, Modal, Form, Tooltip, Drawer, Switch, Tabs } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Bot, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, History, LayoutPanelLeft, Activity, Settings, ChevronUp, ChevronDown, Key, Sparkles, Save, X, Zap, Quote, Wand2, PenLine, Eye } from 'lucide-react';
+import { Bot, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, LayoutPanelLeft, Activity, Settings, ChevronUp, ChevronDown, Key, Sparkles, Save, X, Zap, Quote, Wand2, PenLine, Eye } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -76,6 +76,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [isStalled, setIsStalled] = useState(false);
   const stallTimerRef = useRef<any>(null);
   const [sessionKey, setSessionKey] = useState<string | null>(null);
+  const sessionKeyRef = useRef<string | null>(null);
+  useEffect(() => { sessionKeyRef.current = sessionKey; }, [sessionKey]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [sessionLabel, setSessionLabel] = useState<string | null>(null);
   const sessionLabelRef = useRef<string | null>(null);
   useEffect(() => { sessionLabelRef.current = sessionLabel; }, [sessionLabel]);
@@ -109,7 +112,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [sessionSearch, setSessionSearch] = useState('');
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
-  const [showQuickActions, setShowQuickActions] = useState<boolean>(() => storage.getItem('v3_show_quick_actions') === 'true');
+  const [showQuickActions, setShowQuickActions] = useState<boolean>(() => storage.getItem('v3_show_quick_actions') !== 'false');
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
   const [form] = Form.useForm();
@@ -460,7 +463,15 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       if (res.ok) {
         console.log('✅ [V3] 握手成功！');
         setStatus('authenticated');
-        setTimeout(() => fetchSessions(), 300);
+        setTimeout(() => {
+          fetchSessions();
+          // 断线重连后自动恢复当前打开的会话历史
+          const currentKey = sessionKeyRef.current;
+          if (currentKey) {
+            console.log('🔄 [V3] 断线重连：自动恢复会话历史', currentKey);
+            loadSessionHistory(currentKey);
+          }
+        }, 300);
       } else {
         const errMsg = typeof res.error === 'object' ? JSON.stringify(res.error) : String(res.error);
         if (errMsg.includes('NOT_PAIRED') || errMsg.includes('NOT_AUTHORIZED')) {
@@ -532,6 +543,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   };
 
   const loadSessionHistory = async (key: string) => {
+    setIsLoadingHistory(true);
     // 分页暂不可用
     const res = await sendRPC('chat.history', { sessionKey: key, limit: 500 });
     if (res.ok) {
@@ -539,6 +551,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         const history = parseHistoryMessages(messagesData);
         setMessages(history);
     }
+    setIsLoadingHistory(false);
   };
 
 
@@ -665,6 +678,16 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       }
     } catch (err) {
       console.error('Switch model error:', err);
+    }
+  };
+
+  const handleThinkingLevelChange = async (newLevel: 'low' | 'medium' | 'high' | 'pro') => {
+    setThinkingLevel(newLevel);
+    if (!sessionKey) return; // 无会话时不需同步，新建会话时会自动带入
+    try {
+      await sendRPC('sessions.patch', { key: sessionKey, thinkingLevel: newLevel });
+    } catch (err) {
+      console.error('Sync thinkingLevel error:', err);
     }
   };
 
@@ -948,6 +971,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
   const sendRPC = (method: string, params: any): Promise<any> => {
     return new Promise((resolve) => {
+      // 提前检查：WS 未连接时立即返回错误，不等待 30s 超时
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        console.warn(`⚡ [V3] RPC 跳过 (WS 未就绪): ${method}`);
+        resolve({ ok: false, error: { message: 'WebSocket not connected' } });
+        return;
+      }
       const id = `${method}-${requestIdRef.current++}`;
       const req = { type: 'req', id, method, params };
       // 超时保护：30 秒无响应自动返回错误
@@ -962,7 +991,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         clearTimeout(timer);
         resolve(res);
       });
-      wsRef.current?.send(JSON.stringify(req));
+      wsRef.current.send(JSON.stringify(req));
     });
   };
 
@@ -1137,7 +1166,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingMsgIndex, quotedMsg, startNewSession]);
 
   // Virtuoso 的 followOutput 已接管自动滚动，不再需要手动 scrollTop
 
@@ -1574,7 +1604,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                 <>
                   <div style={{ width: 1, height: 12, background: '#f1f5f9', marginRight: 2 }}></div>
                   <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{t('chat.thinkingLevel', { defaultValue: '思考等级' })}:</span>
-                  <Select size="small" value={thinkingLevel} onChange={setThinkingLevel} style={{ width: 100 }} dropdownStyle={{ borderRadius: 8 }}>
+                  <Select size="small" value={thinkingLevel} onChange={handleThinkingLevelChange} style={{ width: 100 }} dropdownStyle={{ borderRadius: 8 }}>
                       <Select.Option value="low">Low</Select.Option>
                       <Select.Option value="medium">Medium</Select.Option>
                       <Select.Option value="high">High</Select.Option>
@@ -1632,7 +1662,23 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             </div>
           )}
 
-          {messages.length === 0 ? (
+          {/* 会话切换 Loading 遮罩 */}
+          {isLoadingHistory && (
+            <div style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(248, 250, 252, 0.85)',
+              backdropFilter: 'blur(4px)',
+              zIndex: 50,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexDirection: 'column', gap: 12,
+              animation: 'v3-fade-in 0.2s'
+            }}>
+              <Spin size="large" />
+              <span style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500 }}>加载会话历史...</span>
+            </div>
+          )}
+
+          {messages.length === 0 && !isLoadingHistory ? (
             <div style={{ 
               flex: 1, height: '100%',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1646,21 +1692,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                 <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800, color: '#1e293b', marginBottom: 12 }}>{t('chat.v3Ready')}</h3>
                 <p style={{ color: '#64748b', lineHeight: 1.6, fontSize: isMobile ? 13 : 14, padding: isMobile ? '0 10px' : 0 }}>{t('chat.v3ReadyDesc')}</p>
                 
-                {sessions.length > 0 && (
-                  <div style={{ marginTop: 24, animation: 'v3-fade-in 0.8s ease-out' }}>
-                    <Button 
-                      type="primary" 
-                      icon={<History size={18} />} 
-                      onClick={() => setShowSider(true)}
-                      style={{ 
-                        height: 44, borderRadius: 12, background: '#4f46e5', border: 'none', 
-                        padding: '0 24px', fontWeight: 600, boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)' 
-                      }}
-                    >
-                      {t('chat.continueFromHistory', { defaultValue: '从历史会话中继续' })}
-                    </Button>
-                  </div>
-                )}
 
                 <div style={{ marginTop: 24, display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
                   <Tag style={{ borderRadius: 10, padding: isMobile ? '2px 8px' : '4px 12px', fontSize: isMobile ? 11 : 12, margin: 0 }}>{t('chat.v3LowLatency', { defaultValue: '⚡ 低延迟' })}</Tag>
@@ -1669,7 +1700,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                 </div>
               </div>
             </div>
-          ) : (
+          ) : !isLoadingHistory ? (
             <Virtuoso
               ref={virtuosoRef}
               data={messages}
@@ -1730,7 +1761,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                 </div>
               )}
             />
-          )}
+          ) : null}
         </div>
 
         {/* 返回顶部浮动按钮 */}
@@ -1976,7 +2007,14 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
              {showQuickActions ? (
                <>
                  <div style={{ display: 'flex', gap: 8, overflowX: 'auto', flex: 1, paddingBottom: 6, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', whiteSpace: 'nowrap', minWidth: 0 } as React.CSSProperties}>
-                   {quickCommands.map((item: any) => (
+                   {quickCommands.length === 0 ? (
+                     <span
+                       onClick={() => setIsManageModalOpen(true)}
+                       style={{ fontSize: 12, color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}
+                     >
+                       暂无快捷指令，点击 <Settings size={12} /> 添加
+                     </span>
+                   ) : quickCommands.map((item: any) => (
                      <Button
                        key={item.id}
                        size="small"
