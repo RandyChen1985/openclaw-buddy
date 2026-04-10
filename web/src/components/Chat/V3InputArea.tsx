@@ -237,7 +237,8 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
             // 优化 4: 回归原生占位符，移除模拟光标和额外层
             placeholder={
               status !== 'authenticated' ? t('chat.v3Connecting') : 
-              isTyping ? 'AI内容生成中,请稍后...' : 
+              isTyping ? (t('chat.thinking') || 'AI内容生成中,请稍后...') : 
+              uploading ? '文件上传中...' :
               t('chat.v3InputPlaceholder')
             }
             // 优化 1: 保持 autoSize 但精简配置
@@ -252,7 +253,7 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
                 handleInnerSend();
               }
             }}
-            disabled={status !== 'authenticated' || isTyping}
+            disabled={status !== 'authenticated' || isTyping || uploading}
             variant="borderless"
             style={{ padding: '4px 0', fontSize: 13, opacity: isTyping ? 0.6 : 1, minHeight: 32 }}
           />

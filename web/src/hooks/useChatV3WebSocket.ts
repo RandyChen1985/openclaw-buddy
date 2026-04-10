@@ -223,7 +223,16 @@ export const useChatV3WebSocket = ({
         firstTokenTimeRef.current = now;
       }
 
-      const fullText = formatMessageContent(payload.message?.content || []);
+      const rawContent = payload.message?.content;
+      if (rawContent === undefined || rawContent === null) return; // 💡 只有 metadata 的包不更新内容
+
+      const fullText = formatMessageContent(rawContent);
+      
+      // 💡 防御性检查：如果是生成中途，决不允许内容从“有”变“无” (除非是极端的后端重置)
+      if (!fullText && streamContentRef.current) {
+        console.warn('⚠️ [V3] 收到空内容 Delta，已拦截防止清屏');
+        return;
+      }
 
       streamContentRef.current = fullText;
       tokenCountRef.current = fullText.length;

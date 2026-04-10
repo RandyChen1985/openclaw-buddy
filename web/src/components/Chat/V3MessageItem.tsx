@@ -111,9 +111,10 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
     return content.trim();
   }, [msg.content, showThinking]);
 
-  if (!processedContent) return null;
-
   const isUser = msg.role === 'user';
+
+  // 3. 增强：即使过滤后的内容为空，如果是 AI 正在生成中，也不允许销毁组件 (防止气泡闪现消失)
+  if (!processedContent && !(isTyping && isLast && !isUser)) return null;
 
   return (
     <div 
@@ -163,9 +164,9 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
             </div>
           </div>
         ) : (
-          msg.content === t('chat.thinking') ? (
+          msg.content === t('chat.thinking') || (!processedContent && isTyping && isLast && !isUser) ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13, color: '#64748b' }}>{msg.content}</span>
+              <span style={{ fontSize: 13, color: '#64748b' }}>{t('chat.thinking')}</span>
               <div className="typing-indicator" style={{ display: 'flex', gap: 4 }}>
                 <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>
                 <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>

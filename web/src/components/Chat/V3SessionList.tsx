@@ -66,7 +66,10 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
             type="primary" 
             icon={<Plus size={16} />} 
             style={{ flex: 1, borderRadius: 8, height: 38, background: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            onClick={onNewSession}
+            onClick={() => {
+              onNewSession();
+              if (isMobile) setShowSider(false);
+            }}
         >
           {t('chat.v3NewSession', { defaultValue: '开启新会话' })}
         </Button>
@@ -157,7 +160,10 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                     return (
                       <div 
                           key={s.key}
-                          onClick={() => onSelectSession(s.key)}
+                          onClick={() => {
+                            onSelectSession(s.key);
+                            if (isMobile) setShowSider(false);
+                          }}
                           style={{ 
                               padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4, transition: 'all 0.2s',
                               background: isActive ? '#eef2ff' : 'transparent',

@@ -1421,19 +1421,6 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           height: 100% !important;
           overflow-y: auto !important;
           padding: 24px !important;
-          scrollbar-width: thin;
-          scrollbar-color: #e2e8f0 transparent;
-        }
-        /* 强制滚动条始终可见 (针对 Webkit) */
-        .bot-editor-textarea textarea::-webkit-scrollbar {
-          width: 6px;
-        }
-        .bot-editor-textarea textarea::-webkit-scrollbar-thumb {
-          background: #e2e8f0;
-          border-radius: 3px;
-        }
-        .bot-editor-textarea textarea::-webkit-scrollbar-thumb:hover {
-          background: #cbd5e1;
         }
       ` }} />
     </div>

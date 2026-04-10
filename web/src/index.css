@@ -181,3 +181,44 @@ body {
   margin-top: 4px;
 }
 
+/* 全局高级感滚动条方案 (Premium Scrollbar System) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.4);
+}
+
+/* 针对深色背景容器 (如侧边栏) 的特殊适配 */
+.ant-layout-sider-children ::-webkit-scrollbar-thumb,
+.v3-sidebar-container ::-webkit-scrollbar-thumb,
+.ant-menu-inline ::-webkit-scrollbar-thumb,
+.ant-layout-sider-children ::-webkit-scrollbar-thumb,
+div[style*="background: #001529"] ::-webkit-scrollbar-thumb,
+div[style*="background: rgb(0, 21, 41)"] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ant-layout-sider-children ::-webkit-scrollbar-thumb:hover,
+.v3-sidebar-container ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Firefox 支持 (基础适配) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.2) transparent;
+}
+

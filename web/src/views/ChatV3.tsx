@@ -621,7 +621,10 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                       setEditingMsgIndex(idx);
                       setEditContent(content);
                     }}
-                    onSaveEdit={() => handleSaveEdit(editingMsgIndex!, editContent)}
+                    onSaveEdit={() => {
+                      handleSaveEdit(editingMsgIndex!, editContent);
+                      setEditingMsgIndex(null);
+                    }}
                     onCancelEdit={() => setEditingMsgIndex(null)}
                     onDelete={(idx) => setMessages((prev: any) => prev.filter((_: any, i: any) => i !== idx))}
                     onQuote={setQuotedMsg}
