@@ -316,6 +316,16 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [editingMsgIndex, quotedMsg, startNewSession]);
 
+  const handleWrappedSend = React.useCallback((text: string, files?: any[]) => {
+    let finalContent = text;
+    if (quotedMsg) {
+      const quotedStr = quotedMsg.split('\n').map(line => `> ${line}`).join('\n');
+      finalContent = `${quotedStr}\n\n${text}`;
+      setQuotedMsg(null);
+    }
+    handleSend(finalContent, files);
+  }, [handleSend, quotedMsg]);
+
   return (
     <>
       {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
@@ -583,22 +593,34 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               overscan={200}
               followOutput={(isAtBottom) => isAtBottom ? (isTyping ? 'auto' : 'smooth') : false}
               atBottomStateChange={(atBottom) => {
-                const el = scrollRef.current;
-                if (el) {
-                  const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-                  lastScrollTopRef.current = el.scrollTop;
-                  setShowScrollBtn(!isNearBottom);
-                  if (showScrollBtnRef) showScrollBtnRef.current = !isNearBottom;
+                // 💡 优化 1：直接响应 Virtuoso 内部到底状态，不再做可能存在误差的手动偏移计算
+                setShowScrollBtn(!atBottom);
+                if (showScrollBtnRef) showScrollBtnRef.current = !atBottom;
+                
+                // 到底部即视为已读新消息
+                if (atBottom) {
+                  setHasNewMessages(false);
                 }
-                if (atBottom) setHasNewMessages(false);
               }}
               isScrolling={(scrolling) => {
                 if (!scrolling && scrollRef.current) {
-                  const { scrollTop } = scrollRef.current;
+                  const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+                  
+                  // 💡 优化 2：滚动停止时做一次“双重校验”，确保按钮显示状态绝对正确
+                  const isActuallyAtBottom = scrollHeight - scrollTop - clientHeight < 20;
+                  if (isActuallyAtBottom) {
+                    setShowScrollBtn(false);
+                    if (showScrollBtnRef) showScrollBtnRef.current = false;
+                    setHasNewMessages(false);
+                  } else {
+                    setShowScrollBtn(true);
+                    if (showScrollBtnRef) showScrollBtnRef.current = true;
+                  }
+
                   // 只要向下滚动超过阈值就显示返回顶部
-                  const shouldShow = scrollTop > 200;
-                  if (showScrollTopBtn !== shouldShow) {
-                    setShowScrollTopBtn(shouldShow);
+                  const shouldShowTop = scrollTop > 400;
+                  if (showScrollTopBtn !== shouldShowTop) {
+                    setShowScrollTopBtn(shouldShowTop);
                   }
                   lastScrollTopRef.current = scrollTop;
                 }
@@ -729,7 +751,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                        key={item.id}
                        size="small"
                        style={{ borderRadius: 16, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, background: '#f8fafc', color: '#64748b', borderColor: '#e2e8f0', flexShrink: 0 }}
-                       onClick={() => handleSend(item.prompt)}
+                       onClick={() => handleWrappedSend(item.prompt)}
                        disabled={status !== 'authenticated' || isTyping}
                      >
                        {item.label}
@@ -904,7 +926,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                 status={status}
                 isMobile={!!isMobile}
                 isTyping={isTyping}
-                onSend={handleSend}
+                onSend={handleWrappedSend}
                 onStop={handleStopGeneration}
                 t={t}
                 isComposing={isComposing}

@@ -55,10 +55,27 @@ export const useChatV3WebSocket = ({
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error'>('disconnected');
   const [isTyping, setIsTyping] = useState(false);
   const [isStalled, setIsStalled] = useState(false);
-  const [sessionKey, setSessionKey] = useState<string | null>(null);
+  const [sessionKey, setSessionKey] = useState<string | null>(() => storage.getItem('v3_current_session_key'));
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [sessionLabel, setSessionLabel] = useState<string | null>(null);
+  const [sessionLabel, setSessionLabel] = useState<string | null>(() => storage.getItem('v3_current_session_label'));
   const [sessionModel, setSessionModel] = useState<string>('');
+
+  // 💡 持久化：当 sessionKey / sessionLabel 变化时，同步到 storage 以应对窗口缩放/重挂载
+  useEffect(() => {
+    if (sessionKey) {
+      storage.setItem('v3_current_session_key', sessionKey);
+    } else {
+      storage.removeItem('v3_current_session_key');
+    }
+  }, [sessionKey]);
+
+  useEffect(() => {
+    if (sessionLabel) {
+      storage.setItem('v3_current_session_label', sessionLabel);
+    } else {
+      storage.removeItem('v3_current_session_label');
+    }
+  }, [sessionLabel]);
   const [thinkingLevel, setThinkingLevel] = useState<'low' | 'medium' | 'high' | 'pro'>('medium');
   const [lastHealth, setLastHealth] = useState<{ ok: boolean, latency: number, ts: number } | null>(null);
   const [latencyHistory, setLatencyHistory] = useState<number[]>([]);
@@ -106,13 +123,17 @@ export const useChatV3WebSocket = ({
       }
       const id = `${method}-${requestIdRef.current++}`;
       const req = { type: 'req', id, method, params };
+      
+      // 💡 针对物理删除等磁盘 IO 较重的操作，放宽超时限制至 3 分钟
+      const timeoutValue = method === 'sessions.delete' ? 180000 : 30000;
+
       const timer = setTimeout(() => {
         if (pendingRequests.current.has(id)) {
           pendingRequests.current.delete(id);
           console.warn(`⏰ [V3] RPC 超时: ${method} (${id})`);
-          resolve({ ok: false, error: { message: 'RPC timeout (30s)' } });
+          resolve({ ok: false, error: { message: `RPC timeout (${timeoutValue/1000}s)` } });
         }
-      }, 30000);
+      }, timeoutValue);
       pendingRequests.current.set(id, (res: any) => {
         clearTimeout(timer);
         resolve(res);
@@ -293,6 +314,12 @@ export const useChatV3WebSocket = ({
         }
       }
     } else if (payload.state === 'final' || payload.state === 'finished' || payload.state === 'done') {
+        // 💡 漏洞修复：如果 final 事件的 sessionKey 不是当前会话，拦截以防止跨会话状态清零和复写！
+        if (payload.sessionKey && payload.sessionKey !== sessionKeyRef.current) {
+          console.warn('⚠️ [V3] 拦截到跨会话的结束信号，已被阻断以防串线', payload.sessionKey);
+          return;
+        }
+
         clearStallTimer();
         const now = Date.now();
         const duration = (now - startTimeRef.current) / 1000;
@@ -321,6 +348,26 @@ export const useChatV3WebSocket = ({
         setIsTyping(false);
         streamContentRef.current = '';
         fetchSessions(true);
+        setTimeout(() => inputAreaRef.current?.focus(), 100);
+    } else if (payload.state === 'error' || payload.state === 'failed') {
+        clearStallTimer();
+        
+        const errorMsg = payload.message?.content || payload.error?.message || payload.error || '网关或模型响应异常，流式生成失败';
+        
+        setMessages(prev => {
+            const last = prev[prev.length - 1];
+            if (!last || last.role !== 'assistant') return prev;
+            
+            const errMsgFormatted = typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg);
+            const content = last.content === '思考中...' || last.content === t('chat.thinking') || !last.content 
+              ? `> **⚠️ 异常或错误**\n> ${errMsgFormatted}` 
+              : last.content + `\n\n> **⚠️ 生成被中断**\n> ${errMsgFormatted}`;
+
+            return [...prev.slice(0, -1), { ...last, content }];
+        });
+
+        setIsTyping(false);
+        streamContentRef.current = '';
         setTimeout(() => inputAreaRef.current?.focus(), 100);
     }
   }, [resetStallTimer, clearStallTimer, fetchSessions, inputAreaRef, scrollRef, virtuosoRef]);
@@ -461,7 +508,19 @@ export const useChatV3WebSocket = ({
           };
         }).filter((msg: any) => msg.content && msg.content.trim() !== '');
         
+        
         setMessages(history);
+
+        // 💡 历史加载对位：当历史记录加载完成后，自动瞬移到最后一条消息，符合聊天软件查看习惯
+        if (history.length > 0) {
+            setTimeout(() => {
+                virtuosoRef.current?.scrollToIndex({ 
+                    index: history.length - 1, 
+                    align: 'end',
+                    behavior: 'auto' 
+                });
+            }, 100);
+        }
     }
     setIsLoadingHistory(false);
   }, [sendRPC]);
@@ -479,8 +538,11 @@ export const useChatV3WebSocket = ({
       }
     }
     loadSessionHistory(key);
+    setIsTyping(false);
+    clearStallTimer();
+    streamContentRef.current = '';
     setHasNewMessages(false);
-  }, [sessionKey, sessions, setSelectedBot, loadSessionHistory]);
+  }, [sessionKey, sessions, setSelectedBot, loadSessionHistory, clearStallTimer]);
 
   const handleUpdateLabel = useCallback(async (newLabel: string) => {
     if (!sessionKey || !newLabel.trim()) return;
@@ -569,6 +631,15 @@ export const useChatV3WebSocket = ({
       setMessages(prev => [...prev, { id: `msg-ai-${Date.now()}`, role: 'assistant', content: assistantInitialMsg, timestamp: new Date().toLocaleTimeString() }]);
       resetStallTimer();
       
+      // 💡 显式强制滚动到底部：由于用户主动发送消息，无论当前在什么位置，都应立即拉到底部以跟随最新对话
+      setTimeout(() => {
+        virtuosoRef.current?.scrollToIndex({ 
+          index: messagesCountRef.current + 1, // +1 是因为刚刚瞬发了两条记录 (User + AI Thinking)
+          align: 'end',
+          behavior: 'smooth' 
+        });
+      }, 100);
+
       const res = await sendRPC('chat.send', { 
         sessionKey: currentKey, message: finalContent, idempotencyKey: `ik-${Date.now()}`
       });
@@ -624,16 +695,40 @@ export const useChatV3WebSocket = ({
     handleSend('/stop');
   }, [clearStallTimer, handleSend, t]);
 
-  const handleDeleteSession = useCallback((key: string) => {
+  const handleDeleteSession = useCallback((_e: any, key: string) => {
     Modal.confirm({
       title: t('chat.deleteSessionConfirm'),
       content: t('chat.deleteSessionContent'),
       onOk: async () => {
-        const res = await sendRPC('sessions.delete', { key });
-        if (res.ok) {
-          message.success(t('common.success'));
-          if (sessionKey === key) { setSessionKey(null); setMessages([]); setSessionLabel(null); }
-          fetchSessions();
+        try {
+          message.loading({ content: t('common.processing', { defaultValue: '正在处理...' }), key: 'deletingSession' });
+          const res = await sendRPC('sessions.delete', { key });
+          console.log('🗑️ [V3] Delete Session Response:', res);
+          
+          if (res.ok) {
+            message.success({ content: t('common.success'), key: 'deletingSession' });
+            if (sessionKey === key) { 
+              setSessionKey(null); 
+              setMessages([]); 
+              setSessionLabel(null); 
+              setSessionModel('');
+              setIsTyping(false);
+              clearStallTimer();
+              streamContentRef.current = '';
+            }
+            fetchSessions();
+          } else {
+            // 💡 优化：确保透出具体的报错原因，方便定位是网络问题还是权限问题
+            const errMsg = res.error?.message || res.error || 'Gateway Timeout or Unknown Error';
+            message.error({ 
+              content: `${t('common.error')}: ${typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg)}`, 
+              key: 'deletingSession',
+              duration: 5
+            });
+          }
+        } catch (err) {
+          console.error('❌ Delete Session Trap:', err);
+          message.error({ content: t('common.error'), key: 'deletingSession' });
         }
       }
     });
@@ -733,7 +828,14 @@ export const useChatV3WebSocket = ({
     isUpdatingLabel,
     fetchSessions,
     handleSelectSession,
-    startNewSession: () => { setSessionKey(null); setMessages([]); setSessionLabel(null); },
+    startNewSession: () => { 
+      setSessionKey(null); 
+      setMessages([]); 
+      setSessionLabel(null); 
+      setIsTyping(false);
+      clearStallTimer();
+      streamContentRef.current = '';
+    },
     handleSend,
     handleStopGeneration,
     handleRegenerate,
