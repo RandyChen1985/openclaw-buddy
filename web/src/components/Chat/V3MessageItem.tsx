@@ -63,9 +63,9 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                          content.includes(':::toolResult');
       
       const cleanText = content
-        .replace(/> :::thinking[\s\S]*?:::/g, '')
-        .replace(/> :::toolCall[\s\S]*?:::/g, '')
-        .replace(/> :::toolResult[\s\S]*?:::/g, '')
+        .replace(/> :::thinking[\s\S]*?:::\n*/g, '')
+        .replace(/> :::toolCall[\s\S]*?:::\n*/g, '')
+        .replace(/> :::toolResult[\s\S]*?:::\n*/g, '')
         .trim();
       
       if (isMetaOnly && !cleanText) return null;
@@ -247,7 +247,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 9, fontFamily: 'monospace' }}>
                       <Zap size={10} color="#f59e0b" fill="#f59e0b" /><span>{msg.metrics.ttft}ms</span>
                     </div>
-                    {msg.metrics.tps && <div style={{ display: 'flex', alignItems: 'center' }}><span style={{ fontSize: 9, fontFamily: 'monospace' }}>{msg.metrics.tps.toFixed(1)} ch/s</span>{isTyping && isLast && tpsData && <Sparkline data={tpsData} />}</div>}
+                    {msg.metrics.tps && <div style={{ display: 'flex', alignItems: 'center' }}><span style={{ fontSize: 9, fontFamily: 'monospace' }}>~{msg.metrics.tps.toFixed(1)} ch/s</span>{isTyping && isLast && tpsData && <Sparkline data={tpsData} />}</div>}
                     {msg.metrics.duration && <span style={{ fontSize: 9, color: '#10b981', fontFamily: 'monospace', fontWeight: 600 }}>{msg.metrics.duration.toFixed(1)}s</span>}
                   </div>
                 )}

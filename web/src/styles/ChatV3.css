@@ -1,0 +1,332 @@
+/* ChatV3 核心样式提取 */
+
+/* --- 1. 基础动画 & 背景 --- */
+@keyframes v3-blob-animate {
+  0% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+@keyframes v3-message-enter {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes v3-fade-in { 
+  from { opacity: 0; } 
+  to { opacity: 1; } 
+}
+
+.v3-blob {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.12;
+  animation: v3-blob-animate 20s infinite alternate;
+}
+
+/* --- 2. 会话列表 & 消息元素 --- */
+.session-item:hover { 
+  background: #f0f7ff; 
+  border-color: #dbeafe !important; 
+}
+
+.session-actions { 
+  display: none !important; 
+  position: absolute;
+  right: 4px;
+  top: 0;
+  bottom: 0;
+  padding-left: 20px;
+  background: linear-gradient(to right, transparent, #f0f7ff 40%, #f0f7ff);
+  align-items: center;
+  z-index: 10;
+  border-radius: 0 10px 10px 0;
+}
+
+.session-item:hover .session-actions { 
+  display: flex !important; 
+  opacity: 1 !important; 
+}
+
+.session-id-container { 
+  transition: all 0.2s; 
+  max-width: 100%; 
+}
+
+.typing-indicator { 
+  display: flex; 
+  align-items: center; 
+  gap: 4px; 
+  height: 12px; 
+}
+
+.typing-dot { 
+  width: 5px; 
+  height: 5px; 
+  background: #4f46e5; 
+  border-radius: 50%; 
+  opacity: 0.4; 
+  animation: typing-bounce 1.4s infinite ease-in-out; 
+}
+
+.typing-dot:nth-child(1) { animation-delay: 0s; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing-bounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-4px); opacity: 1; }
+}
+
+.message-in { 
+  animation: message-in 0.3s ease; 
+}
+
+@keyframes message-in { 
+  from { opacity: 0; transform: translateY(8px); } 
+  to { opacity: 1; transform: translateY(0); } 
+}
+
+@keyframes v3-heartbeat {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); opacity: 1; }
+  70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); opacity: 0.8; }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); opacity: 1; }
+}
+
+.msg-footer { 
+  opacity: 1; 
+  transition: opacity 0.2s; 
+}
+
+@keyframes v3-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.v3-mock-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  background: #4f46e5;
+  margin-left: 2px;
+  vertical-align: middle;
+  animation: v3-cursor-blink 1s step-end infinite;
+}
+
+/* --- 3. 结构化块样式 (Thinking/Tools) --- */
+.v3-thought-container {
+  background: #f8fafc;
+  border-left: 3px solid #cbd5e1;
+  padding: 10px 14px;
+  margin: 8px 0;
+  border-radius: 0 8px 8px 0;
+  font-size: 13px;
+  color: #64748b;
+  font-style: italic;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.v3-thought-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-style: normal;
+  margin-bottom: 4px;
+  color: #94a3b8;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.v3-tool-call-container {
+  background: #1e293b;
+  border-radius: 8px;
+  padding: 10px;
+  margin: 10px 0;
+  color: #e2e8f0;
+  font-family: 'JetBrains Mono', monospace;
+  border: 1px solid #334155;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.v3-tool-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #334155;
+  padding-bottom: 4px;
+}
+
+.v3-tool-result-container {
+  background: #f0fdf4;
+  border: 1px solid #dcfce7;
+  border-radius: 8px;
+  padding: 10px;
+  margin: 10px 0;
+  font-size: 12px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.v3-tool-result-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #16a34a;
+  font-weight: 700;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+/* 隐藏特殊的容器标记文本 */
+.v3-thought-container p:first-child,
+.v3-tool-call-container p:first-child,
+.v3-tool-result-container p:first-child {
+   display: none;
+}
+
+.v3-thought-container blockquote,
+.v3-tool-call-container blockquote,
+.v3-tool-result-container blockquote {
+   border: none !important;
+   padding: 0 !important;
+   margin: 0 !important;
+   font-style: normal !important;
+   color: inherit !important;
+}
+
+/* --- 4. Markdown 增强样式 --- */
+.markdown-body-v3 { line-height: 1.6; font-size: 14px; }
+.markdown-body-v3 a { color: #2563eb; text-decoration: none; }
+.markdown-body-v3 a:hover { text-decoration: underline; }
+.markdown-body-v3 h1, .markdown-body-v3 h2, .markdown-body-v3 h3 { margin-top: 16px; margin-bottom: 8px; font-weight: 700; color: inherit; }
+.markdown-body-v3 h1 { font-size: 1.5em; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+.markdown-body-v3 h2 { font-size: 1.3em; }
+.markdown-body-v3 h3 { font-size: 1.1em; }
+.markdown-body-v3 ul, .markdown-body-v3 ol { padding-left: 20px; margin: 8px 0; }
+.markdown-body-v3 li { margin-bottom: 4px; }
+.markdown-body-v3 hr { height: 1px; background: #e2e8f0; border: none; margin: 16px 0; }
+.markdown-body-v3 strong { font-weight: 800; color: #1e293b; }
+.markdown-body-v3 table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+.markdown-body-v3 th, .markdown-body-v3 td { border: 1px solid #e2e8f0; padding: 6px 10px; }
+.markdown-body-v3 th { background: #f8fafc; font-weight: 700; }
+.markdown-body-v3 blockquote:not([class]) { border-left: 4px solid #cbd5e1; padding-left: 12px; color: #64748b; margin: 10px 0; font-style: italic; }
+
+/* 用户消息中的 Markdown 颜色适配 (基于 row-reverse 判定) */
+.message-in[style*="row-reverse"] .markdown-body-v3 strong,
+.message-in[style*="row-reverse"] .markdown-body-v3 h1,
+.message-in[style*="row-reverse"] .markdown-body-v3 h2,
+.message-in[style*="row-reverse"] .markdown-body-v3 h3 { color: #fff; }
+.message-in[style*="row-reverse"] .markdown-body-v3 a { color: #fff; text-decoration: underline; text-underline-offset: 2px; }
+.message-in[style*="row-reverse"] .markdown-body-v3 a:hover { color: #dbeafe; }
+.message-in[style*="row-reverse"] .markdown-body-v3 hr { background: rgba(255,255,255,0.2); }
+.message-in[style*="row-reverse"] .markdown-body-v3 th, 
+.message-in[style*="row-reverse"] .markdown-body-v3 td { border-color: rgba(255,255,255,0.2); }
+.message-in[style*="row-reverse"] .markdown-body-v3 th { background: rgba(255,255,255,0.1); }
+
+/* --- 5. 鉴权动画 (Auth Overlay) --- */
+@keyframes v3-pulse-ring {
+  0% { transform: scale(0.8); opacity: 0.5; box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.3); }
+  70% { transform: scale(1.2); opacity: 0; box-shadow: 0 0 0 20px rgba(37, 99, 235, 0); }
+  100% { transform: scale(0.8); opacity: 0; box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+}
+
+@keyframes v3-scan-line { 
+  0% { transform: translateY(-100%); opacity: 0; } 
+  50% { opacity: 0.8; }
+  100% { transform: translateY(400%); opacity: 0; } 
+}
+
+@keyframes v3-grid-move {
+  0% { background-position: 0 0; }
+  100% { background-position: 40px 40px; }
+}
+
+@keyframes v3-glow-light {
+  0%, 100% { box-shadow: 0 10px 30px rgba(37, 99, 235, 0.05); }
+  50% { box-shadow: 0 15px 45px rgba(37, 99, 235, 0.15); }
+}
+
+.v3-auth-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-image: 
+    linear-gradient(rgba(37, 99, 235, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  animation: v3-grid-move 6s linear infinite;
+}
+
+.v3-auth-card {
+  position: relative;
+  padding: 48px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px) saturate(180%);
+  border-radius: 32px;
+  border: 1px solid rgba(37, 99, 235, 0.15);
+  text-align: center;
+  max-width: 380px;
+  width: 85%;
+  box-sizing: border-box;
+  animation: v3-glow-light 4s ease-in-out infinite;
+  overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .v3-auth-card {
+    padding: 32px 24px;
+    border-radius: 24px;
+    max-width: 280px;
+  }
+}
+
+.v3-scan-line-element {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #2563eb, transparent);
+  box-shadow: 0 0 10px rgba(37, 99, 235, 0.5);
+  z-index: 1;
+  animation: v3-scan-line 3.5s linear infinite;
+}
+
+.v3-icon-box {
+  width: 80px; 
+  height: 80px;
+  border-radius: 24px;
+  margin: 0 auto 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+@media (max-width: 768px) {
+  .v3-icon-box {
+    width: 64px;
+    height: 64px;
+    border-radius: 20px;
+  }
+}
+
+.v3-icon-ring {
+  position: absolute;
+  top: -10px; left: -10px; right: -10px; bottom: -10px;
+  border: 2px solid rgba(37, 99, 235, 0.15);
+  border-radius: 50%;
+  animation: v3-pulse-ring 3s ease-out infinite;
+}

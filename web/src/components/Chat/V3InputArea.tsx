@@ -15,6 +15,7 @@ interface FileInfo {
 
 export interface InputAreaHandle {
   addFiles: (files: FileInfo[]) => void;
+  uploadFiles: (files: File[]) => Promise<void>;
   focus: () => void;
 }
 
@@ -33,7 +34,7 @@ interface V3InputAreaProps {
 }
 
 const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputAreaProps> = ({ 
-  status, isMobile, isTyping, onSend, onStop, t, isComposing, setIsComposing, setIsFocused, selectedBot
+  status, isMobile, isTyping, onSend, onStop, t, isComposing, setIsComposing, isFocused, setIsFocused, selectedBot
 }, ref) => {
   const [text, setText] = useState('');
   const [files, setFiles] = useState<FileInfo[]>([]);
@@ -44,6 +45,32 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
   useImperativeHandle(ref, () => ({
     addFiles: (newFiles: FileInfo[]) => {
       setFiles(prev => [...prev, ...newFiles]);
+    },
+    uploadFiles: async (rawFiles: File[]) => {
+      setUploading(true);
+      try {
+        const results = await Promise.all(rawFiles.map(async (file) => {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('botId', selectedBot.replace('openclaw:', ''));
+          
+          const response = await fetch(`${getBaseURL()}/v1/openclaw/chat/upload`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${storage.getItem('guardian_token')}`
+            },
+            body: formData
+          });
+          const res = await response.json();
+          if (res.code === 200) return res.data;
+          throw new Error(res.message || 'Upload failed');
+        }));
+        setFiles(prev => [...prev, ...results]);
+      } catch (err: any) {
+        message.error(err.message);
+      } finally {
+        setUploading(false);
+      }
     },
     focus: () => {
       textAreaRef.current?.focus();
@@ -89,7 +116,7 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
   }, [isTyping, text, status, isMobile, files, uploading]);
 
   return (
-    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 0, position: 'relative' }}>
+    <div className={`v3-input-wrapper ${isFocused ? 'focused' : ''}`} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 0, position: 'relative' }}>
       {/* 文件预览区域 */}
       {(files.length > 0 || uploading) && (
         <div style={{ 
