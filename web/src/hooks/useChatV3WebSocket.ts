@@ -117,7 +117,6 @@ export const useChatV3WebSocket = ({
   const sendRPC = useCallback((method: string, params: any): Promise<any> => {
     return new Promise((resolve) => {
       if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-        console.warn(`⚡ [V3] RPC 跳过 (WS 未就绪): ${method}`);
         resolve({ ok: false, error: { message: 'WebSocket not connected' } });
         return;
       }
@@ -130,7 +129,6 @@ export const useChatV3WebSocket = ({
       const timer = setTimeout(() => {
         if (pendingRequests.current.has(id)) {
           pendingRequests.current.delete(id);
-          console.warn(`⏰ [V3] RPC 超时: ${method} (${id})`);
           resolve({ ok: false, error: { message: `RPC timeout (${timeoutValue/1000}s)` } });
         }
       }, timeoutValue);
@@ -249,7 +247,6 @@ export const useChatV3WebSocket = ({
 
       // 💡 漏洞 1 修复：拦截“跨会话残余串线”，如果丢过来的包并非当前所在的 session，直接丢弃！
       if (payload.sessionKey && payload.sessionKey !== sessionKeyRef.current) {
-        console.warn('⚠️ [V3] 拦截到跨会话残余数据包，已被阻断', payload.sessionKey);
         return;
       }
 
@@ -257,14 +254,12 @@ export const useChatV3WebSocket = ({
       
       // 💡 防御性检查 1：如果内容变为空或纯空白，且之前已有内容，拦截（防止纯空格绕过 !fullText）
       if (!fullText.trim() && streamContentRef.current.trim()) {
-        console.warn('⚠️ [V3] 收到空/纯空白内容 Delta，已拦截防止清屏');
         return;
       }
 
       // 💡 防御性检查 2：强力防护！如果后端发来的累积内容长度突然大幅缩短（容差20字符），说明后端流发生了异常重置或发了增量包，必须拦截！
       const oldLen = streamContentRef.current.length;
       if (oldLen > 50 && fullText.length < oldLen - 20) {
-        console.warn(`⚠️ [V3] 拦截到异常的内容缩水 (从 ${oldLen} 缩到 ${fullText.length})，丢弃此包以保护已生成内容`);
         return;
       }
 
@@ -316,7 +311,6 @@ export const useChatV3WebSocket = ({
     } else if (payload.state === 'final' || payload.state === 'finished' || payload.state === 'done') {
         // 💡 漏洞修复：如果 final 事件的 sessionKey 不是当前会话，拦截以防止跨会话状态清零和复写！
         if (payload.sessionKey && payload.sessionKey !== sessionKeyRef.current) {
-          console.warn('⚠️ [V3] 拦截到跨会话的结束信号，已被阻断以防串线', payload.sessionKey);
           return;
         }
 
@@ -334,7 +328,6 @@ export const useChatV3WebSocket = ({
             // 如果 stream 已经被我们上面清空了（或者是空的），但之前的消息已经有实质内容，说明这是冗余信号，坚决不覆盖！
             const incomingContent = payload.message?.content ? formatMessageContent(payload.message.content) : streamContentRef.current;
             if (!incomingContent && last.content && last.content !== t('chat.thinking')) {
-                console.log('🔄 [V3] 拦截到连续的结束信号，保留原内容防止复写清屏');
                 return prev;
             }
 
@@ -422,10 +415,8 @@ export const useChatV3WebSocket = ({
           // 如果已经在对话中且正在输入/已有内容，且 sessionKey 没变，则绝对不通过 loadSessionHistory 覆盖当前状态
           // 这能防止网络抖动导致的“撤自/清屏”现象
           if (sessionKeyRef.current && messagesCountRef.current === 0) {
-              console.log('📜 [V3] 初始连接/Session 恢复，正在加载历史记录...');
               loadSessionHistory(sessionKeyRef.current);
           } else {
-              console.log('🔄 [V3] 静默重连成功，保持当前 UI 状态，跳过历史重载防止覆盖生成中内容');
               // 如果之前正在打字，重连后保持打字状态 (后续会有新的 Delta 进来恢复更新)
           }
         }, 300);
@@ -488,7 +479,6 @@ export const useChatV3WebSocket = ({
     setIsLoadingHistory(true);
     const res = await sendRPC('chat.history', { sessionKey: key, limit: 500 });
     if (res.ok) {
-        console.log('📜 [V3] History Raw Response:', JSON.stringify(res.payload, null, 2));
         const items = (res.payload.messages || res.payload.items || []).sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
         const history = items.map((item: any) => {
           let content = formatMessageContent(item.content);
@@ -703,7 +693,6 @@ export const useChatV3WebSocket = ({
         try {
           message.loading({ content: t('common.processing', { defaultValue: '正在处理...' }), key: 'deletingSession' });
           const res = await sendRPC('sessions.delete', { key });
-          console.log('🗑️ [V3] Delete Session Response:', res);
           
           if (res.ok) {
             message.success({ content: t('common.success'), key: 'deletingSession' });
