@@ -60,22 +60,19 @@ export const useChatV3WebSocket = ({
   const [sessionLabel, setSessionLabel] = useState<string | null>(() => storage.getItem('v3_current_session_label'));
   const [sessionModel, setSessionModel] = useState<string>('');
 
-  // 💡 持久化：当 sessionKey / sessionLabel 变化时，同步到 storage 以应对窗口缩放/重挂载
+  // 💡 持久化：当 sessionKey / sessionLabel 变化时，原子化同步到 storage 以应对窗口缩放/重挂载
   useEffect(() => {
     if (sessionKey) {
+      storage.setItem('v3_current_session', JSON.stringify({ key: sessionKey, label: sessionLabel }));
+      // 兼容旧版，保留单个 key (可选)
       storage.setItem('v3_current_session_key', sessionKey);
+      if (sessionLabel) storage.setItem('v3_current_session_label', sessionLabel);
     } else {
+      storage.removeItem('v3_current_session');
       storage.removeItem('v3_current_session_key');
-    }
-  }, [sessionKey]);
-
-  useEffect(() => {
-    if (sessionLabel) {
-      storage.setItem('v3_current_session_label', sessionLabel);
-    } else {
       storage.removeItem('v3_current_session_label');
     }
-  }, [sessionLabel]);
+  }, [sessionKey, sessionLabel]);
   const [thinkingLevel, setThinkingLevel] = useState<'low' | 'medium' | 'high' | 'pro'>('medium');
   const [lastHealth, setLastHealth] = useState<{ ok: boolean, latency: number, ts: number } | null>(null);
   const [latencyHistory, setLatencyHistory] = useState<number[]>([]);
@@ -343,6 +340,10 @@ export const useChatV3WebSocket = ({
         fetchSessions(true);
         setTimeout(() => inputAreaRef.current?.focus(), 100);
     } else if (payload.state === 'error' || payload.state === 'failed') {
+        // 💡 漏洞修复：拦截跨会话的错误信号
+        if (payload.sessionKey && payload.sessionKey !== sessionKeyRef.current) {
+          return;
+        }
         clearStallTimer();
         
         const errorMsg = payload.message?.content || payload.error?.message || payload.error || '网关或模型响应异常，流式生成失败';
