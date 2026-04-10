@@ -226,16 +226,35 @@ export const useChatV3WebSocket = ({
       const rawContent = payload.message?.content;
       if (rawContent === undefined || rawContent === null) return; // 💡 只有 metadata 的包不更新内容
 
+      // 💡 漏洞 1 修复：拦截“跨会话残余串线”，如果丢过来的包并非当前所在的 session，直接丢弃！
+      if (payload.sessionKey && payload.sessionKey !== sessionKeyRef.current) {
+        console.warn('⚠️ [V3] 拦截到跨会话残余数据包，已被阻断', payload.sessionKey);
+        return;
+      }
+
       const fullText = formatMessageContent(rawContent);
       
-      // 💡 防御性检查：如果是生成中途，决不允许内容从“有”变“无” (除非是极端的后端重置)
-      if (!fullText && streamContentRef.current) {
-        console.warn('⚠️ [V3] 收到空内容 Delta，已拦截防止清屏');
+      // 💡 防御性检查 1：如果内容变为空或纯空白，且之前已有内容，拦截（防止纯空格绕过 !fullText）
+      if (!fullText.trim() && streamContentRef.current.trim()) {
+        console.warn('⚠️ [V3] 收到空/纯空白内容 Delta，已拦截防止清屏');
+        return;
+      }
+
+      // 💡 防御性检查 2：强力防护！如果后端发来的累积内容长度突然大幅缩短（容差20字符），说明后端流发生了异常重置或发了增量包，必须拦截！
+      const oldLen = streamContentRef.current.length;
+      if (oldLen > 50 && fullText.length < oldLen - 20) {
+        console.warn(`⚠️ [V3] 拦截到异常的内容缩水 (从 ${oldLen} 缩到 ${fullText.length})，丢弃此包以保护已生成内容`);
         return;
       }
 
       streamContentRef.current = fullText;
       tokenCountRef.current = fullText.length;
+
+      // 💡 漏洞 2 修复：利用 React Functional Update 切断闭包陷阱，避免每秒几十次无效调用
+      setIsTyping(prev => {
+        if (!prev) return true;
+        return prev;
+      });
 
       if (now - lastUpdateRef.current > 64) {
         lastUpdateRef.current = now;
@@ -282,11 +301,21 @@ export const useChatV3WebSocket = ({
 
         setMessages(prev => {
             const last = prev[prev.length - 1];
-            return (last && last.role === 'assistant') ? [...prev.slice(0, -1), { 
+            if (!last || last.role !== 'assistant') return prev;
+            
+            // 💡 致命漏洞 3 修复：防止连续的 final/done 信号复写！
+            // 如果 stream 已经被我们上面清空了（或者是空的），但之前的消息已经有实质内容，说明这是冗余信号，坚决不覆盖！
+            const incomingContent = payload.message?.content ? formatMessageContent(payload.message.content) : streamContentRef.current;
+            if (!incomingContent && last.content && last.content !== t('chat.thinking')) {
+                console.log('🔄 [V3] 拦截到连续的结束信号，保留原内容防止复写清屏');
+                return prev;
+            }
+
+            return [...prev.slice(0, -1), { 
                 ...last, 
-                content: streamContentRef.current, // Ensure final text matches
+                content: incomingContent,
                 metrics: { ttft, duration, tps: finalTPS }
-              }] : prev;
+            }];
         });
 
         setIsTyping(false);
@@ -342,7 +371,16 @@ export const useChatV3WebSocket = ({
         setStatus('authenticated');
         setTimeout(() => {
           fetchSessions();
-          if (sessionKeyRef.current) loadSessionHistory(sessionKeyRef.current);
+          // 💡 核心修复：只有当本地没有消息时（初始加载），或者 session 发生了切换，才自动加载历史
+          // 如果已经在对话中且正在输入/已有内容，且 sessionKey 没变，则绝对不通过 loadSessionHistory 覆盖当前状态
+          // 这能防止网络抖动导致的“撤自/清屏”现象
+          if (sessionKeyRef.current && messagesCountRef.current === 0) {
+              console.log('📜 [V3] 初始连接/Session 恢复，正在加载历史记录...');
+              loadSessionHistory(sessionKeyRef.current);
+          } else {
+              console.log('🔄 [V3] 静默重连成功，保持当前 UI 状态，跳过历史重载防止覆盖生成中内容');
+              // 如果之前正在打字，重连后保持打字状态 (后续会有新的 Delta 进来恢复更新)
+          }
         }, 300);
       } else {
         const errMsg = typeof res.error === 'object' ? JSON.stringify(res.error) : String(res.error);
@@ -546,6 +584,10 @@ export const useChatV3WebSocket = ({
   }, [status, sessionKey, selectedBot, thinkingLevel, sessionModel, sendRPC, fetchSessions, resetStallTimer, clearStallTimer, t]);
 
   const handleRegenerate = useCallback(() => {
+    if (isTyping) {
+      message.warning('⚠️ AI 正在狂奔输出中，请先等它说完或手动点击停止哦~');
+      return;
+    }
     const lastUserIndex = [...messages].reverse().findIndex(m => m.role === 'user');
     if (lastUserIndex !== -1) {
       const actualIndex = messages.length - 1 - lastUserIndex;
@@ -553,14 +595,18 @@ export const useChatV3WebSocket = ({
       setMessages(prev => prev.slice(0, actualIndex + 1));
       handleSend(lastUserMsg.content);
     }
-  }, [messages, handleSend]);
+  }, [messages, handleSend, isTyping]);
 
   const handleSaveEdit = useCallback(async (editingMsgIndex: number, editContent: string) => {
+    if (isTyping) {
+      message.warning('⚠️ AI 正在狂奔输出中，请先等它说完或手动点击停止哦~');
+      return;
+    }
     const newText = editContent.trim();
     if (!newText) return;
     setMessages(prev => prev.slice(0, editingMsgIndex));
     handleSend(newText);
-  }, [handleSend]);
+  }, [handleSend, isTyping]);
 
   const handleStopGeneration = useCallback(() => {
     setIsTyping(false);

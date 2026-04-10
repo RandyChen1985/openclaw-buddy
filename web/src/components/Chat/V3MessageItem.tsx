@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Avatar, Tooltip, Button, Input, message } from 'antd';
 import { User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, FileText, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -83,12 +83,14 @@ const CollapsibleMeta = ({ title, icon: Icon, children, defaultExpanded = true }
 
 
 
-const V3MessageItem: React.FC<V3MessageItemProps> = ({
+const V3MessageItem: React.FC<V3MessageItemProps> = ({ 
   msg, index, isMobile, showThinking,
   editingMsgIndex, editContent, setEditContent,
   onEdit, onSaveEdit, onCancelEdit, onQuote, onRegenerate,
   copyToClipboard, isTyping, isLast, isStalled, tpsData, t
 }) => {
+  const [thinkingSeconds, setThinkingSeconds] = useState(0);
+
   
   // 核心优化：按照最新要求处理内容过滤
   const processedContent = useMemo(() => {
@@ -112,6 +114,19 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   }, [msg.content, showThinking]);
 
   const isUser = msg.role === 'user';
+  const isThinkingState = msg.content === t('chat.thinking') || (!processedContent && isTyping && isLast && !isUser);
+
+  useEffect(() => {
+    let interval: any;
+    if (isThinkingState) {
+      interval = setInterval(() => {
+        setThinkingSeconds((s: number) => s + 1);
+      }, 1000);
+    } else {
+      setThinkingSeconds(0);
+    }
+    return () => clearInterval(interval);
+  }, [isThinkingState]);
 
   // 3. 增强：即使过滤后的内容为空，如果是 AI 正在生成中，也不允许销毁组件 (防止气泡闪现消失)
   if (!processedContent && !(isTyping && isLast && !isUser)) return null;
@@ -164,9 +179,9 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
             </div>
           </div>
         ) : (
-          msg.content === t('chat.thinking') || (!processedContent && isTyping && isLast && !isUser) ? (
+          isThinkingState ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13, color: '#64748b' }}>{t('chat.thinking')}</span>
+              <span style={{ fontSize: 13, color: '#64748b' }}>{t('chat.thinking')}{thinkingSeconds > 0 ? ` (${thinkingSeconds}s)` : ''}</span>
               <div className="typing-indicator" style={{ display: 'flex', gap: 4 }}>
                 <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>
                 <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>
