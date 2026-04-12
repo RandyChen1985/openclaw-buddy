@@ -48,18 +48,24 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
   });
 
   const [philosophyVisible, setPhilosophyVisible] = useState(false);
-
-  const fetchData = async () => {
+  const [updatedAt, setUpdatedAt] = useState('');
+  
+  const fetchData = async (refresh = false) => {
     setLoading(true);
     setVersionTooLow(false);
     try {
-      const res = await api.get('/v1/openclaw/security/status');
-      const resultData = res.data;
+      const res = await api.get(`/v1/openclaw/security/status${refresh ? '?refresh=true' : ''}`);
+      // 适配缓存后的嵌套结构: { data: { policy, snapshot, versionTooLow }, updated_at }
+      const rawData = res.data;
+      const resultData = rawData.data || rawData;
+      const updateTime = rawData.updated_at;
+
       if (resultData?.versionTooLow) {
         setVersionTooLow(true);
         setData(null);
       } else {
         setData(resultData);
+        setUpdatedAt(updateTime || '');
         if (resultData?.snapshot?.file) {
             setJsonContent(JSON.stringify(resultData.snapshot.file, null, 2));
         }
@@ -230,12 +236,17 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
             size="small" 
             type="text" 
             icon={<RefreshCw size={12} />} 
-            onClick={fetchData} 
+            onClick={() => fetchData(true)} 
             loading={loading}
             style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', marginLeft: 4, height: 'auto', padding: '0 4px' }}
           >
             <span style={{ fontSize: 11, fontWeight: 400 }}>{t('common.refresh')}</span>
           </Button>
+          {updatedAt && (
+            <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400, marginLeft: 8 }}>
+              {t('common.syncedAt', { defaultValue: '同步于' })}: {new Date(updatedAt).toLocaleTimeString()}
+            </span>
+          )}
         </Title>
         <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14, opacity: 0.8 }}>{t('security.description')}</Text>
       </div>
