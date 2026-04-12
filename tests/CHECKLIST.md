@@ -159,6 +159,7 @@
 - [ ] **配置持久化**: 验证 `dev.sh` 在重启或停止时是否能正确保留 `temp-dev-test/env` 文件，且不再重复覆盖。
 - [ ] **Windows 兼容性**: 在 Windows 环境下执行 `openclaw-buddy.exe`，验证 Shell 终端与 TUI 聊天能够正常启动（ConPTY）。
 - [ ] **跨平台编译**: 执行 `GOOS=windows go build` 应无 `syscall` 相关编译错误。
+- [x] **1.0.6 重新打包**: 验证 1.0.6 版本全量打包过程，确保 Mac 和 Linux 产物一致且包含最新 indigo 视觉全案。 `2026-04-12`
 
 ## 6. 接口标准协议 (API Schema)
 - [ ] **统一包装格式**: 验证 `/v1/openclaw/status` 等核心接口返回是否包含 `code`, `message`, `data` 顶层字段。
@@ -408,7 +409,8 @@
 - [x] **预设按钮标准化**: 验证快速切换预设按钮采用统一的左对齐 Flex 布局，图标与文字块起始位置垂直对齐。 `2026-04-12`
 - [x] **移动端 Tooltip 禁用**: 验证移动端点击图标或 Select 时不再弹出阻碍交互的 Tooltip 气泡。 `2026-04-12`
 - [x] **状态标签精致化**: 验证移动端下 `getAskTag` 和 `getSecurityTag` 采用更紧凑的 13px 字号与小间距。 `2026-04-12`
-
+- [x] **解析鲁棒性 (Exec Policy)**: 验证 `ExecPolicyShow` 在输出包含尾部日志时仍能通过 `json.NewDecoder` 稳健解析。 `2026-04-12`
+- [x] **解析鲁棒性 (Approvals)**: 验证 `GetApprovalsSnapshot` 在输出包含尾部日志时仍能稳健解析。 `2026-04-12`
 
 ## 18. ChatV3 数据可视化与高级交互 (1.0.6)
 - [x] **ECharts 图表渲染**: 验证消息中的图表数据能被正确解析并渲染为交互式 ECharts 组件。 `2026-04-12`

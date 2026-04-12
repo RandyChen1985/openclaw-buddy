@@ -1123,7 +1123,8 @@ func ExecPolicyShow() (*OpenClawExecPolicyResponse, error) {
 	cleanOut = cleanOut[index:]
 
 	var res OpenClawExecPolicyResponse
-	if err := json.Unmarshal([]byte(cleanOut), &res); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(cleanOut))
+	if err := decoder.Decode(&res); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal exec policy: %v", err)
 	}
 
@@ -1145,7 +1146,8 @@ func GetApprovalsSnapshot() (*OpenClawApprovalsSnapshot, error) {
 	cleanOut = cleanOut[index:]
 
 	var res OpenClawApprovalsSnapshot
-	if err := json.Unmarshal([]byte(cleanOut), &res); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(cleanOut))
+	if err := decoder.Decode(&res); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal approvals snapshot: %v", err)
 	}
 
