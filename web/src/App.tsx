@@ -873,6 +873,7 @@ const Dashboard = () => {
           icon: <Zap size={14} /> 
         },
         { key: 'shell', label: t('common.shell'), icon: <Terminal size={14} /> },
+        { key: 'security', label: t('security.title'), icon: <ShieldCheck size={14} /> },
       ]
     },
     {
@@ -886,7 +887,6 @@ const Dashboard = () => {
         { key: 'skills', label: t('common.skills'), icon: <Puzzle size={14} /> },
         { key: 'plugins', label: t('plugins.title'), icon: <Zap size={14} /> },
         { key: 'experts', label: t('common.expertMarket'), icon: <Rocket size={14} /> },
-        { key: 'security', label: t('security.title'), icon: <ShieldCheck size={14} /> },
       ]
     },
     {

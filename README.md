@@ -264,3 +264,11 @@ EXTERNAL_DASHBOARD_URL="https://claw.yourdomain.com" # 外部访问前缀 (用�
 ## 📄 开源协议
 
 本项目基于 **MIT License** 开源，由 randychen 维护。联系我：[cexlong@gmail.com](mailto:cexlong@gmail.com)
+
+---
+
+### 💬 联系与交流
+
+如果您在使用过程中有任何疑问、功能建议，或者想要获取更多关于 OpenClaw 的技术资讯，欢迎扫码关注我们的 **微信公众号**：
+
+![微信公众号](docs/images/%20gzh.png)

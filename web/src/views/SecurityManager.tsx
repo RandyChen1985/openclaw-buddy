@@ -197,34 +197,37 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
 
   return (
     <div style={{ 
-      padding: isMobile ? '16px' : '24px', 
+      padding: isMobile ? '0 16px' : '0 24px', 
       width: '100%',
       height: '100%',
       display: 'flex',
       flexDirection: 'column',
       gap: isMobile ? 16 : 24
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <Title level={isMobile ? 3 : 2} style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, flexWrap: 'wrap' }}>
-            <ShieldCheck size={isMobile ? 22 : 28} color="#2563eb" />
-            {t('security.title')}
-            <Button 
-              type="link" 
-              icon={<Info size={14} />} 
-              onClick={() => setPhilosophyVisible(true)}
-              style={{ padding: 0, marginLeft: isMobile ? 4 : 8, fontSize: isMobile ? 12 : 14 }}
-            >
-              {t('security.learnMore')}
-            </Button>
-          </Title>
-          <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14, opacity: 0.8 }}>{t('security.description')}</Text>
-        </div>
-        <Space>
-          <Button icon={<RefreshCw size={14} />} onClick={fetchData} loading={loading}>
-            {isMobile ? "" : t('common.refresh')}
+      <div style={{ marginBottom: isMobile ? 8 : 16 }}>
+        <Title level={isMobile ? 3 : 2} style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, flexWrap: 'wrap' }}>
+          <ShieldCheck size={isMobile ? 22 : 28} color="#2563eb" />
+          {t('security.title')}
+          <Button 
+            type="link" 
+            icon={<Info size={14} />} 
+            onClick={() => setPhilosophyVisible(true)}
+            style={{ padding: 0, marginLeft: isMobile ? 4 : 8, fontSize: isMobile ? 12 : 14 }}
+          >
+            {t('security.learnMore')}
           </Button>
-        </Space>
+          <Button 
+            size="small" 
+            type="text" 
+            icon={<RefreshCw size={12} />} 
+            onClick={fetchData} 
+            loading={loading}
+            style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', marginLeft: 4, height: 'auto', padding: '0 4px' }}
+          >
+            <span style={{ fontSize: 11, fontWeight: 400 }}>{t('common.refresh')}</span>
+          </Button>
+        </Title>
+        <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14, opacity: 0.8 }}>{t('security.description')}</Text>
       </div>
 
       <div style={{ 
@@ -256,19 +259,19 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>
               <div style={{ 
                 display: 'flex', 
-                flexDirection: isMobile ? 'column' : 'row',
+                flexDirection: 'row',
                 justifyContent: 'space-around', 
                 background: '#f8fafc', 
-                padding: isMobile ? '20px' : '32px 24px', 
+                padding: isMobile ? '16px 8px' : '32px 24px', 
                 borderRadius: 16, 
                 border: '1px solid #e2e8f0',
-                gap: isMobile ? 20 : 0
+                gap: isMobile ? 8 : 0
               }}>
-                <div style={{ textAlign: 'center', flex: 1, width: '100%' }}>
-                  <Space style={{ marginBottom: 8 }}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>{t('security.askLabel')}</Text>
+                <div style={{ textAlign: 'center', flex: 1, minWidth: 0 }}>
+                  <Space style={{ marginBottom: isMobile ? 4 : 8 }}>
+                    <Text type="secondary" style={{ fontSize: isMobile ? 11 : 12 }}>{t('security.askLabel')}</Text>
                     <Tooltip title={isMobile ? "" : t('security.clickForHelp')}>
-                      <HelpCircle size={14} style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => showHelp('ask')} />
+                      <HelpCircle size={isMobile ? 12 : 14} style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => showHelp('ask')} />
                     </Tooltip>
                   </Space>
                   <div style={{ marginTop: 4, display: 'flex', justifyContent: 'center', width: '100%' }}>
@@ -295,12 +298,19 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
                     )}
                   </div>
                 </div>
-                {!isMobile && <div style={{ height: 64, width: 1, background: '#e2e8f0', margin: '0 24px' }} />}
-                <div style={{ textAlign: 'center', flex: 1, width: '100%' }}>
-                  <Space style={{ marginBottom: 12 }}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>{t('security.securityLabel')}</Text>
+                <div style={{ 
+                  height: isMobile ? 32 : 64, 
+                  width: 1, 
+                  background: '#e2e8f0', 
+                  margin: isMobile ? '0 8px' : '0 24px',
+                  alignSelf: 'center',
+                  flexShrink: 0
+                }} />
+                <div style={{ textAlign: 'center', flex: 1, minWidth: 0 }}>
+                  <Space style={{ marginBottom: isMobile ? 4 : 12 }}>
+                    <Text type="secondary" style={{ fontSize: isMobile ? 11 : 12 }}>{t('security.securityLabel')}</Text>
                     <Tooltip title={isMobile ? "" : t('security.clickForHelp')}>
-                      <HelpCircle size={14} style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => showHelp('security')} />
+                      <HelpCircle size={isMobile ? 12 : 14} style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => showHelp('security')} />
                     </Tooltip>
                   </Space>
                   <div style={{ marginTop: 4, display: 'flex', justifyContent: 'center', width: '100%' }}>
