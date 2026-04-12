@@ -1026,34 +1026,28 @@ func (s *Server) getSessions(c *gin.Context) {
 }
 
 func (s *Server) getSecurityStatus(c *gin.Context) {
-	policy, err := process.ExecPolicyShow()
-	if err != nil {
-		// 容错设计：如果 openclaw 版本过低，不支持 exec-policy 命令，则返回特定标志
-		if strings.Contains(err.Error(), "unknown command") {
-			s.Success(c, gin.H{
-				"policy":        nil,
-				"snapshot":      nil,
-				"versionTooLow": true,
-			})
+	refresh := c.Query("refresh") == "true"
+	if refresh {
+		if err := process.SyncKeySingle("security_status", s.cfg.OpenClawConfigDir); err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
 			return
 		}
-		s.Error(c, http.StatusInternalServerError, err.Error())
-		return
 	}
 
-	snapshot, err := process.GetApprovalsSnapshot()
+	data, updatedAt, err := process.GetCachedData("security_status")
 	if err != nil {
-		// 如果获取快照失败（例如 approvals 文件不存在），依然返回 policy
-		s.Success(c, gin.H{
-			"policy":   policy,
-			"snapshot": nil,
-		})
-		return
+		// 如果缓存没有，尝试实时同步一次
+		if err := process.SyncKeySingle("security_status", s.cfg.OpenClawConfigDir); err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		data, updatedAt, _ = process.GetCachedData("security_status")
 	}
 
+	// 将缓存的 map 转换为结构体或直接返回
 	s.Success(c, gin.H{
-		"policy":   policy,
-		"snapshot": snapshot,
+		"data":       data,
+		"updated_at": updatedAt,
 	})
 }
 
@@ -1135,7 +1129,14 @@ func (s *Server) triggerSecurityTask(c *gin.Context) {
 		Target: req.Target,
 	}
 
-	s.runAsyncTask(c, task, runFunc)
+	s.runAsyncTask(c, task, func() (string, error) {
+		res, err := runFunc()
+		if err == nil {
+			// 操作成功后立即触发同步，确保缓存与物理状态对齐
+			_ = process.SyncKeySingle("security_status", s.cfg.OpenClawConfigDir)
+		}
+		return res, err
+	})
 }
 
 func (s *Server) getOpenClawModelsConfig(c *gin.Context) {
