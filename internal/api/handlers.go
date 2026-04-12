@@ -1028,6 +1028,15 @@ func (s *Server) getSessions(c *gin.Context) {
 func (s *Server) getSecurityStatus(c *gin.Context) {
 	policy, err := process.ExecPolicyShow()
 	if err != nil {
+		// 容错设计：如果 openclaw 版本过低，不支持 exec-policy 命令，则返回特定标志
+		if strings.Contains(err.Error(), "unknown command") {
+			s.Success(c, gin.H{
+				"policy":        nil,
+				"snapshot":      nil,
+				"versionTooLow": true,
+			})
+			return
+		}
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -12,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import api from '../api';
 import type { Task } from '../hooks/useTaskCenter';
+import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
@@ -25,7 +26,7 @@ interface SecurityManagerProps {
 }
 
 const SecurityManager: React.FC<SecurityManagerProps> = ({
-  isMobile, bots, activeTasks
+  isMobile, bots, activeTasks, isRunning, onNavigateToDashboard
 }) => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
@@ -34,6 +35,7 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
   const [newPattern, setNewPattern] = useState('');
   const [jsonModalVisible, setJsonModalVisible] = useState(false);
   const [jsonContent, setJsonContent] = useState('');
+  const [versionTooLow, setVersionTooLow] = useState(false);
   
   // 正在执行异步任务的状态
   const [isOperating, setIsOperating] = useState(false);
@@ -49,12 +51,18 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
 
   const fetchData = async () => {
     setLoading(true);
+    setVersionTooLow(false);
     try {
       const res = await api.get('/v1/openclaw/security/status');
       const resultData = res.data;
-      setData(resultData);
-      if (resultData?.snapshot?.file) {
-          setJsonContent(JSON.stringify(resultData.snapshot.file, null, 2));
+      if (resultData?.versionTooLow) {
+        setVersionTooLow(true);
+        setData(null);
+      } else {
+        setData(resultData);
+        if (resultData?.snapshot?.file) {
+            setJsonContent(JSON.stringify(resultData.snapshot.file, null, 2));
+        }
       }
     } catch (err: any) {
       console.error('Security status fetch error:', err);
@@ -202,8 +210,10 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
       height: '100%',
       display: 'flex',
       flexDirection: 'column',
-      gap: isMobile ? 16 : 24
+      gap: isMobile ? 16 : 24,
+      position: 'relative'
     }}>
+      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
       <div style={{ marginBottom: isMobile ? 8 : 16 }}>
         <Title level={isMobile ? 3 : 2} style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, flexWrap: 'wrap' }}>
           <ShieldCheck size={isMobile ? 22 : 28} color="#2563eb" />
@@ -240,16 +250,18 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
           title={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Zap size={18} /> {t('security.policyCardTitle')}</div>}
           extra={
             <Space>
-              {!isEditing ? (
-                <Button size="small" icon={<Pencil size={14} />} onClick={() => setIsEditing(true)} disabled={loading || isOperating}>
-                  {isMobile ? t('common.edit') : `${t('common.edit')}配置`}
-                </Button>
-              ) : (
-                <Button size="small" icon={<X size={14} />} onClick={() => setIsEditing(false)} danger>
-                  {isMobile ? "退出" : "退出编辑"}
-                </Button>
+              {effectiveScope && (
+                !isEditing ? (
+                  <Button size="small" icon={<Pencil size={14} />} onClick={() => setIsEditing(true)} disabled={loading || isOperating}>
+                    {isMobile ? t('common.edit') : `${t('common.edit')}配置`}
+                  </Button>
+                ) : (
+                  <Button size="small" icon={<X size={14} />} onClick={() => setIsEditing(false)} danger>
+                    {isMobile ? "退出" : "退出编辑"}
+                  </Button>
+                )
               )}
-              {!isMobile && <Tag color="blue" style={{ marginLeft: 8 }}>{t('security.effectivePolicy')}</Tag>}
+              {!isMobile && effectiveScope && <Tag color="blue" style={{ marginLeft: 8 }}>{t('security.effectivePolicy')}</Tag>}
             </Space>
           }
           loading={loading}
@@ -257,6 +269,7 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
         >
           {effectiveScope ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>
+              {/* ... existing scope UI ... */}
               <div style={{ 
                 display: 'flex', 
                 flexDirection: 'row',
@@ -394,6 +407,40 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
                 </div>
               </div>
             </div>
+          ) : versionTooLow ? (
+            <div style={{ 
+              height: '100%', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: 16,
+              padding: '40px 20px',
+              background: 'rgba(240, 242, 245, 0.5)',
+              borderRadius: 12,
+              border: '1px dashed #d9d9d9'
+            }}>
+               <ShieldAlert size={48} color="#ef4444" style={{ opacity: 0.8 }} />
+               <Text strong style={{ fontSize: 18 }}>当前版本过低 (Version Upgrade Required)</Text>
+               <div style={{ textAlign: 'center', maxWidth: 400 }}>
+                 <Text type="secondary" style={{ fontSize: 14 }}>
+                   当前 OpenClaw 核心版本暂不支持执行策略（Exec Policy）管理。为了保障您的操作安全并启用此功能，请在终端执行以下命令进行升级：
+                 </Text>
+                 <div style={{ 
+                   background: '#1e293b', 
+                   color: '#f8fafc', 
+                   padding: '12px 20px', 
+                   borderRadius: 8, 
+                   marginTop: 16,
+                   fontFamily: 'monospace',
+                   fontSize: 14,
+                   position: 'relative',
+                   textAlign: 'left'
+                 }}>
+                   <span style={{ color: '#94a3b8' }}>$</span> openclaw upgrade
+                 </div>
+               </div>
+            </div>
           ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} />}
         </Card>
 
@@ -492,9 +539,11 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text type="secondary" style={{ fontSize: 12 }}>{t('security.editApprovals')}</Text>
-          <Button size="small" icon={<FileCode size={14} />} disabled={isOperating} onClick={() => setJsonModalVisible(true)}>
-            {t('common.edit')} JSON
-          </Button>
+          {data?.snapshot && (
+            <Button size="small" icon={<FileCode size={14} />} disabled={isOperating} onClick={() => setJsonModalVisible(true)}>
+              {t('common.edit')} JSON
+            </Button>
+          )}
         </div>
       </Card>
 
