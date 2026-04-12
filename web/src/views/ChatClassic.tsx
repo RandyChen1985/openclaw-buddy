@@ -12,7 +12,7 @@ import 'katex/dist/katex.min.css';
 import api, { getFullUrl } from '../api';
 import { getBaseURL } from '../utils/url';
 import storage from '../utils/storage';
-import { Mermaid, CodeBlock } from '../components/ChatComponents';
+import { Mermaid, CodeBlock, ECharts } from '../components/ChatComponents';
 import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 const { Option } = Select;
@@ -594,6 +594,8 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
         color: #1e293b;
       }
       .markdown-body p { margin-bottom: 6px; }
+      .markdown-body a { color: #2563eb; text-decoration: none; }
+      .markdown-body a:hover { text-decoration: underline; }
       .markdown-body ul, .markdown-body ol {
         margin-bottom: 6px;
         padding-left: 20px;
@@ -906,12 +908,12 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                 <Avatar 
                   size={isMobile ? 32 : 36} 
                   style={{ 
-                    background: msg.role === 'user' ? '#2563eb' : '#fff',
+                    background: msg.role === 'user' ? '#4f46e5' : '#fff',
                     border: msg.role === 'assistant' ? '1px solid #e2e8f0' : 'none',
                     boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
                     flexShrink: 0
                   }}
-                  icon={msg.role === 'user' ? <User size={18} /> : <Bot size={18} color="#2563eb" />}
+                  icon={msg.role === 'user' ? <User size={18} /> : <Bot size={18} color="#4f46e5" />}
                 />
                 <div style={{ 
                   maxWidth: isMobile ? '92%' : '85%',
@@ -925,7 +927,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                     borderRadius: 16,
                     borderTopRightRadius: msg.role === 'user' ? 4 : 16,
                     borderTopLeftRadius: msg.role === 'assistant' ? 4 : 16,
-                    background: msg.role === 'user' ? '#2563eb' : '#fff',
+                    background: msg.role === 'user' ? '#4f46e5' : '#fff',
                     color: msg.role === 'user' ? '#fff' : '#1e293b',
                     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
                     fontSize: 14,
@@ -1019,10 +1021,14 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                                     return <Mermaid chart={codeContent} />;
                                   }
 
+                                  if (!inline && language === 'echarts') {
+                                    const isLastMessage = index === messages.length - 1;
+                                    return <ECharts optionStr={codeContent} isTyping={isLastMessage && isTyping} />;
+                                  }
+
                                   if (!inline && language) {
                                     return <CodeBlock language={language} value={codeContent} isMobile={isMobile} {...props} />;
-                                  }
-                                
+                                  }                                
                                 return (
                                   <code className={className} {...props} style={{
                                     padding: '0.2em 0.4em',

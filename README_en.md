@@ -260,3 +260,11 @@ To embed a chat window with a preset bot and auto-login:
 ## 📄 License
 
 This project is licensed under the **MIT License**. Maintained by randychen. Contact: [cexlong@gmail.com](mailto:cexlong@gmail.com)
+
+---
+
+### 💬 Contact & Community
+
+If you have any questions, feature suggestions, or want to get the latest technical news about OpenClaw during use, you are welcome to scan the QR code to follow our **Official WeChat Account**:
+
+![Official WeChat Account](docs/images/%20gzh.png)

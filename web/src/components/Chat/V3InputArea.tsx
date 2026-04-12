@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useImperativeHandle, forwardRef, useRef } from 'react';
 import { Input, Button, Upload, message } from 'antd';
 import { Send, Square, Paperclip, X, FileText, Loader2 } from 'lucide-react';
 import storage from '../../utils/storage';
@@ -11,6 +11,12 @@ interface FileInfo {
   filename: string;
   size: number;
   ext: string;
+}
+
+export interface InputAreaHandle {
+  addFiles: (files: FileInfo[]) => void;
+  uploadFiles: (files: File[]) => Promise<void>;
+  focus: () => void;
 }
 
 interface V3InputAreaProps {
@@ -27,12 +33,49 @@ interface V3InputAreaProps {
   selectedBot: string;
 }
 
-const V3InputArea: React.FC<V3InputAreaProps> = ({ 
-  status, isMobile, isTyping, onSend, onStop, t, isComposing, setIsComposing, setIsFocused, selectedBot
-}) => {
+const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputAreaProps> = ({ 
+  status, isMobile, isTyping, onSend, onStop, t, isComposing, setIsComposing, isFocused, setIsFocused, selectedBot
+}, ref) => {
   const [text, setText] = useState('');
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [uploading, setUploading] = useState(false);
+  const textAreaRef = useRef<any>(null);
+
+  // 暴露 addFiles 方法供拖拽上传调用
+  useImperativeHandle(ref, () => ({
+    addFiles: (newFiles: FileInfo[]) => {
+      setFiles(prev => [...prev, ...newFiles]);
+    },
+    uploadFiles: async (rawFiles: File[]) => {
+      setUploading(true);
+      try {
+        const results = await Promise.all(rawFiles.map(async (file) => {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('botId', selectedBot.replace('openclaw:', ''));
+          
+          const response = await fetch(`${getBaseURL()}/v1/openclaw/chat/upload`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${storage.getItem('guardian_token')}`
+            },
+            body: formData
+          });
+          const res = await response.json();
+          if (res.code === 200) return res.data;
+          throw new Error(res.message || 'Upload failed');
+        }));
+        setFiles(prev => [...prev, ...results]);
+      } catch (err: any) {
+        message.error(err.message);
+      } finally {
+        setUploading(false);
+      }
+    },
+    focus: () => {
+      textAreaRef.current?.focus();
+    }
+  }));
 
   const handleInnerSend = () => {
     if ((!text.trim() && files.length === 0) || status !== 'authenticated' || isTyping || uploading) return;
@@ -73,7 +116,7 @@ const V3InputArea: React.FC<V3InputAreaProps> = ({
   }, [isTyping, text, status, isMobile, files, uploading]);
 
   return (
-    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 0, position: 'relative' }}>
+    <div className={`v3-input-wrapper ${isFocused ? 'focused' : ''}`} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 0, position: 'relative' }}>
       {/* 文件预览区域 */}
       {(files.length > 0 || uploading) && (
         <div style={{ 
@@ -188,10 +231,16 @@ const V3InputArea: React.FC<V3InputAreaProps> = ({
 
         <div style={{ flex: 1, position: 'relative' }}>
           <Input.TextArea
+            ref={textAreaRef}
             value={text}
             onChange={e => setText(e.target.value)}
             // 优化 4: 回归原生占位符，移除模拟光标和额外层
-            placeholder={status === 'authenticated' ? t('chat.v3InputPlaceholder') : t('chat.v3Connecting')}
+            placeholder={
+              status !== 'authenticated' ? t('chat.v3Connecting') : 
+              isTyping ? (t('chat.thinking') || 'AI内容生成中,请稍后...') : 
+              uploading ? '文件上传中...' :
+              t('chat.v3InputPlaceholder')
+            }
             // 优化 1: 保持 autoSize 但精简配置
             autoSize={{ minRows: 1, maxRows: 6 }}
             onCompositionStart={() => setIsComposing(true)}
@@ -204,7 +253,7 @@ const V3InputArea: React.FC<V3InputAreaProps> = ({
                 handleInnerSend();
               }
             }}
-            disabled={status !== 'authenticated' || isTyping}
+            disabled={status !== 'authenticated' || isTyping || uploading}
             variant="borderless"
             style={{ padding: '4px 0', fontSize: 13, opacity: isTyping ? 0.6 : 1, minHeight: 32 }}
           />
@@ -222,7 +271,7 @@ const V3InputArea: React.FC<V3InputAreaProps> = ({
 };
 
 // 优化 3: 严格的重绘控制
-export default React.memo(V3InputArea, (prev, next) => {
+const V3InputArea = React.memo(forwardRef(V3InputAreaInner), (prev, next) => {
   return prev.status === next.status &&
          prev.isMobile === next.isMobile &&
          prev.isTyping === next.isTyping &&
@@ -230,3 +279,5 @@ export default React.memo(V3InputArea, (prev, next) => {
          prev.isFocused === next.isFocused &&
          prev.selectedBot === next.selectedBot;
 });
+
+export default V3InputArea;
