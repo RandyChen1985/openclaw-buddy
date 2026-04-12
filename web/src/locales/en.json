@@ -110,6 +110,45 @@
     "readyDesc": "System is ready to clone expert \"{{name}}\" to your workspace.",
     "lastAdjust": "Last Adjust"
   },
+  "security": {
+    "title": "Security Center",
+    "description": "Manage OpenClaw's execution policy and instruction approval allowlist, ensuring Agent operations meet your security requirements.",
+    "learnMore": "Learn security mechanism",
+    "philosophyTitle": "OpenClaw Security Mechanisms Explained",
+    "philosophyContent": "### 1. Duty Segregation\n\n• **Instruction Ask (Ask) = Identity Verification / Access Control**\nThe core is 'Interaction'. It focuses on: **'Do I need to ask the boss (you) about this?'**. If enabled, the Agent must obtain your approval before taking any action.\n\n• **Security Level (Security) = Laboratory Rules / Physical Constraints**\nThe core is 'Constraint'. It focuses on: **'Within the allowed scope, what dangerous items can it touch?'**. This determines the strength of sandbox isolation and interception during command execution.\n\n---\n\n### 2. Their Relationship\n\n**'Ask is the first line of defense, Security is the ultimate line of defense'**\n\n• **Cross Defense**: Even if you accidentally click 'Allow' in an Ask prompt, if the Security level is set to `full`, the system will still intercept dangerous operations at the low level.\n\n• **Priority**: If the Security level is set to `deny` (Deny All), no more Ask prompts will be triggered because the command is directly intercepted.",
+    "policyCardTitle": "Exec Policy",
+    "effectivePolicy": "Effective Policy",
+    "presetTitle": "Quick Presets",
+    "presetYoloDesc": "Fully automated, no questions. Security: None",
+    "presetCautiousDesc": "Cautious mode, confirmation for key commands. Security: Full",
+    "presetDenyAllDesc": "Deny all execution requests",
+    "applyPreset": "Apply Preset",
+    "askLabel": "Instruction Ask",
+    "securityLabel": "Security Level (Security)",
+    "askOn": "Always Ask (On)",
+    "askOff": "Ask Off (Off)",
+    "askOnMiss": "Ask On Miss (On Miss)",
+    "securityFull": "Security Full (Full)",
+    "securityNone": "Security None (None)",
+    "securityAllowlist": "Allowlist Mode (Allowlist)",
+    "securityDeny": "Deny All (Deny)",
+    "askHelpTitle": "What is Instruction Ask?",
+    "askHelpContent": "Determines whether Agent needs your approval before executing a Shell command.\n\n• **Always Ask (on)**: Safest. A confirmation prompt will appear before every command.\n\n• **Ask On Miss (on-miss)**: Balanced. Commands in the allowlist execute automatically, others need confirmation.\n\n• **Ask Off (off)**: Fastest. Agent can execute all commands silently. Ensure you trust the Agent.",
+    "securityHelpTitle": "What is Security Level?",
+    "securityHelpContent": "Determines the defense and restriction strength during command execution.\n\n• **Security Full (full)**: Recommended. Enables sandbox restrictions, prevents access to sensitive system files, and intercepts dangerous operations.\n\n• **Allowlist Mode (allowlist)**: Strict. Only allows execution of commands you have explicitly authorized in the list on the right.\n\n• **Security None (none)**: Developer Mode. Commands execute with your current user permissions without extra protection.\n\n• **Deny All (deny)**: Lockdown. Prohibits all Shell command execution.",
+    "allowlistHelpTitle": "How to configure the Allowlist?",
+    "allowlistHelpContent": "The allowlist grants authorization for specific commands to run automatically without manual confirmation.\n\n• **Matching Patterns**: Supports wildcards. For example, `npm install *` will permit any command starting with npm install, and `git **` will allow all git operations.\n\n• **Exact Match**: If you enter only `ls`, only the bare ls command without arguments will be allowed.\n\n• **Scope**: You can set allowlists for specific Agents or select `* (All Agents)` for global application.\n\n• **Security Tip**: Avoid adding dangerous commands like `sudo *` or `rm *` to the allowlist.",
+    "allowlistTitle": "Instruction Allowlist",
+    "agentSelectorPlaceholder": "Select Agent...",
+    "addPattern": "Add Pattern",
+    "patternPlaceholder": "e.g., npm install *",
+    "noPatterns": "No custom allowlist for this agent",
+    "advancedTitle": "Advanced Configuration",
+    "editApprovals": "Directly edit approval config (exec-approvals.json)",
+    "saveConfirm": "Are you sure you want to apply these security changes?",
+    "fetchFailed": "Failed to fetch security status",
+    "updateStarted": "Security policy update task started"
+  },
   "login": {
     "title": "OpenClaw Buddy",
     "subtitle": "Your Private LLM Ops Companion",
@@ -296,7 +335,10 @@
     "waitingGatewaySync": "Syncing gateway task status...",
     "modelSwitchSuccess": "Model switched successfully",
     "defaultModel": "Use Default Model",
-    "defaultSuffix": "(Default)"
+    "defaultSuffix": "(Default)",
+    "approvalRequired": "Command execution needs your approval",
+    "approvalTip": "Approval command filled, please click send to confirm",
+    "approveNow": "Approve this command (allow-once)"
   },
   "channels": {
     "boundChannels": "Bound Channels",
@@ -628,6 +670,10 @@
     "reload_plugins": "Reload Plugin Engine",
     "update_plugins": "Update All Plugins",
     "unbind_wechat": "Unbind WeChat",
+    "apply_security_preset": "Apply Security Preset: {{id}}",
+    "update_security_policy": "Update Exec Policy",
+    "update_allowlist": "Update Allowlist: {{id}}",
+    "set_approvals": "Update Approvals Configuration",
     "results": {
       "cloned": "Cloned",
       "created": "Created",
@@ -647,7 +693,11 @@
       "model_appended": "Model Appended/Updated",
       "model_removed": "Model Removed",
       "unbound": "Unbound",
-      "upgraded": "Upgrade ready, please restart"
+      "upgraded": "Upgrade ready, please restart",
+      "policy_updated": "Policy updated",
+      "preset_applied": "Preset applied",
+      "allowlist_updated": "Allowlist updated",
+      "approvals_set": "Config updated"
     }
   }
 }

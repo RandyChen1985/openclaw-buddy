@@ -1,6 +1,9 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Avatar, Tooltip, Button, Input, message } from 'antd';
-import { User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, FileText, ChevronRight } from 'lucide-react';
+import { 
+  User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, 
+  FileText, ChevronRight, ShieldAlert, ShieldCheck 
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -23,6 +26,7 @@ interface V3MessageItemProps {
   onCancelEdit: () => void;
   onDelete: (index: number) => void;
   onQuote: (content: string) => void;
+  onSend: (content: string) => void; // 新增：直接发送
   onRegenerate: () => void;
   copyToClipboard: (text: string) => void;
   isTyping: boolean;
@@ -47,13 +51,9 @@ const Sparkline = ({ data }: { data: number[] }) => {
   );
 };
 
-/**
- * 可折叠的元数据块组件 (用于思考过程、工具调用等)
- */
 const CollapsibleMeta = ({ title, icon: Icon, children, defaultExpanded = true }: any) => {
   const [isExpanded, setIsExpanded] = React.useState(defaultExpanded);
 
-  // 监听外部 defaultExpanded 的变化 (用于同步 showThinking 开关)
   React.useEffect(() => {
     setIsExpanded(defaultExpanded);
   }, [defaultExpanded]);
@@ -80,33 +80,28 @@ const CollapsibleMeta = ({ title, icon: Icon, children, defaultExpanded = true }
   );
 };
 
-
-
-
 const V3MessageItem: React.FC<V3MessageItemProps> = ({ 
   msg, index, isMobile, showThinking,
   editingMsgIndex, editContent, setEditContent,
-  onEdit, onSaveEdit, onCancelEdit, onQuote, onRegenerate,
+  onEdit, onSaveEdit, onCancelEdit, onQuote, onSend, onRegenerate,
   copyToClipboard, isTyping, isLast, isStalled, tpsData, t
 }) => {
   const [thinkingSeconds, setThinkingSeconds] = useState(0);
 
-  
-  // 核心优化：按照最新要求处理内容过滤
   const processedContent = useMemo(() => {
     let content = msg.content;
     
-    // 1. :::toolResult (工具输出) 永远物理隐藏
+    // 1. :::toolResult 物理隐藏
     content = content.replace(/> :::toolResult[\s\S]*?:::\n*/g, '');
 
+    // 注意：不要在此处剔除 :::approval，否则 blockquote 渲染器无法捕获并渲染卡片
+
     if (!showThinking) {
-      // 2. 关闭思考显示时，物理隐藏所有元数据块
       content = content
         .replace(/> :::thinking[\s\S]*?:::\n*/g, '')
         .replace(/> :::toolCall[\s\S]*?:::\n*/g, '')
         .trim();
       
-      // 如果剔除后没有实质文本内容，则不渲染气泡
       if (!content && (msg.content.includes(':::thinking') || msg.content.includes(':::toolCall'))) return null;
     }
 
@@ -114,6 +109,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   }, [msg.content, showThinking]);
 
   const isUser = msg.role === 'user';
+  const hasApproval = msg.content.includes(':::approval');
   const isThinkingState = msg.content === t('chat.thinking') || (!processedContent && isTyping && isLast && !isUser);
 
   useEffect(() => {
@@ -128,8 +124,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
     return () => clearInterval(interval);
   }, [isThinkingState]);
 
-  // 3. 增强：即使过滤后的内容为空，如果是 AI 正在生成中，也不允许销毁组件 (防止气泡闪现消失)
-  if (!processedContent && !(isTyping && isLast && !isUser)) return null;
+  if (!processedContent && !(isTyping && isLast && !isUser) && !hasApproval) return null;
 
   return (
     <div 
@@ -140,14 +135,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       }}
     >
       {isUser ? (
-        <Avatar 
-          icon={<User size={18} />} 
-          style={{ 
-            background: '#1e293b', flexShrink: 0, marginTop: 4, 
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            visibility: 'visible'
-          }} 
-        />
+        <Avatar icon={<User size={18} />} style={{ background: '#1e293b', flexShrink: 0, marginTop: 4, visibility: 'visible' }} />
       ) : (
         <div style={{ flexShrink: 0, marginTop: 4, visibility: 'visible' }}>
           <div style={{ width: isMobile ? 32 : 36, height: isMobile ? 32 : 36, borderRadius: '50%', background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #c7d2fe' }}>
@@ -158,8 +146,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       
       <div style={{ 
         maxWidth: isMobile ? '92%' : '85%', padding: isMobile ? '10px 14px' : '12px 18px', borderRadius: isUser ? '18px 18px 4px 18px' : '4px 18px 18px 18px', 
-        background: isUser ? '#4f46e5' : '#fff',
-        color: isUser ? '#fff' : '#1e293b',
+        background: isUser ? '#4f46e5' : '#fff', color: isUser ? '#fff' : '#1e293b',
         boxShadow: isUser ? '0 4px 15px rgba(79, 70, 229, 0.15)' : '0 4px 12px rgba(0,0,0,0.03)',
         border: !isUser ? '1px solid #e8eff6' : 'none',
         position: 'relative', wordBreak: 'break-word', overflowWrap: 'anywhere', minWidth: 0,
@@ -167,9 +154,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         {editingMsgIndex === index ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: isMobile ? 220 : 400 }}>
             <Input.TextArea
-              autoFocus
-              autoSize={{ minRows: 2, maxRows: 15 }}
-              value={editContent}
+              autoFocus autoSize={{ minRows: 2, maxRows: 15 }} value={editContent}
               onChange={e => setEditContent(e.target.value)}
               style={{ borderRadius: 12, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: isUser ? '#fff' : '#1e293b', fontSize: isMobile ? 13 : 14 }}
             />
@@ -213,17 +198,55 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                       };
                       const fullText = extractText(children);
                       if (fullText.includes(':::thinking')) {
-                        return (
-                          <CollapsibleMeta title={t('chat.thinkingProcess', { defaultValue: 'Thinking Process' })} icon={Cpu} defaultExpanded={false}>
-                            {children}
-                          </CollapsibleMeta>
-                        );
+                        return <CollapsibleMeta title={t('chat.thinkingProcess', { defaultValue: 'Thinking Process' })} icon={Cpu} defaultExpanded={false}>{children}</CollapsibleMeta>;
                       }
                       if (fullText.includes(':::toolCall')) {
+                        return <CollapsibleMeta title={t('chat.systemTool', { defaultValue: 'System Tool' })} icon={Terminal} defaultExpanded={false}>{children}</CollapsibleMeta>;
+                      }
+                      if (fullText.includes(':::approval')) {
+                        // 改进的 Slug 提取：支持加粗、原样或独立单词
+                        const slugMatch = /\*\*([a-f0-9]{8,})\*\*/.exec(fullText) || /([a-f0-9]{8,})/.exec(fullText);
+                        const slug = slugMatch ? (slugMatch[1] || slugMatch[0]) : '';
                         return (
-                          <CollapsibleMeta title={t('chat.systemTool', { defaultValue: 'System Tool' })} icon={Terminal} defaultExpanded={false}>
+                          <div style={{ 
+                            margin: '12px 0', padding: '16px', background: '#fef2f2', 
+                            border: '1px solid #fee2e2', borderRadius: 12,
+                            boxShadow: '0 2px 8px rgba(239, 68, 68, 0.05)'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: '#ef4444' }}>
+                              <ShieldAlert size={18} />
+                              <span style={{ fontWeight: 600, fontSize: 14 }}>{t('chat.approvalRequired')}</span>
+                            </div>
+                            <div style={{ marginBottom: 12, opacity: 0.9 }}>{children}</div>
+                            <Button 
+                              type="primary" danger block icon={<ShieldCheck size={16} />}
+                              onClick={() => {
+                                if (slug) {
+                                  onSend(`/approve ${slug} allow-once`);
+                                  message.success(t('chat.approvalSent', { defaultValue: '已提交审批指令' }));
+                                }
+                              }}
+                              style={{ borderRadius: 8, fontWeight: 600, height: 36 }}
+                            >
+                              {t('chat.approveNow')}
+                            </Button>
+                          </div>
+                        );
+                      }
+                      // 💡 关键新增：渲染未知/警告块
+                      if (fullText.includes(':::warning')) {
+                        return (
+                          <div style={{ 
+                            margin: '12px 0', padding: '12px', background: '#fffbeb', 
+                            border: '1px solid #fef3c7', borderRadius: 8,
+                            fontSize: 12
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: '#d97706' }}>
+                              <ShieldAlert size={14} />
+                              <span style={{ fontWeight: 600 }}>{fullText.split('\n')[0].replace('> :::warning ', '')}</span>
+                            </div>
                             {children}
-                          </CollapsibleMeta>
+                          </div>
                         );
                       }
                       return <blockquote style={{ borderLeft: '4px solid #e2e8f0', paddingLeft: '12px', color: '#64748b', fontStyle: 'italic', margin: '8px 0' }}>{children}</blockquote>;
@@ -252,63 +275,37 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: isUser ? 'flex-end' : 'flex-start', gap: 6, marginTop: 6, fontSize: 10, color: isUser ? 'rgba(255,255,255,0.7)' : '#94a3b8' }} className="msg-footer">
                 {!(isTyping && isLast) && (
                   <div style={{ display: 'flex', gap: 2 }}>
-                    <Tooltip title={t('chat.copy', { defaultValue: '复制' })}><Button type="text" size="small" icon={<Copy size={11} />} onClick={() => copyToClipboard(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
-                    <Tooltip title={t('chat.reply', { defaultValue: '引用' })}><Button type="text" size="small" icon={<Quote size={11} />} onClick={() => onQuote(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
+                    <Tooltip title={t('chat.copy')}><Button type="text" size="small" icon={<Copy size={11} />} onClick={() => copyToClipboard(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
+                    <Tooltip title={t('chat.reply')}><Button type="text" size="small" icon={<Quote size={11} />} onClick={() => onQuote(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
                     {!isUser && (
-                      <Tooltip title={t('chat.exportPDF', { defaultValue: '导出 PDF' })}>
+                      <Tooltip title={t('chat.exportPDF')}>
                         <Button 
-                          type="text" 
-                          size="small" 
-                          icon={<FileText size={11} />} 
+                          type="text" size="small" icon={<FileText size={11} />} 
                           onClick={async () => {
                             const element = document.getElementById(`msg-content-v3-${index}`);
                             if (!element) return;
-                            const hide = message.loading(t('chat.exporting', { defaultValue: '正在生成 PDF...' }), 0);
+                            const hide = message.loading(t('chat.exporting'), 0);
                             try {
                               const html2pdf = (await import('html2pdf.js')).default;
-                              
                               const opt = {
-                                margin: 10,
-                                filename: `Message_${index + 1}.pdf`,
-                                image: { type: 'jpeg' as const, quality: 0.98 },
-                                html2canvas: { 
-                                  scale: 2, 
-                                  useCORS: true, 
-                                  logging: false,
-                                  onclone: (clonedDoc: Document) => {
-                                    // 在克隆的文档中找到目标元素并强制拉宽
+                                margin: 10, filename: `Message_${index + 1}.pdf`, image: { type: 'jpeg' as const, quality: 0.98 },
+                                html2canvas: { scale: 2, useCORS: true, logging: false, onclone: (clonedDoc: Document) => {
                                     const clonedEl = clonedDoc.getElementById(`msg-content-v3-${index}`);
-                                    if (clonedEl) {
-                                      clonedEl.style.width = '1100px';
-                                      clonedEl.style.padding = '40px';
-                                      clonedEl.style.background = '#fff';
-                                      clonedEl.style.color = '#000';
-                                      clonedEl.style.borderRadius = '0';
-                                      clonedEl.style.boxShadow = 'none';
-                                      clonedEl.style.border = 'none';
-                                      // 移除 max-width 限制
-                                      clonedEl.style.maxWidth = 'none';
-                                    }
+                                    if (clonedEl) { clonedEl.style.width = '1100px'; clonedEl.style.padding = '40px'; clonedEl.style.background = '#fff'; clonedEl.style.color = '#000'; clonedEl.style.borderRadius = '0'; clonedEl.style.boxShadow = 'none'; clonedEl.style.border = 'none'; clonedEl.style.maxWidth = 'none'; }
                                   }
                                 },
                                 jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'landscape' as const }
                               };
-                              
                               await html2pdf().from(element).set(opt).save();
-                              message.success(t('chat.exportSuccess', { defaultValue: '导出成功' }));
-                            } catch (err) {
-                              console.error('PDF Export Error:', err);
-                              message.error(t('chat.exportFailed', { defaultValue: '导出失败' }));
-                            } finally {
-                              hide();
-                            }
+                              message.success(t('chat.exportSuccess'));
+                            } catch (err) { message.error(t('chat.exportFailed')); } finally { hide(); }
                           }} 
                           style={{ color: '#64748b' }} 
                         />
                       </Tooltip>
                     )}
-                    {isUser && <Tooltip title={t('common.edit', { defaultValue: '编辑' })}><Button type="text" size="small" icon={<Pencil size={11} />} onClick={() => onEdit(index, msg.content)} style={{ color: 'rgba(255,255,255,0.85)' }} /></Tooltip>}
-                    {!isUser && isLast && <Tooltip title={t('chat.retry', { defaultValue: '重试' })}><Button type="text" size="small" icon={<RefreshCw size={11} />} onClick={onRegenerate} style={{ color: '#64748b' }} /></Tooltip>}
+                    {isUser && <Tooltip title={t('common.edit')}><Button type="text" size="small" icon={<Pencil size={11} />} onClick={() => onEdit(index, msg.content)} style={{ color: 'rgba(255,255,255,0.85)' }} /></Tooltip>}
+                    {!isUser && isLast && <Tooltip title={t('chat.retry')}><Button type="text" size="small" icon={<RefreshCw size={11} />} onClick={onRegenerate} style={{ color: '#64748b' }} /></Tooltip>}
                   </div>
                 )}
                 <span>{msg.timestamp}</span>
@@ -332,7 +329,6 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
 };
 
 export default React.memo(V3MessageItem, (prev, next) => {
-  // 核心优化：只有在内容、编辑状态或关键状态发生变化时才重绘
   return prev.editContent === next.editContent && 
          prev.editingMsgIndex === next.editingMsgIndex &&
          prev.msg.content === next.msg.content &&

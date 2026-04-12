@@ -3,7 +3,8 @@ import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QR
 import { useTranslation } from 'react-i18next';
 import {
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
-  Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone, Rocket
+  Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone, Rocket,
+  ShieldCheck
 } from 'lucide-react';
 import api from './api';
 import storage from './utils/storage';
@@ -23,6 +24,7 @@ import TaskTray from './components/common/TaskTray';
 import SkillManagement from './views/SkillManagement';
 import ExpertMarket from './views/ExpertMarket';
 import PluginManagement from './views/PluginManagement';
+import SecurityManager from './views/SecurityManager';
 import TuiView from './views/TuiView';
 import ShellView from './views/ShellView';
 import CrayfishLoading from './components/common/CrayfishLoading';
@@ -884,6 +886,7 @@ const Dashboard = () => {
         { key: 'skills', label: t('common.skills'), icon: <Puzzle size={14} /> },
         { key: 'plugins', label: t('plugins.title'), icon: <Zap size={14} /> },
         { key: 'experts', label: t('common.expertMarket'), icon: <Rocket size={14} /> },
+        { key: 'security', label: t('security.title'), icon: <ShieldCheck size={14} /> },
       ]
     },
     {
@@ -1052,7 +1055,19 @@ const Dashboard = () => {
       'experts': <ExpertMarket isMobile={isMobile} onNavigate={setActiveTab} isRunning={isRunning} onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
-          }} />
+          }} />,
+      'security': (
+        <SecurityManager 
+          isMobile={isMobile}
+          isRunning={isRunning}
+          bots={botsModels?.data?.bots || []}
+          activeTasks={activeTasks}
+          onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }}
+        />
+      )
     };
 
     return (

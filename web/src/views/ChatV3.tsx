@@ -650,6 +650,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                     onCancelEdit={() => setEditingMsgIndex(null)}
                     onDelete={(idx) => setMessages((prev: any) => prev.filter((_: any, i: any) => i !== idx))}
                     onQuote={setQuotedMsg}
+                    onSend={handleWrappedSend}
                     onRegenerate={handleRegenerate}
                     copyToClipboard={copyToClipboard}
                     isTyping={isTyping}

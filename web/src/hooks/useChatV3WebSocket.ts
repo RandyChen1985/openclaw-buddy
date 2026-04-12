@@ -170,35 +170,48 @@ export const useChatV3WebSocket = ({
     // 如果是数组，处理每一块
     if (Array.isArray(content)) {
       return content.map((c: any) => {
-        // 兼容不同的文本字段名 (text, content)
-        const textPart = c.text || c.content || '';
+        let matched = false;
         
-        // 处理思考过程
+        // 1. 处理思考过程
         let thinkingPart = '';
-        if (c.thinking || c.thought || c.reasoning) {
-          const thought = c.thinking || c.thought || c.reasoning;
-          thinkingPart = `> :::thinking\n> ${thought.replace(/\n/g, '\n> ')}\n> :::\n\n`;
+        if (c.thinking || c.thought || c.reasoning || c.type === 'thinking') {
+          const thought = c.thinking || c.thought || c.reasoning || c.content || '';
+          thinkingPart = `> :::thinking\n> ${String(thought).replace(/\n/g, '\n> ')}\n> :::\n\n`;
+          matched = true;
         }
 
-        // 处理工具调用
+        // 2. 处理工具调用
         let toolCallPart = '';
         if (c.type === 'toolCall' || c.toolCall || c.tool_call) {
           const tc = c.toolCall || c.tool_call || c;
           const name = tc.name || tc.function?.name || 'unknown_tool';
           const args = typeof tc.arguments === 'string' ? tc.arguments : JSON.stringify(tc.arguments || {});
           toolCallPart = `> :::toolCall\n> **${name}**\n> \`\`\`json\n> ${args}\n> \`\`\`\n> :::\n\n`;
+          matched = true;
         }
 
-        // 处理工具结果
+        // 3. 处理工具结果
         let toolResultPart = '';
         if (c.type === 'toolResult' || c.toolResult || c.tool_result) {
           const tr = c.toolResult || c.tool_result || c;
           const toolName = tr.toolName || tr.tool_name || tr.name || '';
           const result = typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content || tr.result || {});
           toolResultPart = `> :::toolResult\n> ${toolName ? `**${toolName}**\n> ` : ''}\`\`\`json\n> ${result}\n> \`\`\`\n> :::\n\n`;
+          matched = true;
         }
 
-        return thinkingPart + toolCallPart + toolResultPart + textPart;
+        // 4. 处理文本
+        const textPart = c.text || (typeof c.content === 'string' ? c.content : '');
+        if (textPart) matched = true;
+
+        // 5. 💡 关键兜底：如果完全没匹配到已知类型，且 c 是个非空对象，则显示其 JSON 结构
+        let fallbackPart = '';
+        if (!matched && typeof c === 'object' && c !== null && Object.keys(c).length > 0) {
+          console.warn('⚠️ [V3] 检测到未处理的消息块类型:', c);
+          fallbackPart = `\n> :::warning 未知消息块 (${c.type || 'unknown'})\n> \`\`\`json\n> ${JSON.stringify(c, null, 2).split('\n').join('\n> ')}\n> \`\`\`\n> :::\n\n`;
+        }
+
+        return thinkingPart + toolCallPart + toolResultPart + fallbackPart + textPart;
       }).join('');
     }
 
@@ -460,6 +473,36 @@ export const useChatV3WebSocket = ({
         if (data.event === 'connect.challenge') handleChallenge(data.payload.nonce, ws);
         else if (data.event === 'chat') handleChatDelta(data.payload);
         else if (data.event === 'sessions.changed') fetchSessions(true);
+        else if (data.event === 'exec.approval.requested') {
+          // 💡 关键修复：生成结构化的审批 Markdown 块
+          const { id, request } = data.payload;
+          const slug = id.substring(0, 8);
+          const command = request.command;
+          // 使用自定义容器语法，方便前端识别并渲染为按钮
+          const approvalBlock = `\n\n> :::approval\n> **${slug}**\n> \`\`\`bash\n> ${command}\n> \`\`\`\n> :::\n`;
+
+          setMessages(prev => {
+            const last = prev[prev.length - 1];
+            if (last && last.role === 'assistant') {
+              if (last.content.includes(slug)) return prev;
+              const newContent = (last.content === t('chat.thinking') || !last.content) 
+                ? approvalBlock 
+                : `${last.content}${approvalBlock}`;
+              return [...prev.slice(0, -1), { ...last, content: newContent }];
+            }
+            return prev;
+          });
+          setIsTyping(false);
+          clearStallTimer();
+        }
+ else if (data.event === 'agent') {
+          // 处理 agent 状态流，如“正在等待审批”
+          const { stream, data: agentData } = data.payload;
+          if (stream === 'item' && agentData.status === 'blocked') {
+            setIsTyping(false);
+            clearStallTimer();
+          }
+        }
         return;
       }
       if (data.type === 'res') {
