@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShieldCheck, ShieldOff, Zap, Plus, Trash2, 
-  Settings2, RefreshCw, FileCode, HelpCircle, Info
+  Settings2, RefreshCw, FileCode, HelpCircle, Info,
+  Pencil, X, ShieldAlert
 } from 'lucide-react';
 import { 
   Card, Button, Tag, Table, Input, Select, 
@@ -36,6 +37,8 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
   
   // 正在执行异步任务的状态
   const [isOperating, setIsOperating] = useState(false);
+  // 是否处于编辑模式
+  const [isEditing, setIsEditing] = useState(false);
 
   // 帮助弹窗状态
   const [helpModal, setHelpModal] = useState<{ visible: boolean, title: string, content: string }>({
@@ -79,6 +82,7 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
         message.success(t('common.success'));
         fetchData();
         setIsOperating(false);
+        setIsEditing(false);
       }
     } catch (err: any) {
       message.error(err.message || t('common.error'));
@@ -88,6 +92,10 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
 
   const handleApplyPreset = (preset: string) => {
     triggerTask('apply-preset', { target: preset });
+  };
+
+  const handleUpdatePolicy = (ask: string, security: string) => {
+    triggerTask('set-policy', { ask, security });
   };
 
   const handleAddPattern = () => {
@@ -130,42 +138,62 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
         newlyFinishedTasks.forEach(t => processedTasksRef.current.add(t.id));
         fetchData();
         setIsOperating(false);
+        setIsEditing(false);
     }
   }, [activeTasks]);
 
   const allowlistData = (selectedAgent && data?.snapshot?.file?.agents?.[selectedAgent]?.allowlist) || [];
   const safeAllowlistData = Array.isArray(allowlistData) ? allowlistData : [];
 
-  // 判断是否允许编辑白名单 (仅在 allowlist 模式下允许)
   const isAllowlistMode = effectiveScope?.security.effective === 'allowlist';
 
-  // 状态映射辅助函数
+  // 状态显示逻辑
   const getAskTag = (val: string) => {
+    const tagStyle: React.CSSProperties = isMobile 
+      ? { fontSize: 13, padding: '2px 10px', borderRadius: 6, fontWeight: 'bold' } 
+      : { fontSize: 16, padding: '6px 16px', borderRadius: 8, fontWeight: 'bold' };
+      
     switch(val) {
-      case 'on': return <Tag color="orange" style={{fontSize: 14, padding: '4px 12px'}}>{t('security.askOn')}</Tag>;
-      case 'on-miss': return <Tag color="blue" style={{fontSize: 14, padding: '4px 12px'}}>{t('security.askOnMiss')}</Tag>;
-      case 'off': return <Tag color="green" style={{fontSize: 14, padding: '4px 12px'}}>{t('security.askOff')}</Tag>;
-      default: return <Tag>{val}</Tag>;
+      case 'always': return <Tag color="orange" style={tagStyle}>{t('security.askOn')}</Tag>;
+      case 'on-miss': return <Tag color="blue" style={tagStyle}>{t('security.askOnMiss')}</Tag>;
+      case 'off': return <Tag color="green" style={tagStyle}>{t('security.askOff')}</Tag>;
+      default: return <Tag style={{fontSize: isMobile ? 13 : 16}}>{val}</Tag>;
     }
   };
 
   const getSecurityTag = (val: string) => {
+    const tagStyle: React.CSSProperties = isMobile 
+      ? { fontSize: 13, padding: '2px 10px', borderRadius: 6, fontWeight: 'bold' } 
+      : { fontSize: 16, padding: '6px 16px', borderRadius: 8, fontWeight: 'bold' };
+
     switch(val) {
-      case 'full': return <Tag color="blue" style={{fontSize: 14, padding: '4px 12px'}}>{t('security.securityFull')}</Tag>;
-      case 'allowlist': return <Tag color="cyan" style={{fontSize: 14, padding: '4px 12px'}}>{t('security.securityAllowlist')}</Tag>;
-      case 'none': return <Tag color="volcano" style={{fontSize: 14, padding: '4px 12px'}}>{t('security.securityNone')}</Tag>;
-      case 'deny': return <Tag color="red" style={{fontSize: 14, padding: '4px 12px'}}>{t('security.securityDeny')}</Tag>;
-      default: return <Tag>{val}</Tag>;
+      case 'full': return <Tag color="blue" style={tagStyle}>{t('security.securityFull')}</Tag>;
+      case 'allowlist': return <Tag color="cyan" style={tagStyle}>{t('security.securityAllowlist')}</Tag>;
+      case 'deny': return <Tag color="red" style={tagStyle}>{t('security.securityDeny')}</Tag>;
+      default: return <Tag style={{fontSize: isMobile ? 13 : 16}}>{val}</Tag>;
     }
   };
 
-  const showHelp = (type: 'ask' | 'security' | 'allowlist') => {
+  const showHelp = (type: 'ask' | 'security' | 'allowlist' | 'advanced') => {
     setHelpModal({
       visible: true,
       title: t(`security.${type}HelpTitle`),
       content: t(`security.${type}HelpContent`)
     });
   };
+
+  // 两行式 Option 渲染组件
+  const CustomOption = ({ emoji, label, desc }: { emoji: string, label: string, desc: string }) => (
+    <div style={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      padding: isMobile ? '2px 0' : '4px 0',
+      lineHeight: 1.4
+    }}>
+      <Text strong style={{ fontSize: isMobile ? 13 : 14 }}>{emoji} {label}</Text>
+      <Text type="secondary" style={{ fontSize: isMobile ? 10 : 11, opacity: 0.8 }}>{desc}</Text>
+    </div>
+  );
 
   return (
     <div style={{ 
@@ -174,27 +202,29 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
       height: '100%',
       display: 'flex',
       flexDirection: 'column',
-      gap: 24
+      gap: isMobile ? 16 : 24
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <Title level={2} style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <ShieldCheck size={28} color="#2563eb" />
+          <Title level={isMobile ? 3 : 2} style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, flexWrap: 'wrap' }}>
+            <ShieldCheck size={isMobile ? 22 : 28} color="#2563eb" />
             {t('security.title')}
             <Button 
               type="link" 
-              icon={<Info size={16} />} 
+              icon={<Info size={14} />} 
               onClick={() => setPhilosophyVisible(true)}
-              style={{ padding: 0, marginLeft: 8, fontSize: 14 }}
+              style={{ padding: 0, marginLeft: isMobile ? 4 : 8, fontSize: isMobile ? 12 : 14 }}
             >
               {t('security.learnMore')}
             </Button>
           </Title>
-          <Text type="secondary">{t('security.description')}</Text>
+          <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14, opacity: 0.8 }}>{t('security.description')}</Text>
         </div>
-        <Button icon={<RefreshCw size={14} />} onClick={fetchData} loading={loading}>
-          {t('common.refresh')}
-        </Button>
+        <Space>
+          <Button icon={<RefreshCw size={14} />} onClick={fetchData} loading={loading}>
+            {isMobile ? "" : t('common.refresh')}
+          </Button>
+        </Space>
       </div>
 
       <div style={{ 
@@ -205,90 +235,150 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
       }}>
         <Card 
           title={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Zap size={18} /> {t('security.policyCardTitle')}</div>}
-          extra={<Tag color="blue">{t('security.effectivePolicy')}</Tag>}
+          extra={
+            <Space>
+              {!isEditing ? (
+                <Button size="small" icon={<Pencil size={14} />} onClick={() => setIsEditing(true)} disabled={loading || isOperating}>
+                  {isMobile ? t('common.edit') : `${t('common.edit')}配置`}
+                </Button>
+              ) : (
+                <Button size="small" icon={<X size={14} />} onClick={() => setIsEditing(false)} danger>
+                  {isMobile ? "退出" : "退出编辑"}
+                </Button>
+              )}
+              {!isMobile && <Tag color="blue" style={{ marginLeft: 8 }}>{t('security.effectivePolicy')}</Tag>}
+            </Space>
+          }
           loading={loading}
-          styles={{ body: { height: '100%', display: 'flex', flexDirection: 'column' } }}
+          styles={{ body: { height: '100%', display: 'flex', flexDirection: 'column', padding: isMobile ? '16px' : '32px' } }}
         >
           {effectiveScope ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-around', background: '#f8fafc', padding: '20px', borderRadius: 16, border: '1px solid #e2e8f0' }}>
-                <div style={{ textAlign: 'center' }}>
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: isMobile ? 'column' : 'row',
+                justifyContent: 'space-around', 
+                background: '#f8fafc', 
+                padding: isMobile ? '20px' : '32px 24px', 
+                borderRadius: 16, 
+                border: '1px solid #e2e8f0',
+                gap: isMobile ? 20 : 0
+              }}>
+                <div style={{ textAlign: 'center', flex: 1, width: '100%' }}>
                   <Space style={{ marginBottom: 8 }}>
                     <Text type="secondary" style={{ fontSize: 12 }}>{t('security.askLabel')}</Text>
-                    <Tooltip title="Click for help">
+                    <Tooltip title={isMobile ? "" : t('security.clickForHelp')}>
                       <HelpCircle size={14} style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => showHelp('ask')} />
                     </Tooltip>
                   </Space>
-                  <div style={{ marginTop: 4 }}>{getAskTag(effectiveScope.ask.effective)}</div>
+                  <div style={{ marginTop: 4, display: 'flex', justifyContent: 'center', width: '100%' }}>
+                    {!isEditing ? getAskTag(effectiveScope.ask.effective) : (
+                      <Select 
+                        value={effectiveScope.ask.effective} 
+                        onChange={(val) => handleUpdatePolicy(val, effectiveScope.security.effective)}
+                        disabled={isOperating}
+                        loading={isOperating}
+                        dropdownMatchSelectWidth={false}
+                        listHeight={300}
+                        style={{ width: '100%', minWidth: isMobile ? 'auto' : 180, height: 'auto' }}
+                      >
+                        <Option value="always">
+                          <CustomOption emoji="🛡️" label={t('security.askOn')} desc={t('security.askAlwaysDesc')} />
+                        </Option>
+                        <Option value="on-miss">
+                          <CustomOption emoji="⚖️" label={t('security.askOnMiss')} desc={t('security.askOnMissDesc')} />
+                        </Option>
+                        <Option value="off">
+                          <CustomOption emoji="🚀" label={t('security.askOff')} desc={t('security.askOffDesc')} />
+                        </Option>
+                      </Select>
+                    )}
+                  </div>
                 </div>
-                <div style={{ height: 50, width: 1, background: '#e2e8f0' }} />
-                <div style={{ textAlign: 'center' }}>
-                  <Space style={{ marginBottom: 8 }}>
+                {!isMobile && <div style={{ height: 64, width: 1, background: '#e2e8f0', margin: '0 24px' }} />}
+                <div style={{ textAlign: 'center', flex: 1, width: '100%' }}>
+                  <Space style={{ marginBottom: 12 }}>
                     <Text type="secondary" style={{ fontSize: 12 }}>{t('security.securityLabel')}</Text>
-                    <Tooltip title="Click for help">
+                    <Tooltip title={isMobile ? "" : t('security.clickForHelp')}>
                       <HelpCircle size={14} style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => showHelp('security')} />
                     </Tooltip>
                   </Space>
-                  <div style={{ marginTop: 4 }}>{getSecurityTag(effectiveScope.security.effective)}</div>
+                  <div style={{ marginTop: 4, display: 'flex', justifyContent: 'center', width: '100%' }}>
+                    {!isEditing ? getSecurityTag(effectiveScope.security.effective) : (
+                      <Select 
+                        value={effectiveScope.security.effective} 
+                        onChange={(val) => handleUpdatePolicy(effectiveScope.ask.effective, val)}
+                        disabled={isOperating}
+                        loading={isOperating}
+                        dropdownMatchSelectWidth={false}
+                        listHeight={300}
+                        style={{ width: '100%', minWidth: isMobile ? 'auto' : 180, height: 'auto' }}
+                      >
+                        <Option value="full">
+                          <CustomOption emoji="🔒" label={t('security.securityFull')} desc={t('security.securityFullDesc')} />
+                        </Option>
+                        <Option value="allowlist">
+                          <CustomOption emoji="📜" label={t('security.securityAllowlist')} desc={t('security.securityAllowlistDesc')} />
+                        </Option>
+                        <Option value="deny">
+                          <CustomOption emoji="🚫" label={t('security.securityDeny')} desc={t('security.securityDenyDesc')} />
+                        </Option>
+                      </Select>
+                    )}
+                  </div>
                 </div>
               </div>
 
               <div style={{ flex: 1 }}>
                 <Text strong style={{ display: 'block', marginBottom: 16, fontSize: 15 }}>{t('security.presetTitle')}</Text>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <Button 
-                    block 
-                    type="primary"
-                    loading={isOperating}
-                    disabled={isOperating}
-                    icon={<Rocket size={18} />} 
+                    block type="primary" loading={isOperating} disabled={isOperating}
                     onClick={() => handleApplyPreset('yolo')}
                     style={{ 
-                      height: 'auto', padding: '16px', textAlign: 'left',
+                      height: 'auto', padding: isMobile ? '12px 16px' : '20px 40px', textAlign: 'left',
                       background: isOperating ? '#94a3b8' : '#22c55e', border: 'none', borderRadius: 12,
-                      boxShadow: isOperating ? 'none' : '0 4px 12px rgba(34, 197, 94, 0.2)'
+                      boxShadow: isOperating ? 'none' : '0 4px 12px rgba(34, 197, 94, 0.2)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 16
                     }}
                   >
+                    <Rocket size={24} color="#fff" style={{ opacity: 0.9, flexShrink: 0 }} />
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <Text style={{ color: '#fff', fontWeight: 800, fontSize: 16 }}>YOLO</Text>
-                      <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>{t('security.presetYoloDesc')}</Text>
+                      <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>{t('security.presetYoloDesc')}</Text>
                     </div>
                   </Button>
                   
                   <Button 
-                    block 
-                    loading={isOperating}
-                    disabled={isOperating}
-                    onClick={() => handleApplyPreset('cautious')}
+                    block loading={isOperating} disabled={isOperating} onClick={() => handleApplyPreset('cautious')}
                     style={{ 
-                      height: 'auto', padding: '16px', textAlign: 'left',
+                      height: 'auto', padding: isMobile ? '12px 16px' : '20px 40px', textAlign: 'left',
                       background: isOperating ? '#94a3b8' : '#f59e0b', border: 'none', borderRadius: 12,
-                      boxShadow: isOperating ? 'none' : '0 4px 12px rgba(245, 158, 11, 0.2)'
+                      boxShadow: isOperating ? 'none' : '0 4px 12px rgba(245, 158, 11, 0.2)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 16
                     }}
                   >
+                    <ShieldAlert size={24} color="#fff" style={{ opacity: 0.9, flexShrink: 0 }} />
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <Text style={{ color: '#fff', fontWeight: 800, fontSize: 16 }}>Cautious</Text>
-                      <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>{t('security.presetCautiousDesc')}</Text>
+                      <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>{t('security.presetCautiousDesc')}</Text>
                     </div>
                   </Button>
-
+                  
                   <Button 
-                    block 
-                    danger
-                    type="primary"
-                    loading={isOperating}
-                    disabled={isOperating}
-                    icon={<ShieldOff size={18} />} 
+                    block danger type="primary" loading={isOperating} disabled={isOperating} 
                     onClick={() => handleApplyPreset('deny-all')}
                     style={{ 
-                      height: 'auto', padding: '16px', textAlign: 'left',
+                      height: 'auto', padding: isMobile ? '12px 16px' : '20px 40px', textAlign: 'left',
                       background: isOperating ? '#94a3b8' : '#ef4444', border: 'none', borderRadius: 12,
-                      boxShadow: isOperating ? 'none' : '0 4px 12px rgba(239, 68, 68, 0.2)'
+                      boxShadow: isOperating ? 'none' : '0 4px 12px rgba(239, 68, 68, 0.2)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 16
                     }}
                   >
+                    <ShieldOff size={24} color="#fff" style={{ opacity: 0.9, flexShrink: 0 }} />
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <Text style={{ color: '#fff', fontWeight: 800, fontSize: 16 }}>Deny All</Text>
-                      <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>{t('security.presetDenyAllDesc')}</Text>
+                      <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>{t('security.presetDenyAllDesc')}</Text>
                     </div>
                   </Button>
                 </div>
@@ -302,25 +392,20 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Settings2 size={18} /> 
               {t('security.allowlistTitle')}
-              <Tooltip title="Click for help">
+              <Tooltip title={isMobile ? "" : t('security.clickForHelp')}>
                 <HelpCircle size={14} style={{ cursor: 'pointer', color: '#94a3b8', marginLeft: 4 }} onClick={() => showHelp('allowlist')} />
               </Tooltip>
             </div>
           }
           loading={loading}
-          styles={{ body: { height: '100%', display: 'flex', flexDirection: 'column' } }}
+          styles={{ body: { height: '100%', display: 'flex', flexDirection: 'column', padding: isMobile ? '16px' : '32px' } }}
         >
           <div style={{ marginBottom: 16 }}>
-            <Tooltip title={!isAllowlistMode ? "当前安全模式下不使用白名单，编辑已禁用" : ""}>
+            <Tooltip title={(isMobile || !isAllowlistMode) ? "" : t('security.allowlistDisabledTip', { defaultValue: '当前安全模式下不使用白名单，编辑已禁用' })}>
               <Select 
-                showSearch
-                style={{ width: '100%' }}
-                size="large"
-                disabled={!isAllowlistMode || isOperating}
-                placeholder={t('security.agentSelectorPlaceholder')}
-                optionFilterProp="children"
-                onChange={(v) => setSelectedAgent(v)}
-                value={selectedAgent}
+                showSearch style={{ width: '100%' }} size="large" disabled={!isAllowlistMode || isOperating}
+                placeholder={t('security.agentSelectorPlaceholder')} optionFilterProp="children"
+                onChange={(v) => setSelectedAgent(v)} value={selectedAgent}
               >
                 <Option value="*">* (All Agents)</Option>
                 {bots.map(bot => (
@@ -336,52 +421,35 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, opacity: isAllowlistMode ? 1 : 0.6 }}>
               {!isAllowlistMode && (
                 <Alert 
-                  message="白名单编辑已禁用" 
-                  description="OpenClaw 当前运行在非白名单模式下。若要自定义指令权限，请先将执行策略切换至 Cautious 或手动设置为 Allowlist。" 
-                  type="info" 
-                  showIcon 
-                  style={{ marginBottom: 16 }}
+                  message={t('security.allowlistDisabledTitle', { defaultValue: '白名单编辑已禁用' })}
+                  description={t('security.allowlistDisabledDesc', { defaultValue: 'OpenClaw 当前运行在非白名单模式下。若要自定义指令权限，请先将执行策略切换至 Cautious 或手动设置为 Allowlist。' })}
+                  type="info" showIcon style={{ marginBottom: 16 }}
                 />
               )}
               <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                <Tooltip title={!isAllowlistMode ? "请先开启白名单模式以添加规则" : ""}>
+                <Tooltip title={(isMobile || !isAllowlistMode) ? "" : t('security.allowlistAddDisabledTip', { defaultValue: '请先开启白名单模式以添加规则' })}>
                   <div style={{ flex: 1, display: 'flex', gap: 8 }}>
                     <Input 
-                      size="large"
-                      disabled={!isAllowlistMode || isOperating}
-                      placeholder={t('security.patternPlaceholder')} 
-                      value={newPattern}
-                      onChange={e => setNewPattern(e.target.value)}
-                      onPressEnter={handleAddPattern}
+                      size="large" disabled={!isAllowlistMode || isOperating} placeholder={t('security.patternPlaceholder')} 
+                      value={newPattern} onChange={e => setNewPattern(e.target.value)} onPressEnter={handleAddPattern}
                     />
                     <Button 
-                      type="primary" 
-                      size="large" 
-                      loading={isOperating}
-                      disabled={!isAllowlistMode || isOperating} 
-                      icon={<Plus size={18} />} 
-                      onClick={handleAddPattern} 
+                      type="primary" size="large" loading={isOperating} disabled={!isAllowlistMode || isOperating} 
+                      icon={<Plus size={18} />} onClick={handleAddPattern} 
                     />
                   </div>
                 </Tooltip>
               </div>
 
               <Table 
-                dataSource={safeAllowlistData.map((p: any, i: number) => ({ 
-                  key: i, 
-                  pattern: typeof p === 'string' ? p : (p?.pattern || '') 
-                }))}
+                dataSource={safeAllowlistData.map((p: any, i: number) => ({ key: i, pattern: typeof p === 'string' ? p : (p?.pattern || '') }))}
                 columns={[
                   { title: 'Pattern', dataIndex: 'pattern', key: 'pattern', render: (text) => <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: 4 }}>{text}</code> },
                   { 
-                    title: t('common.action'), 
-                    key: 'action', 
-                    width: 80,
-                    align: 'center',
+                    title: t('common.action'), key: 'action', width: 80, align: 'center',
                     render: (_, record: { key: number, pattern: string }) => (
                       <Popconfirm 
-                        title={t('common.confirm')} 
-                        disabled={!isAllowlistMode || isOperating}
+                        title={t('common.confirm')} disabled={!isAllowlistMode || isOperating}
                         onConfirm={() => handleRemovePattern(selectedAgent, record.pattern)}
                       >
                         <Button type="text" danger icon={<Trash2 size={16} />} disabled={!isAllowlistMode || isOperating} />
@@ -389,10 +457,7 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
                     )
                   }
                 ]}
-                size="middle"
-                pagination={{ pageSize: 8 }}
-                locale={{ emptyText: t('security.noPatterns') }}
-                style={{ flex: 1 }}
+                size="middle" pagination={{ pageSize: 8 }} locale={{ emptyText: t('security.noPatterns') }} style={{ flex: 1 }}
               />
             </div>
           ) : (
@@ -405,7 +470,15 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
 
       <Card 
         size="small"
-        title={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FileCode size={16} /> {t('security.advancedTitle')}</div>}
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FileCode size={16} /> 
+            {t('security.advancedTitle')}
+            <Tooltip title={t('security.clickForHelp')}>
+              <HelpCircle size={14} style={{ cursor: 'pointer', color: '#94a3b8', marginLeft: 4 }} onClick={() => showHelp('advanced')} />
+            </Tooltip>
+          </div>
+        }
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text type="secondary" style={{ fontSize: 12 }}>{t('security.editApprovals')}</Text>
@@ -420,7 +493,7 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
         open={helpModal.visible}
         onOk={() => setHelpModal(prev => ({ ...prev, visible: false }))}
         onCancel={() => setHelpModal(prev => ({ ...prev, visible: false }))}
-        footer={[<Button key="ok" type="primary" onClick={() => setHelpModal(prev => ({ ...prev, visible: false }))}>{t('common.gotIt')}</Button>]}
+        footer={[<Button key="ok" type="primary" onClick={() => setHelpModal(prev => ({ ...prev, visible: false }))}>{t('common.gotIt', { defaultValue: '知道了' })}</Button>]}
       >
         <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', fontSize: 14 }}>
           {helpModal.content}
@@ -433,7 +506,7 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
         onOk={() => setPhilosophyVisible(false)}
         onCancel={() => setPhilosophyVisible(false)}
         width={600}
-        footer={[<Button key="ok" type="primary" onClick={() => setPhilosophyVisible(false)}>{t('common.gotIt')}</Button>]}
+        footer={[<Button key="ok" type="primary" onClick={() => setPhilosophyVisible(false)}>{t('common.gotIt', { defaultValue: '知道了' })}</Button>]}
       >
         <div style={{ padding: '8px 0' }}>
           <Paragraph style={{ fontSize: 15, lineHeight: '1.8' }}>
@@ -464,8 +537,17 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
   );
 };
 
-const Rocket = ({ size }: { size: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-5c1.62-2.2 5-3 5-3"/><path d="M12 15v5s3.03-.55 5-2c2.2-1.62 3-5 3-5"/></svg>
+const Rocket = ({ size, color, style }: { size: number, color?: string, style?: React.CSSProperties }) => (
+  <svg 
+    width={size} height={size} viewBox="0 0 24 24" fill="none" 
+    stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" 
+    style={style}
+  >
+    <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/>
+    <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>
+    <path d="M9 12H4s.55-3.03 2-5c1.62-2.2 5-3 5-3"/>
+    <path d="M12 15v5s3.03-.55 5-2c2.2-1.62 3-5 3-5"/>
+  </svg>
 );
 
 export default SecurityManager;

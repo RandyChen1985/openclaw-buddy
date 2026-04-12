@@ -138,6 +138,12 @@
     "securityNone": "无安全限制 (None)",
     "securityAllowlist": "白名单模式 (Allowlist)",
     "securityDeny": "完全禁止 (Deny)",
+    "askAlwaysDesc": "每条指令都需手动确认，最安全",
+    "askOnMissDesc": "白名单外才询问，效率与安全平衡",
+    "askOffDesc": "全自动静默执行，风险最高",
+    "securityFullDesc": "启用沙箱隔离，禁止访问系统敏感文件",
+    "securityAllowlistDesc": "仅限右侧列表已授权指令，严格控制",
+    "securityDenyDesc": "封锁一切 Shell 执行请求，最高警戒",
     "askHelpTitle": "什么是指令询问 (Ask)？",
     "askHelpContent": "决定了 Agent 在执行 Shell 指令前是否需要您的批准。\n\n• **总是询问 (on)**: 最安全。每条指令执行前都会弹出确认框。\n\n• **仅未命中时询问 (on-miss)**: 平衡。白名单内的指令自动执行，其他指令需确认。\n\n• **关闭询问 (off)**: 最快。Agent 可以静默执行所有指令，请确保您信任该 Agent。",
     "securityHelpTitle": "什么是安全等级 (Security)？",
@@ -153,7 +159,10 @@
     "editApprovals": "直接编辑审批配置 (exec-approvals.json)",
     "saveConfirm": "确定要应用这些安全变更吗？",
     "fetchFailed": "获取安全状态失败",
-    "updateStarted": "安全策略更新任务已启动"
+    "updateStarted": "安全策略更新任务已启动",
+    "clickForHelp": "点击查看说明",
+    "advancedHelpTitle": "高级配置说明",
+    "advancedHelpContent": "• **核心文件**: `exec-approvals.json` 是 OpenClaw 权限系统的核心配置文件，它拥有最高优先级的决定权。\n\n• **JSON 编辑**: 通过直接编辑 JSON，您可以手动配置更复杂的权限规则，例如针对特定 IP、特定 Node 或特定的系统调用进行授权。\n\n• **风险提示**: 错误的 JSON 语法可能会导致权限校验失效或 Agent 无法执行任何指令，请在保存前仔细核对结构。"
   },
   "login": {
     "title": "OpenClaw Buddy",

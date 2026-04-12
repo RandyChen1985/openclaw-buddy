@@ -132,6 +132,12 @@
     "securityNone": "Security None (None)",
     "securityAllowlist": "Allowlist Mode (Allowlist)",
     "securityDeny": "Deny All (Deny)",
+    "askAlwaysDesc": "Every command needs confirmation, safest",
+    "askOnMissDesc": "Ask only if not in allowlist, balanced",
+    "askOffDesc": "Fully automated execution, highest risk",
+    "securityFullDesc": "Enable sandbox, protect system files",
+    "securityAllowlistDesc": "Only authorized commands allowed, strict",
+    "securityDenyDesc": "Block all Shell requests, highest alert",
     "askHelpTitle": "What is Instruction Ask?",
     "askHelpContent": "Determines whether Agent needs your approval before executing a Shell command.\n\n• **Always Ask (on)**: Safest. A confirmation prompt will appear before every command.\n\n• **Ask On Miss (on-miss)**: Balanced. Commands in the allowlist execute automatically, others need confirmation.\n\n• **Ask Off (off)**: Fastest. Agent can execute all commands silently. Ensure you trust the Agent.",
     "securityHelpTitle": "What is Security Level?",
@@ -147,7 +153,10 @@
     "editApprovals": "Directly edit approval config (exec-approvals.json)",
     "saveConfirm": "Are you sure you want to apply these security changes?",
     "fetchFailed": "Failed to fetch security status",
-    "updateStarted": "Security policy update task started"
+    "updateStarted": "Security policy update task started",
+    "clickForHelp": "Click for help",
+    "advancedHelpTitle": "Advanced Configuration Notes",
+    "advancedHelpContent": "• **Core File**: `exec-approvals.json` is the core configuration file of the OpenClaw permission system and holds the highest decision-making priority.\n\n• **JSON Editing**: By directly editing the JSON, you can manually configure more complex permission rules, such as authorizing specific IPs, nodes, or system calls.\n\n• **Risk Warning**: Incorrect JSON syntax may cause permission verification to fail or prevent the Agent from executing any commands. Please check the structure carefully before saving."
   },
   "login": {
     "title": "OpenClaw Buddy",
