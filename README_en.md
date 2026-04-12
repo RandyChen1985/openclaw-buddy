@@ -267,4 +267,4 @@ This project is licensed under the **MIT License**. Maintained by randychen. Con
 
 If you have any questions, feature suggestions, or want to get the latest technical news about OpenClaw during use, you are welcome to scan the QR code to follow our **Official WeChat Account**:
 
-![Official WeChat Account](docs/images/%20gzh.png)
+<img src="docs/images/%20gzh.png" width="200" alt="Official WeChat Account" />

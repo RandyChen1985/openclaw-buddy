@@ -271,4 +271,4 @@ EXTERNAL_DASHBOARD_URL="https://claw.yourdomain.com" # 外部访问前缀 (用�
 
 如果您在使用过程中有任何疑问、功能建议，或者想要获取更多关于 OpenClaw 的技术资讯，欢迎扫码关注我们的 **微信公众号**：
 
-![微信公众号](docs/images/%20gzh.png)
+<img src="docs/images/%20gzh.png" width="200" alt="微信公众号" />
