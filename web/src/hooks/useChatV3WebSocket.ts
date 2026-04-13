@@ -627,6 +627,9 @@ export const useChatV3WebSocket = ({
 
   const handleSend = useCallback(async (content?: any, attachedFiles?: FileInfo[]) => {
     const text = (typeof content === 'string' ? content : '').trim();
+    
+    // 💡 健壮性加固 1：防止重复发送（解决“一遍又一遍”重复的问题），并确保在认证状态下操作
+    if (isTyping) return;
     if ((!text && (!attachedFiles || attachedFiles.length === 0)) || status !== 'authenticated') return;
 
     setIsTyping(true);
@@ -641,9 +644,9 @@ export const useChatV3WebSocket = ({
     if (attachedFiles && attachedFiles.length > 0) {
       const fileLinks = attachedFiles.map(f => {
         const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
-        return isImage ? `\n![${f.filename}](${f.thumbUrl || f.url} "${f.url}")\n(File path: ${f.path})` : `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
+        return isImage ? `\n![${f.filename}](${f.thumbUrl || f.url} \"${f.url}\")\n(File path: ${f.path})` : `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
       }).join('');
-      finalContent += fileLinks + `\n\n**System Note for Expert:** The user has uploaded files. Access them via absolute "File path" provided.`;
+      finalContent += fileLinks + `\n\n**System Note for Expert:** The user has uploaded files. Access them via absolute \"File path\" provided.`;
     }
 
     const newUserMsg: Message = { id: `msg-${Date.now()}`, role: 'user', content: finalContent, timestamp: new Date().toLocaleTimeString() };
@@ -657,6 +660,11 @@ export const useChatV3WebSocket = ({
         setSessionKey(currentKey);
         await sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel });
         fetchSessions();
+      } else {
+        // 💡 修复：如果创建会话失败，必须报错并重置状态，不能静默退出（解决“无反应”Bug）
+        message.error(t('chat.failedToCreateSession') || 'Failed to create session: ' + (res.error?.message || 'Unknown'));
+        setIsTyping(false);
+        return;
       }
     }
 
@@ -685,8 +693,12 @@ export const useChatV3WebSocket = ({
         setIsTyping(false);
         clearStallTimer();
       }
+    } else {
+      // 💡 修复：防止 sessionKey 依然为空导致的静默失败
+      setIsTyping(false);
+      message.error('Session key missing');
     }
-  }, [status, sessionKey, selectedBot, thinkingLevel, sessionModel, sendRPC, fetchSessions, resetStallTimer, clearStallTimer, t]);
+  }, [status, sessionKey, selectedBot, thinkingLevel, sessionModel, sendRPC, fetchSessions, resetStallTimer, clearStallTimer, t, isTyping]);
 
   const handleRegenerate = useCallback(() => {
     if (isTyping) {
