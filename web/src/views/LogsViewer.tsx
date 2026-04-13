@@ -3,8 +3,6 @@ import { Spin, Input, Tag, Space, Button, Segmented } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Search, Filter, AlertCircle, Info, AlertTriangle, Shield, Terminal } from 'lucide-react';
 
-import GatewayOfflineMask from '../components/GatewayOfflineMask';
-
 interface LogsViewerProps {
   wsLogs: string[];
   activeSource: string;
@@ -13,7 +11,7 @@ interface LogsViewerProps {
   onNavigateToDashboard?: () => void;
 }
 
-const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceChange, isRunning, onNavigateToDashboard }) => {
+const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceChange }) => {
   const { t } = useTranslation();
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [searchText, setSearchText] = useState('');
@@ -58,7 +56,7 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceC
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', background: '#0d1117', borderRadius: 0, overflow: 'hidden', border: '1px solid #30363d', height: '100%', boxShadow: '0 8px 24px rgba(0,0,0,0.2)', position: 'relative' }}>
-      {activeSource === 'gateway' && !isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
+      {/* 网关离线时允许查看 Buddy 本地日志，网关日志则显示为空或等待 */}
       {/* 顶部工具栏 */}
       <div style={{ 
         display: 'flex', 

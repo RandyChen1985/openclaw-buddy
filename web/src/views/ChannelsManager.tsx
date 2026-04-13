@@ -3,7 +3,6 @@ import { Card, Tag, Spin, Button, Modal } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle, Cloud, RefreshCw, Zap, AlertCircle, Smartphone, Radar, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
-import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 interface ChannelsManagerProps {
   chatChannels: any;
@@ -34,9 +33,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   onRefreshChannels,
   onUnbindWeixin,
   activeTasks = [],
-  isMobile,
-  isRunning,
-  onNavigateToDashboard
+  isMobile
 }) => {
   const { t } = useTranslation();
   const channelsList = chatChannels?.data || [];
@@ -45,7 +42,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
 
   return (
     <div style={{ height: '100%', minHeight: 'calc(100vh - 100px)', width: '100%', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
+      {/* 允许在网关停止时管理绑定渠道 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0' : '8px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* 已绑定渠道概览 */}
       <Card

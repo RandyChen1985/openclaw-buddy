@@ -3,7 +3,6 @@ import { Card, Tag, Spin, List, Button, Tooltip, Modal } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Smartphone, CheckCircle, RefreshCw } from 'lucide-react';
 import dayjs from 'dayjs';
-import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 interface DeviceManagerProps {
   devices: any; // 结构: { data: [], updated_at: string }
@@ -20,9 +19,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
   loadingDevices, 
   onApproveDevice,
   onRefresh,
-  isMobile,
-  isRunning,
-  onNavigateToDashboard
+  isMobile
 }) => {
   const { t } = useTranslation();
   const deviceList = devices?.data || [];
@@ -31,7 +28,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
 
   return (
     <div style={{ height: '100%', minHeight: 'calc(100vh - 100px)', width: '100%', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
+      {/* 允许在网关停止时管理接入设备 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0' : '8px', display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* 1. 待批准设备请求 */}
       <Card

@@ -183,30 +183,38 @@ export const useChatV3WebSocket = ({
   }, [sendRPC]);
 
   // --- Streaming Data Handlers ---
-  const formatMessageContent = useCallback((content: any): string => {
-    if (!content) return '';
+  const formatMessageContent = useCallback((msg: any): string => {
+    if (!msg) return '';
     
-    // 如果是字符串，尝试解析是否为 JSON (处理历史记录或双重转义情况)
-    if (typeof content === 'string') {
-      const trimmed = content.trim();
-      if (trimmed === '[]' || trimmed === '{}') return '';
-      if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          return formatMessageContent(parsed);
-        } catch (e) {
-          return content;
-        }
-      }
-      return content;
+    // 💡 兼容性设计：既支持传入完整的 message 对象，也支持仅传入 content 字段（用于历史回溯）
+    const content = (msg.content !== undefined && msg.content !== null) ? msg.content : msg;
+    const topThought = msg.thought || msg.thinking || msg.reasoning || '';
+    
+    let prefix = '';
+    if (topThought) {
+      prefix = `> :::thinking\n> ${String(topThought).replace(/\n/g, '\n> ')}\n> :::\n\n`;
     }
 
-    // 如果是数组，处理每一块
-    if (Array.isArray(content)) {
-      return content.map((c: any) => {
+    // 处理主要内容部分
+    let body = '';
+    if (typeof content === 'string') {
+      const trimmed = content.trim();
+      if (trimmed === '[]' || trimmed === '{}') body = '';
+      else if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          body = formatMessageContent(parsed);
+        } catch (e) {
+          body = content;
+        }
+      } else {
+        body = content;
+      }
+    } else if (Array.isArray(content)) {
+      body = content.map((c: any) => {
         let matched = false;
         
-        // 1. 处理思考过程
+        // 1. 处理思考过程 (数组内部格式)
         let thinkingPart = '';
         if (c.thinking || c.thought || c.reasoning || c.type === 'thinking') {
           const thought = c.thinking || c.thought || c.reasoning || c.content || '';
@@ -238,23 +246,21 @@ export const useChatV3WebSocket = ({
         const textPart = c.text || (typeof c.content === 'string' ? c.content : '');
         if (textPart) matched = true;
 
-        // 5. 💡 关键兜底：如果完全没匹配到已知类型，且 c 是个非空对象，则显示其 JSON 结构
+        // 5. 💡 兜底处理
         let fallbackPart = '';
         if (!matched && typeof c === 'object' && c !== null && Object.keys(c).length > 0) {
-          console.warn('⚠️ [V3] 检测到未处理的消息块类型:', c);
           fallbackPart = `\n> :::warning 未知消息块 (${c.type || 'unknown'})\n> \`\`\`json\n> ${JSON.stringify(c, null, 2).split('\n').join('\n> ')}\n> \`\`\`\n> :::\n\n`;
         }
 
         return thinkingPart + toolCallPart + toolResultPart + fallbackPart + textPart;
       }).join('');
+    } else if (typeof content === 'object' && content !== null) {
+      body = formatMessageContent([content]);
+    } else {
+      body = String(content);
     }
 
-    // 如果是个单对象，递归处理其生成的数组
-    if (typeof content === 'object') {
-      return formatMessageContent([content]);
-    }
-
-    return String(content);
+    return prefix + body;
   }, []);
 
   const clearStallTimer = useCallback(() => {
@@ -286,15 +292,15 @@ export const useChatV3WebSocket = ({
         firstTokenTimeRef.current = now;
       }
 
-      const rawContent = payload.message?.content;
-      if (rawContent === undefined || rawContent === null) return; // 💡 只有 metadata 的包不更新内容
+      const messageObj = payload.message;
+      if (!messageObj) return; // 💡 只有 metadata 的包不更新内容
 
       // 💡 漏洞 1 修复：拦截“跨会话残余串线”，如果丢过来的包并非当前所在的 session，直接丢弃！
       if (payload.sessionKey && payload.sessionKey !== sessionKeyRef.current) {
         return;
       }
 
-      const fullText = formatMessageContent(rawContent);
+      const fullText = formatMessageContent(messageObj);
       
       // 💡 防御性检查 1：如果内容变为空或纯空白，且之前已有内容，拦截（防止纯空格绕过 !fullText）
       if (!fullText.trim() && streamContentRef.current.trim()) {
@@ -719,7 +725,9 @@ export const useChatV3WebSocket = ({
       }, 100);
 
       const res = await sendRPC('chat.send', { 
-        sessionKey: currentKey, message: finalContent, idempotencyKey: `ik-${Date.now()}`
+        sessionKey: currentKey, 
+        message: finalContent, 
+        idempotencyKey: `ik-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
       });
       if (!res.ok) {
         message.error('Failed to send: ' + (res.error?.message || 'Unknown'));

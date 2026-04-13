@@ -221,31 +221,35 @@ func (s *Server) handleGatewayProxy(c *gin.Context) {
 	// 协程 A: 浏览器 -> 网关 (拦截 connect 请求以记录 DeviceID 并注入真实 Token)
 	go func() {
 		defer cancel()
+		handshakeDone := false
 		for {
 			mt, message, err := clientConn.ReadMessage()
 			if err != nil {
 				return
 			}
 
-			// 尝试拦截 V3 connect 请求
-			var raw map[string]interface{}
-			if json.Unmarshal(message, &raw) == nil && raw["method"] == "connect" {
-				if params, ok := raw["params"].(map[string]interface{}); ok {
-					// 记录 DeviceID
-					if device, ok := params["device"].(map[string]interface{}); ok {
-						if did, ok := device["id"].(string); ok {
-							lastDeviceId = did
-							log.Printf("🛡️ [WS-Proxy] 拦截到连接请求，设备 ID: %s", lastDeviceId)
+			// 只有在未完成握手时才尝试拦截 V3 connect 请求以注入 Token
+			if !handshakeDone {
+				var raw map[string]interface{}
+				if json.Unmarshal(message, &raw) == nil && raw["method"] == "connect" {
+					if params, ok := raw["params"].(map[string]interface{}); ok {
+						// 记录 DeviceID
+						if device, ok := params["device"].(map[string]interface{}); ok {
+							if did, ok := device["id"].(string); ok {
+								lastDeviceId = did
+								log.Printf("🛡️ [WS-Proxy] 拦截到连接请求，设备 ID: %s", lastDeviceId)
+							}
 						}
-					}
-					// 关键：将前端的 guardian token 替换为 OpenClaw Gateway 的真实 token
-					if auth, ok := params["auth"].(map[string]interface{}); ok {
-						auth["token"] = gw.Auth.Token
-						log.Printf("🔑 [WS-Proxy] 已注入 Gateway 真实 Token")
-					}
-					// 重新序列化
-					if patched, err := json.Marshal(raw); err == nil {
-						message = patched
+						// 关键：将前端的 guardian token 替换为 OpenClaw Gateway 的真实 token
+						if auth, ok := params["auth"].(map[string]interface{}); ok {
+							auth["token"] = gw.Auth.Token
+							log.Printf("🔑 [WS-Proxy] 已注入 Gateway 真实 Token")
+						}
+						// 重新序列化
+						if patched, err := json.Marshal(raw); err == nil {
+							message = patched
+						}
+						handshakeDone = true // 标记握手已处理，后续包直接转发
 					}
 				}
 			}
