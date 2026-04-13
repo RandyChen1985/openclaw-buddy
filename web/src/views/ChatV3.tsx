@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import type { VirtuosoHandle } from 'react-virtuoso';
-import { Select, Input, Button, Spin, message, Tag, Badge, Modal, Form, Tooltip, Drawer, Switch, Tabs } from 'antd';
+import { Select, Input, Button, Spin, message, Badge, Modal, Form, Tooltip, Drawer, Switch, Tabs } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Bot, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, LayoutPanelLeft, Activity, Settings, ChevronUp, ChevronDown, Sparkles, Save, X, Zap, Quote, Wand2, PenLine, Eye, Activity as ActivityIcon } from 'lucide-react';
+import { Bot, RefreshCw, Cpu, Plus, Trash2, LayoutPanelLeft, Settings, ChevronUp, ChevronDown, Sparkles, Save, X, Zap, Quote, Wand2, PenLine, Eye, Activity } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -225,7 +225,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     if (p.includes('openai')) return <div style={wrapStyle}><Bot size={size * 0.55} color="#10a37f" /></div>;
     if (p.includes('anthropic')) return <div style={{ ...wrapStyle, fontSize: size * 0.45, fontWeight: 900, color: '#d97706', fontFamily: 'serif' }}>A</div>;
     if (p.includes('google') || p.includes('gemini')) return <div style={wrapStyle}><Zap size={size * 0.55} color="#4285f4" fill="#4285f4" /></div>;
-    if (p.includes('deepseek')) return <div style={wrapStyle}><ActivityIcon size={size * 0.55} color="#0891b2" /></div>;
+    if (p.includes('deepseek')) return <div style={wrapStyle}><Activity size={size * 0.55} color="#0891b2" /></div>;
     return <div style={wrapStyle}><Bot size={size * 0.55} color="#2563eb" /></div>;
   };
 
@@ -462,9 +462,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               </div>
             ) : (
               !isMobile && status === 'authenticated' && (
-                <Tag color="blue" icon={<ShieldCheck size={11} />} style={{ borderRadius: 6, border: 'none', background: '#eff6ff', color: '#4f46e5', padding: '0 6px', fontSize: 11, flexShrink: 0, margin: 0 }}>
-                  {t('chat.deviceVerified')}
-                </Tag>
+                null
               )
             )}
             
@@ -472,7 +470,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 8, flexShrink: 0, marginLeft: 4 }}>
                 <div style={{ height: 12, width: 1, background: '#f1f5f9', marginRight: 2 }}></div>
                 <span style={{ fontSize: 11, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600, marginRight: 2 }}>
-                    {lastHealth?.ok === false ? '网关波动' : '网关已连接'}
+                    {lastHealth?.ok === false ? '网关波动' : '已连接'}
                 </span>
                 <div key={pulse} style={{ 
                   width: 7, height: 7, borderRadius: '50%', 
@@ -498,7 +496,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 2 : 6, flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 4 }}>
-                  <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>{t('chat.showThinking', { defaultValue: '显示思考' })}</span>
+                  <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>{t('chat.showThinking', { defaultValue: '思考过程' })}</span>
                   <Switch 
                       size="small" 
                       checked={showThinking} 
@@ -523,7 +521,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               {status === 'authenticated' && sessionKey && !isMobile && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px', background: '#f8fafc', borderRadius: 8, height: 24, marginLeft: 4 }}>
                     <span style={{ fontSize: 10, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600 }}>
-                        {lastHealth?.ok === false ? '网关波动' : '网关已连接'}
+                        {lastHealth?.ok === false ? '网关波动' : '已连接'}
                     </span>
                     <div key={pulse} style={{ 
                       width: 6, height: 6, borderRadius: '50%', 
@@ -667,29 +665,34 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
         {/* 返回顶部浮动按钮 */}
         {showScrollTopBtn && (
-            <div style={{ position: 'absolute', top: 80, right: isMobile ? 16 : 32, zIndex: 100, animation: 'v3-fade-in 0.3s' }}>
+            <div style={{ 
+                position: 'absolute', 
+                top: isMobile ? 70 : 80, 
+                left: '50%', 
+                transform: 'translateX(-50%)', 
+                zIndex: 100, 
+                animation: 'v3-fade-in 0.3s' 
+            }}>
                 <Button
-                    shape="round"
+                    className="v3-floating-btn"
+                    shape="circle"
                     onClick={() => {
                         virtuosoRef.current?.scrollToIndex({ index: 0, behavior: 'smooth', align: 'start' });
                         setShowScrollTopBtn(false);
                     }}
-                    icon={<ChevronUp size={14} />}
+                    icon={<ChevronUp size={16} />}
                     style={{ 
                         boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                         background: '#fff',
                         color: '#64748b',
                         border: '1px solid #e2e8f0',
                         height: 32,
-                        fontSize: 12,
+                        width: 32,
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 6,
-                        padding: '0 10px'
+                        justifyContent: 'center'
                     }}
-                >
-                    返回顶部
-                </Button>
+                />
             </div>
         )}
 
@@ -704,6 +707,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                 animation: 'v3-fade-in 0.3s' 
             }}>
                 <Button
+                    className="v3-floating-btn"
                     shape="round"
                     type={hasNewMessages ? 'primary' : 'default'}
                     onClick={() => {
@@ -791,13 +795,17 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               display: 'flex', 
               background: '#fff', 
               borderRadius: 20, 
-              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 0 0 2px rgba(99, 102, 241, 0.1)', 
+              // 💡 视觉加固：增强版聚焦效果。加大发光半径 (4px) 与位移 (-4px)，带来更强的悬浮确认感
+              boxShadow: isFocused 
+                ? '0 20px 40px -10px rgba(99, 102, 241, 0.25), 0 0 0 4px rgba(99, 102, 241, 0.3)' 
+                : '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 0 0 2px rgba(99, 102, 241, 0.1)', 
               border: 'none',
               flexDirection: 'column',
               overflow: 'hidden',
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
               width: '100%',
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              transform: isFocused ? 'translateY(-4px)' : 'none'
             }} className="input-container-v3">
               <div style={{ width: '100%', display: 'flex', alignItems: 'center', padding: isMobile ? '6px 12px 0' : '12px 16px 0', gap: 8, boxSizing: 'border-box' }}>
                  <div style={{ 

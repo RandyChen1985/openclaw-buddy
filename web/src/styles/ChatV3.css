@@ -296,3 +296,19 @@
   border-radius: 50%;
   animation: v3-pulse-ring 3s ease-out infinite;
 }
+
+/* --- 6. 浮动控制按钮 (Floating Controls) --- */
+.v3-floating-btn {
+  opacity: 0.3;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer;
+}
+
+.v3-floating-btn:hover {
+  opacity: 1 !important;
+  transform: scale(1.05); /* 悬浮时轻微放大 */
+}
+
+.v3-floating-btn:active {
+  transform: scale(0.95); /* 点击时轻微缩放 */
+}

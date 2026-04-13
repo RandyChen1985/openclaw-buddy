@@ -94,6 +94,7 @@ export const useChatV3WebSocket = ({
   
   const sessionKeyRef = useRef<string | null>(null);
   useEffect(() => { sessionKeyRef.current = sessionKey; }, [sessionKey]);
+  const autoSummarizeRef = useRef<any>(null);
   
   const sessionLabelRef = useRef<string | null>(null);
   useEffect(() => { sessionLabelRef.current = sessionLabel; }, [sessionLabel]);
@@ -140,10 +141,43 @@ export const useChatV3WebSocket = ({
   // --- Session List actions ---
   const fetchSessions = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoadingSessions(true);
-    const res = await sendRPC('sessions.list', { limit: 50 });
+    
+    // 💡 视觉加固：使用 Promise.all 确保即使后端秒回，图标也至少旋转 800ms
+    const [res] = await Promise.all([
+      sendRPC('sessions.list', { limit: 50 }),
+      isSilent ? Promise.resolve() : new Promise(resolve => setTimeout(resolve, 800))
+    ]);
+
     if (res.ok) {
       const list = res.payload?.items || res.payload?.sessions || (Array.isArray(res.payload) ? res.payload : []);
       setSessions(list);
+
+      // 💡 自动总结：刷新后识别未命名会话并后台生成标题
+      if (!isSilent) {
+        const untitled = list.filter((s: any) => !s.label || s.label === '未命名会话' || s.label === 'New Session' || s.label === '').slice(0, 15);
+        if (untitled.length > 0) {
+          // 缩短延时到 500ms
+          setTimeout(async () => {
+            for (const s of untitled) {
+              const hRes = await sendRPC('chat.history', { sessionKey: s.key, limit: 10 });
+              if (hRes.ok) {
+                const raw = hRes.payload.messages || hRes.payload.items || [];
+                // 💡 降低门槛：只要有 1 条用户消息即可尝试总结标题
+                if (raw.length >= 1) {
+                  const msgs = raw.map((m: any) => ({
+                    role: m.role === 'toolResult' ? 'assistant' : m.role,
+                    content: formatMessageContent(m.content)
+                  })).filter((m: any) => m.content);
+                  
+                  if (msgs.length > 0) {
+                    autoSummarizeRef.current?.(msgs, false, s.key);
+                  }
+                }
+              }
+            }
+          }, 500);
+        }
+      }
     }
     if (!isSilent) setLoadingSessions(false);
   }, [sendRPC]);
@@ -598,6 +632,7 @@ export const useChatV3WebSocket = ({
     const targetMessages = messagesOverride || messages;
     if (!activeKey || targetMessages.length === 0) return;
     if (!targetKey) setIsSummarizing(true);
+    if (!silent && targetKey) message.loading({ content: t('chat.summarizingTitle', { defaultValue: '正在生成标题...' }), key: `summarizing-${activeKey}` });
     try {
       const agentId = selectedBot.replace('openclaw:', '');
       const bot = botsModels?.data?.bots?.find((b: any) => b.id === agentId);
@@ -614,8 +649,8 @@ export const useChatV3WebSocket = ({
         const res = await sendRPC('sessions.patch', { key: activeKey, label: newTitle });
         if (res.ok) {
           if (activeKey === sessionKey) setSessionLabel(newTitle);
-          if (!silent) message.success(t('chat.titleSummarized'));
-          fetchSessions();
+          if (!silent) message.success({ content: t('chat.titleSummarized'), key: `summarizing-${activeKey}` });
+          setSessions(prev => prev.map(s => s.key === activeKey ? { ...s, label: newTitle } : s));
         }
       }
     } catch (err) {
@@ -624,9 +659,13 @@ export const useChatV3WebSocket = ({
       if (!targetKey) setIsSummarizing(false);
     }
   }, [sessionKey, messages, selectedBot, botsModels, sendRPC, fetchSessions, t]);
+  autoSummarizeRef.current = handleAutoSummarize;
 
   const handleSend = useCallback(async (content?: any, attachedFiles?: FileInfo[]) => {
     const text = (typeof content === 'string' ? content : '').trim();
+    
+    // 💡 健壮性加固 1：防止重复发送（解决“一遍又一遍”重复的问题），并确保在认证状态下操作
+    if (isTyping) return;
     if ((!text && (!attachedFiles || attachedFiles.length === 0)) || status !== 'authenticated') return;
 
     setIsTyping(true);
@@ -641,9 +680,9 @@ export const useChatV3WebSocket = ({
     if (attachedFiles && attachedFiles.length > 0) {
       const fileLinks = attachedFiles.map(f => {
         const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
-        return isImage ? `\n![${f.filename}](${f.thumbUrl || f.url} "${f.url}")\n(File path: ${f.path})` : `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
+        return isImage ? `\n![${f.filename}](${f.thumbUrl || f.url} \"${f.url}\")\n(File path: ${f.path})` : `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
       }).join('');
-      finalContent += fileLinks + `\n\n**System Note for Expert:** The user has uploaded files. Access them via absolute "File path" provided.`;
+      finalContent += fileLinks + `\n\n**System Note for Expert:** The user has uploaded files. Access them via absolute \"File path\" provided.`;
     }
 
     const newUserMsg: Message = { id: `msg-${Date.now()}`, role: 'user', content: finalContent, timestamp: new Date().toLocaleTimeString() };
@@ -657,6 +696,11 @@ export const useChatV3WebSocket = ({
         setSessionKey(currentKey);
         await sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel });
         fetchSessions();
+      } else {
+        // 💡 修复：如果创建会话失败，必须报错并重置状态，不能静默退出（解决“无反应”Bug）
+        message.error(t('chat.failedToCreateSession') || 'Failed to create session: ' + (res.error?.message || 'Unknown'));
+        setIsTyping(false);
+        return;
       }
     }
 
@@ -685,8 +729,12 @@ export const useChatV3WebSocket = ({
         setIsTyping(false);
         clearStallTimer();
       }
+    } else {
+      // 💡 修复：防止 sessionKey 依然为空导致的静默失败
+      setIsTyping(false);
+      message.error('Session key missing');
     }
-  }, [status, sessionKey, selectedBot, thinkingLevel, sessionModel, sendRPC, fetchSessions, resetStallTimer, clearStallTimer, t]);
+  }, [status, sessionKey, selectedBot, thinkingLevel, sessionModel, sendRPC, fetchSessions, resetStallTimer, clearStallTimer, t, isTyping]);
 
   const handleRegenerate = useCallback(() => {
     if (isTyping) {

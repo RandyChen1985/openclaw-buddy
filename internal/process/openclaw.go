@@ -133,6 +133,12 @@ type OpenClawApprovalsSnapshot struct {
 	} `json:"file"`
 }
 
+type SecurityStatusData struct {
+	Policy        *OpenClawExecPolicyResponse `json:"policy"`
+	Snapshot      *OpenClawApprovalsSnapshot   `json:"snapshot"`
+	VersionTooLow bool                         `json:"versionTooLow"`
+}
+
 func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error) {
 	res := &OpenClawBotsModelsResponse{
 		Bots:   []OpenClawBot{},
@@ -1123,7 +1129,8 @@ func ExecPolicyShow() (*OpenClawExecPolicyResponse, error) {
 	cleanOut = cleanOut[index:]
 
 	var res OpenClawExecPolicyResponse
-	if err := json.Unmarshal([]byte(cleanOut), &res); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(cleanOut))
+	if err := decoder.Decode(&res); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal exec policy: %v", err)
 	}
 
@@ -1145,7 +1152,8 @@ func GetApprovalsSnapshot() (*OpenClawApprovalsSnapshot, error) {
 	cleanOut = cleanOut[index:]
 
 	var res OpenClawApprovalsSnapshot
-	if err := json.Unmarshal([]byte(cleanOut), &res); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(cleanOut))
+	if err := decoder.Decode(&res); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal approvals snapshot: %v", err)
 	}
 
@@ -1230,4 +1238,33 @@ func SetApprovals(content string) error {
 		return fmt.Errorf("failed to set approvals: %v. Output: %s", err, string(out))
 	}
 	return nil
+}
+
+func GetSecurityStatusData() (*SecurityStatusData, error) {
+	policy, err := ExecPolicyShow()
+	if err != nil {
+		// 容错设计：如果 openclaw 版本过低，不支持 exec-policy 命令，则返回特定标志
+		if strings.Contains(err.Error(), "unknown command") {
+			return &SecurityStatusData{
+				Policy:        nil,
+				Snapshot:      nil,
+				VersionTooLow: true,
+			}, nil
+		}
+		return nil, err
+	}
+
+	snapshot, err := GetApprovalsSnapshot()
+	if err != nil {
+		// 如果获取快照失败（例如 approvals 文件不存在），依然返回 policy
+		return &SecurityStatusData{
+			Policy:   policy,
+			Snapshot: nil,
+		}, nil
+	}
+
+	return &SecurityStatusData{
+		Policy:   policy,
+		Snapshot: snapshot,
+	}, nil
 }

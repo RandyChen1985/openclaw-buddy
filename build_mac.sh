@@ -120,7 +120,10 @@ EOF
 cat <<'EOF' > "${PKG_DIR}/start.sh"
 #!/bin/bash
 cd "$(dirname "$0")"
-PID_FILE="/tmp/openclaw-buddy-mac.pid"
+# 🚀 确保必要目录存在
+mkdir -p ./pid ./logs ./data ./reports ./backups
+
+PID_FILE="./pid/openclaw-buddy.pid"
 [ -f "$PID_FILE" ] && ps -p $(cat "$PID_FILE") > /dev/null && echo "❌ 已经在运行中" && exit 1
 nohup ./lib/openclaw-buddy >> ./logs/guardian.log 2>&1 &
 echo $! > "$PID_FILE"
@@ -132,14 +135,60 @@ chmod +x "${PKG_DIR}/start.sh"
 # 生成停止脚本
 cat <<'EOF' > "${PKG_DIR}/stop.sh"
 #!/bin/bash
-PID_FILE="/tmp/openclaw-buddy-mac.pid"
+cd "$(dirname "$0")"
+PID_FILE="./pid/openclaw-buddy.pid"
+
+stop_process() {
+    local pid=$1
+    echo "⏱️ 正在关闭进程 $pid..."
+    kill $pid 2>/dev/null
+
+    # 等待最多 5 秒
+    for i in {1..5}; do
+        if ! ps -p $pid > /dev/null; then
+            echo "✅ 进程 $pid 已成功停止"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "⚠️ 进程 $pid 未能优雅退出，正在强制终止 (kill -9)..."
+    kill -9 $pid 2>/dev/null
+    return 0
+}
+
 if [ -f "$PID_FILE" ]; then
-    kill $(cat "$PID_FILE") && echo "✅ 已停止 (Mac)"
+    PID=$(cat "$PID_FILE")
+    if ps -p $PID > /dev/null; then
+        stop_process $PID
+    else
+        echo "⚠️ PID 文件存在但进程 $PID 不在运行，正在清理陈旧文件..."
+    fi
     rm -f "$PID_FILE"
 else
-    echo "⚠️ 未发现运行中的服务"
+    echo "⚠️ 未发现 PID 文件，尝试通过进程名匹配清理..."
+fi
+
+# 兜底清理：仅查找匹配当前目录绝对路径的进程，防止误杀多实例
+CURRENT_BINARY=$(pwd)/lib/openclaw-buddy
+# 使用 ps -ef 并通过 grep 匹配绝对路径
+PIDS=$(ps -ef | grep "$CURRENT_BINARY" | grep -v grep | awk '{print $2}')
+
+# 如果绝对路径没匹配到，尝试匹配相对路径 (兼容直接在当前目录启动的情况)
+if [ -z "$PIDS" ]; then
+    PIDS=$(ps -ef | grep "\./lib/openclaw-buddy" | grep -v grep | awk '{print $2}')
+fi
+
+if [ -n "$PIDS" ]; then
+    echo "🔍 发现残余进程: $PIDS"
+    for p in $PIDS; do
+        stop_process $p
+    done
+else
+    echo "✅ 未检测到其他运行进程"
 fi
 EOF
+
 chmod +x "${PKG_DIR}/stop.sh"
 
 # 5. 打包归档

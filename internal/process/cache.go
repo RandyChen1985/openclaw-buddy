@@ -48,6 +48,11 @@ func SyncAll(configDir string) {
 		return GetBotRanking(configDir)
 	})
 
+	// 8. Security Status (安全中心状态)
+	syncKey("security_status", func() (any, error) {
+		return GetSecurityStatusData()
+	})
+
 	log.Printf("✅ [Cache] 全量同步完成，耗时 %v。", time.Since(start))
 }
 
@@ -69,6 +74,8 @@ func SyncKeySingle(key string, configDir string) error {
 		fetcher = func() (any, error) { return GetOpenClawSessions() }
 	case "ranking":
 		fetcher = func() (any, error) { return GetBotRanking(configDir) }
+	case "security_status":
+		fetcher = func() (any, error) { return GetSecurityStatusData() }
 	default:
 		return nil
 	}
