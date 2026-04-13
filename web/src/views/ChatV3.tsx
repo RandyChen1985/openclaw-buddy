@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import type { VirtuosoHandle } from 'react-virtuoso';
-import { Select, Input, Button, Spin, message, Tag, Badge, Modal, Form, Tooltip, Drawer, Switch, Tabs } from 'antd';
+import { Select, Input, Button, Spin, message, Badge, Modal, Form, Tooltip, Drawer, Switch, Tabs } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Bot, RefreshCw, ShieldCheck, Cpu, Plus, Trash2, LayoutPanelLeft, Activity, Settings, ChevronUp, ChevronDown, Sparkles, Save, X, Zap, Quote, Wand2, PenLine, Eye, Activity as ActivityIcon } from 'lucide-react';
+import { Bot, RefreshCw, Cpu, Plus, Trash2, LayoutPanelLeft, Activity, Settings, ChevronUp, ChevronDown, Sparkles, Save, X, Zap, Quote, Wand2, PenLine, Eye, Activity as ActivityIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -462,9 +462,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               </div>
             ) : (
               !isMobile && status === 'authenticated' && (
-                <Tag color="blue" icon={<ShieldCheck size={11} />} style={{ borderRadius: 6, border: 'none', background: '#eff6ff', color: '#4f46e5', padding: '0 6px', fontSize: 11, flexShrink: 0, margin: 0 }}>
-                  {t('chat.deviceVerified')}
-                </Tag>
+                null
               )
             )}
             
@@ -472,7 +470,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 8, flexShrink: 0, marginLeft: 4 }}>
                 <div style={{ height: 12, width: 1, background: '#f1f5f9', marginRight: 2 }}></div>
                 <span style={{ fontSize: 11, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600, marginRight: 2 }}>
-                    {lastHealth?.ok === false ? '网关波动' : '网关已连接'}
+                    {lastHealth?.ok === false ? '网关波动' : '已连接'}
                 </span>
                 <div key={pulse} style={{ 
                   width: 7, height: 7, borderRadius: '50%', 
@@ -498,7 +496,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 2 : 6, flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 4 }}>
-                  <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>{t('chat.showThinking', { defaultValue: '显示思考' })}</span>
+                  <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>{t('chat.showThinking', { defaultValue: '思考过程' })}</span>
                   <Switch 
                       size="small" 
                       checked={showThinking} 
@@ -523,7 +521,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               {status === 'authenticated' && sessionKey && !isMobile && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px', background: '#f8fafc', borderRadius: 8, height: 24, marginLeft: 4 }}>
                     <span style={{ fontSize: 10, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600 }}>
-                        {lastHealth?.ok === false ? '网关波动' : '网关已连接'}
+                        {lastHealth?.ok === false ? '网关波动' : '已连接'}
                     </span>
                     <div key={pulse} style={{ 
                       width: 6, height: 6, borderRadius: '50%', 
