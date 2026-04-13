@@ -682,15 +682,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                     }}
                     icon={<ChevronUp size={16} />}
                     style={{ 
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                        background: '#fff',
-                        color: '#64748b',
-                        border: '1px solid #e2e8f0',
                         height: 32,
                         width: 32,
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center'
+                        justifyContent: 'center',
+                        color: '#64748b'
                     }}
                 />
             </div>
@@ -721,16 +718,15 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                     }}
                     icon={hasNewMessages ? <Activity size={14} className="animate-pulse" /> : <ChevronDown size={14} />}
                     style={{ 
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                        background: hasNewMessages ? '#2563eb' : '#fff',
-                        color: hasNewMessages ? '#fff' : '#64748b',
-                        border: hasNewMessages ? 'none' : '1px solid #e2e8f0',
                         height: 32,
                         fontSize: 12,
                         display: 'flex',
                         alignItems: 'center',
                         gap: 6,
-                        padding: hasNewMessages ? '0 12px' : '0 10px'
+                        padding: hasNewMessages ? '0 12px' : '0 10px',
+                        background: hasNewMessages ? '#2563eb' : undefined,
+                        color: hasNewMessages ? '#fff' : '#64748b',
+                        border: hasNewMessages ? 'none' : undefined
                     }}
                 >
                     {hasNewMessages && '有新消息'}
