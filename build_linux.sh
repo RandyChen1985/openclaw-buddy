@@ -123,6 +123,9 @@ EOF
 cat <<'EOF' > "${PKG_DIR}/start.sh"
 #!/bin/bash
 cd "$(dirname "$0")"
+# 🚀 确保必要目录存在
+mkdir -p ./pid ./logs ./data ./reports ./backups
+
 PID_FILE="./pid/openclaw-buddy.pid"
 
 if [ -f "$PID_FILE" ]; then
@@ -146,6 +149,7 @@ chmod +x "${PKG_DIR}/start.sh"
 # 生成 Linux 停止脚本 (stop.sh)
 cat <<'EOF' > "${PKG_DIR}/stop.sh"
 #!/bin/bash
+cd "$(dirname "$0")"
 PID_FILE="./pid/openclaw-buddy.pid"
 
 stop_process() {
@@ -179,8 +183,16 @@ else
     echo "⚠️ 未发现 PID 文件，尝试通过进程名匹配清理..."
 fi
 
-# 兜底清理：查找包含 lib/openclaw-buddy 路径的进程，排除 grep 自身和当前脚本
-PIDS=$(ps -ef | grep "lib/openclaw-buddy" | grep -v grep | awk '{print $2}')
+# 兜底清理：仅查找匹配当前目录绝对路径的进程，防止误杀多实例
+CURRENT_BINARY=$(pwd)/lib/openclaw-buddy
+# 使用 ps -ef 并通过 grep 匹配绝对路径
+PIDS=$(ps -ef | grep "$CURRENT_BINARY" | grep -v grep | awk '{print $2}')
+
+# 如果绝对路径没匹配到，尝试匹配相对路径 (兼容直接在当前目录启动的情况)
+if [ -z "$PIDS" ]; then
+    PIDS=$(ps -ef | grep "\./lib/openclaw-buddy" | grep -v grep | awk '{print $2}')
+fi
+
 if [ -n "$PIDS" ]; then
     echo "🔍 发现残余进程: $PIDS"
     for p in $PIDS; do

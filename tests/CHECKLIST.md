@@ -160,7 +160,9 @@
 - [ ] **Windows 兼容性**: 在 Windows 环境下执行 `openclaw-buddy.exe`，验证 Shell 终端与 TUI 聊天能够正常启动（ConPTY）。
 - [ ] **跨平台编译**: 执行 `GOOS=windows go build` 应无 `syscall` 相关编译错误。
 - [x] **1.0.6 重新打包**: 验证 1.0.6 版本全量打包过程，确保 Mac 和 Linux 产物一致且包含最新 indigo 视觉全案。 `2026-04-12` [x]
-- [ ] **PID 路径一致性**: 验证 `start.sh` 和 `stop.sh` 均使用 `./pid/openclaw-buddy.pid`，且 `SelfRestart` 后能通过 `stop.sh` 正常停止进程。 `2026-04-12`
+- [x] **PID 路径一致性**: 验证 `start.sh` 和 `stop.sh` 均使用 `./pid/openclaw-buddy.pid`，且 `SelfRestart` 后能通过 `stop.sh` 正常停止进程。 `2026-04-12`
+- [x] **目录自动创建**: 验证 `start.sh` 启动时能自动创建 `pid`, `logs`, `data`, `reports`, `backups` 等必要目录。 `2026-04-13` 
+- [x] **精确进程清理**: 验证 `stop.sh` 能够根据二进制文件的绝对路径精确匹配并清理进程，防止多实例误杀。 `2026-04-13`
 - [ ] **安全中心缓存**: 验证 `/v1/openclaw/security/status` 是否能从缓存快速响应，且支持 `?refresh=true` 手动同步。 `2026-04-12`
 
 ## 6. 接口标准协议 (API Schema)
