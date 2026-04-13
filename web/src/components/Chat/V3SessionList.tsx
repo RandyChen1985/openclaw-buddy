@@ -13,7 +13,7 @@ interface V3SessionListProps {
   onDeleteSession: (e: any, key: string) => void;
   onDeleteGroup: (label: string, keys: string[]) => void;
   onClearAll: () => void;
-  fetchSessions: () => void;
+  fetchSessions: (isSilent?: boolean) => void;
   isMobile: boolean;
   setShowSider: (show: boolean) => void;
   copyToClipboard: (text: string) => void;
@@ -23,7 +23,7 @@ interface V3SessionListProps {
 const V3SessionList: React.FC<V3SessionListProps> = ({
   sessions, sessionKey, loadingSessions, sessionSearch, setSessionSearch,
   onSelectSession, onNewSession, onDeleteSession, onDeleteGroup, onClearAll, fetchSessions,
-  isMobile, setShowSider, copyToClipboard, t
+  copyToClipboard, t
 }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff' }}>
@@ -41,6 +41,8 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
         .session-group-header:hover {
           background: #f1f5f9;
         }
+        @keyframes v3-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .v3-spin { animation: v3-spin 1s linear infinite; }
         .group-delete-btn {
           opacity: 0;
           transition: opacity 0.2s;
@@ -68,18 +70,16 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
             style={{ flex: 1, borderRadius: 8, height: 38, background: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onClick={() => {
               onNewSession();
-              if (isMobile) setShowSider(false);
             }}
         >
           {t('chat.v3NewSession', { defaultValue: '开启新会话' })}
         </Button>
         <Button 
-          icon={<RefreshCw size={14} />} 
-          onClick={fetchSessions} 
-          loading={loadingSessions} 
+          icon={<RefreshCw size={14} className={loadingSessions ? "v3-spin" : ""} />} 
+          onClick={() => fetchSessions(false)} 
+          loading={loadingSessions}
           style={{ height: 38, width: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}
         />
-        {isMobile && <Button icon={<Plus size={14} rotate={45} />} onClick={() => setShowSider(false)} style={{ height: 38, width: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }} />}
       </div>
       
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
@@ -162,7 +162,6 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                           key={s.key}
                           onClick={() => {
                             onSelectSession(s.key);
-                            if (isMobile) setShowSider(false);
                           }}
                           style={{ 
                               padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4, transition: 'all 0.2s',
