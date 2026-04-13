@@ -1,6 +1,6 @@
 import React from 'react';
-import { Input, Button, Spin, Tooltip, Avatar } from 'antd';
-import { Search, Plus, Trash2, History, RefreshCw, Copy, Bot, XCircle } from 'lucide-react';
+import { Input, Button, Spin, Tooltip, Avatar, Badge as AntBadge } from 'antd';
+import { Search, Plus, Trash2, History, RefreshCw, Copy, Bot, XCircle, AlertCircle } from 'lucide-react';
 
 interface V3SessionListProps {
   sessions: any[];
@@ -19,6 +19,24 @@ interface V3SessionListProps {
   copyToClipboard: (text: string) => void;
   t: any;
 }
+
+const SessionStatusIcon = ({ status, t }: { status: string, t: any }) => {
+  if (status === 'active') {
+    return (
+      <Tooltip title={t('chat.statusActive', { defaultValue: '正在生成中...' })}>
+        <AntBadge status="processing" size="small" style={{ marginLeft: 6, transform: 'scale(0.8)' }} />
+      </Tooltip>
+    );
+  }
+  if (status === 'failed') {
+    return (
+      <Tooltip title={t('chat.statusFailed', { defaultValue: '执行遇到错误' })}>
+        <AlertCircle size={10} color="#ef4444" style={{ marginLeft: 6 }} />
+      </Tooltip>
+    );
+  }
+  return null;
+};
 
 const V3SessionList: React.FC<V3SessionListProps> = ({
   sessions, sessionKey, loadingSessions, sessionSearch, setSessionSearch,
@@ -174,8 +192,9 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                           <Avatar size={32} src={s.avatar} icon={<Bot size={16} />} style={{ background: isActive ? '#4f46e5' : '#f1f5f9', color: isActive ? '#fff' : '#64748b', flexShrink: 0 }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-                                <div style={{ fontSize: 13, fontWeight: 700, color: isActive ? '#3730a3' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                <div style={{ fontSize: 13, fontVariant: 'tabular-nums', fontWeight: 700, color: isActive ? '#3730a3' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
                                     {s.label || t('chat.noLabel', { defaultValue: '未命名会话' })}
+                                    <SessionStatusIcon status={s.status} t={t} />
                                 </div>
                                 {s.messagesCount !== undefined && (
                                   <div style={{ 

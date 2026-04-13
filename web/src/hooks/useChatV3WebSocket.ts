@@ -17,6 +17,7 @@ export interface FileInfo {
 
 export interface Message {
   id: string;
+  runId?: string; // 💡 事务标识：用于精准追踪流式响应属于哪一轮对话
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: string;
@@ -293,21 +294,18 @@ export const useChatV3WebSocket = ({
       }
 
       const messageObj = payload.message;
-      if (!messageObj) return; // 💡 只有 metadata 的包不更新内容
+      if (!messageObj) return;
 
-      // 💡 漏洞 1 修复：拦截“跨会话残余串线”，如果丢过来的包并非当前所在的 session，直接丢弃！
       if (payload.sessionKey && payload.sessionKey !== sessionKeyRef.current) {
         return;
       }
 
       const fullText = formatMessageContent(messageObj);
       
-      // 💡 防御性检查 1：如果内容变为空或纯空白，且之前已有内容，拦截（防止纯空格绕过 !fullText）
       if (!fullText.trim() && streamContentRef.current.trim()) {
         return;
       }
 
-      // 💡 防御性检查 2：强力防护！如果后端发来的累积内容长度突然大幅缩短（容差20字符），说明后端流发生了异常重置或发了增量包，必须拦截！
       const oldLen = streamContentRef.current.length;
       if (oldLen > 50 && fullText.length < oldLen - 20) {
         return;
@@ -316,7 +314,6 @@ export const useChatV3WebSocket = ({
       streamContentRef.current = fullText;
       tokenCountRef.current = fullText.length;
 
-      // 💡 漏洞 2 修复：利用 React Functional Update 切断闭包陷阱，避免每秒几十次无效调用
       setIsTyping(prev => {
         if (!prev) return true;
         return prev;
@@ -333,13 +330,23 @@ export const useChatV3WebSocket = ({
         }
 
         setMessages(prev => {
-          const last = prev[prev.length - 1];
-          if (last && last.role === 'assistant') {
-            return [...prev.slice(0, -1), { 
-              ...last, 
+          // 💡 核心优化：通过 runId 精准查找。
+          // 逻辑：1. 找 runId 匹配的；2. 没找到再找没有 runId 且是 assistant 的第一项（软绑定）。
+          const targetIndex = prev.findLastIndex(m => m.runId === payload.runId) !== -1 
+            ? prev.findLastIndex(m => m.runId === payload.runId)
+            : prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
+
+          if (targetIndex !== -1) {
+            const current = prev[targetIndex];
+            const updated = { 
+              ...current, 
+              runId: payload.runId, // 完成绑定
               content: fullText,
-              metrics: { ttft, tps: currentTPS }
-            }];
+              metrics: { ...current.metrics, ttft, tps: currentTPS }
+            };
+            const next = [...prev];
+            next[targetIndex] = updated;
+            return next;
           }
           return prev;
         });
@@ -371,21 +378,26 @@ export const useChatV3WebSocket = ({
         const finalTPS = duration > 0 ? (tokenCountRef.current / (duration - (ttft/1000))) : 0;
 
         setMessages(prev => {
-            const last = prev[prev.length - 1];
-            if (!last || last.role !== 'assistant') return prev;
+            const targetIndex = prev.findLastIndex(m => m.runId === payload.runId) !== -1 
+              ? prev.findLastIndex(m => m.runId === payload.runId)
+              : prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
+
+            if (targetIndex === -1) return prev;
+            const last = prev[targetIndex];
             
-            // 💡 致命漏洞 3 修复：防止连续的 final/done 信号复写！
-            // 如果 stream 已经被我们上面清空了（或者是空的），但之前的消息已经有实质内容，说明这是冗余信号，坚决不覆盖！
             const incomingContent = payload.message?.content ? formatMessageContent(payload.message.content) : streamContentRef.current;
             if (!incomingContent && last.content && last.content !== t('chat.thinking')) {
                 return prev;
             }
 
-            return [...prev.slice(0, -1), { 
+            const next = [...prev];
+            next[targetIndex] = { 
                 ...last, 
+                runId: payload.runId,
                 content: incomingContent,
-                metrics: { ttft, duration, tps: finalTPS }
-            }];
+                metrics: { ...last.metrics, ttft, duration, tps: finalTPS }
+            };
+            return next;
         });
 
         setIsTyping(false);
@@ -729,6 +741,20 @@ export const useChatV3WebSocket = ({
         message: finalContent, 
         idempotencyKey: `ik-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
       });
+      
+      if (res.ok && res.payload?.runId) {
+        // 💡 握手回填：将 RPC 返回的 runId 立即同步到刚才创建的 AI 消息对象中
+        setMessages(prev => {
+          const lastIndex = prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
+          if (lastIndex !== -1) {
+            const next = [...prev];
+            next[lastIndex] = { ...next[lastIndex], runId: res.payload.runId };
+            return next;
+          }
+          return prev;
+        });
+      }
+
       if (!res.ok) {
         message.error('Failed to send: ' + (res.error?.message || 'Unknown'));
         setIsTyping(false);
