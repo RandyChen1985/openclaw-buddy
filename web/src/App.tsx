@@ -343,9 +343,9 @@ const Dashboard = () => {
     }
   };
 
-  const checkWeixinPlugin = async () => {
+  const checkWeixinPlugin = async (force = false) => {
     try {
-      const res = await api.get('/v1/wechat/plugin/status');
+      const res = await api.get(`/v1/wechat/plugin/status${force ? '?refresh=true' : ''}`);
       setWeixinStatus(res.data);
     } catch (err) {
       setWeixinStatus({ installed: false, status: 'Detection Failed', version: 'N/A' });
@@ -989,6 +989,7 @@ const Dashboard = () => {
           loadingWeixin={loadingWeixin} checkWeixinSeconds={checkWeixinSeconds}
           isGettingQR={isGettingQR} onInstallWeixin={handleInstallWeixin} onGetQRCode={() => handleControl('wechat')}
           onRefreshChannels={() => fetchChatChannels(true)}
+          onRefreshWeixin={() => checkWeixinPlugin(true)}
           onUnbindWeixin={handleUnbindWeixin}
           activeTasks={activeTasks}
           isMobile={isMobile}

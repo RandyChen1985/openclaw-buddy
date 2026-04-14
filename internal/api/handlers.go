@@ -543,7 +543,8 @@ func (s *Server) getTasksStatus(c *gin.Context) {
 }
 
 func (s *Server) checkWeChatPlugin(c *gin.Context) {
-	status, err := process.GetWeChatPluginStatus()
+	refresh := c.Query("refresh") == "true"
+	status, err := process.GetWeChatPluginStatus(refresh)
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return

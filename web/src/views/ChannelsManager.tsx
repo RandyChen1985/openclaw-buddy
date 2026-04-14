@@ -14,6 +14,7 @@ interface ChannelsManagerProps {
   onInstallWeixin: () => void;
   onGetQRCode: () => void;
   onRefreshChannels: () => void;
+  onRefreshWeixin?: () => void;
   onUnbindWeixin?: (id: string) => void;
   activeTasks?: any[]; // 新增：用于检测解绑任务状态
   isMobile?: boolean; // 新增
@@ -31,6 +32,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   onInstallWeixin,
   onGetQRCode,
   onRefreshChannels,
+  onRefreshWeixin,
   onUnbindWeixin,
   activeTasks = [],
   isMobile
@@ -180,17 +182,30 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
               <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 15, marginBottom: 4 }}>
                 {t('channels.weixinPlugin')} (openclaw-weixin)
               </div>
-              <div style={{ color: '#64748b', fontSize: 12 }}>
+              <div style={{ color: '#64748b', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                 {weixinStatus === null 
                   ? t('channels.connecting')
                   : weixinStatus.installed 
                     ? t('channels.runningManaged', { status: weixinStatus.status })
                     : t('channels.coreMissing')}
+                {weixinStatus?.last_check && (
+                  <span style={{ fontSize: 10, color: '#94a3b8' }}>
+                    ({t('channels.syncedAt')}: {dayjs(weixinStatus.last_check).format('HH:mm:ss')})
+                  </span>
+                )}
               </div>
             </div>
           </div>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+            <Button
+              type="text"
+              size="small"
+              icon={<RefreshCw size={14} className={weixinStatus === null ? 'animate-spin' : ''} />}
+              onClick={onRefreshWeixin}
+              loading={weixinStatus === null}
+              style={{ color: '#64748b' }}
+            />
             {weixinStatus === null ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                 <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>{t('channels.monitoring')} ({checkWeixinSeconds}s)</span>
