@@ -344,6 +344,28 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                     <span>•</span>
                                     <span>CORE SYSTEM</span>
                                 </div>
+                                {/* Token 水位线 (主会话同步补全) */}
+                                {mainSession.contextTokens > 0 && (
+                                    <div style={{ marginTop: 6, width: '100%' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, fontSize: 9, fontWeight: 700 }}>
+                                        <span style={{ color: '#d97706', opacity: 0.6, transform: 'scale(0.9)', transformOrigin: 'left' }}>CONTEXT</span>
+                                        <span style={{ 
+                                            color: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : '#b45309',
+                                            opacity: 0.8
+                                        }}>
+                                            {Math.round((mainSession.totalTokens / mainSession.contextTokens) * 100)}%
+                                        </span>
+                                    </div>
+                                    <div style={{ height: 3, width: '100%', background: 'rgba(245, 158, 11, 0.15)', borderRadius: 2, overflow: 'hidden' }}>
+                                        <div style={{ 
+                                            height: '100%', 
+                                            width: `${Math.min(100, (mainSession.totalTokens / mainSession.contextTokens) * 100)}%`,
+                                            background: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : '#f59e0b',
+                                            transition: 'width 0.3s ease'
+                                        }} />
+                                    </div>
+                                    </div>
+                                )}
                             </div>
                             <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>
                                 <Button size="small" type="text" icon={<Copy size={12} />} onClick={(e) => { e.stopPropagation(); copyToClipboard(mainSession.key); }} />
