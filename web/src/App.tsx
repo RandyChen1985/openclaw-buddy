@@ -65,6 +65,7 @@ const Dashboard = () => {
   const [loadingChannels, setLoadingChannels] = useState(false);
   const [weixinStatus, setWeixinStatus] = useState<any>(null);
   const [loadingWeixin, setLoadingWeixin] = useState(false);
+  const [refreshingWeixin, setRefreshingWeixin] = useState(false);
   const [checkWeixinSeconds, setCheckWeixinSeconds] = useState(0);
   const [botsModels, setBotsModels] = useState<any>(null);
   const [loadingBots, setLoadingBots] = useState(false);
@@ -290,21 +291,23 @@ const Dashboard = () => {
     }
   };
 
-  // 微信插件检测定时器逻辑 (1s UI计数, 5s 接口轮询)
   useEffect(() => {
     let counter: any;
     let poller: any;
     
-    if (activeTab === 'components' && weixinStatus === null) {
+    if (activeTab === 'components' && (weixinStatus === null || refreshingWeixin)) {
       counter = setInterval(() => setCheckWeixinSeconds(s => s + 1), 1000);
-      poller = setInterval(() => checkWeixinPlugin(), 5000);
+      // 仅在初始加载（status 为 null）且未手动刷新时开启轮询
+      if (weixinStatus === null && !refreshingWeixin) {
+        poller = setInterval(() => checkWeixinPlugin(), 5000);
+      }
     }
 
     return () => {
       if (counter) clearInterval(counter);
       if (poller) clearInterval(poller);
     };
-  }, [activeTab, weixinStatus]);
+  }, [activeTab, weixinStatus, refreshingWeixin]);
 
   // Methods
   const fetchBotsModels = async (force = false) => {
@@ -344,11 +347,18 @@ const Dashboard = () => {
   };
 
   const checkWeixinPlugin = async (force = false) => {
+    if (force) {
+      setRefreshingWeixin(true);
+      setCheckWeixinSeconds(0);
+    }
     try {
       const res = await api.get(`/v1/wechat/plugin/status${force ? '?refresh=true' : ''}`);
       setWeixinStatus(res.data);
+      if (force) message.success(t('channels.weixinRefreshed'));
     } catch (err) {
       setWeixinStatus({ installed: false, status: 'Detection Failed', version: 'N/A' });
+    } finally {
+      if (force) setRefreshingWeixin(false);
     }
   };
 
@@ -990,6 +1000,7 @@ const Dashboard = () => {
           isGettingQR={isGettingQR} onInstallWeixin={handleInstallWeixin} onGetQRCode={() => handleControl('wechat')}
           onRefreshChannels={() => fetchChatChannels(true)}
           onRefreshWeixin={() => checkWeixinPlugin(true)}
+          refreshingWeixin={refreshingWeixin}
           onUnbindWeixin={handleUnbindWeixin}
           activeTasks={activeTasks}
           isMobile={isMobile}

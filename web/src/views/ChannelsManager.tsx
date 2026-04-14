@@ -15,6 +15,7 @@ interface ChannelsManagerProps {
   onGetQRCode: () => void;
   onRefreshChannels: () => void;
   onRefreshWeixin?: () => void;
+  refreshingWeixin?: boolean;
   onUnbindWeixin?: (id: string) => void;
   activeTasks?: any[]; // 新增：用于检测解绑任务状态
   isMobile?: boolean; // 新增
@@ -33,6 +34,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   onGetQRCode,
   onRefreshChannels,
   onRefreshWeixin,
+  refreshingWeixin,
   onUnbindWeixin,
   activeTasks = [],
   isMobile
@@ -201,12 +203,12 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
             <Button
               type="text"
               size="small"
-              icon={<RefreshCw size={14} className={weixinStatus === null ? 'animate-spin' : ''} />}
+              icon={<RefreshCw size={14} className={refreshingWeixin ? 'animate-spin' : ''} />}
               onClick={onRefreshWeixin}
-              loading={weixinStatus === null}
+              loading={refreshingWeixin}
               style={{ color: '#64748b' }}
             />
-            {weixinStatus === null ? (
+            {(weixinStatus === null || refreshingWeixin) ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                 <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>{t('channels.monitoring')} ({checkWeixinSeconds}s)</span>
                 <div className="radar-pulse-container" style={{ width: 32, height: 32, '--radar-color': '#ef4444' } as any}>
@@ -239,8 +241,8 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
 
       {/* 微信登录卡片 */}
       <div style={{ marginTop: 20, position: 'relative', overflow: 'hidden', borderRadius: 12 }}>
-        {/* 监测中遮罩层 */}
-        {weixinStatus === null && (
+        {/* 监测中遮罩层 (首次进入或手动刷新时触发) */}
+        {(weixinStatus === null || refreshingWeixin) && (
           <div style={{
             position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
             background: 'rgba(255, 255, 255, 0.7)', backdropFilter: 'blur(4px)',
@@ -279,11 +281,11 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
           styles={{ body: { padding: 20 } }}
           style={{ 
             borderRadius: hasWeixinConfig ? '0 0 12px 12px' : 12, border: '1px solid #e2e8f0', 
-            cursor: weixinStatus?.installed ? 'pointer' : 'not-allowed', 
+            cursor: (weixinStatus?.installed && !refreshingWeixin) ? 'pointer' : 'not-allowed', 
             transition: 'all 0.3s',
-            filter: weixinStatus === null ? 'blur(1px)' : 'none' // 遮罩下方的轻微模糊
+            filter: (weixinStatus === null || refreshingWeixin) ? 'blur(1px)' : 'none' // 遮罩下方的轻微模糊
           }}
-          hoverable={weixinStatus?.installed && weixinStatus !== null}
+          hoverable={weixinStatus?.installed && !refreshingWeixin}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
