@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Tag, Progress, Button, Timeline, Badge, Spin, Empty, message, notification } from 'antd';
+import { Row, Col, Card, Tag, Progress, Button, Timeline, Badge, Spin, Empty, message, notification, Tabs, Radio } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Server, Activity, Play, Square, RefreshCw, Trophy, Zap, Monitor } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
@@ -50,6 +50,10 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const [isRestarting, setIsRestarting] = useState(false);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [ocStatus, setOcStatus] = useState<OcStatus | null>(null);
+  const [usageData, setUsageData] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState('tokens');
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [selectedDays, setSelectedDays] = useState(30);
 
   // 综合判断是否处于处理中：1. 异步任务在跑 2. 前端正在等待请求响应
   const isGatewayProcessing = isTransitioning || activeTasks.some(t => t.module === 'gateway' && t.status === 'Running');
@@ -67,6 +71,18 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       if (ocRes.data) setOcStatus(ocRes.data);
     } catch (err) {
       console.error('Failed to fetch dashboard system info:', err);
+    }
+  };
+
+  const fetchUsageData = async (days: number = selectedDays, force: boolean = false) => {
+    setUsageLoading(true);
+    try {
+      const res = await api.get(`/v1/gateway/usage-cost?days=${days}${force ? '&force=true' : ''}`);
+      if (res.data) setUsageData(res.data);
+    } catch (err) {
+      console.error('Failed to fetch usage data:', err);
+    } finally {
+      setUsageLoading(false);
     }
   };
 
@@ -122,6 +138,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
   useEffect(() => {
     fetchData();
+    fetchUsageData();
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
     window.addEventListener('resize', handleResize);
 
@@ -135,12 +152,20 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const renderChart = (data: any[], dataKey: string, color: string, label: string, unit: string) => (
+  const formatLargeNumber = (num: number) => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return num.toFixed(0);
+  };
+
+  const renderChart = (data: any[], dataKey: string, color: string, label: string, unit: string, isDailyUsage: boolean = false) => (
     <div style={{ height: 120 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label} {t('dashboard.historyTrend')}</span>
-        <span style={{ fontSize: 10, color: '#94a3b8' }}>24H</span>
-      </div>
+      {!isDailyUsage && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label} {t('dashboard.historyTrend')}</span>
+          <span style={{ fontSize: 10, color: '#94a3b8' }}>24H</span>
+        </div>
+      )}
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
           <defs>
@@ -150,14 +175,19 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-          <XAxis dataKey="timestamp" hide />
+          <XAxis 
+            dataKey={isDailyUsage ? "date" : "timestamp"} 
+            hide={!isDailyUsage}
+            fontSize={9}
+            tickFormatter={(v) => isDailyUsage ? dayjs(v).format('MM-DD') : v}
+          />
           <YAxis hide domain={['auto', 'auto']} />
           <ChartTooltip
             contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: 11 }}
-            labelFormatter={(v) => dayjs(v).format('HH:mm:ss')}
-            formatter={(v: any) => [v.toFixed(1) + ' ' + unit, label]}
+            labelFormatter={(v) => isDailyUsage ? dayjs(v).format('YYYY-MM-DD') : dayjs(v).format('HH:mm:ss')}
+            formatter={(v: any) => [isDailyUsage ? formatLargeNumber(v) + ' ' + unit : v.toFixed(1) + ' ' + unit, label]}
           />
-          <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} fill={`url(#color${dataKey})`} dot={false} />
+          <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} fill={`url(#color${dataKey})`} dot={isDailyUsage} />
         </AreaChart>
       </ResponsiveContainer>
     </div>
@@ -371,7 +401,63 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 </Col>
               </Row>
               <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 20 }}>
-                {renderChart(history, 'response_time_ms', '#10b981', t('dashboard.latency'), 'ms')}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {t('dashboard.usageTrend')} ({selectedDays}D)
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <Radio.Group 
+                        size="small" 
+                        value={selectedDays} 
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedDays(val);
+                          fetchUsageData(val);
+                        }}
+                        optionType="button"
+                        buttonStyle="solid"
+                        style={{ fontSize: 10 }}
+                      >
+                        <Radio.Button value={7}>{t('dashboard.days7')}</Radio.Button>
+                        <Radio.Button value={14}>{t('dashboard.days14')}</Radio.Button>
+                        <Radio.Button value={30}>{t('dashboard.days30')}</Radio.Button>
+                      </Radio.Group>
+                      <Button 
+                        size="small" 
+                        type="text" 
+                        icon={<RefreshCw size={12} className={usageLoading ? 'animate-spin' : ''} />} 
+                        onClick={() => fetchUsageData(selectedDays, true)}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}
+                      />
+                    </div>
+                  </div>
+                  <Tabs 
+                    size="small"
+                    activeKey={activeTab} 
+                    onChange={setActiveTab}
+                    className="compact-tabs usage-tabs"
+                    items={[
+                      { key: 'tokens', label: t('dashboard.tokens') },
+                      { key: 'costs', label: t('dashboard.costs') },
+                      { key: 'cache', label: t('dashboard.cache') },
+                    ]}
+                    style={{ marginBottom: 0 }}
+                  />
+                </div>
+                {usageLoading ? (
+                  <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spin size="small" /></div>
+                ) : usageData?.daily ? (
+                  <>
+                    {activeTab === 'tokens' && renderChart(usageData.daily, 'totalTokens', '#f59e0b', t('dashboard.tokens'), '', true)}
+                    {activeTab === 'costs' && renderChart(usageData.daily, 'totalCost', '#ef4444', t('dashboard.costs'), 'Credits', true)}
+                    {activeTab === 'cache' && renderChart(usageData.daily, 'cacheRead', '#3b82f6', t('dashboard.cache'), '', true)}
+                  </>
+                ) : (
+                  <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 11 }}>
+                    {t('dashboard.noActiveBots')}
+                  </div>
+                )}
               </div>
             </div>
 

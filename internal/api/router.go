@@ -152,6 +152,7 @@ func (s *Server) setupRoutes() {
 			gateway.POST("/start", s.startGateway)
 			gateway.POST("/stop", s.stopGateway)
 			gateway.POST("/restart", s.restartGateway)
+			gateway.GET("/usage-cost", s.getUsageCost)
 		}
 
 		v1.GET("/stats/health", s.getHealthStats)

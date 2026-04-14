@@ -209,6 +209,8 @@
     "cpuTrend": "CPU 历史趋势",
     "memTrend": "内存 历史趋势",
     "latencyTrend": "网关延迟 (TTFT) 历史趋势",
+    "usageTrend": "网关使用量趋势",
+    "usageStats": "网关使用统计",
     "timeline": "巡检历史轨迹",
     "noEvents": "暂无巡检记录",
     "quickActions": "快捷指令与自愈控制",
@@ -221,7 +223,15 @@
     "historyTrend": "历史趋势",
     "cpu": "CPU",
     "memory": "内存",
-    "latency": "网关延迟 (TTFT)"
+    "latency": "网关延迟 (TTFT)",
+    "tokens": "Tokens",
+    "costs": "费用",
+    "cache": "缓存节省",
+    "input": "输入",
+    "output": "输出",
+    "days7": "7 天",
+    "days14": "14 天",
+    "days30": "30 天"
   },
   "chat": {
     "title": "在线聊天",

@@ -2165,3 +2165,17 @@ func (s *Server) handleGetChatFile(c *gin.Context) {
 	c.File(cleanPath)
 }
 
+func (s *Server) getUsageCost(c *gin.Context) {
+	daysStr := c.DefaultQuery("days", "30")
+	forceStr := c.DefaultQuery("force", "false")
+	var days int
+	fmt.Sscanf(daysStr, "%d", &days)
+	force := forceStr == "true"
+
+	data, err := process.GetUsageCost(days, force)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, data)
+}

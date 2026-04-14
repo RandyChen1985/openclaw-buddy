@@ -202,6 +202,8 @@
     "cpuTrend": "CPU History",
     "memTrend": "Memory History",
     "latencyTrend": "Gateway Latency (TTFT) History",
+    "usageTrend": "Usage Stats Trend",
+    "usageStats": "Gateway Usage Stats",
     "timeline": "Inspection Timeline",
     "noEvents": "No inspection records",
     "quickActions": "Quick Commands & Healing Control",
@@ -214,7 +216,15 @@
     "historyTrend": "History Trend",
     "cpu": "CPU",
     "memory": "Memory",
-    "latency": "Gateway Latency (TTFT)"
+    "latency": "Gateway Latency (TTFT)",
+    "tokens": "Tokens",
+    "costs": "Cost",
+    "cache": "Cache Saved",
+    "input": "Input",
+    "output": "Output",
+    "days7": "7 Days",
+    "days14": "14 Days",
+    "days30": "30 Days"
   },
   "chat": {
     "title": "Online Chat",
