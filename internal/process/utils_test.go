@@ -45,6 +45,25 @@ func TestExtractJSON(t *testing.T) {
 			input:    `plain text`,
 			expected: `plain text`,
 		},
+		{
+			name: "OpenClaw Warnings and Logs",
+			input: `Config warnings:
+- plugins.entries.active-memory: plugin disabled (disabled in config) but config is present
+- plugins.entries.oh-my-openclaw: plugin disabled (disabled in config) but config is present
+21:11:19 [plugins] plugins.allow is empty; discovered non-bundled plugins may auto-load: oh-my-openclaw (/root/.openclaw/extensions/oh-my-openclaw/dist/index.js), openclaw-weixin (/root/.openclaw/extensions/openclaw-weixin/index.ts). Set plugins.allow to explicit trusted ids.
+[
+  {
+    "id": "main",
+    "name": "bot-云枢智维"
+  }
+]`,
+			expected: `[
+  {
+    "id": "main",
+    "name": "bot-云枢智维"
+  }
+]`,
+		},
 	}
 
 	for _, tt := range tests {

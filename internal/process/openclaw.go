@@ -173,13 +173,9 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 	usedJSON := false
 	if err == nil {
 		cleanOut := StripANSI(string(outBotsJSON))
-		// 支持数组格式或者带包裹的对象格式
-		idxStart := strings.Index(cleanOut, "[")
-		idxEnd := strings.LastIndex(cleanOut, "]")
-		if idxStart != -1 && idxEnd != -1 && idxEnd > idxStart {
-			jsonStr := cleanOut[idxStart : idxEnd+1]
-			var cliBots []cliBot
-			if jsonErr := json.Unmarshal([]byte(jsonStr), &cliBots); jsonErr == nil {
+		jsonStr := ExtractJSON(cleanOut)
+		var cliBots []cliBot
+		if jsonErr := json.Unmarshal([]byte(jsonStr), &cliBots); jsonErr == nil {
 				for _, b := range cliBots {
 					name := b.IdentityName
 					if name == "" {
@@ -188,6 +184,10 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 					emoji := b.IdentityEmoji
 					if emoji == "" {
 						emoji = "🤖"
+					}
+					// 兜底：如果没有 workspace 则丢弃
+					if b.Workspace == "" {
+						continue
 					}
 					res.Bots = append(res.Bots, OpenClawBot{
 						ID:           b.ID,
@@ -260,7 +260,7 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 				}
 			}
 		}
-		if currentBot != nil {
+		if currentBot != nil && currentBot.Workspace != "" {
 			res.Bots = append(res.Bots, *currentBot)
 		}
 	}
@@ -272,12 +272,9 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 	outModelsJSON, err := cmdModelsJSON.CombinedOutput()
 	if err == nil {
 		cleanOut := StripANSI(string(outModelsJSON))
-		idxStart := strings.Index(cleanOut, "[")
-		idxEnd := strings.LastIndex(cleanOut, "]")
-		if idxStart != -1 && idxEnd != -1 && idxEnd > idxStart {
-			jsonStr := cleanOut[idxStart : idxEnd+1]
-			var cliModels []cliModel
-			if jsonErr := json.Unmarshal([]byte(jsonStr), &cliModels); jsonErr == nil {
+		jsonStr := ExtractJSON(cleanOut)
+		var cliModels []cliModel
+		if jsonErr := json.Unmarshal([]byte(jsonStr), &cliModels); jsonErr == nil {
 				for _, m := range cliModels {
 					isDefault := m.IsDefault
 					if !isDefault {
@@ -1189,11 +1186,7 @@ func ExecPolicyShow() (*OpenClawExecPolicyResponse, error) {
 	}
 
 	cleanOut := StripANSI(string(out))
-	index := strings.Index(cleanOut, "{")
-	if index == -1 {
-		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
-	}
-	cleanOut = cleanOut[index:]
+	cleanOut = ExtractJSON(cleanOut)
 
 	var res OpenClawExecPolicyResponse
 	decoder := json.NewDecoder(strings.NewReader(cleanOut))
@@ -1212,11 +1205,7 @@ func GetApprovalsSnapshot() (*OpenClawApprovalsSnapshot, error) {
 	}
 
 	cleanOut := StripANSI(string(out))
-	index := strings.Index(cleanOut, "{")
-	if index == -1 {
-		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
-	}
-	cleanOut = cleanOut[index:]
+	cleanOut = ExtractJSON(cleanOut)
 
 	var res OpenClawApprovalsSnapshot
 	decoder := json.NewDecoder(strings.NewReader(cleanOut))
