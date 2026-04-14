@@ -634,6 +634,13 @@ export const useChatV3WebSocket = ({
 
   const handleUpdateLabel = useCallback(async (newLabel: string) => {
     if (!sessionKey || !newLabel.trim()) return;
+    
+    // 💡 核心保护：禁止平替主会话名称
+    if (sessionKey === 'agent:main:main') {
+      message.warning(t('chat.systemSessionNoRename', { defaultValue: '系统主会话名称不可修改' }));
+      return;
+    }
+
     setIsUpdatingLabel(true);
     try {
       const res = await sendRPC('sessions.patch', { key: sessionKey, label: newLabel.trim() });
@@ -651,6 +658,11 @@ export const useChatV3WebSocket = ({
     const activeKey = targetKey || sessionKey;
     const targetMessages = messagesOverride || messages;
     
+    // 💡 核心保护：禁止 AI 自动总结主会话
+    if (activeKey === 'agent:main:main') {
+      return;
+    }
+
     // 💡 鲁棒性加固：检查是否已经在总结该会话，防止并发冲突
     if (!activeKey || targetMessages.length === 0 || summarizingSessionsRef.current.has(activeKey)) return;
     

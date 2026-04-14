@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Badge, Button, List, Tag, Modal, Spin, message, Tabs, Table, Typography, Space, Radio, Descriptions, Collapse } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Zap, Terminal, FileText, ChevronRight, RefreshCw, Clock, HardDrive, AlertCircle, History, Code, Wand2, Save, Layout as LayoutIcon, Copy } from 'lucide-react';
+import { Zap, Terminal, FileText, ChevronRight, RefreshCw, Clock, HardDrive, AlertCircle, History, Code, Wand2, Save, Layout as LayoutIcon, Copy, Activity } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -312,6 +312,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
   const [savingConfig, setSavingConfig] = useState(false);
   const [editMode, setEditMode] = useState<'editor' | 'visual'>('editor');
   const [runningDoctor, setRunningDoctor] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
 
   const preprocessMarkdown = (content: string) => {
     if (!content) return '';
@@ -380,11 +381,67 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
   };
 
   const handleSaveConfig = async () => {
-    setSavingConfig(true);
+    Modal.confirm({
+      title: t('heal.saveConfigConfirm'),
+      content: t('heal.saveConfigConfirmDesc'),
+      okText: t('common.save'),
+      cancelText: t('common.cancel'),
+      onOk: async () => {
+        setSavingConfig(true);
+        try {
+          await api.post('/v1/openclaw/config', { content: configContent });
+          message.success(t('common.saveSuccess'));
+          fetchBackups();
+        } catch (err: any) {
+          const rawMsg = err.response?.data?.message || err.message || String(err);
+          const cleaned = cleanErrorMessage(rawMsg);
+          Modal.error({
+            title: t('heal.configErrorTitle', { defaultValue: '配置校验未通过' }),
+            width: 600,
+            centered: true,
+            content: (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ background: '#fff1f0', border: '1px solid #ffccc7', padding: '12px 16px', borderRadius: 8, color: '#cf1322', fontSize: 13, fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: 200, overflowY: 'auto' }}>
+                  {cleaned}
+                </div>
+                <div style={{ marginTop: 12, fontSize: 12, color: '#64748b' }}>
+                  {t('heal.configErrorTip', { defaultValue: '建议检查 JSON 语法或必填字段。系统已自动回滚，您的更改尚未生效。' })}
+                </div>
+              </div>
+            )
+          });
+        } finally {
+          setSavingConfig(false);
+        }
+      }
+    });
+  };
+
+  const handleRunDoctor = async () => {
+    Modal.confirm({
+      title: t('heal.doctorFixConfirm'),
+      content: t('heal.doctorFixConfirmDesc'),
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      onOk: async () => {
+        setRunningDoctor(true);
+        try {
+          await api.post('/v1/openclaw/doctor');
+          message.success(t('heal.doctorSuccess'));
+        } catch (err) { 
+          message.error(t('heal.doctorFailed')); 
+        } finally { 
+          setRunningDoctor(false); 
+        }
+      }
+    });
+  };
+
+  const handleValidateConfig = async () => {
+    setIsValidating(true);
     try {
-      await api.post('/v1/openclaw/config', { content: configContent });
-      message.success(t('common.saveSuccess'));
-      fetchBackups();
+      await api.post('/v1/openclaw/config/validate', { content: configContent });
+      message.success(t('heal.validateSuccess', { defaultValue: '配置内容合法' }));
     } catch (err: any) {
       const rawMsg = err.response?.data?.message || err.message || String(err);
       const cleaned = cleanErrorMessage(rawMsg);
@@ -394,26 +451,15 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
         centered: true,
         content: (
           <div style={{ marginTop: 12 }}>
-            <div style={{ background: '#fff1f0', border: '1px solid #ffccc7', padding: '12px 16px', borderRadius: 8, color: '#cf1322', fontSize: 13, fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: 200, overflowY: 'auto' }}>
+            <div style={{ background: '#fff1f0', border: '1px solid #ffccc7', padding: '12px 16px', borderRadius: 8, color: '#cf1322', fontSize: 13, fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: 300, overflowY: 'auto' }}>
               {cleaned}
-            </div>
-            <div style={{ marginTop: 12, fontSize: 12, color: '#64748b' }}>
-              {t('heal.configErrorTip', { defaultValue: '建议检查 JSON 语法或必填字段。系统已自动回滚，您的更改尚未生效。' })}
             </div>
           </div>
         )
       });
     } finally {
-      setSavingConfig(false);
+      setIsValidating(false);
     }
-  };
-
-  const handleRunDoctor = async () => {
-    setRunningDoctor(true);
-    try {
-      await api.post('/v1/openclaw/doctor');
-      message.success(t('heal.doctorSuccess'));
-    } catch (err) { message.error(t('heal.doctorFailed')); } finally { setRunningDoctor(false); }
   };
 
   const viewReport = async (report: any) => {
@@ -546,8 +592,17 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
               <AlertCircle size={14} color="#3b82f6" style={{ flexShrink: 0 }} /><span style={{ flex: 1 }}>{t('heal.configSaveTip')}</span>
             </div>
             <Space style={{ width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
-              <Button icon={<RefreshCw size={14} />} onClick={fetchConfig} loading={loadingConfig}>{t('common.refresh')}</Button>
-              <Button type="primary" icon={<Save size={16} />} onClick={handleSaveConfig} loading={savingConfig} disabled={editMode === 'visual' || savingConfig || loadingConfig} style={{ fontWeight: 700, borderRadius: 8, height: 36, padding: '0 20px' }}>{t('common.save')}</Button>
+              <Button icon={<RefreshCw size={14} />} onClick={fetchConfig} loading={loadingConfig} disabled={isValidating}>{t('common.refresh')}</Button>
+              <Button 
+                icon={<Activity size={14} />} 
+                onClick={handleValidateConfig} 
+                loading={isValidating}
+                disabled={editMode === 'visual' || savingConfig || loadingConfig || isValidating}
+                style={{ borderRadius: 8 }}
+              >
+                {t('heal.validate', { defaultValue: '仅校验内容' })}
+              </Button>
+              <Button type="primary" icon={<Save size={16} />} onClick={handleSaveConfig} loading={savingConfig} disabled={editMode === 'visual' || savingConfig || loadingConfig || isValidating} style={{ fontWeight: 700, borderRadius: 8, height: 36, padding: '0 20px' }}>{t('common.save')}</Button>
               <Button onClick={() => setIsConfigModalOpen(false)} style={{ borderRadius: 8 }}>{t('common.close')}</Button>
             </Space>
           </div>

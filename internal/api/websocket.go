@@ -253,6 +253,27 @@ func (s *Server) handleGatewayProxy(c *gin.Context) {
 						handshakeDone = true // 标记握手已处理，后续包直接转发
 					}
 				}
+			} else {
+				// 💡 哨兵逻辑：拦截并禁止修改主会话标签
+				var raw map[string]interface{}
+				if json.Unmarshal(message, &raw) == nil && raw["method"] == "sessions.patch" {
+					if params, ok := raw["params"].(map[string]interface{}); ok {
+						if key, _ := params["key"].(string); key == "agent:main:main" {
+							log.Printf("🛡️ [WS-Proxy] 拦截到主会话修改请求并拒绝")
+							// 伪造一个失败的 RPC 响应直接返回给前端
+							errResp, _ := json.Marshal(map[string]interface{}{
+								"type": "res",
+								"id":   raw["id"],
+								"ok":   false,
+								"error": map[string]interface{}{
+									"message": "System session is immutable",
+								},
+							})
+							_ = clientConn.WriteMessage(mt, errResp)
+							continue // 停止转发到网关
+						}
+					}
+				}
 			}
 
 			if err := gatewayConn.WriteMessage(mt, message); err != nil {

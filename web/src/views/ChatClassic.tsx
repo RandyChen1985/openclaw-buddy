@@ -868,17 +868,18 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                     key={i} 
                     className="stagger-entry card-float"
                     onClick={() => {
-                        if (!selectedBot) {
-                            message.warning(t('chat.selectBot'));
+                        if (!selectedBot || isTyping) {
+                            if (!selectedBot) message.warning(t('chat.selectBot'));
                             return;
                         }
                         handleSend(item.text);
                     }}
                     style={{ 
                       padding: '16px', background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', 
-                      cursor: 'pointer', textAlign: 'left', transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                      cursor: isTyping ? 'not-allowed' : 'pointer', transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
                       display: 'flex', flexDirection: 'column', gap: 6,
                       boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+                      opacity: isTyping ? 0.6 : 1,
                       '--delay': `${i * 0.05}s`
                     } as React.CSSProperties}
                   >
@@ -1161,8 +1162,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
             style={{
               position: 'absolute',
               bottom: 120,
-              left: '50%',
-              transform: 'translateX(-50%)',
+              right: 24,
               zIndex: 100,
               boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
               width: 44,
@@ -1208,8 +1208,9 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                     <Button 
                       key={item.id}
                       size="small"
-                      style={{ borderRadius: 16, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, background: '#f8fafc', color: '#64748b', borderColor: '#e2e8f0', flexShrink: 0 }}
+                      style={{ borderRadius: 16, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, background: '#f8fafc', color: '#64748b', borderColor: '#e2e8f0', flexShrink: 0, opacity: isTyping ? 0.6 : 1 }}
                       onClick={() => handleSend(item.prompt)}
+                      disabled={isTyping}
                     >
                       {item.label}
                     </Button>
@@ -1383,7 +1384,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                   }
                 }}
                 style={{ borderRadius: 12, padding: isMobile ? '8px 12px' : '10px 16px', fontSize: isMobile ? 15 : 14 }}
-                disabled={!selectedBot || (isTyping && !abortControllerRef.current)}
+                disabled={!selectedBot || isTyping}
               />
             </div>
 

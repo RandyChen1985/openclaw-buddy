@@ -432,30 +432,32 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                   ) : (
                     <>
                       <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile ? 150 : 300 }}>
-                        {sessionLabel || t('chat.noLabel', { defaultValue: '未命名会话' })}
+                        {sessionKey === 'agent:main:main' ? t('chat.mainSession', { defaultValue: '主会话' }) : (sessionLabel || t('chat.noLabel', { defaultValue: '未命名会话' }))}
                       </span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Tooltip title={t('chat.autoSummarize', { defaultValue: 'AI 自动总结标题' })}>
+                      {sessionKey !== 'agent:main:main' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Tooltip title={t('chat.autoSummarize', { defaultValue: 'AI 自动总结标题' })}>
+                            <Button 
+                              size="small" 
+                              type="text" 
+                              icon={isSummarizing ? <RefreshCw size={10} className="animate-spin" /> : <Wand2 size={10} />} 
+                              onClick={() => handleAutoSummarize()}
+                              disabled={isSummarizing || messages.length === 0}
+                              style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}
+                            />
+                          </Tooltip>
                           <Button 
                             size="small" 
                             type="text" 
-                            icon={isSummarizing ? <RefreshCw size={10} className="animate-spin" /> : <Wand2 size={10} />} 
-                            onClick={() => handleAutoSummarize()}
-                            disabled={isSummarizing || messages.length === 0}
-                            style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}
+                            icon={isUpdatingLabel ? <RefreshCw size={10} className="animate-spin" /> : <Save size={10} />} 
+                            onClick={() => {
+                              setEditingLabelText(sessionLabel || '');
+                              setIsEditingLabel(true);
+                            }}
+                            style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}
                           />
-                        </Tooltip>
-                        <Button 
-                          size="small" 
-                          type="text" 
-                          icon={isUpdatingLabel ? <RefreshCw size={10} className="animate-spin" /> : <Save size={10} />} 
-                          onClick={() => {
-                            setEditingLabelText(sessionLabel || '');
-                            setIsEditingLabel(true);
-                          }}
-                          style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}
-                        />
-                      </div>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -668,8 +670,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             <div style={{ 
                 position: 'absolute', 
                 top: isMobile ? 70 : 80, 
-                left: '50%', 
-                transform: 'translateX(-50%)', 
+                right: isMobile ? 16 : 24, 
                 zIndex: 100, 
                 animation: 'v3-fade-in 0.3s' 
             }}>
@@ -682,12 +683,16 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                     }}
                     icon={<ChevronUp size={16} />}
                     style={{ 
-                        height: 32,
-                        width: 32,
+                        height: 36,
+                        width: 36,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: '#64748b'
+                        color: '#64748b',
+                        background: 'rgba(255, 255, 255, 0.8)',
+                        backdropFilter: 'blur(8px)',
+                        border: '1px solid rgba(0,0,0,0.05)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
                     }}
                 />
             </div>
@@ -698,8 +703,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             <div style={{ 
                 position: 'absolute', 
                 bottom: isMobile ? (showQuickActions ? 170 : 130) : (showQuickActions ? 210 : 160), 
-                left: '50%', 
-                transform: 'translateX(-50%)', 
+                right: isMobile ? 16 : 24, 
                 zIndex: 100, 
                 animation: 'v3-fade-in 0.3s' 
             }}>

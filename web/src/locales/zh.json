@@ -639,6 +639,13 @@
     "doctorFailed": "启动体检修复失败",
     "configErrorTitle": "配置校验未通过",
     "configErrorTip": "建议检查 JSON 语法或必填字段。系统已自动回滚，您的更改尚未生效。",
+    "saveConfigConfirm": "确认保存并应用配置？",
+    "saveConfigConfirmDesc": "保存将立即生效，且会触发 OpenClaw Gateway 重启，当前所有正在进行的对话可能会中断。",
+    "doctorFixConfirm": "确认执行一键体检修复？",
+    "doctorFixConfirmDesc": "体检修复会自动检测并修复环境与配置问题，执行过程中会重启 Gateway 以使修复生效。",
+    "validate": "仅校验配置",
+    "validateSuccess": "配置内容合法",
+    "validating": "正在深度校验配置...",
     "parseFailed": "JSON 解析失败，请检查语法"
   },
   "skills": {

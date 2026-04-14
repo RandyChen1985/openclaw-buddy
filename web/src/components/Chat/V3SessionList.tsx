@@ -1,6 +1,6 @@
 import React from 'react';
 import { Input, Button, Spin, Tooltip, Avatar, Badge as AntBadge } from 'antd';
-import { Search, Plus, Trash2, History, RefreshCw, Copy, Bot, XCircle, AlertCircle, Shield } from 'lucide-react';
+import { Search, Plus, Trash2, History, RefreshCw, Copy, Bot, XCircle, AlertCircle, Shield, Zap } from 'lucide-react';
 
 interface V3SessionListProps {
   sessions: any[];
@@ -134,7 +134,9 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
         ) : (
           (() => {
             const filtered = sessions.filter((s: any) => !sessionSearch || (s.key || '').toLowerCase().includes(sessionSearch.toLowerCase()) || (s.label || '').toLowerCase().includes(sessionSearch.toLowerCase()));
-            
+            const mainSession = filtered.find((s: any) => s.key === 'agent:main:main');
+            const otherSessions = filtered.filter((s: any) => s.key !== 'agent:main:main');
+
             // 分组逻辑
             const groups: Record<string, any[]> = { today: [], yesterday: [], lastWeek: [], older: [] };
             const now = new Date();
@@ -143,7 +145,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
             const yesterdayStr = yesterday.toDateString();
             const lastWeek = new Date(now); lastWeek.setDate(now.getDate() - 7);
 
-            filtered.forEach((s: any) => {
+            otherSessions.forEach((s: any) => {
               const date = new Date(s.updatedAt || s.createdAt || Date.now());
               const dateStr = date.toDateString();
               if (dateStr === todayStr) groups.today.push(s);
@@ -278,7 +280,82 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
               );
             };
 
-            return ['today', 'yesterday', 'lastWeek', 'older'].map(key => renderGroup(key, groups[key]));
+            return (
+              <>
+                {mainSession && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div className="session-group-header">
+                      <span style={{ fontSize: 10, fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Shield size={10} />
+                        {t('chat.pinnedSession', { defaultValue: '置顶会话' })}
+                      </span>
+                    </div>
+                    {(() => {
+                      const isActive = sessionKey === mainSession.key;
+                      return (
+                        <div 
+                            key={mainSession.key}
+                            onClick={() => onSelectSession(mainSession.key)}
+                            style={{ 
+                                padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4, transition: 'all 0.2s',
+                                background: isActive ? 'linear-gradient(135deg, #fffbeb 0%, #ffedd5 100%)' : '#fffcf5',
+                                border: '1px solid', borderColor: isActive ? '#fde047' : '#fef3c7',
+                                display: 'flex', alignItems: 'center', gap: 10, position: 'relative',
+                                boxShadow: isActive ? '0 4px 12px rgba(245, 158, 11, 0.12)' : 'none'
+                            }}
+                            className="session-item-main"
+                        >
+                            <Avatar size={32} src={mainSession.avatar} icon={<Bot size={16} />} style={{ background: isActive ? '#f59e0b' : '#fef3c7', color: isActive ? '#fff' : '#d97706', flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                                  <div style={{ fontSize: 13, fontWeight: 800, color: isActive ? '#92400e' : '#b45309', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
+                                      {t('chat.mainSession', { defaultValue: '主会话' })}
+                                      <span style={{ 
+                                          fontSize: 9, 
+                                          background: 'rgba(245, 158, 11, 0.15)', 
+                                          color: '#d97706', 
+                                          padding: '1px 6px', 
+                                          borderRadius: 4, 
+                                          marginLeft: 6, 
+                                          fontWeight: 700,
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 3,
+                                          flexShrink: 0,
+                                          border: '1px solid rgba(245, 158, 11, 0.2)'
+                                      }}>
+                                          <Zap size={10} fill="#f59e0b" style={{ color: '#f59e0b' }} />
+                                          SYSTEM
+                                      </span>
+                                      <SessionStatusIcon status={mainSession.status} t={t} />
+                                  </div>
+                                  {mainSession.messagesCount !== undefined && (
+                                    <div style={{ 
+                                      fontSize: 10, background: 'rgba(245, 158, 11, 0.1)', 
+                                      color: '#d97706', padding: '0 6px', 
+                                      borderRadius: 6, fontWeight: 600, flexShrink: 0
+                                    }}>
+                                      {mainSession.messagesCount}
+                                    </div>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: 9, color: '#d97706', opacity: 0.6, marginTop: 1, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <span>{new Date(mainSession.updatedAt || mainSession.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                    <span>•</span>
+                                    <span>CORE SYSTEM</span>
+                                </div>
+                            </div>
+                            <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>
+                                <Button size="small" type="text" icon={<Copy size={12} />} onClick={(e) => { e.stopPropagation(); copyToClipboard(mainSession.key); }} />
+                            </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+                {['today', 'yesterday', 'lastWeek', 'older'].map(key => renderGroup(key, groups[key]))}
+              </>
+            );
           })()
         )}
       </div>

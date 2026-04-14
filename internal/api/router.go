@@ -141,6 +141,7 @@ func (s *Server) setupRoutes() {
 			// Configuration & Maintenance
 			oc.GET("/config", s.handleGetConfig)
 			oc.POST("/config", s.handleUpdateConfig)
+			oc.POST("/config/validate", s.handleValidateConfig)
 			oc.POST("/doctor", s.handleRunDoctor)
 			// Security related
 			oc.GET("/security/status", s.getSecurityStatus)
