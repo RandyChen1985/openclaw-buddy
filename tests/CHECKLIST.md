@@ -44,7 +44,8 @@
 - [ ] **系统事件流**: `GET /v1/system/events` 应按时间倒序返回最近 20 条系统事件（含自愈、更新、手动控制）。
 - [ ] **机器人活跃排行**: `GET /v1/openclaw/bots/top` 应返回活跃会话数前 3 的机器人，并包含名称和 Emoji。
 - [ ] **核心配置读取**: `GET /v1/openclaw/config` 应返回当前 `openclaw.json` 的字符串内容。
-- [ ] **核心配置保存与校验**: `POST /v1/openclaw/config` 在写入前应自动触发 `openclaw health` 校验，若校验失败应回滚配置并返回 400。
+- [ ] **核心配置保存与校验**: `POST /v1/openclaw/config` 在写入前应自动触发配置校验（优先使用 `config validate`），若校验失败应回滚配置，并确保返回的错误信息包含具体的失败原因（如 JSON 语法错误或 Schema 校验项）。
+- [x] **校验详情透传**: 验证当 `openclaw` 报错时，Buddy 能完整捕获并展示 `Problem:` 或 `Error:` 之后的内容。
 - [ ] **一键体检修复**: `POST /v1/openclaw/doctor` 应触发 `openclaw doctor --fix --yes` 并返回完整的标准输出。
 - [ ] **运维终端接口**: `GET /v1/ws/shell` 应能通过 WebSocket 升级并启动系统 Shell 进程。
 - [x] **专家市场列表**: `GET /v1/openclaw/experts` 应返回全量专家模板（含自媒体、财务等 20+ 个场景）。

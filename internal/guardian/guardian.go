@@ -209,7 +209,7 @@ func (g *Guardian) backupConfig() {
 	configPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json")
 
 	// 1. 在备份前执行深层配置校验 (Prevent backing up broken config)
-	isValid, problem, _ := process.CheckConfig()
+	isValid, problem, _ := process.CheckConfig(g.config.OpenClawConfigDir)
 	if !isValid {
 		log.Printf("⚠️  配置深度校验未通过，跳过备份以防污染。原因: %s", problem)
 		return

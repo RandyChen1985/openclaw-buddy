@@ -1042,7 +1042,7 @@ func (s *Server) handleUpdateConfig(c *gin.Context) {
 	}
 
 	// 3. 校验新配置 (深度 Check)
-	isValid, problem, _ := process.CheckConfig()
+	isValid, problem, _ := process.CheckConfig(s.cfg.OpenClawConfigDir)
 	if !isValid {
 		// 校验失败，回滚
 		_ = os.WriteFile(configPath, oldContent, 0644)
