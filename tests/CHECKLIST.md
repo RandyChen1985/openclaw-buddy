@@ -20,7 +20,7 @@
 - [ ] **资产查询 (带缓存)**: `GET /v1/openclaw/bots-models` 应返回 `data` 和 `updated_at` 包装格式，而非原始数组。
 - [ ] **强制刷新**: `GET /v1/openclaw/bots-models?refresh=true` 应绕过数据库缓存直接触发实时爬取并同步。
 - [ ] **解析鲁棒性 (Bots)**: `openclaw agents list` 输出中不包含 `Identity:` 的机器人应被自动跳过，不返回给前端。
-- [ ] **解析鲁棒性 (Models)**: `openclaw models list` 输出中包含插件日志（带 ANSI 颜色、时间戳）时，不应将其误识别为模型。
+- [x] **解析鲁棒性 (Models)**: `openclaw models list` 输出中包含插件日志（带 ANSI 颜色、时间戳）时，系统应能稳健地提取 JSON。 `2026-04-14`
 - [ ] **外部地址前缀**: 设置 `EXTERNAL_DASHBOARD_URL` 后，龙虾面板跳转链接应包含该前缀。
 - [x] **环境检测状态锁定**: 确认 Dashboard 控制按钮在环境检测期间处于禁用状态。
 - [x] **API 统一重构**: 全站（含 SSE 聊天流）已迁移至 api 实例，各路径均支持自定义 WebRoot 补全。
@@ -56,7 +56,7 @@
 - [ ] **机器人内容保存**: `POST /v1/openclaw/bots/file` 应支持原子化覆盖写入，并触发 `SyncKeySingle` 缓存同步。
 - [ ] **原子化读写安全**: 验证接口是否无法通过 `../` 等手段绕过机器人工作区目录。
 - [x] **心智编辑器预览**: 点击 ✨ 图标后弹出的编辑器已采用 Tab 切换布局（编辑/预览），确保在窄屏下也有良好的书写空间。 `2026-04-08`
-- [ ] **网关使用统计**: `GET /v1/gateway/usage-cost` 应返回带 `daily` 数组和 `totals` 的 JSON 统计数据。 `2026-04-14`
+- [x] **网关使用统计**: `GET /v1/gateway/usage-cost` 应返回带 `daily` 数组和 `totals` 的 JSON 统计数据（已通过 Stdout/Stderr 分离及 ExtractJSON 修复警告干扰问题）。 `2026-04-14`
 - [ ] **多维度趋势切换**: Dashboard 概览应支持 Tokens, 费用, 缓存节省的多维度切换显示。 `2026-04-14`
 - [ ] **统计周期选择**: Dashboard 应支持 7/14/30 天的范围切换，且默认显示 30 天。 `2026-04-14`
 - [ ] **数据库缓存 (TTL 1h)**: 验证使用统计数据已存入数据库缓存，且点击刷新按钮能强制更新。 `2026-04-14`
