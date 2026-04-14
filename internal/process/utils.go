@@ -26,7 +26,7 @@ func IsLogLine(line string) bool {
 		return true
 	}
 	// Check for common log markers
-	if strings.Contains(line, "[plugins]") || strings.Contains(line, "[oh-my-openclaw]") {
+	if strings.Contains(line, "[plugins]") || strings.Contains(line, "[oh-my-openclaw]") || strings.HasPrefix(line, "Config warnings") {
 		return true
 	}
 	return false

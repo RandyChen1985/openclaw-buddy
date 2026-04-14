@@ -168,7 +168,7 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 
 	// 首先尝试 JSON 模式
 	cmdBotsJSON := exec.Command("openclaw", "agents", "list", "--json")
-	outBotsJSON, err := cmdBotsJSON.CombinedOutput()
+	outBotsJSON, err := cmdBotsJSON.Output()
 	
 	usedJSON := false
 	if err == nil {
@@ -203,11 +203,11 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 				usedJSON = true
 			}
 		}
-	}
 
 	// 兜底：如果 JSON 失败，则使用原始文本解析 (同时修复缩进导致误判的 Bug)
 	if !usedJSON {
 		var currentBot *OpenClawBot
+		isAgentsSection := false
 		scannerBots := bufio.NewScanner(strings.NewReader(string(outBotsJSON)))
 		if usedJSON == false { // 这里的 outBotsJSON 实际上是上面失败的输出，需要重新获取纯文本输出
 			cmdBotsPlain := exec.Command("openclaw", "agents", "list")
@@ -223,9 +223,19 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 			rawLine := StripANSI(line)
 			trimmedLine := strings.TrimSpace(rawLine)
 
+			// 只有进入 Agents: 区块后才开始识别具体的 Agent
+			if strings.HasPrefix(trimmedLine, "Agents:") {
+				isAgentsSection = true
+				continue
+			}
+
+			if !isAgentsSection {
+				continue
+			}
+
 			// 核心修复：只有行首紧跟 "- " 的才认为是 Agent 标题，排除掉 Providers 下方带空格缩进的横杠
 			if strings.HasPrefix(rawLine, "- ") {
-				if currentBot != nil {
+				if currentBot != nil && currentBot.Workspace != "" {
 					res.Bots = append(res.Bots, *currentBot)
 				}
 				id := strings.TrimPrefix(trimmedLine, "- ")
@@ -269,7 +279,7 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 
 	usedModelsJSON := false
 	cmdModelsJSON := exec.Command("openclaw", "models", "list", "--json")
-	outModelsJSON, err := cmdModelsJSON.CombinedOutput()
+	outModelsJSON, err := cmdModelsJSON.Output()
 	if err == nil {
 		cleanOut := StripANSI(string(outModelsJSON))
 		jsonStr := ExtractJSON(cleanOut)
@@ -306,7 +316,6 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 				usedModelsJSON = true
 			}
 		}
-	}
 
 	if !usedModelsJSON {
 		cmdModelsPlain := exec.Command("openclaw", "models", "list")
@@ -657,7 +666,7 @@ type OpenClawPlugin struct {
 
 func GetOpenClawPlugins() (any, error) {
 	cmd := exec.Command("openclaw", "plugins", "list", "--json")
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list plugins: %v. Output: %s", err, string(out))
 	}
@@ -720,7 +729,7 @@ func UpdateOpenClawPlugins() error {
 
 func GetOpenClawSkills() (any, error) {
 	cmd := exec.Command("openclaw", "skills", "list", "--json")
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list skills: %v. Output: %s", err, string(out))
 	}
@@ -754,7 +763,7 @@ func ReloadOpenClawSkills() error {
 
 func GetOpenClawSessions() ([]OpenClawSession, error) {
 	cmd := exec.Command("openclaw", "sessions", "--all-agents", "--json")
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sessions: %v. Output: %s", err, string(out))
 	}
@@ -1180,7 +1189,7 @@ func CreateBotFromExpert(expertID, newBotID, modelID, customSoul, customIdentity
 
 func ExecPolicyShow() (*OpenClawExecPolicyResponse, error) {
 	cmd := exec.Command("openclaw", "exec-policy", "show", "--json")
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to show exec policy: %v. Output: %s", err, string(out))
 	}
@@ -1199,7 +1208,7 @@ func ExecPolicyShow() (*OpenClawExecPolicyResponse, error) {
 
 func GetApprovalsSnapshot() (*OpenClawApprovalsSnapshot, error) {
 	cmd := exec.Command("openclaw", "approvals", "get", "--json")
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get approvals snapshot: %v. Output: %s", err, string(out))
 	}
