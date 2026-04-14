@@ -111,6 +111,7 @@ export const useChatV3WebSocket = ({
   const tokenCountRef = useRef<number>(0);
   const firstTokenTimeRef = useRef<number>(0);
   const showScrollBtnRef = useRef(false);
+  const summarizingSessionsRef = useRef<Set<string>>(new Set());
 
   // --- RPC Communication ---
   const sendRPC = useCallback((method: string, params: any): Promise<any> => {
@@ -171,7 +172,8 @@ export const useChatV3WebSocket = ({
                   })).filter((m: any) => m.content);
                   
                   if (msgs.length > 0) {
-                    autoSummarizeRef.current?.(msgs, false, s.key);
+                    // 💡 视觉修复：后台扫描历史会话时，强制开启 silent 模式，禁止弹出 Toast！
+                    autoSummarizeRef.current?.(msgs, true, s.key);
                   }
                 }
               }
@@ -648,9 +650,21 @@ export const useChatV3WebSocket = ({
   const handleAutoSummarize = useCallback(async (messagesOverride?: Message[], silent = false, targetKey?: string) => {
     const activeKey = targetKey || sessionKey;
     const targetMessages = messagesOverride || messages;
-    if (!activeKey || targetMessages.length === 0) return;
+    
+    // 💡 鲁棒性加固：检查是否已经在总结该会话，防止并发冲突
+    if (!activeKey || targetMessages.length === 0 || summarizingSessionsRef.current.has(activeKey)) return;
+    
+    summarizingSessionsRef.current.add(activeKey);
     if (!targetKey) setIsSummarizing(true);
-    if (!silent && targetKey) message.loading({ content: t('chat.summarizingTitle', { defaultValue: '正在生成标题...' }), key: `summarizing-${activeKey}` });
+    
+    // 💡 视觉修复：修正逻辑，如果是前台活跃会话且非静默模式，显示 Loading
+    if (!silent) {
+      message.loading({ 
+        content: t('chat.summarizingTitle', { defaultValue: '正在生成标题...' }), 
+        key: `summarizing-${activeKey}` 
+      });
+    }
+
     try {
       const agentId = selectedBot.replace('openclaw:', '');
       const bot = botsModels?.data?.bots?.find((b: any) => b.id === agentId);
@@ -662,18 +676,23 @@ export const useChatV3WebSocket = ({
                      .replace(/> :::toolResult[\s\S]*?:::\n*/g, '');
         return { role: m.role, content: clean.trim() };
       }).filter(m => m.content.length > 0);
+      
       const newTitle = await summarizeSession(validMessages, currentModelID);
       if (newTitle) {
         const res = await sendRPC('sessions.patch', { key: activeKey, label: newTitle });
         if (res.ok) {
           if (activeKey === sessionKey) setSessionLabel(newTitle);
-          if (!silent) message.success({ content: t('chat.titleSummarized'), key: `summarizing-${activeKey}` });
+          // 💡 视觉修复：仅在非静默模式下显示成功提示
+          if (!silent) {
+            message.success({ content: t('chat.titleSummarized'), key: `summarizing-${activeKey}` });
+          }
           setSessions(prev => prev.map(s => s.key === activeKey ? { ...s, label: newTitle } : s));
         }
       }
     } catch (err) {
       if (!silent) console.error('Summarize error:', err);
     } finally {
+      summarizingSessionsRef.current.delete(activeKey);
       if (!targetKey) setIsSummarizing(false);
     }
   }, [sessionKey, messages, selectedBot, botsModels, sendRPC, fetchSessions, t]);
