@@ -53,8 +53,29 @@ const HighlightedJsonEditor: React.FC<{
     }
   };
 
+  // 关键：统一字体、行高、间距和折行属性
+  const commonStyles: React.CSSProperties = {
+    padding: isMobile ? '16px 12px' : '24px 20px',
+    fontSize: isMobile ? 12 : 13,
+    lineHeight: 1.6,
+    fontFamily: '"JetBrains Mono", Menlo, Monaco, Consolas, monospace',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-all',
+    boxSizing: 'border-box',
+    tabSize: 4,
+    MozTabSize: 4,
+  };
+
   return (
     <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', border: '1px solid #334155', background: '#1e1e1e', height: '100%', minHeight: 400 }}>
+      {/* 隐藏背景层中的滚动条，但保留其占位，确保换行一致 */}
+      <style>
+        {`
+          .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+          }
+        `}
+      </style>
       <Button
         icon={<Copy size={14} />}
         size="small"
@@ -78,6 +99,7 @@ const HighlightedJsonEditor: React.FC<{
         disabled={disabled}
         spellCheck={false}
         style={{
+          ...commonStyles,
           position: 'absolute',
           inset: 0,
           width: '100%',
@@ -87,42 +109,43 @@ const HighlightedJsonEditor: React.FC<{
           caretColor: disabled ? 'transparent' : '#fff',
           border: 'none',
           outline: 'none',
-          padding: isMobile ? '16px 12px' : '24px 20px',
-          fontSize: isMobile ? 12 : 13,
-          lineHeight: 1.6,
-          fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
           resize: 'none',
-          overflow: 'auto',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-all',
+          overflowY: 'scroll', // 强制显示滚动条以保证宽度计算一致
+          overflowX: 'hidden',
           zIndex: 10,
           cursor: disabled ? 'not-allowed' : 'text'
         }}
       />
       <div 
         ref={preRef}
+        className="hide-scrollbar"
         style={{ 
           position: 'absolute', 
           inset: 0, 
-          overflow: 'hidden', 
-          padding: isMobile ? '16px 12px' : '24px 20px', 
+          overflowY: 'scroll', // 同样强制滚动条空间
+          overflowX: 'hidden',
           zIndex: 1, 
-          opacity: disabled ? 0.6 : 1 
+          opacity: disabled ? 0.6 : 1,
+          pointerEvents: 'none',
+          scrollbarWidth: 'none', // Firefox 隐藏
         }}
       >
         <SyntaxHighlighter
           language="json"
           style={vscDarkPlus}
+          codeTagProps={{
+            style: {
+              fontFamily: 'inherit',
+              lineHeight: 'inherit',
+              padding: 0,
+              margin: 0,
+            }
+          }}
           customStyle={{
+            ...commonStyles,
             margin: 0,
-            padding: 0,
             background: 'transparent',
-            fontSize: isMobile ? 12 : 13,
-            lineHeight: 1.6,
-            fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
             pointerEvents: 'none',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-all'
           }}
         >
           {value + (value.endsWith('\n') ? ' ' : '')}
