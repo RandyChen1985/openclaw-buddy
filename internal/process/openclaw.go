@@ -139,124 +139,209 @@ type SecurityStatusData struct {
 	VersionTooLow bool                         `json:"versionTooLow"`
 }
 
+type cliBot struct {
+	ID            string   `json:"id"`
+	IdentityName  string   `json:"identityName"`
+	IdentityEmoji string   `json:"identityEmoji"`
+	Workspace     string   `json:"workspace"`
+	AgentDir      string   `json:"agentDir"`
+	Model         string   `json:"model"`
+	Bindings      int      `json:"bindings"`
+	Routes        []string `json:"routes"`
+}
+
+type cliModel struct {
+	Key       string   `json:"key"`
+	Name      string   `json:"name"`
+	Tags      []string `json:"tags"`
+	Provider  string   `json:"provider"` // 某些版本可能有，没有就从 Key 截取
+	IsDefault bool     `json:"isDefault"`
+}
+
 func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error) {
 	res := &OpenClawBotsModelsResponse{
 		Bots:   []OpenClawBot{},
 		Models: []OpenClawModel{},
 	}
 
-	// 1. 解析 Bots: openclaw agents list
-	cmdBots := exec.Command("openclaw", "agents", "list")
-	outBots, _ := cmdBots.CombinedOutput()
+	// --- 1. 解析 Bots ---
 
-	var currentBot *OpenClawBot
-	scannerBots := bufio.NewScanner(strings.NewReader(string(outBots)))
-	for scannerBots.Scan() {
-		line := scannerBots.Text()
-		if IsLogLine(line) {
-			continue
-		}
-		trimmedLine := strings.TrimSpace(StripANSI(line))
-
-		// 匹配 Agent ID: "- main (default)"
-		if strings.HasPrefix(trimmedLine, "- ") {
-			if currentBot != nil {
-				res.Bots = append(res.Bots, *currentBot)
-			}
-			id := strings.TrimPrefix(trimmedLine, "- ")
-			id = strings.Split(id, " ")[0]
-			currentBot = &OpenClawBot{ID: id}
-		} else if currentBot != nil {
-			if strings.Contains(line, "Identity:") {
-				// 格式示例 1: Identity: 🤖 云枢智维 (IDENTITY.md)
-				// 格式示例 2: Identity: 测试 002 号 (config)
-				lineContent := strings.Split(line, "Identity:")[1]
-				lineContent = strings.TrimSpace(lineContent)
-
-				// 1. 去掉末尾的 (xxx) 标识
-				lastIdx := strings.LastIndex(lineContent, "(")
-				namePart := lineContent
-				if lastIdx > 0 {
-					namePart = strings.TrimSpace(lineContent[:lastIdx])
-				}
-
-				// 2. 尝试提取 Emoji (这里采用简单策略：如果有空格且第一部分长度较短，认为是 Emoji)
-				parts := strings.SplitN(namePart, " ", 2)
-				if len(parts) == 2 {
-					// 常见的 Emoji 或者是图标，长度通常在 1-4 字节(UTF-8)
-					// 如果第一部分包含非 ASCII 字符或长度极短，我们把它当 Emoji
-					first := parts[0]
-					isEmoji := false
-					for _, r := range first {
-						if r > 127 { // 包含非 ASCII，大概率是 Emoji 或中文
-							// 如果长度很短(1个字符)，认为是 Emoji
-							if len([]rune(first)) == 1 {
-								isEmoji = true
-							}
-							break
-						}
+	// 首先尝试 JSON 模式
+	cmdBotsJSON := exec.Command("openclaw", "agents", "list", "--json")
+	outBotsJSON, err := cmdBotsJSON.CombinedOutput()
+	
+	usedJSON := false
+	if err == nil {
+		cleanOut := StripANSI(string(outBotsJSON))
+		// 支持数组格式或者带包裹的对象格式
+		idxStart := strings.Index(cleanOut, "[")
+		idxEnd := strings.LastIndex(cleanOut, "]")
+		if idxStart != -1 && idxEnd != -1 && idxEnd > idxStart {
+			jsonStr := cleanOut[idxStart : idxEnd+1]
+			var cliBots []cliBot
+			if jsonErr := json.Unmarshal([]byte(jsonStr), &cliBots); jsonErr == nil {
+				for _, b := range cliBots {
+					name := b.IdentityName
+					if name == "" {
+						name = b.ID
 					}
-					if isEmoji {
-						currentBot.Emoji = first
+					emoji := b.IdentityEmoji
+					if emoji == "" {
+						emoji = "🤖"
+					}
+					res.Bots = append(res.Bots, OpenClawBot{
+						ID:           b.ID,
+						Name:         name,
+						Emoji:        emoji,
+						Model:        b.Model,
+						Workspace:    b.Workspace,
+						AgentDir:     b.AgentDir,
+						RoutingRules: fmt.Sprintf("%d", b.Bindings),
+						Routing:      strings.Join(b.Routes, ", "),
+					})
+				}
+				usedJSON = true
+			}
+		}
+	}
+
+	// 兜底：如果 JSON 失败，则使用原始文本解析 (同时修复缩进导致误判的 Bug)
+	if !usedJSON {
+		var currentBot *OpenClawBot
+		scannerBots := bufio.NewScanner(strings.NewReader(string(outBotsJSON)))
+		if usedJSON == false { // 这里的 outBotsJSON 实际上是上面失败的输出，需要重新获取纯文本输出
+			cmdBotsPlain := exec.Command("openclaw", "agents", "list")
+			outBotsPlain, _ := cmdBotsPlain.CombinedOutput()
+			scannerBots = bufio.NewScanner(strings.NewReader(string(outBotsPlain)))
+		}
+
+		for scannerBots.Scan() {
+			line := scannerBots.Text()
+			if IsLogLine(line) {
+				continue
+			}
+			rawLine := StripANSI(line)
+			trimmedLine := strings.TrimSpace(rawLine)
+
+			// 核心修复：只有行首紧跟 "- " 的才认为是 Agent 标题，排除掉 Providers 下方带空格缩进的横杠
+			if strings.HasPrefix(rawLine, "- ") {
+				if currentBot != nil {
+					res.Bots = append(res.Bots, *currentBot)
+				}
+				id := strings.TrimPrefix(trimmedLine, "- ")
+				id = strings.Split(id, " ")[0]
+				currentBot = &OpenClawBot{ID: id, Emoji: "🤖"} // 默认 emoji
+			} else if currentBot != nil {
+				if strings.Contains(line, "Identity:") {
+					lineContent := strings.Split(line, "Identity:")[1]
+					lineContent = strings.TrimSpace(lineContent)
+					lastIdx := strings.LastIndex(lineContent, "(")
+					namePart := lineContent
+					if lastIdx > 0 {
+						namePart = strings.TrimSpace(lineContent[:lastIdx])
+					}
+					parts := strings.SplitN(namePart, " ", 2)
+					if len(parts) == 2 && len([]rune(parts[0])) == 1 && []rune(parts[0])[0] > 127 {
+						currentBot.Emoji = parts[0]
 						currentBot.Name = strings.TrimSpace(parts[1])
 					} else {
 						currentBot.Name = namePart
 					}
-				} else {
-					currentBot.Name = namePart
+				} else if strings.Contains(line, "Workspace:") {
+					currentBot.Workspace = strings.TrimSpace(strings.Split(line, "Workspace:")[1])
+				} else if strings.Contains(line, "Agent dir:") {
+					currentBot.AgentDir = strings.TrimSpace(strings.Split(line, "Agent dir:")[1])
+				} else if strings.Contains(line, "Model:") {
+					currentBot.Model = strings.TrimSpace(strings.Split(line, "Model:")[1])
+				} else if strings.Contains(line, "Routing rules:") {
+					currentBot.RoutingRules = strings.TrimSpace(strings.Split(line, "Routing rules:")[1])
+				} else if strings.Contains(line, "Routing:") {
+					currentBot.Routing = strings.TrimSpace(strings.Split(line, "Routing:")[1])
 				}
-			} else if strings.Contains(line, "Workspace:") {
-				currentBot.Workspace = strings.TrimSpace(strings.Split(line, "Workspace:")[1])
-			} else if strings.Contains(line, "Agent dir:") {
-				currentBot.AgentDir = strings.TrimSpace(strings.Split(line, "Agent dir:")[1])
-			} else if strings.Contains(line, "Model:") {
-				currentBot.Model = strings.TrimSpace(strings.Split(line, "Model:")[1])
-			} else if strings.Contains(line, "Routing rules:") {
-				currentBot.RoutingRules = strings.TrimSpace(strings.Split(line, "Routing rules:")[1])
-			} else if strings.Contains(line, "Routing:") {
-				currentBot.Routing = strings.TrimSpace(strings.Split(line, "Routing:")[1])
+			}
+		}
+		if currentBot != nil {
+			res.Bots = append(res.Bots, *currentBot)
+		}
+	}
+
+	// --- 2. 解析 Models ---
+
+	usedModelsJSON := false
+	cmdModelsJSON := exec.Command("openclaw", "models", "list", "--json")
+	outModelsJSON, err := cmdModelsJSON.CombinedOutput()
+	if err == nil {
+		cleanOut := StripANSI(string(outModelsJSON))
+		idxStart := strings.Index(cleanOut, "[")
+		idxEnd := strings.LastIndex(cleanOut, "]")
+		if idxStart != -1 && idxEnd != -1 && idxEnd > idxStart {
+			jsonStr := cleanOut[idxStart : idxEnd+1]
+			var cliModels []cliModel
+			if jsonErr := json.Unmarshal([]byte(jsonStr), &cliModels); jsonErr == nil {
+				for _, m := range cliModels {
+					isDefault := m.IsDefault
+					if !isDefault {
+						for _, t := range m.Tags {
+							if t == "default" {
+								isDefault = true
+								break
+							}
+						}
+					}
+					
+					id := m.Key
+					if id == "" {
+						id = m.Name
+					}
+					
+					provider := m.Provider
+					if provider == "" && strings.Contains(id, "/") {
+						provider = strings.Split(id, "/")[0]
+					}
+
+					res.Models = append(res.Models, OpenClawModel{
+						ID:        id,
+						Name:      id,
+						Provider:  provider,
+						IsDefault: isDefault,
+					})
+				}
+				usedModelsJSON = true
 			}
 		}
 	}
-	if currentBot != nil {
-		res.Bots = append(res.Bots, *currentBot)
-	}
 
-	// 2. 解析 Models: openclaw models list
-	cmdModels := exec.Command("openclaw", "models", "list")
-	outModels, _ := cmdModels.CombinedOutput()
-
-	scannerModels := bufio.NewScanner(strings.NewReader(string(outModels)))
-	isTableStarted := false
-	for scannerModels.Scan() {
-		line := scannerModels.Text()
-		if IsLogLine(line) {
-			continue
-		}
-		trimmedLine := strings.TrimSpace(StripANSI(line))
-
-		// 识别表头
-		if strings.HasPrefix(trimmedLine, "Model") && strings.Contains(trimmedLine, "Ctx") {
-			isTableStarted = true
-			continue
-		}
-
-		if isTableStarted && trimmedLine != "" && !strings.Contains(trimmedLine, "OpenClaw") {
-			fields := strings.Fields(trimmedLine)
-			// 模型列表至少应包含 Model, Input, Ctx 3个核心字段
-			if len(fields) >= 3 {
-				modelID := fields[0]
-				isDefault := strings.Contains(strings.ToLower(line), "default")
-				tags := ""
-				if len(fields) >= 5 {
-					tags = fields[len(fields)-1]
+	if !usedModelsJSON {
+		cmdModelsPlain := exec.Command("openclaw", "models", "list")
+		outModelsPlain, _ := cmdModelsPlain.CombinedOutput()
+		scannerModels := bufio.NewScanner(strings.NewReader(string(outModelsPlain)))
+		isTableStarted := false
+		for scannerModels.Scan() {
+			line := scannerModels.Text()
+			if IsLogLine(line) {
+				continue
+			}
+			trimmedLine := strings.TrimSpace(StripANSI(line))
+			if strings.HasPrefix(trimmedLine, "Model") && strings.Contains(trimmedLine, "Ctx") {
+				isTableStarted = true
+				continue
+			}
+			if isTableStarted && trimmedLine != "" && !strings.Contains(trimmedLine, "OpenClaw") {
+				fields := strings.Fields(trimmedLine)
+				if len(fields) >= 3 {
+					modelID := fields[0]
+					isDefault := strings.Contains(strings.ToLower(line), "default")
+					tags := ""
+					if len(fields) >= 5 {
+						tags = fields[len(fields)-1]
+					}
+					res.Models = append(res.Models, OpenClawModel{
+						ID:        modelID,
+						Name:      modelID,
+						Provider:  tags,
+						IsDefault: isDefault,
+					})
 				}
-				res.Models = append(res.Models, OpenClawModel{
-					ID:        modelID,
-					Name:      modelID,
-					Provider:  tags,
-					IsDefault: isDefault,
-				})
 			}
 		}
 	}

@@ -114,11 +114,18 @@ func StopGateway(port int) error {
 func ForceStartGateway() error {
 	return DefaultController.Start()
 }
-
 func RunDoctorFix() error {
-	cmd := exec.Command(GetOpenClawBinary(), "doctor", "--fix")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to run openclaw doctor --fix: %v", err)
+	cmd := exec.Command(GetOpenClawBinary(), "doctor", "--fix", "--yes")
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to run openclaw doctor --fix --yes: %v", err)
 	}
 	return nil
 }
+
+func RunDoctorFixWithOutput() (string, error) {
+	cmd := exec.Command(GetOpenClawBinary(), "doctor", "--fix", "--yes")
+	output, err := cmd.CombinedOutput()
+	return string(output), err
+}
+

@@ -10,7 +10,6 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import api from '../api';
-import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 interface Expert {
   id: string;
@@ -37,7 +36,7 @@ interface ExpertMarketProps {
   onNavigateToDashboard?: () => void;
 }
 
-const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate, isRunning, onNavigateToDashboard }) => {
+const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => {
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language.split('-')[0]; // 处理 zh-CN 等情况
 
@@ -178,7 +177,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate, isRun
 
   return (
     <div style={{ height: '100%', minHeight: 'calc(100vh - 100px)', width: '100%', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
+      {/* 允许在网关停止时浏览并导入专家模型 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0 4px' : '0 8px', display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div style={{ padding: isMobile ? '0 4px' : '0 8px' }}>
         <h2 style={{ fontSize: isMobile ? 18 : 22, fontWeight: 800, color: '#1e293b', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>

@@ -11,7 +11,6 @@ import remarkGfm from 'remark-gfm';
 import dayjs from 'dayjs';
 import api from '../api';
 import { message } from 'antd';
-import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 interface BotsManagerProps {
   botsModels: any; 
@@ -33,7 +32,7 @@ interface BotsManagerProps {
 const BotsManager: React.FC<BotsManagerProps> = ({ 
   botsModels, loadingBots, isMobile, onRefresh, onRefreshBots, modelsConfig, loadingConfig,
   onAddBot, onUpdateBot, onDeleteBot, onSetDefaultModel,
-  activeTasks = [], isRunning, onNavigateToDashboard
+  activeTasks = [] 
 }) => {
   const { t } = useTranslation();
   const cardColors = [
@@ -402,7 +401,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
 
   return (
     <div style={{ height: '100%', minHeight: 'calc(100vh - 100px)', width: '100%', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
+      {/* 允许在网关停止时通过 Buddy 管理机器人 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0' : '8px' }}>
         <div style={{ marginBottom: 24, padding: isMobile ? '0 8px' : '0' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>

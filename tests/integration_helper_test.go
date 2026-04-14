@@ -55,7 +55,7 @@ func SetupIntegrationTest() (*api.Server, string) {
 	}
 
 	// 5. 启动 Server
-	s := api.NewServer(cfg)
+	s := api.NewServer(cfg, nil)
 	return s, tmpDir
 }
 

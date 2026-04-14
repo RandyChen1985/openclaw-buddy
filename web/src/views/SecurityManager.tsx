@@ -12,7 +12,6 @@ import {
 import { useTranslation } from 'react-i18next';
 import api from '../api';
 import type { Task } from '../hooks/useTaskCenter';
-import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
@@ -26,7 +25,7 @@ interface SecurityManagerProps {
 }
 
 const SecurityManager: React.FC<SecurityManagerProps> = ({
-  isMobile, bots, activeTasks, isRunning, onNavigateToDashboard
+  isMobile, bots, activeTasks
 }) => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
@@ -219,7 +218,7 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
       gap: isMobile ? 16 : 24,
       position: 'relative'
     }}>
-      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
+      {/* 允许在网关停止时配置安全审核策略 */}
       <div style={{ marginBottom: isMobile ? 8 : 16 }}>
         <Title level={isMobile ? 3 : 2} style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, flexWrap: 'wrap' }}>
           <ShieldCheck size={isMobile ? 22 : 28} color="#2563eb" />

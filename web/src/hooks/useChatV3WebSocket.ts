@@ -17,6 +17,7 @@ export interface FileInfo {
 
 export interface Message {
   id: string;
+  runId?: string; // 💡 事务标识：用于精准追踪流式响应属于哪一轮对话
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: string;
@@ -110,6 +111,7 @@ export const useChatV3WebSocket = ({
   const tokenCountRef = useRef<number>(0);
   const firstTokenTimeRef = useRef<number>(0);
   const showScrollBtnRef = useRef(false);
+  const summarizingSessionsRef = useRef<Set<string>>(new Set());
 
   // --- RPC Communication ---
   const sendRPC = useCallback((method: string, params: any): Promise<any> => {
@@ -170,7 +172,8 @@ export const useChatV3WebSocket = ({
                   })).filter((m: any) => m.content);
                   
                   if (msgs.length > 0) {
-                    autoSummarizeRef.current?.(msgs, false, s.key);
+                    // 💡 视觉修复：后台扫描历史会话时，强制开启 silent 模式，禁止弹出 Toast！
+                    autoSummarizeRef.current?.(msgs, true, s.key);
                   }
                 }
               }
@@ -183,30 +186,38 @@ export const useChatV3WebSocket = ({
   }, [sendRPC]);
 
   // --- Streaming Data Handlers ---
-  const formatMessageContent = useCallback((content: any): string => {
-    if (!content) return '';
+  const formatMessageContent = useCallback((msg: any): string => {
+    if (!msg) return '';
     
-    // 如果是字符串，尝试解析是否为 JSON (处理历史记录或双重转义情况)
-    if (typeof content === 'string') {
-      const trimmed = content.trim();
-      if (trimmed === '[]' || trimmed === '{}') return '';
-      if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          return formatMessageContent(parsed);
-        } catch (e) {
-          return content;
-        }
-      }
-      return content;
+    // 💡 兼容性设计：既支持传入完整的 message 对象，也支持仅传入 content 字段（用于历史回溯）
+    const content = (msg.content !== undefined && msg.content !== null) ? msg.content : msg;
+    const topThought = msg.thought || msg.thinking || msg.reasoning || '';
+    
+    let prefix = '';
+    if (topThought) {
+      prefix = `> :::thinking\n> ${String(topThought).replace(/\n/g, '\n> ')}\n> :::\n\n`;
     }
 
-    // 如果是数组，处理每一块
-    if (Array.isArray(content)) {
-      return content.map((c: any) => {
+    // 处理主要内容部分
+    let body = '';
+    if (typeof content === 'string') {
+      const trimmed = content.trim();
+      if (trimmed === '[]' || trimmed === '{}') body = '';
+      else if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          body = formatMessageContent(parsed);
+        } catch (e) {
+          body = content;
+        }
+      } else {
+        body = content;
+      }
+    } else if (Array.isArray(content)) {
+      body = content.map((c: any) => {
         let matched = false;
         
-        // 1. 处理思考过程
+        // 1. 处理思考过程 (数组内部格式)
         let thinkingPart = '';
         if (c.thinking || c.thought || c.reasoning || c.type === 'thinking') {
           const thought = c.thinking || c.thought || c.reasoning || c.content || '';
@@ -238,23 +249,21 @@ export const useChatV3WebSocket = ({
         const textPart = c.text || (typeof c.content === 'string' ? c.content : '');
         if (textPart) matched = true;
 
-        // 5. 💡 关键兜底：如果完全没匹配到已知类型，且 c 是个非空对象，则显示其 JSON 结构
+        // 5. 💡 兜底处理
         let fallbackPart = '';
         if (!matched && typeof c === 'object' && c !== null && Object.keys(c).length > 0) {
-          console.warn('⚠️ [V3] 检测到未处理的消息块类型:', c);
           fallbackPart = `\n> :::warning 未知消息块 (${c.type || 'unknown'})\n> \`\`\`json\n> ${JSON.stringify(c, null, 2).split('\n').join('\n> ')}\n> \`\`\`\n> :::\n\n`;
         }
 
         return thinkingPart + toolCallPart + toolResultPart + fallbackPart + textPart;
       }).join('');
+    } else if (typeof content === 'object' && content !== null) {
+      body = formatMessageContent([content]);
+    } else {
+      body = String(content);
     }
 
-    // 如果是个单对象，递归处理其生成的数组
-    if (typeof content === 'object') {
-      return formatMessageContent([content]);
-    }
-
-    return String(content);
+    return prefix + body;
   }, []);
 
   const clearStallTimer = useCallback(() => {
@@ -286,22 +295,19 @@ export const useChatV3WebSocket = ({
         firstTokenTimeRef.current = now;
       }
 
-      const rawContent = payload.message?.content;
-      if (rawContent === undefined || rawContent === null) return; // 💡 只有 metadata 的包不更新内容
+      const messageObj = payload.message;
+      if (!messageObj) return;
 
-      // 💡 漏洞 1 修复：拦截“跨会话残余串线”，如果丢过来的包并非当前所在的 session，直接丢弃！
       if (payload.sessionKey && payload.sessionKey !== sessionKeyRef.current) {
         return;
       }
 
-      const fullText = formatMessageContent(rawContent);
+      const fullText = formatMessageContent(messageObj);
       
-      // 💡 防御性检查 1：如果内容变为空或纯空白，且之前已有内容，拦截（防止纯空格绕过 !fullText）
       if (!fullText.trim() && streamContentRef.current.trim()) {
         return;
       }
 
-      // 💡 防御性检查 2：强力防护！如果后端发来的累积内容长度突然大幅缩短（容差20字符），说明后端流发生了异常重置或发了增量包，必须拦截！
       const oldLen = streamContentRef.current.length;
       if (oldLen > 50 && fullText.length < oldLen - 20) {
         return;
@@ -310,7 +316,6 @@ export const useChatV3WebSocket = ({
       streamContentRef.current = fullText;
       tokenCountRef.current = fullText.length;
 
-      // 💡 漏洞 2 修复：利用 React Functional Update 切断闭包陷阱，避免每秒几十次无效调用
       setIsTyping(prev => {
         if (!prev) return true;
         return prev;
@@ -327,13 +332,23 @@ export const useChatV3WebSocket = ({
         }
 
         setMessages(prev => {
-          const last = prev[prev.length - 1];
-          if (last && last.role === 'assistant') {
-            return [...prev.slice(0, -1), { 
-              ...last, 
+          // 💡 核心优化：通过 runId 精准查找。
+          // 逻辑：1. 找 runId 匹配的；2. 没找到再找没有 runId 且是 assistant 的第一项（软绑定）。
+          const targetIndex = prev.findLastIndex(m => m.runId === payload.runId) !== -1 
+            ? prev.findLastIndex(m => m.runId === payload.runId)
+            : prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
+
+          if (targetIndex !== -1) {
+            const current = prev[targetIndex];
+            const updated = { 
+              ...current, 
+              runId: payload.runId, // 完成绑定
               content: fullText,
-              metrics: { ttft, tps: currentTPS }
-            }];
+              metrics: { ...current.metrics, ttft, tps: currentTPS }
+            };
+            const next = [...prev];
+            next[targetIndex] = updated;
+            return next;
           }
           return prev;
         });
@@ -365,21 +380,26 @@ export const useChatV3WebSocket = ({
         const finalTPS = duration > 0 ? (tokenCountRef.current / (duration - (ttft/1000))) : 0;
 
         setMessages(prev => {
-            const last = prev[prev.length - 1];
-            if (!last || last.role !== 'assistant') return prev;
+            const targetIndex = prev.findLastIndex(m => m.runId === payload.runId) !== -1 
+              ? prev.findLastIndex(m => m.runId === payload.runId)
+              : prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
+
+            if (targetIndex === -1) return prev;
+            const last = prev[targetIndex];
             
-            // 💡 致命漏洞 3 修复：防止连续的 final/done 信号复写！
-            // 如果 stream 已经被我们上面清空了（或者是空的），但之前的消息已经有实质内容，说明这是冗余信号，坚决不覆盖！
             const incomingContent = payload.message?.content ? formatMessageContent(payload.message.content) : streamContentRef.current;
             if (!incomingContent && last.content && last.content !== t('chat.thinking')) {
                 return prev;
             }
 
-            return [...prev.slice(0, -1), { 
+            const next = [...prev];
+            next[targetIndex] = { 
                 ...last, 
+                runId: payload.runId,
                 content: incomingContent,
-                metrics: { ttft, duration, tps: finalTPS }
-            }];
+                metrics: { ...last.metrics, ttft, duration, tps: finalTPS }
+            };
+            return next;
         });
 
         setIsTyping(false);
@@ -630,9 +650,21 @@ export const useChatV3WebSocket = ({
   const handleAutoSummarize = useCallback(async (messagesOverride?: Message[], silent = false, targetKey?: string) => {
     const activeKey = targetKey || sessionKey;
     const targetMessages = messagesOverride || messages;
-    if (!activeKey || targetMessages.length === 0) return;
+    
+    // 💡 鲁棒性加固：检查是否已经在总结该会话，防止并发冲突
+    if (!activeKey || targetMessages.length === 0 || summarizingSessionsRef.current.has(activeKey)) return;
+    
+    summarizingSessionsRef.current.add(activeKey);
     if (!targetKey) setIsSummarizing(true);
-    if (!silent && targetKey) message.loading({ content: t('chat.summarizingTitle', { defaultValue: '正在生成标题...' }), key: `summarizing-${activeKey}` });
+    
+    // 💡 视觉修复：修正逻辑，如果是前台活跃会话且非静默模式，显示 Loading
+    if (!silent) {
+      message.loading({ 
+        content: t('chat.summarizingTitle', { defaultValue: '正在生成标题...' }), 
+        key: `summarizing-${activeKey}` 
+      });
+    }
+
     try {
       const agentId = selectedBot.replace('openclaw:', '');
       const bot = botsModels?.data?.bots?.find((b: any) => b.id === agentId);
@@ -644,18 +676,23 @@ export const useChatV3WebSocket = ({
                      .replace(/> :::toolResult[\s\S]*?:::\n*/g, '');
         return { role: m.role, content: clean.trim() };
       }).filter(m => m.content.length > 0);
+      
       const newTitle = await summarizeSession(validMessages, currentModelID);
       if (newTitle) {
         const res = await sendRPC('sessions.patch', { key: activeKey, label: newTitle });
         if (res.ok) {
           if (activeKey === sessionKey) setSessionLabel(newTitle);
-          if (!silent) message.success({ content: t('chat.titleSummarized'), key: `summarizing-${activeKey}` });
+          // 💡 视觉修复：仅在非静默模式下显示成功提示
+          if (!silent) {
+            message.success({ content: t('chat.titleSummarized'), key: `summarizing-${activeKey}` });
+          }
           setSessions(prev => prev.map(s => s.key === activeKey ? { ...s, label: newTitle } : s));
         }
       }
     } catch (err) {
       if (!silent) console.error('Summarize error:', err);
     } finally {
+      summarizingSessionsRef.current.delete(activeKey);
       if (!targetKey) setIsSummarizing(false);
     }
   }, [sessionKey, messages, selectedBot, botsModels, sendRPC, fetchSessions, t]);
@@ -719,8 +756,24 @@ export const useChatV3WebSocket = ({
       }, 100);
 
       const res = await sendRPC('chat.send', { 
-        sessionKey: currentKey, message: finalContent, idempotencyKey: `ik-${Date.now()}`
+        sessionKey: currentKey, 
+        message: finalContent, 
+        idempotencyKey: `ik-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
       });
+      
+      if (res.ok && res.payload?.runId) {
+        // 💡 握手回填：将 RPC 返回的 runId 立即同步到刚才创建的 AI 消息对象中
+        setMessages(prev => {
+          const lastIndex = prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
+          if (lastIndex !== -1) {
+            const next = [...prev];
+            next[lastIndex] = { ...next[lastIndex], runId: res.payload.runId };
+            return next;
+          }
+          return prev;
+        });
+      }
+
       if (!res.ok) {
         message.error('Failed to send: ' + (res.error?.message || 'Unknown'));
         setIsTyping(false);

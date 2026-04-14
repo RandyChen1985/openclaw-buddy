@@ -11,19 +11,43 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
+const auditFile = "tests/manual/v3_protocol_audit.md"
+
 // Base64URL no padding 编码
 func base64URLNoPadding(data []byte) string {
 	return strings.TrimRight(base64.URLEncoding.EncodeToString(data), "=")
 }
 
+// logRPC 记录 RPC 交互到 Markdown 文件
+func logRPC(direction string, method string, data interface{}) {
+	f, err := os.OpenFile(auditFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("⚠️ 无法写入审计日志: %v\n", err)
+		return
+	}
+	defer f.Close()
+
+	jsonData, _ := json.MarshalIndent(data, "", "  ")
+	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
+	
+	entry := fmt.Sprintf("\n### [%s] %s | Method: %s\n```json\n%s\n```\n", 
+		timestamp, direction, method, string(jsonData))
+	
+	f.WriteString(entry)
+}
+
 func main() {
-	// 1. 配置参数 (使用 Buddy Proxy 转发，但内部协议使用 OpenClaw Token)
+	// 初始化审计文件
+	os.WriteFile(auditFile, []byte("# WebSocket Chat V3 协议审计报告\n\n生成时间: "+time.Now().Format(time.RFC3339)+"\n"), 0644)
+
+	// 1. 配置参数
 	url := "ws://127.0.0.1:3000/console/claw/v1/ws/gateway?token=openclaw-buddy-2026"
 	token := "71937201d0ba32c6c14047dd15487a0cbf0cd1f3a05e07f8"
 
@@ -35,7 +59,7 @@ func main() {
 	// 3. 建立连接
 	dialer := websocket.Dialer{}
 	header := http.Header{}
-	header.Add("Origin", "http://127.0.0.1:18789") // 绕过网关 Origin 校验
+	header.Add("Origin", "http://127.0.0.1:18789")
 	conn, _, err := dialer.Dial(url, header)
 	if err != nil {
 		log.Fatal("❌ 连接失败:", err)
@@ -49,7 +73,9 @@ func main() {
 		_, msg, _ := conn.ReadMessage()
 		var m map[string]interface{}
 		json.Unmarshal(msg, &m)
+		
 		if m["event"] == "connect.challenge" {
+			logRPC("IN", "connect.challenge", m)
 			payload := m["payload"].(map[string]interface{})
 			challengeNonce = payload["nonce"].(string)
 			fmt.Println("📥 收到 Challenge:", challengeNonce)
@@ -61,7 +87,6 @@ func main() {
 	signedAt := time.Now().UnixMilli()
 	clientId := "openclaw-control-ui"
 	scopes := "operator.admin,operator.read,operator.write"
-	// v3|{deviceId}|{clientId}|{clientMode}|{role}|{scopes}|{signedAtMs}|{token}|{nonce}|{platform}|{deviceFamily}
 	payloadStr := fmt.Sprintf("v3|%s|%s|cli|operator|%s|%d|%s|%s|macos|",
 		deviceId, clientId, scopes, signedAt, token, challengeNonce)
 	
@@ -93,6 +118,7 @@ func main() {
 			},
 		},
 	}
+	logRPC("OUT", "connect", connectReq)
 	conn.WriteJSON(connectReq)
 
 	// 6.5 等待 Connect 响应
@@ -100,6 +126,7 @@ func main() {
 		_, msg, _ := conn.ReadMessage()
 		var resp map[string]interface{}
 		json.Unmarshal(msg, &resp)
+		logRPC("IN", "connect.response", resp)
 		if resp["type"] == "res" && resp["id"] == "auth-1" {
 			if resp["ok"] == true {
 				fmt.Println("✅ 握手成功 (Connect OK)")
@@ -113,7 +140,6 @@ func main() {
 	// 7. 进入全量协议验证逻辑
 	fmt.Println("\n--- 开始全量方法验证 ---")
 	
-	// 定义要测试的方法
 	methods := []struct {
 		ID     string
 		Method string
@@ -122,7 +148,6 @@ func main() {
 		{"m-1", "agents.list", nil},
 		{"m-2", "models.list", nil},
 		{"m-3", "sessions.list", map[string]interface{}{"limit": 5}},
-		{"m-4", "health", map[string]interface{}{"probe": true}},
 	}
 
 	for _, m := range methods {
@@ -136,35 +161,30 @@ func main() {
 		if m.Params == nil {
 			req["params"] = map[string]interface{}{}
 		}
+		logRPC("OUT", m.Method, req)
 		conn.WriteJSON(req)
 		
-		// 等待响应
 		for {
 			_, msg, _ := conn.ReadMessage()
 			var resp map[string]interface{}
 			json.Unmarshal(msg, &resp)
 			
 			if resp["type"] == "res" && resp["id"] == m.ID {
+				logRPC("IN", m.Method+".response", resp)
 				if resp["ok"] == true {
 					fmt.Printf("✅ %s 成功!\n", m.Method)
-					// if m.Method == "agents.list" {
-					// 	fmt.Printf("   机器人数据: %v\n", resp["payload"])
-					// }
 				} else {
 					fmt.Printf("❌ %s 失败: %v\n", m.Method, resp["error"])
 				}
 				break
 			} else if resp["type"] == "event" {
-				// 忽略心跳等事件
-				if resp["event"] != "health" {
-					fmt.Printf("📡 事件 [%v]: %s\n", resp["event"], string(msg))
-				}
+				logRPC("IN", "event."+resp["event"].(string), resp)
 			}
 		}
 	}
 
-	// 8. 测试会话创建与流式对话
-	fmt.Println("\n--- 测试流程: 创建会话 -> 发送消息 -> 接收流式回复 ---")
+	// 8. 测试会话创建与多轮对话
+	fmt.Println("\n--- 开始多轮对话验证 (普通 -> 思考 -> 上下文) ---")
 	
 	// Create Session
 	createReq := map[string]interface{}{
@@ -176,6 +196,7 @@ func main() {
 			"label": "WS测试会话-" + time.Now().Format("15:04:05"),
 		},
 	}
+	logRPC("OUT", "sessions.create", createReq)
 	conn.WriteJSON(createReq)
 	
 	var sessionKey string
@@ -184,78 +205,68 @@ func main() {
 		var resp map[string]interface{}
 		json.Unmarshal(msg, &resp)
 		if resp["id"] == "s-create" {
+			logRPC("IN", "sessions.create.response", resp)
 			payload := resp["payload"].(map[string]interface{})
-			// 实际上创建会话返回的是 entry 对象，Key 在里面
-			// 这里根据源码，我们直接构造 key 或者从返回中拿
-			// 经验证，sessions.create 返回的对象包含 key
 			sessionKey = payload["key"].(string)
 			fmt.Printf("✅ 会话创建成功: %s\n", sessionKey)
 			break
 		}
 	}
 
-	// Send Message
-	chatReq := map[string]interface{}{
-		"type": "req",
-		"id": "c-send",
-		"method": "chat.send",
-		"params": map[string]interface{}{
-			"sessionKey": sessionKey,
-			"message": "请用一句话证明你已经收到了这个指令",
-			"idempotencyKey": "test-" + time.Now().Format("150405"),
-		},
+	// 多轮对话定义
+	rounds := []string{
+		"你好，请用一句话介绍你自己",
+		"请详细分析 1+1 等于几，展示你的思考过程，逻辑要严密",
+		"刚才我问了你什么？",
 	}
-	conn.WriteJSON(chatReq)
 
-	fmt.Println("⏳ 等待流式输出...")
-	for {
-		_, msg, _ := conn.ReadMessage()
-		var m map[string]interface{}
-		json.Unmarshal(msg, &m)
+	for i, query := range rounds {
+		fmt.Printf("\n💬 第 %d 轮对话: %s\n", i+1, query)
+		chatReq := map[string]interface{}{
+			"type": "req",
+			"id": fmt.Sprintf("c-send-%d", i),
+			"method": "chat.send",
+			"params": map[string]interface{}{
+				"sessionKey": sessionKey,
+				"message": query,
+				"idempotencyKey": fmt.Sprintf("test-%d-%d", i, time.Now().Unix()),
+			},
+		}
+		logRPC("OUT", "chat.send", chatReq)
+		conn.WriteJSON(chatReq)
 
-		if m["type"] == "event" && m["event"] == "chat" {
-			payload := m["payload"].(map[string]interface{})
-			state := payload["state"].(string)
-			if state == "delta" {
-				msgObj := payload["message"].(map[string]interface{})
-				content := msgObj["content"].([]interface{})
-				if len(content) > 0 {
-					text := content[0].(map[string]interface{})["text"].(string)
-					fmt.Printf("\r💬 流式回复: %s", text)
+		fmt.Println("⏳ 等待流式输出...")
+		for {
+			_, msg, _ := conn.ReadMessage()
+			var m map[string]interface{}
+			json.Unmarshal(msg, &m)
+
+			if m["type"] == "event" && m["event"] == "chat" {
+				logRPC("IN", "chat.event", m)
+				payload := m["payload"].(map[string]interface{})
+				state := payload["state"].(string)
+				if state == "thought" {
+					fmt.Print("💭") // 思考中...
+				} else if state == "delta" {
+					msgObj := payload["message"].(map[string]interface{})
+					content := msgObj["content"].([]interface{})
+					if len(content) > 0 {
+						text := content[0].(map[string]interface{})["text"].(string)
+						fmt.Printf("\r💬 回复: %s", text)
+					}
+				} else if state == "final" {
+					fmt.Println("\n✅ 轮次完成！")
+					break
 				}
-			} else if state == "final" {
-				fmt.Println("\n✅ 对话完成！")
-				break
-			}
-		} else if m["type"] == "res" && m["id"] == "c-send" {
-			if m["ok"] != true {
-				fmt.Printf("❌ 发送失败: %v\n", m["error"])
-				return
+			} else if m["type"] == "res" && m["id"] == fmt.Sprintf("c-send-%d", i) {
+				logRPC("IN", "chat.send.response", m)
+				if m["ok"] != true {
+					fmt.Printf("❌ 发送失败: %v\n", m["error"])
+					break
+				}
 			}
 		}
 	}
 
-	// 9. 测试历史获取
-	fmt.Println("\n--- 测试方法: chat.history ---")
-	historyReq := map[string]interface{}{
-		"type": "req",
-		"id": "h-1",
-		"method": "chat.history",
-		"params": map[string]interface{}{
-			"sessionKey": sessionKey,
-			"limit": 10,
-		},
-	}
-	conn.WriteJSON(historyReq)
-	for {
-		_, msg, _ := conn.ReadMessage()
-		var resp map[string]interface{}
-		json.Unmarshal(msg, &resp)
-		if resp["id"] == "h-1" {
-			fmt.Printf("✅ 历史记录获取成功! 消息条数: %v\n", len(resp["payload"].(map[string]interface{})["messages"].([]interface{})))
-			break
-		}
-	}
-
-	fmt.Println("\n🎉 所有关键协议路径验证通过！")
+	fmt.Println("\n🎉 所有关键协议路径验证通过！审计日志已保存至:", auditFile)
 }

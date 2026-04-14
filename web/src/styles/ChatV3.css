@@ -299,14 +299,19 @@
 
 /* --- 6. 浮动控制按钮 (Floating Controls) --- */
 .v3-floating-btn {
-  opacity: 0.3;
+  opacity: 1 !important; /* 彻底移除透明度 */
+  background: #ffffff !important; 
+  border: 1px solid #cbd5e1 !important; /* 使用更深的边框色提高对比度 */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
   cursor: pointer;
 }
 
 .v3-floating-btn:hover {
-  opacity: 1 !important;
-  transform: scale(1.05); /* 悬浮时轻微放大 */
+  background: #f8fafc !important; /* 悬浮时轻微变色 */
+  transform: scale(1.1); 
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2) !important;
+  border-color: #6366f1 !important;
 }
 
 .v3-floating-btn:active {
