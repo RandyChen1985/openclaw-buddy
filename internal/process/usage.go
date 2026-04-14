@@ -79,8 +79,9 @@ func GetUsageCost(days int, force bool) (*UsageCostResult, error) {
 	}
 
 	var result UsageCostResult
-	if err := json.Unmarshal([]byte(res.Output), &result); err != nil {
-		log.Printf("⚠️ [Usage] 反序列化 JSON 失败: %v, 输出为: %s", err, res.Output)
+	jsonStr := ExtractJSON(res.Stdout)
+	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+		log.Printf("⚠️ [Usage] 反序列化 JSON 失败: %v, Stdout: %s, Stderr: %s", err, res.Stdout, res.Stderr)
 		return nil, fmt.Errorf("failed to parse usage-cost output: %v", err)
 	}
 

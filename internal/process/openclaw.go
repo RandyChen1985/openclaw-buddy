@@ -667,13 +667,7 @@ func GetOpenClawPlugins() (any, error) {
 
 	// 清理 ANSI 颜色代码
 	cleanOut := StripANSI(string(out))
-
-	// 找到第一个 '{'，跳过前面的日志行
-	index := strings.Index(cleanOut, "{")
-	if index == -1 {
-		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
-	}
-	cleanOut = cleanOut[index:]
+	cleanOut = ExtractJSON(cleanOut)
 
 	var data struct {
 		Plugins []OpenClawPlugin `json:"plugins"`
@@ -736,13 +730,7 @@ func GetOpenClawSkills() (any, error) {
 
 	// 清理 ANSI 颜色代码，防止 JSON 解析失败
 	cleanOut := StripANSI(string(out))
-
-	// 找到第一个 '{'，跳过前面的日志行 (例如: 16:15:18+08:00 [plugins] ...)
-	index := strings.Index(cleanOut, "{")
-	if index == -1 {
-		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
-	}
-	cleanOut = cleanOut[index:]
+	cleanOut = ExtractJSON(cleanOut)
 
 	var skills interface{}
 	decoder := json.NewDecoder(strings.NewReader(cleanOut))
@@ -776,13 +764,7 @@ func GetOpenClawSessions() ([]OpenClawSession, error) {
 
 	// 清理 ANSI 颜色代码，防止 JSON 解析失败
 	cleanOut := StripANSI(string(out))
-
-	// 找到第一个 '{'，跳过前面的日志行
-	index := strings.Index(cleanOut, "{")
-	if index == -1 {
-		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
-	}
-	cleanOut = cleanOut[index:]
+	cleanOut = ExtractJSON(cleanOut)
 
 	var data struct {
 		Sessions []OpenClawSession `json:"sessions"`

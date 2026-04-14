@@ -31,3 +31,30 @@ func IsLogLine(line string) bool {
 	}
 	return false
 }
+
+// ExtractJSON finds the first '{' and last '}' and returns the substring between them.
+// This is useful for parsing JSON from CLI output that might contain leading or trailing logs.
+func ExtractJSON(input string) string {
+	start := strings.Index(input, "{")
+	if start == -1 {
+		// Also try array start if object start not found
+		start = strings.Index(input, "[")
+		if start == -1 {
+			return input
+		}
+	}
+	
+	// Find last matching brace/bracket
+	var end int
+	if input[start] == '{' {
+		end = strings.LastIndex(input, "}")
+	} else {
+		end = strings.LastIndex(input, "]")
+	}
+	
+	if end == -1 || end < start {
+		return input[start:]
+	}
+	
+	return input[start : end+1]
+}

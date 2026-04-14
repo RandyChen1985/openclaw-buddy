@@ -10,7 +10,9 @@ import (
 
 type CommandResult struct {
 	Success    bool   `json:"success"`
-	Output     string `json:"output"`
+	Output     string `json:"output"` // Combined output (legacy)
+	Stdout     string `json:"stdout"`
+	Stderr     string `json:"stderr"`
 	ReturnCode int    `json:"return_code"`
 	Error      string `json:"error,omitempty"`
 }
@@ -26,19 +28,25 @@ func RunCommandWithTimeout(timeout time.Duration, name string, args ...string) (
 	cmd.Stderr = &stderr
 
 	err := cmd.Run()
-	output := StripANSI(stdout.String() + stderr.String())
+	stdoutStr := StripANSI(stdout.String())
+	stderrStr := StripANSI(stderr.String())
+	combinedOutput := stdoutStr + stderrStr
 
 	if ctx.Err() == context.DeadlineExceeded {
 		return &CommandResult{
 			Success: false,
-			Output:  output,
+			Output:  combinedOutput,
+			Stdout:  stdoutStr,
+			Stderr:  stderrStr,
 			Error:   "Command timed out",
 		}, nil
 	}
 
 	result := &CommandResult{
 		Success: err == nil,
-		Output:  output,
+		Output:  combinedOutput,
+		Stdout:  stdoutStr,
+		Stderr:  stderrStr,
 	}
 
 	if exitErr, ok := err.(*exec.ExitError); ok {
