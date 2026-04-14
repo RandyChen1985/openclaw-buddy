@@ -1,6 +1,6 @@
 import React from 'react';
 import { Input, Button, Spin, Tooltip, Avatar, Badge as AntBadge } from 'antd';
-import { Search, Plus, Trash2, History, RefreshCw, Copy, Bot, XCircle, AlertCircle } from 'lucide-react';
+import { Search, Plus, Trash2, History, RefreshCw, Copy, Bot, XCircle, AlertCircle, Shield } from 'lucide-react';
 
 interface V3SessionListProps {
   sessions: any[];
@@ -111,15 +111,17 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
             allowClear
             style={{ borderRadius: 8, fontSize: 12, flex: 1 }}
           />
-          <Tooltip title={t('chat.clearAllHistory', { defaultValue: '清除全部历史' })}>
-              <Button 
-                  size="small" 
-                  type="text" 
-                  icon={<Trash2 size={13} />} 
-                  onClick={onClearAll}
-                  style={{ color: '#94a3b8', background: '#f8fafc', borderRadius: 8 }}
-              />
-          </Tooltip>
+          {sessions.some(s => s.key !== 'agent:main:main') && (
+            <Tooltip title={t('chat.clearAllHistory', { defaultValue: '清除全部历史' })}>
+                <Button 
+                    size="small" 
+                    type="text" 
+                    icon={<Trash2 size={13} />} 
+                    onClick={onClearAll}
+                    style={{ color: '#94a3b8', background: '#f8fafc', borderRadius: 8 }}
+                />
+            </Tooltip>
+          )}
         </div>
 
         {loadingSessions && sessions.length === 0 ? (
@@ -194,6 +196,25 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
                                 <div style={{ fontSize: 13, fontVariant: 'tabular-nums', fontWeight: 700, color: isActive ? '#3730a3' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
                                     {s.label || t('chat.noLabel', { defaultValue: '未命名会话' })}
+                                    {s.key === 'agent:main:main' && (
+                                      <span style={{ 
+                                          fontSize: 9, 
+                                          background: isActive ? 'rgba(99, 102, 241, 0.15)' : '#f1f5f9', 
+                                          color: isActive ? '#4f46e5' : '#64748b', 
+                                          padding: '1px 6px', 
+                                          borderRadius: 4, 
+                                          marginLeft: 6, 
+                                          fontWeight: 600,
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 3,
+                                          flexShrink: 0,
+                                          border: isActive ? '1px solid rgba(99, 102, 241, 0.2)' : '1px solid transparent'
+                                      }}>
+                                          <Shield size={10} strokeWidth={2.5} />
+                                          {t('chat.systemSessionTag', { defaultValue: '系统' })}
+                                      </span>
+                                    )}
                                     <SessionStatusIcon status={s.status} t={t} />
                                 </div>
                                 {s.messagesCount !== undefined && (
@@ -246,7 +267,9 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                           </div>
                           <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>
                               <Button size="small" type="text" icon={<Copy size={12} />} onClick={(e) => { e.stopPropagation(); copyToClipboard(s.key); }} />
-                              <Button size="small" type="text" icon={<Trash2 size={12} />} onClick={(e) => onDeleteSession(e, s.key)} />
+                              {s.key !== 'agent:main:main' && (
+                                <Button size="small" type="text" icon={<Trash2 size={12} />} onClick={(e) => onDeleteSession(e, s.key)} />
+                              )}
                           </div>
                       </div>
                     );

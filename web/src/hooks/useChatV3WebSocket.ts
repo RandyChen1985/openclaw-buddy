@@ -853,9 +853,16 @@ export const useChatV3WebSocket = ({
             fetchSessions();
           } else {
             // 💡 优化：确保透出具体的报错原因，方便定位是网络问题还是权限问题
-            const errMsg = res.error?.message || res.error || 'Gateway Timeout or Unknown Error';
+            const errMsgRaw = res.error?.message || res.error || 'Gateway Timeout or Unknown Error';
+            let errMsg = typeof errMsgRaw === 'string' ? errMsgRaw : JSON.stringify(errMsgRaw);
+            
+            // 💡 翻译优化：针对主会话不可删除的后端提示做特定翻译
+            if (errMsg.includes('Cannot delete the main session')) {
+              errMsg = t('chat.cannotDeleteMainSession');
+            }
+            
             message.error({ 
-              content: `${t('common.error')}: ${typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg)}`, 
+              content: `${t('common.error')}: ${errMsg}`, 
               key: 'deletingSession',
               duration: 5
             });
@@ -877,7 +884,8 @@ export const useChatV3WebSocket = ({
       onOk: async () => {
         try {
           message.loading({ content: t('chat.clearingGroup'), key: 'clearingGroup' });
-          await Promise.all(sessionKeys.map(key => sendRPC('sessions.delete', { key })));
+          const deletableKeys = sessionKeys.filter(k => k !== 'agent:main:main');
+          await Promise.all(deletableKeys.map(key => sendRPC('sessions.delete', { key })));
           message.success({ content: t('common.success'), key: 'clearingGroup' });
           if (sessionKey && sessionKeys.includes(sessionKey)) { 
             setSessionKey(null); 
@@ -901,7 +909,8 @@ export const useChatV3WebSocket = ({
       onOk: async () => {
         try {
           message.loading({ content: t('chat.clearingAll'), key: 'clearingAll' });
-          await Promise.all(sessions.map(s => sendRPC('sessions.delete', { key: s.key })));
+          const deletableSessions = sessions.filter(s => s.key !== 'agent:main:main');
+          await Promise.all(deletableSessions.map(s => sendRPC('sessions.delete', { key: s.key })));
           message.success({ content: t('chat.clearAllSuccess'), key: 'clearingAll' });
           setSessionKey(null); setMessages([]); setSessionLabel(null); setSessions([]);
           fetchSessions();
@@ -969,6 +978,10 @@ export const useChatV3WebSocket = ({
       setIsTyping(false);
       clearStallTimer();
       streamContentRef.current = '';
+      
+      // 💡 视觉反馈：提示已就绪并自动聚焦输入框
+      message.info({ content: t('chat.newSessionReady', { defaultValue: '新会话已就绪' }), key: 'newSessionReady' });
+      setTimeout(() => inputAreaRef.current?.focus(), 100);
     },
     handleSend,
     handleStopGeneration,
