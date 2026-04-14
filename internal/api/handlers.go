@@ -1000,6 +1000,70 @@ func (s *Server) reloadSkills(c *gin.Context) {
 	s.Success(c, gin.H{"status": "success", "message": "规则与技能已重新加载"})
 }
 
+func (s *Server) handleGetConfig(c *gin.Context) {
+	configPath := filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json")
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to read openclaw.json: "+err.Error())
+		return
+	}
+	s.Success(c, gin.H{"content": string(content)})
+}
+
+func (s *Server) handleUpdateConfig(c *gin.Context) {
+	var req struct {
+		Content string `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	configPath := filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json")
+	backupPath := configPath + ".bak.tmp"
+
+	// 1. 备份当前配置
+	oldContent, err := os.ReadFile(configPath)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to backup current config: "+err.Error())
+		return
+	}
+	if err := os.WriteFile(backupPath, oldContent, 0644); err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to write backup: "+err.Error())
+		return
+	}
+	defer os.Remove(backupPath)
+
+	// 2. 写入新配置
+	if err := os.WriteFile(configPath, []byte(req.Content), 0644); err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to update config: "+err.Error())
+		return
+	}
+
+	// 3. 校验新配置 (深度 Check)
+	isValid, problem, _ := process.CheckConfig()
+	if !isValid {
+		// 校验失败，回滚
+		_ = os.WriteFile(configPath, oldContent, 0644)
+		s.Error(c, http.StatusBadRequest, "Configuration validation failed: "+problem)
+		return
+	}
+
+	// 校验成功
+	utils.RecordSystemEvent("CONFIG", "用户通过 Web 控制台手动更新了核心配置 openclaw.json")
+	s.Success(c, nil)
+}
+
+func (s *Server) handleRunDoctor(c *gin.Context) {
+	output, err := process.RunDoctorFixWithOutput()
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "Doctor fix failed: "+err.Error()+"\n\nOutput:\n"+output)
+		return
+	}
+	utils.RecordSystemEvent("HEAL", "用户手动执行了一键体检修复 (Doctor Fix)")
+	s.Success(c, gin.H{"output": output})
+}
+
 func (s *Server) getSessions(c *gin.Context) {
 	refresh := c.Query("refresh") == "true"
 	if refresh {

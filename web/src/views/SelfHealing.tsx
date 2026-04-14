@@ -432,7 +432,18 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
   };
 
   const backupColumns = [
-    { title: t('common.name'), dataIndex: 'name', key: 'name', render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</span> },
+    { 
+      title: t('common.name'), 
+      dataIndex: 'name', 
+      key: 'name', 
+      render: (v: string, _: any, index: number) => (
+        <Space size={8}>
+          <HardDrive size={14} color="#94a3b8" style={{ flexShrink: 0 }} />
+          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</span>
+          {index === 0 && <Tag color="processing" style={{ fontSize: 10, borderRadius: 4 }}>{t('heal.latest')}</Tag>}
+        </Space>
+      ) 
+    },
     { title: t('common.time'), dataIndex: 'time', key: 'time', render: (v: string) => <span style={{ fontSize: 12, color: '#64748b' }}>{v}</span> },
     { title: t('common.size'), dataIndex: 'size', key: 'size', render: (v: number) => <span style={{ fontSize: 12 }}>{formatSize(v)}</span> },
     { title: t('common.action'), key: 'action', render: (_: any, record: any) => (
@@ -466,7 +477,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
                type={selfHealingEnabled ? "primary" : "primary"} 
                danger={selfHealingEnabled} 
                onClick={() => onToggle(!selfHealingEnabled)} 
-               style={{ borderRadius: 10, minWidth: 100, fontWeight: 700 }}
+               style={{ borderRadius: 10, minWidth: 120, height: 48, fontWeight: 700, fontSize: 15 }}
             >
               {selfHealingEnabled ? t('heal.disableService') : t('heal.enableNow')}
             </Button>
@@ -481,8 +492,8 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
             <div><div style={{ fontSize: 15, fontWeight: 700, color: '#1e293b' }}>{t('heal.coreConfigTitle')}</div><div style={{ fontSize: 12, color: '#64748b' }}>{t('heal.coreConfigDesc')}</div></div>
           </div>
           <Space>
-            <Button type="primary" icon={<Wand2 size={14} />} onClick={() => setIsConfigModalOpen(true)} disabled={runningDoctor} style={{ borderRadius: 8, height: 40, fontWeight: 600, padding: '0 20px' }}>{t('heal.manageConfig')}</Button>
-            <Button icon={<RefreshCw size={14} />} onClick={handleRunDoctor} loading={runningDoctor} style={{ borderRadius: 8, height: 40, fontWeight: 600, borderColor: '#3b82f6', color: '#3b82f6' }}>{t('heal.doctorFix')}</Button>
+            <Button type="primary" icon={<Wand2 size={14} />} onClick={() => setIsConfigModalOpen(true)} disabled={runningDoctor} style={{ borderRadius: 8, height: 44, fontWeight: 600, padding: '0 24px' }}>{t('heal.manageConfig')}</Button>
+            <Button icon={<RefreshCw size={14} />} onClick={handleRunDoctor} loading={runningDoctor} style={{ borderRadius: 8, height: 44, fontWeight: 600, borderColor: '#3b82f6', color: '#3b82f6', padding: '0 20px' }}>{t('heal.doctorFix')}</Button>
           </Space>
         </div>
       </Card>
@@ -513,8 +524,8 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
             </div>
             <Space style={{ width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
               <Button icon={<RefreshCw size={14} />} onClick={fetchConfig} loading={loadingConfig}>{t('common.refresh')}</Button>
-              <Button type="primary" icon={<Save size={14} />} onClick={handleSaveConfig} loading={savingConfig} disabled={editMode === 'visual' || savingConfig || loadingConfig} style={{ fontWeight: 600 }}>{t('common.save')}</Button>
-              <Button onClick={() => setIsConfigModalOpen(false)}>{t('common.close')}</Button>
+              <Button type="primary" icon={<Save size={16} />} onClick={handleSaveConfig} loading={savingConfig} disabled={editMode === 'visual' || savingConfig || loadingConfig} style={{ fontWeight: 700, borderRadius: 8, height: 36, padding: '0 20px' }}>{t('common.save')}</Button>
+              <Button onClick={() => setIsConfigModalOpen(false)} style={{ borderRadius: 8 }}>{t('common.close')}</Button>
             </Space>
           </div>
         ]}

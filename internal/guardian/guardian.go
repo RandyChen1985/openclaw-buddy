@@ -18,6 +18,7 @@ import (
 	"sort"
 	"net/http"
 	"strings"
+	"math/rand"
 )
 
 type Guardian struct {
@@ -146,10 +147,20 @@ func (g *Guardian) check() {
 		}
 
 		if i < g.config.MaxRetries {
-			log.Printf("⚠️ Check failed (attempt %d/%d): %v. Retrying in 2 seconds...", i, g.config.MaxRetries, lastErr)
+			// [优化] 阶梯式递增重试: 1st: 3s, 2nd: 10s, 3rd: 30s
+			waits := []int{3, 10, 30}
+			waitSec := 2 // 默认兜底
+			if i-1 < len(waits) {
+				waitSec = waits[i-1]
+			}
+			// 引入 0-2000ms 的随机抖动 (Jitter)，防止惊群效应
+			jitter := time.Duration(rand.Intn(2001)) * time.Millisecond
+			totalWait := time.Duration(waitSec)*time.Second + jitter
+
+			log.Printf("⚠️ Check failed (attempt %d/%d): %v. Retrying in %v...", i, g.config.MaxRetries, lastErr, totalWait)
 			metrics := process.GetSystemMetrics()
 			g.recordHealthCheck("Degraded", 0, metrics.CPUUsage, metrics.MemoryUsage, lastErr.Error())
-			time.Sleep(2 * time.Second)
+			time.Sleep(totalWait)
 		}
 	}
 

@@ -138,6 +138,10 @@ func (s *Server) setupRoutes() {
 			oc.GET("/experts", s.getOpenClawExperts)
 			oc.POST("/bots/template", s.createBotFromExpert)
 			oc.GET("/sessions", s.getSessions)
+			// Configuration & Maintenance
+			oc.GET("/config", s.handleGetConfig)
+			oc.POST("/config", s.handleUpdateConfig)
+			oc.POST("/doctor", s.handleRunDoctor)
 			// Security related
 			oc.GET("/security/status", s.getSecurityStatus)
 			oc.POST("/security/task", s.triggerSecurityTask)
