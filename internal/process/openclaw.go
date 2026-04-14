@@ -151,10 +151,11 @@ type cliBot struct {
 }
 
 type cliModel struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Provider  string `json:"provider"`
-	IsDefault bool   `json:"isDefault"`
+	Key       string   `json:"key"`
+	Name      string   `json:"name"`
+	Tags      []string `json:"tags"`
+	Provider  string   `json:"provider"` // 某些版本可能有，没有就从 Key 截取
+	IsDefault bool     `json:"isDefault"`
 }
 
 func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error) {
@@ -278,11 +279,31 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 			var cliModels []cliModel
 			if jsonErr := json.Unmarshal([]byte(jsonStr), &cliModels); jsonErr == nil {
 				for _, m := range cliModels {
+					isDefault := m.IsDefault
+					if !isDefault {
+						for _, t := range m.Tags {
+							if t == "default" {
+								isDefault = true
+								break
+							}
+						}
+					}
+					
+					id := m.Key
+					if id == "" {
+						id = m.Name
+					}
+					
+					provider := m.Provider
+					if provider == "" && strings.Contains(id, "/") {
+						provider = strings.Split(id, "/")[0]
+					}
+
 					res.Models = append(res.Models, OpenClawModel{
-						ID:        m.ID,
-						Name:      m.ID,
-						Provider:  m.Provider,
-						IsDefault: m.IsDefault,
+						ID:        id,
+						Name:      id,
+						Provider:  provider,
+						IsDefault: isDefault,
 					})
 				}
 				usedModelsJSON = true
