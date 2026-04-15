@@ -104,6 +104,9 @@ export const useChatV3WebSocket = ({
   const messagesCountRef = useRef(messages.length);
   useEffect(() => { messagesCountRef.current = messages.length; }, [messages.length]);
 
+  // 💡 性能优化：缓存当前会话正在流式更新的 Assistant 消息索引，避免每个 delta 都 O(n) 扫描 + 排序
+  const streamingAssistantIndexRef = useRef<number | null>(null);
+
   const stallTimerRef = useRef<any>(null);
   const lastUpdateRef = useRef(0);
   const showScrollBtnRef = useRef(false);
@@ -352,30 +355,36 @@ export const useChatV3WebSocket = ({
           }
 
           setMessages(prev => {
-            const targetIndex = prev.findLastIndex(m => m.runId === payload.runId) !== -1 
-              ? prev.findLastIndex(m => m.runId === payload.runId)
-              : prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
-
-            if (targetIndex !== -1) {
-              const current = prev[targetIndex];
-              const updated = { 
-                ...current, 
+            const idx = streamingAssistantIndexRef.current;
+            if (idx === null || idx < 0 || idx >= prev.length) {
+              // 兜底：找不到索引时保持旧行为，但不再排序（避免高频开销）
+              const runIdIndex = prev.findLastIndex(m => m.runId === payload.runId);
+              const fallbackIndex = runIdIndex !== -1 ? runIdIndex : prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
+              if (fallbackIndex === -1) return prev;
+              const next = [...prev];
+              const current = next[fallbackIndex];
+              next[fallbackIndex] = {
+                ...current,
                 runId: payload.runId,
                 content: fullText,
                 metrics: { ...current.metrics, ttft, tps: currentTPS },
-                _sortTs: current._sortTs // 💡 继承权重
+                _sortTs: current._sortTs
               };
-              const next = [...prev];
-              next[targetIndex] = updated;
-              // 💡 排序保险：考虑秒级精度撞车，User 优先
-              return next.sort((a, b) => {
-                const diff = (a._sortTs || 0) - (b._sortTs || 0);
-                if (diff !== 0) return diff;
-                const roleOrder: Record<string, number> = { 'system': 0, 'user': 1, 'assistant': 2 };
-                return (roleOrder[a.role] || 0) - (roleOrder[b.role] || 0);
-              });
+              // 记录索引以便后续 delta 直接命中
+              streamingAssistantIndexRef.current = fallbackIndex;
+              return next;
             }
-            return prev;
+
+            const next = [...prev];
+            const current = next[idx];
+            next[idx] = {
+              ...current,
+              runId: payload.runId,
+              content: fullText,
+              metrics: { ...current.metrics, ttft, tps: currentTPS },
+              _sortTs: current._sortTs
+            };
+            return next;
           });
 
           if (virtuosoRef.current) {
@@ -407,33 +416,27 @@ export const useChatV3WebSocket = ({
 
         if (pSessionKey === sessionKeyRef.current) {
           setMessages(prev => {
-              const targetIndex = prev.findLastIndex(m => m.runId === payload.runId) !== -1 
-                ? prev.findLastIndex(m => m.runId === payload.runId)
-                : prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
+            const idx = streamingAssistantIndexRef.current;
+            const runIdIndex = prev.findLastIndex(m => m.runId === payload.runId);
+            const targetIndex = (idx !== null && idx >= 0 && idx < prev.length) ? idx : (runIdIndex !== -1 ? runIdIndex : prev.findLastIndex(m => m.role === 'assistant' && !m.runId));
+            if (targetIndex === -1) return prev;
 
-              if (targetIndex === -1) return prev;
-              const last = prev[targetIndex];
-              
-              if (!incomingContent && last.content && last.content !== t('chat.thinking')) return prev;
+            const last = prev[targetIndex];
+            if (!incomingContent && last.content && last.content !== t('chat.thinking')) return prev;
 
-              const next = [...prev];
-              next[targetIndex] = { 
-                  ...last, 
-                  runId: payload.runId,
-                  content: incomingContent,
-                  metrics: { ...last.metrics, ttft, duration, tps: finalTPS },
-                  _sortTs: last._sortTs // 💡 继承权重
-              };
-              // 💡 排序保险：考虑秒级精度撞车，User 优先
-              return next.sort((a, b) => {
-                const diff = (a._sortTs || 0) - (b._sortTs || 0);
-                if (diff !== 0) return diff;
-                const roleOrder: Record<string, number> = { 'system': 0, 'user': 1, 'assistant': 2 };
-                return (roleOrder[a.role] || 0) - (roleOrder[b.role] || 0);
-              });
-              });
+            const next = [...prev];
+            next[targetIndex] = {
+              ...last,
+              runId: payload.runId,
+              content: incomingContent,
+              metrics: { ...last.metrics, ttft, duration, tps: finalTPS },
+              _sortTs: last._sortTs
+            };
+            return next;
+          });
 
           setIsTyping(false);
+          streamingAssistantIndexRef.current = null;
           fetchSessions(true);
           setTimeout(() => inputAreaRef.current?.focus(), 100);
         }
@@ -460,6 +463,7 @@ export const useChatV3WebSocket = ({
           });
 
           setIsTyping(false);
+          streamingAssistantIndexRef.current = null;
           setTimeout(() => inputAreaRef.current?.focus(), 100);
         }
     }
@@ -576,9 +580,19 @@ export const useChatV3WebSocket = ({
                 : `${last.content}${approvalBlock}`;
               return [...prev.slice(0, -1), { ...last, content: newContent }];
             }
-            return prev;
+            // 兜底：如果最后一条不是 assistant，则追加一个新的 assistant 消息承载审批卡片，避免事件丢失
+            const now = Date.now();
+            const newMsg: Message = {
+              id: `msg-approval-${now}`,
+              role: 'assistant',
+              content: approvalBlock,
+              timestamp: new Date(now).toLocaleTimeString(),
+              _sortTs: now
+            };
+            return [...prev, newMsg];
           });
           setIsTyping(false);
+          streamingAssistantIndexRef.current = null;
           clearStallTimer();
         }
  else if (data.event === 'agent') {
@@ -607,6 +621,8 @@ export const useChatV3WebSocket = ({
   // --- More Session/Chat Logic ---
   const loadSessionHistory = useCallback(async (key: string) => {
     setIsLoadingHistory(true);
+    // 切换/加载历史时清空流式索引，防止命中旧索引导致“更新错消息”
+    streamingAssistantIndexRef.current = null;
     const res = await sendRPC('chat.history', { sessionKey: key, limit: 500 });
     if (res.ok) {
         const items = (res.payload.messages || res.payload.items || []).sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
@@ -700,6 +716,7 @@ export const useChatV3WebSocket = ({
   const handleSelectSession = useCallback((key: string) => {
     if (key === sessionKey) return;
     setSessionKey(key);
+    streamingAssistantIndexRef.current = null;
     const s = sessions.find(x => x.key === key);
     if (s) {
       /**
@@ -896,6 +913,8 @@ export const useChatV3WebSocket = ({
 
       // 💡 一次性推入 User 和 AI 占位消息，确保时序正确
       setMessages(prev => [...prev, newUserMsg, aiPlaceholderMsg]);
+      // 记录当前流式 assistant 索引（assistant 占位符在追加的第二条）
+      streamingAssistantIndexRef.current = messagesCountRef.current + 1;
       resetStallTimer();
 
       setTimeout(() => {
@@ -931,17 +950,20 @@ export const useChatV3WebSocket = ({
       if (!res.ok) {
         message.error('Failed to send: ' + (res.error?.message || 'Unknown'));
         setIsTyping(false);
+        streamingAssistantIndexRef.current = null;
         clearStallTimer();
         const cache = sessionCacheRef.current.get(currentKey);
         if (cache) cache.isTyping = false;
       } else if (text === '/stop') {
         setIsTyping(false);
+        streamingAssistantIndexRef.current = null;
         clearStallTimer();
         const cache = sessionCacheRef.current.get(currentKey);
         if (cache) cache.isTyping = false;
       }
     } else {
       setIsTyping(false);
+      streamingAssistantIndexRef.current = null;
       message.error('Session key missing');
     }
   }, [status, sessionKey, selectedBot, thinkingLevel, sessionModel, sendRPC, fetchSessions, resetStallTimer, clearStallTimer, t, isTyping, messagesCountRef, virtuosoRef]);
@@ -985,6 +1007,8 @@ export const useChatV3WebSocket = ({
     });
 
     setMessages(prev => [...prev, aiPlaceholderMsg]);
+    // 记录流式 assistant 索引（此处仅追加一条 assistant 占位符）
+    streamingAssistantIndexRef.current = messagesCountRef.current;
     resetStallTimer();
 
     setTimeout(() => {
@@ -1019,6 +1043,7 @@ export const useChatV3WebSocket = ({
     if (!res.ok) {
       message.error('Failed to send: ' + (res.error?.message || 'Unknown'));
       setIsTyping(false);
+      streamingAssistantIndexRef.current = null;
       clearStallTimer();
       const cache = sessionCacheRef.current.get(sessionKey);
       if (cache) cache.isTyping = false;
@@ -1077,6 +1102,7 @@ export const useChatV3WebSocket = ({
 
     // 💡 1. 前端立即停机，恢复 UI 可用性
     setIsTyping(false);
+    streamingAssistantIndexRef.current = null;
     clearStallTimer();
     
     const cache = sessionCacheRef.current.get(sessionKey);
