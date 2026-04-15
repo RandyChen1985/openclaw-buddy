@@ -329,7 +329,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                 {mainSession && (
                   <div style={{ marginBottom: 12 }}>
                     <div className="session-group-header">
-                      <span style={{ fontSize: 10, fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ fontSize: 10, fontWeight: 800, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: 4 }}>
                         <Shield size={10} />
                         {t('chat.pinnedSession', { defaultValue: '置顶会话' })}
                       </span>
@@ -345,24 +345,24 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                             }}
                             style={{ 
                                 padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4, transition: 'all 0.2s',
-                                background: isActive ? 'linear-gradient(135deg, #fffbeb 0%, #ffedd5 100%)' : '#fffcf5',
-                                border: '1px solid', borderColor: isActive ? '#fde047' : '#fef3c7',
+                                background: isActive ? 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)' : '#f8fafc',
+                                border: '1px solid', borderColor: isActive ? '#c7d2fe' : '#e2e8f0',
                                 display: 'flex', alignItems: 'center', gap: 12, position: 'relative',
-                                boxShadow: isActive ? '0 4px 12px rgba(245, 158, 11, 0.12)' : 'none'
+                                boxShadow: isActive ? '0 4px 12px rgba(79, 70, 229, 0.08)' : 'none'
                             }}
                             className="session-item-main"
                         >
                             <div style={{ position: 'relative', flexShrink: 0 }}>
                               <Avatar 
                                 size={32} 
-                                icon={<Shield size={16} fill={isActive ? '#fff' : '#f59e0b'} />} 
+                                icon={<Shield size={16} fill={isActive ? '#fff' : '#6366f1'} />} 
                                 style={{ 
-                                  background: isActive ? '#f59e0b' : '#fef3c7', 
-                                  color: isActive ? '#fff' : '#d97706',
+                                  background: isActive ? '#4f46e5' : '#e0e7ff', 
+                                  color: isActive ? '#fff' : '#4338ca',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
-                                  boxShadow: isActive ? '0 0 0 2px rgba(245, 158, 11, 0.2)' : 'none'
+                                  boxShadow: isActive ? '0 0 0 2px rgba(79, 70, 229, 0.2)' : 'none'
                                 }} 
                               />
                               <div style={{
@@ -378,7 +378,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                 justifyContent: 'center',
                                 fontSize: 10,
                                 boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                                border: '1px solid #fde047'
+                                border: '1px solid #c7d2fe'
                               }}>
                                 {mainSession.avatar ? <img src={mainSession.avatar} style={{ width: '100%', height: '100%', borderRadius: '50%' }} /> : (mainSession.emoji || '⚡')}
                               </div>
@@ -386,21 +386,21 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
 
                             <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-                                  <div style={{ fontSize: 13, fontWeight: 800, color: isActive ? '#92400e' : '#b45309', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
+                                  <div style={{ fontSize: 13, fontWeight: 800, color: isActive ? '#1e1b4b' : '#3730a3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
                                       {t('chat.mainSession', { defaultValue: '主会话' })}
                                       <SessionStatusIcon status={mainSession.status} t={t} />
                                   </div>
                                   {mainSession.messagesCount !== undefined && (
                                     <div style={{ 
-                                      fontSize: 10, background: 'rgba(245, 158, 11, 0.1)', 
-                                      color: '#d97706', padding: '0 6px', 
+                                      fontSize: 10, background: 'rgba(79, 70, 229, 0.1)', 
+                                      color: '#4f46e5', padding: '0 6px', 
                                       borderRadius: 6, fontWeight: 600, flexShrink: 0
                                     }}>
                                       {mainSession.messagesCount}
                                     </div>
                                   )}
                                 </div>
-                                <div style={{ fontSize: 9, color: '#d97706', opacity: 0.6, marginTop: 1, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
+                                <div style={{ fontSize: 9, color: '#6366f1', opacity: 0.7, marginTop: 1, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
                                     <span>{new Date(mainSession.updatedAt || mainSession.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                     <span>•</span>
                                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>CORE SYSTEM</span>
@@ -409,19 +409,19 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                 {mainSession.contextTokens > 0 && (
                                     <div style={{ marginTop: 6, width: '100%' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, fontSize: 9, fontWeight: 700 }}>
-                                        <span style={{ color: '#d97706', opacity: 0.6, transform: 'scale(0.9)', transformOrigin: 'left' }}>CONTEXT</span>
+                                        <span style={{ color: '#6366f1', opacity: 0.7, transform: 'scale(0.9)', transformOrigin: 'left' }}>CONTEXT</span>
                                         <span style={{ 
-                                            color: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : '#b45309',
+                                            color: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : '#4f46e5',
                                             opacity: 0.8
                                         }}>
                                             {Math.round((mainSession.totalTokens / mainSession.contextTokens) * 100)}%
                                         </span>
                                     </div>
-                                    <div style={{ height: 3, width: '100%', background: 'rgba(245, 158, 11, 0.15)', borderRadius: 2, overflow: 'hidden' }}>
+                                    <div style={{ height: 3, width: '100%', background: 'rgba(79, 70, 229, 0.15)', borderRadius: 2, overflow: 'hidden' }}>
                                         <div style={{ 
                                             height: '100%', 
                                             width: `${Math.min(100, (mainSession.totalTokens / mainSession.contextTokens) * 100)}%`,
-                                            background: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : '#f59e0b',
+                                            background: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : '#6366f1',
                                             transition: 'width 0.3s ease'
                                         }} />
                                     </div>
