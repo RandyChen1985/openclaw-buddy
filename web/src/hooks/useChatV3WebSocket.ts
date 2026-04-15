@@ -6,6 +6,7 @@ import { useV3GatewayConnection } from './chatV3/useV3GatewayConnection';
 import { useV3Messages } from './chatV3/useV3Messages';
 import { useV3AutoSummarize } from './chatV3/useV3AutoSummarize';
 import { useV3Sessions } from './chatV3/useV3Sessions';
+import { useV3UntitledAutoTitle } from './chatV3/useV3UntitledAutoTitle';
 
 export interface FileInfo {
   url: string;
@@ -72,11 +73,16 @@ export const useChatV3WebSocket = ({
   const showScrollBtnRef = useRef(false);
 
   // 消息层 API 引用（用于在网关事件路由中调用，避免 TDZ）
-  const messagesApiRef = useRef<null | { handleChatDelta: (payload: any) => void }>(null);
+  const messagesApiRef = useRef<null | {
+    handleChatDelta: (payload: any) => void;
+    handleApprovalRequested: (payload: any) => void;
+    handleGatewayEvent: (data: any) => void;
+  }>(null);
   const sessionMessageOpsRef = useRef<{
     setMessages?: (updater: ((prev: Message[]) => Message[]) | Message[]) => void;
     loadSessionHistory?: (key: string) => Promise<void> | void;
     setHasNewMessages?: (val: boolean) => void;
+    getMessagesCount?: () => number;
   }>({});
 
   /**
@@ -105,6 +111,7 @@ export const useChatV3WebSocket = ({
     loadingSessions,
     isUpdatingLabel,
     fetchSessions,
+    handleGatewayEvent: handleSessionsGatewayEvent,
     handleSelectSession,
     startNewSession,
     handleUpdateLabel,
@@ -142,7 +149,10 @@ export const useChatV3WebSocket = ({
     handleSend,
     handleStopGeneration,
     handleRegenerate,
-    handleSaveEdit
+    handleSaveEdit,
+    handleApprovalRequested,
+    handleGatewayEvent,
+    getMessagesCount
   } = useV3Messages({
     t,
     status,
@@ -163,14 +173,15 @@ export const useChatV3WebSocket = ({
     sessionMessageOpsRef.current = {
       setMessages: setV3Messages,
       loadSessionHistory,
-      setHasNewMessages
+      setHasNewMessages,
+      getMessagesCount
     };
-  }, [loadSessionHistory, setHasNewMessages, setV3Messages]);
+  }, [getMessagesCount, loadSessionHistory, setHasNewMessages, setV3Messages]);
 
   // 与网关事件路由兼容：将 chat delta 处理函数注入 ref
   useEffect(() => {
-    messagesApiRef.current = { handleChatDelta };
-  }, [handleChatDelta]);
+    messagesApiRef.current = { handleChatDelta, handleApprovalRequested, handleGatewayEvent };
+  }, [handleApprovalRequested, handleChatDelta, handleGatewayEvent]);
 
   // 保持对外 messages/setMessages API 不变：对外仍以 messages 作为单一来源
   useEffect(() => {
@@ -185,46 +196,13 @@ export const useChatV3WebSocket = ({
   useEffect(() => {
     gatewayEventHandlerRef.current = (data: any) => {
       if (!data || data.type !== 'event') return;
-      if (['tick', 'presence'].includes(data.event)) return;
-      if (data.event === 'chat') messagesApiRef.current?.handleChatDelta(data.payload);
-      else if (data.event === 'sessions.changed') fetchSessions(true);
-      else if (data.event === 'exec.approval.requested') {
-        const { id, request } = data.payload;
-        const slug = id.substring(0, 8);
-        const command = request.command;
-        const approvalBlock = `\n\n> :::approval\n> **${slug}**\n> \`\`\`bash\n> ${command}\n> \`\`\`\n> :::\n`;
-
-        setMessages(prev => {
-          const last = prev[prev.length - 1];
-          if (last && last.role === 'assistant') {
-            if (last.content.includes(slug)) return prev;
-            const newContent = (last.content === t('chat.thinking') || !last.content)
-              ? approvalBlock
-              : `${last.content}${approvalBlock}`;
-            return [...prev.slice(0, -1), { ...last, content: newContent }];
-          }
-          const now = Date.now();
-          const newMsg: Message = {
-            id: `msg-approval-${now}`,
-            role: 'assistant',
-            content: approvalBlock,
-            timestamp: new Date(now).toLocaleTimeString(),
-            _sortTs: now
-          };
-          return [...prev, newMsg];
-        });
-        // typing/stall 等状态由消息层统一维护，这里不额外干预
-      } else if (data.event === 'agent') {
-        const { stream, data: agentData } = data.payload;
-        if (stream === 'item' && agentData.status === 'blocked') {
-          // typing/stall 等状态由消息层统一维护，这里不额外干预
-        }
-      }
+      handleSessionsGatewayEvent(data);
+      messagesApiRef.current?.handleGatewayEvent(data);
     };
     return () => {
       gatewayEventHandlerRef.current = null;
     };
-  }, [fetchSessions, t]);
+  }, [handleSessionsGatewayEvent]);
 
   const { isSummarizing, handleAutoSummarize } = useV3AutoSummarize({
     t,
@@ -240,6 +218,14 @@ export const useChatV3WebSocket = ({
     }
   });
   autoSummarizeRef.current = handleAutoSummarize;
+
+  // 后台任务：为未命名会话自动补全标题（去抖 + 并发控制 + 可取消）
+  useV3UntitledAutoTitle({
+    status,
+    sessions,
+    sendRPC,
+    handleAutoSummarize
+  });
 
   return {
     messages, setMessages,

@@ -331,6 +331,81 @@ export function useV3Messages({
   }, [clearStallTimer, fetchSessions, formatMessageContent, inputAreaRef, resetStallTimer, scrollRef, showScrollBtnRef, t, virtuosoRef]);
 
   /**
+   * 处理审批请求事件：将审批卡片以 Markdown block 注入到消息流中，确保 UI 一定可见。
+   *
+   * 规则：
+   * - 若最后一条是 assistant，则追加 block 到该消息（去重：slug 已存在则忽略）
+   * - 否则追加一条新的 assistant 消息承载审批卡片
+   */
+  const handleApprovalRequested = useCallback((payload: any) => {
+    if (!payload) return;
+    const { id, request } = payload;
+    const slug = (id || '').toString().substring(0, 8);
+    const command = request?.command || '';
+    if (!slug || !command) return;
+
+    const approvalBlock = `\n\n> :::approval\n> **${slug}**\n> \`\`\`bash\n> ${command}\n> \`\`\`\n> :::\n`;
+
+    setMessages(prev => {
+      const last = prev[prev.length - 1];
+      if (last && last.role === 'assistant') {
+        if (last.content.includes(slug)) return prev;
+        const newContent = (last.content === t('chat.thinking') || !last.content)
+          ? approvalBlock
+          : `${last.content}${approvalBlock}`;
+        return [...prev.slice(0, -1), { ...last, content: newContent }];
+      }
+      const now = Date.now();
+      const newMsg: Message = {
+        id: `msg-approval-${now}`,
+        role: 'assistant',
+        content: approvalBlock,
+        timestamp: new Date(now).toLocaleTimeString(),
+        _sortTs: now
+      };
+      return [...prev, newMsg];
+    });
+
+    // 审批出现时应解除 typing，并清理 stall 标记，避免 UI 卡在“生成中”
+    setIsTyping(false);
+    streamingAssistantIndexRef.current = null;
+    clearStallTimer();
+  }, [clearStallTimer, t]);
+
+  /**
+   * 统一处理网关 event（除 health/connect.challenge/sessions.changed 外）。
+   *
+   * - tick/presence: 噪声事件，忽略
+   * - chat: 转发到流式处理
+   * - exec.approval.requested: 注入审批卡片
+   * - agent(blocked): 解除 typing/stall，避免 UI 卡住
+   */
+  const handleGatewayEvent = useCallback((data: any) => {
+    if (!data || data.type !== 'event') return;
+    const evt = data.event;
+    if (!evt) return;
+
+    if (evt === 'tick' || evt === 'presence') return;
+    if (evt === 'chat') {
+      handleChatDelta(data.payload);
+      return;
+    }
+    if (evt === 'exec.approval.requested') {
+      handleApprovalRequested(data.payload);
+      return;
+    }
+    if (evt === 'agent') {
+      const { stream, data: agentData } = data.payload || {};
+      if (stream === 'item' && agentData?.status === 'blocked') {
+        setIsTyping(false);
+        clearStallTimer();
+        streamingAssistantIndexRef.current = null;
+      }
+      return;
+    }
+  }, [clearStallTimer, handleApprovalRequested, handleChatDelta]);
+
+  /**
    * 加载会话历史并写入 messages；同时用 sessionCacheRef 缝合 DB 未落盘的临时消息。
    */
   const loadSessionHistory = useCallback(async (key: string) => {
@@ -707,6 +782,8 @@ export function useV3Messages({
       hasNewMessages,
       setHasNewMessages,
       handleChatDelta,
+      handleApprovalRequested,
+      handleGatewayEvent,
       loadSessionHistory,
       handleSend,
       handleStopGeneration,
@@ -714,8 +791,12 @@ export function useV3Messages({
       handleSaveEdit,
       // refs exposed for compatibility with existing callers
       showScrollBtnRef,
-      messagesCountRef
+      messagesCountRef,
+      /**
+       * 获取当前消息数量（供会话层在 authenticated 后决定是否加载历史，避免覆盖正在进行的对话）。
+       */
+      getMessagesCount: () => messagesCountRef.current
     };
-  }, [handleChatDelta, handleRegenerate, handleSaveEdit, handleSend, handleStopGeneration, hasNewMessages, isLoadingHistory, isStalled, isTyping, messages, setMessages, tpsData, showScrollBtnRef]);
+  }, [handleApprovalRequested, handleChatDelta, handleGatewayEvent, handleRegenerate, handleSaveEdit, handleSend, handleStopGeneration, hasNewMessages, isLoadingHistory, isStalled, isTyping, messages, setMessages, tpsData, showScrollBtnRef]);
 }
 

@@ -24,6 +24,7 @@ export interface UseV3SessionsParams {
     setMessages?: (updater: ((prev: Message[]) => Message[]) | Message[]) => void;
     loadSessionHistory?: (key: string) => Promise<void> | void;
     setHasNewMessages?: (val: boolean) => void;
+    getMessagesCount?: () => number;
   }>;
   inputAreaRef: React.RefObject<any>;
 }
@@ -95,6 +96,19 @@ export function useV3Sessions({
 
     if (!isSilent) setLoadingSessions(false);
   }, [sendRPC]);
+
+  /**
+   * 统一处理网关 event（会话维度）。
+   *
+   * 目前仅处理：
+   * - sessions.changed：静默刷新会话列表
+   */
+  const handleGatewayEvent = useCallback((data: any) => {
+    if (!data || data.type !== 'event') return;
+    if (data.event === 'sessions.changed') {
+      fetchSessions(true);
+    }
+  }, [fetchSessions]);
 
   /**
    * 切换会话：同步标题/模型/机器人，并加载历史。
@@ -298,8 +312,10 @@ export function useV3Sessions({
     fetchSessions(true);
     if (sessionKeyRef.current) {
       // 保持旧逻辑：只有当消息为空时才加载历史（避免“撤自/清屏”）
-      // 这里无法直接拿到 messages.length，由消息层负责更精细策略；会话层只做安全触发
-      messageOpsRef.current.loadSessionHistory?.(sessionKeyRef.current);
+      const count = messageOpsRef.current.getMessagesCount?.() ?? 0;
+      if (count === 0) {
+        messageOpsRef.current.loadSessionHistory?.(sessionKeyRef.current);
+      }
     }
   }, [fetchSessions, messageOpsRef, status]);
 
@@ -310,6 +326,7 @@ export function useV3Sessions({
       loadingSessions,
       isUpdatingLabel,
       fetchSessions,
+      handleGatewayEvent,
       handleSelectSession,
       startNewSession,
       handleUpdateLabel,
@@ -321,6 +338,7 @@ export function useV3Sessions({
     };
   }, [
     fetchSessions,
+    handleGatewayEvent,
     handleClearAllHistory,
     handleDeleteGroup,
     handleDeleteSession,

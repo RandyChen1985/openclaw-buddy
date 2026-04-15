@@ -142,9 +142,6 @@ export function useV3GatewayConnection({
    */
   const handleChallenge = useCallback(async (nonce: string, ws: WebSocket) => {
     if (!keyPair || !deviceId) return;
-    const nonceBytes = new TextEncoder().encode(nonce);
-    const payload = new Uint8Array([...nonceBytes, ...new TextEncoder().encode(APP_VERSION)]);
-    const signature = nacl.sign.detached(payload, keyPair.secretKey);
 
     let gatewayToken = '';
     try {
@@ -159,6 +156,7 @@ export function useV3GatewayConnection({
       return;
     }
 
+    const signedAt = Date.now();
     const role = 'operator';
     const scopes = 'operator.admin,operator.read,operator.write';
     const clientId = 'openclaw-control-ui';
@@ -166,22 +164,28 @@ export function useV3GatewayConnection({
     const platform = navigator.platform.toLowerCase().includes('mac') ? 'macos' : 'windows';
 
     const authId = `connect-${Date.now()}`;
+
+    // 与既有网关协议对齐：签名握手串（服务端会校验字段完整性，如 minProtocol/maxProtocol）
+    const handshakeStr = `v3|${deviceId}|${clientId}|${clientMode}|${role}|${scopes}|${signedAt}|${gatewayToken}|${nonce}|${platform}|`;
+    const signatureBytes = nacl.sign.detached(new TextEncoder().encode(handshakeStr), keyPair.secretKey);
+
     const req = {
       type: 'req',
       id: authId,
       method: 'connect',
       params: {
+        minProtocol: 3,
+        maxProtocol: 3,
         role,
         scopes: scopes.split(','),
-        clientId,
-        clientMode,
-        deviceId,
-        platform,
-        gatewayToken,
-        challenge: {
-          nonce,
+        auth: { token: gatewayToken },
+        client: { id: clientId, mode: clientMode, platform, version: APP_VERSION },
+        device: {
+          id: deviceId,
           publicKey: btoa(String.fromCharCode(...keyPair.publicKey)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
-          signature: btoa(String.fromCharCode(...signature)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+          signature: btoa(String.fromCharCode(...signatureBytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+          signedAt,
+          nonce
         }
       }
     };
