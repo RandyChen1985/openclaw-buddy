@@ -3,7 +3,7 @@ import { Virtuoso } from 'react-virtuoso';
 import type { VirtuosoHandle } from 'react-virtuoso';
 import { Select, Input, Button, Spin, message, Badge, Modal, Form, Tooltip, Drawer, Switch, Tabs } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Bot, RefreshCw, Cpu, Plus, Trash2, LayoutPanelLeft, Settings, ChevronUp, ChevronDown, Sparkles, Save, X, Zap, Quote, Wand2, PenLine, Eye, Activity, Monitor, MessageCircle, Send, Globe, Shield } from 'lucide-react';
+import { Bot, RefreshCw, Cpu, Plus, Trash2, LayoutPanelLeft, Settings, ChevronUp, ChevronDown, Sparkles, Save, X, Zap, Quote, Wand2, PenLine, Eye, Activity, Monitor, MessageCircle, Send, Globe, Shield, Clock } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -38,6 +38,8 @@ const SourceConfig: Record<string, { icon: any, color: string, label: string }> 
   'dashboard': { icon: <Monitor size={12} />, color: '#6366f1', label: '管理后台' },
   'weixin': { icon: <MessageCircle size={12} />, color: '#07c160', label: '微信' },
   'feishu': { icon: <Send size={12} />, color: '#3370ff', label: '飞书' },
+  'telegram': { icon: <Send size={12} />, color: '#24A1DE', label: 'Telegram' },
+  'cron': { icon: <Clock size={12} />, color: '#8b5cf6', label: '定时任务' },
   'openai-user': { icon: <Zap size={12} />, color: '#f59e0b', label: 'OpenAI API' },
   'fallback': { icon: <Globe size={12} />, color: '#94a3b8', label: '其他渠道' }
 };

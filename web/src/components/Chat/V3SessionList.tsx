@@ -1,6 +1,6 @@
 import React from 'react';
 import { Input, Button, Spin, Tooltip, Avatar, Badge as AntBadge } from 'antd';
-import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe } from 'lucide-react';
+import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe, Clock } from 'lucide-react';
 
 interface V3SessionListProps {
   sessions: any[];
@@ -34,6 +34,8 @@ const SourceConfig: Record<string, { icon: any, color: string, label: string }> 
   'dashboard': { icon: <Monitor size={14} />, color: '#6366f1', label: '管理后台' },
   'weixin': { icon: <MessageCircle size={14} />, color: '#07c160', label: '微信' },
   'feishu': { icon: <Send size={14} />, color: '#3370ff', label: '飞书' },
+  'telegram': { icon: <Send size={14} />, color: '#24A1DE', label: 'Telegram' },
+  'cron': { icon: <Clock size={14} />, color: '#8b5cf6', label: '定时任务' },
   'openai-user': { icon: <Zap size={14} />, color: '#f59e0b', label: 'OpenAI API' },
   'fallback': { icon: <Globe size={14} />, color: '#94a3b8', label: '其他渠道' }
 };
