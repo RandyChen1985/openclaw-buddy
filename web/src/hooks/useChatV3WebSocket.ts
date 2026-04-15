@@ -702,15 +702,26 @@ export const useChatV3WebSocket = ({
     setSessionKey(key);
     const s = sessions.find(x => x.key === key);
     if (s) {
-      // 💡 只有当 s.label 确实有意义时才覆盖当前 sessionLabel，防止被列表里的“空”数据偷袭
-      if (s.label && s.label.trim() !== '' && s.label !== '未命名会话' && s.label !== 'New Session') {
-        setSessionLabel(s.label);
+      /**
+       * 会话切换时同步标题（label）。
+       *
+       * 关键修复：当目标会话未命名/为空时，必须清空当前 `sessionLabel`，否则会错误沿用上一个会话标题。
+       * 同时保留原本的防御意图：仅当目标会话 label“像样”时才使用它覆盖；否则用 null 触发 UI 的“未命名会话”兜底展示。
+       */
+      const nextLabel = (s.label || '').trim();
+      if (nextLabel && nextLabel !== '未命名会话' && nextLabel !== 'New Session') {
+        setSessionLabel(nextLabel);
+      } else {
+        setSessionLabel(null);
       }
       setSessionModel(s.model || '');
       if (key.startsWith('agent:')) {
         const parts = key.split(':');
         if (parts.length >= 2) setSelectedBot(`openclaw:${parts[1]}`);
       }
+    } else {
+      // 找不到会话元信息时也要避免串台
+      setSessionLabel(null);
     }
     // 💡 状态切换：先尝试从缓存恢复 UI 状态，防止加载历史期间输入框“闪现”可用状态
     const cache = sessionCacheRef.current.get(key);
@@ -748,7 +759,13 @@ export const useChatV3WebSocket = ({
     }
   }, [sessionKey, sendRPC, fetchSessions, t]);
 
-  const handleAutoSummarize = useCallback(async (messagesOverride?: Message[], silent = false, targetKey?: string) => {
+  /**
+   * 手动/自动汇总会话标题。
+   *
+   * - 自动模式（force=false）：仅在会话标题为空/未命名时生成，避免覆盖用户已命名标题。
+   * - 手动模式（force=true）：允许在已有标题时重新生成并覆盖标题（用于“手动触发 AI 汇总标题”）。
+   */
+  const handleAutoSummarize = useCallback(async (messagesOverride?: Message[], silent = false, targetKey?: string, force = false) => {
     const activeKey = targetKey || sessionKey;
     const targetMessages = messagesOverride || messages;
     
@@ -757,10 +774,11 @@ export const useChatV3WebSocket = ({
       return;
     }
 
-    // 💡 核心保护 2：如果已经有了“像样”的名字（不是空、也不是未命名标识），则不要去改它
+    // 💡 核心保护 2（自动模式）：如果已经有了“像样”的名字（不是空、也不是未命名标识），则不要去改它
+    // 手动模式允许覆盖，从而支持“已存在会话标题也能手动触发 AI 汇总标题”
     const existing = sessions.find(s => s.key === activeKey);
     const currentLabel = activeKey === sessionKey ? sessionLabel : existing?.label;
-    if (currentLabel && currentLabel !== '未命名会话' && currentLabel !== 'New Session' && currentLabel.trim() !== '') {
+    if (!force && currentLabel && currentLabel !== '未命名会话' && currentLabel !== 'New Session' && currentLabel.trim() !== '') {
       return;
     }
 
@@ -808,7 +826,7 @@ export const useChatV3WebSocket = ({
       summarizingSessionsRef.current.delete(activeKey);
       if (!targetKey) setIsSummarizing(false);
     }
-  }, [sessionKey, messages, selectedBot, botsModels, sendRPC, fetchSessions, t]);
+  }, [sessionKey, messages, selectedBot, botsModels, sendRPC, fetchSessions, t, sessions, sessionLabel]);
   autoSummarizeRef.current = handleAutoSummarize;
 
   const handleSend = useCallback(async (content?: any, attachedFiles?: FileInfo[]) => {

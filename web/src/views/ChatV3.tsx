@@ -519,7 +519,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                                 size="small" 
                                 type="text" 
                                 icon={isSummarizing ? <RefreshCw size={10} className="animate-spin" /> : <Wand2 size={10} />} 
-                                onClick={() => handleAutoSummarize()}
+                                onClick={() => handleAutoSummarize(undefined, false, undefined, true)}
                                 disabled={isSummarizing || messages.length === 0}
                                 style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}
                               />
