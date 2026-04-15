@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { Message } from '../useChatV3WebSocket';
+import { isUntitledSessionLabel } from './labelUtils';
 
 export interface UseV3UntitledAutoTitleParams {
   status: 'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error';
@@ -19,11 +20,6 @@ export interface UseV3UntitledAutoTitleParams {
    * 每个会话拉取历史的条数，默认 10。
    */
   historyLimit?: number;
-}
-
-function isUntitledLabel(label: any) {
-  const s = (label ?? '').toString().trim();
-  return !s || s === '未命名会话' || s === 'New Session';
 }
 
 /**
@@ -48,7 +44,7 @@ export function useV3UntitledAutoTitle({
     if (status !== 'authenticated') return;
 
     const untitled = sessions
-      .filter((s: any) => s?.key && s.key !== 'agent:main:main' && isUntitledLabel(s.label))
+      .filter((s: any) => s?.key && s.key !== 'agent:main:main' && isUntitledSessionLabel(s.label))
       .slice(0, 15); // 保护：一次最多处理 15 个
 
     if (untitled.length === 0) return;

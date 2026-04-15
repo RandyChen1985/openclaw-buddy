@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { message as antdMessage } from 'antd';
 import { summarizeSession } from '../../api';
 import type { Message } from '../useChatV3WebSocket';
+import { isUntitledSessionLabel } from './labelUtils';
 
 export interface UseV3AutoSummarizeParams {
   t: any;
@@ -44,7 +45,7 @@ export function useV3AutoSummarize({
 
     const existing = sessions.find(s => s.key === activeKey);
     const currentLabel = activeKey === sessionKey ? sessionLabel : existing?.label;
-    if (!force && currentLabel && currentLabel !== '未命名会话' && currentLabel !== 'New Session' && currentLabel.trim() !== '') {
+    if (!force && !isUntitledSessionLabel(currentLabel)) {
       return;
     }
 

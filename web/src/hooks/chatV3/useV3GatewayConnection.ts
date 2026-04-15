@@ -93,6 +93,8 @@ export function useV3GatewayConnection({
   const pendingRequests = useRef<Map<string, (res: any) => void>>(new Map());
   const reconnectCountRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectInFlightRef = useRef(false);
+  const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [status, dispatch] = useReducer(wsStatusReducer, 'disconnected' as V3WsStatus);
   const [lastHealth, setLastHealth] = useState<{ ok: boolean; latency: number; ts: number } | null>(null);
@@ -190,7 +192,21 @@ export function useV3GatewayConnection({
       }
     };
 
+    // 握手兜底超时：避免 connect-res 丢失导致状态悬挂
+    if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
+    connectTimeoutRef.current = setTimeout(() => {
+      if (!pendingRequests.current.has(authId)) return;
+      pendingRequests.current.delete(authId);
+      // 进入 error 并关闭当前 ws，交由重连调度处理
+      dispatch({ type: 'AUTH_FAILED' });
+      try { ws.close(); } catch {}
+    }, 30000);
+
     pendingRequests.current.set(authId, (res: any) => {
+      if (connectTimeoutRef.current) {
+        clearTimeout(connectTimeoutRef.current);
+        connectTimeoutRef.current = null;
+      }
       if (res.ok) {
         dispatch({ type: 'AUTH_OK' });
       } else {
@@ -212,6 +228,9 @@ export function useV3GatewayConnection({
    */
   const connect = useCallback(async () => {
     if (!keyPair || !deviceId) return;
+    // 防抖：避免多次点击导致 close/new ws 抖动
+    if (connectInFlightRef.current) return;
+    connectInFlightRef.current = true;
 
     dispatch({ type: 'CONNECT_REQUEST' });
 
@@ -230,6 +249,7 @@ export function useV3GatewayConnection({
 
     ws.onopen = () => {
       if (ws !== wsRef.current) return;
+      connectInFlightRef.current = false;
       dispatch({ type: 'WS_OPEN' });
     };
 
@@ -274,12 +294,14 @@ export function useV3GatewayConnection({
     ws.onclose = () => {
       if (ws !== wsRef.current) return;
       wsRef.current = null;
+      connectInFlightRef.current = false;
       dispatch({ type: 'WS_CLOSE' });
       rejectAllPendingRequests('WebSocket closed');
     };
 
     ws.onerror = () => {
       if (ws !== wsRef.current) return;
+      connectInFlightRef.current = false;
       dispatch({ type: 'WS_ERROR' });
       rejectAllPendingRequests('WebSocket error');
     };
@@ -290,7 +312,7 @@ export function useV3GatewayConnection({
    */
   useEffect(() => {
     if (!keyPair) return;
-    if (status !== 'disconnected') return;
+    if (status !== 'disconnected' && status !== 'error') return;
     if (reconnectCountRef.current >= maxReconnects) {
       dispatch({ type: 'AUTH_FAILED' });
       return;
@@ -314,6 +336,10 @@ export function useV3GatewayConnection({
    */
   useEffect(() => {
     return () => {
+      if (connectTimeoutRef.current) {
+        clearTimeout(connectTimeoutRef.current);
+        connectTimeoutRef.current = null;
+      }
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;

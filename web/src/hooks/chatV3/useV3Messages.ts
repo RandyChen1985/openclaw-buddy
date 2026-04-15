@@ -197,6 +197,8 @@ export function useV3Messages({
       if (!messageObj) return;
 
       const fullText = formatMessageContent(messageObj);
+      // 防抖/去重：若格式化结果无变化，则不触发 setState（降低高频 delta 的开销）
+      if (fullText === cache.fullText) return;
       if (!fullText.trim() && cache.fullText.trim()) return;
 
       const oldLen = cache.fullText.length;

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { message as antdMessage, Modal } from 'antd';
 import storage from '../../utils/storage';
 import type { Message } from '../useChatV3WebSocket';
+import { isUntitledSessionLabel } from './labelUtils';
 
 export interface UseV3SessionsParams {
   t: any;
@@ -120,7 +121,7 @@ export function useV3Sessions({
     const s = sessions.find(x => x.key === key);
     if (s) {
       const nextLabel = (s.label || '').trim();
-      if (nextLabel && nextLabel !== '未命名会话' && nextLabel !== 'New Session') setSessionLabel(nextLabel);
+      if (!isUntitledSessionLabel(nextLabel)) setSessionLabel(nextLabel);
       else setSessionLabel(null);
 
       setSessionModel(s.model || '');

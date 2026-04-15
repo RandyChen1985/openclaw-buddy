@@ -317,18 +317,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   };
 
   useEffect(() => {
-    if (!isTyping && messages.length >= 2 && sessionKey) {
-      const isUntitled = !sessionLabel || sessionLabel === '未命名会话' || sessionLabel === t('chat.noLabel');
-      if (isUntitled && !isSummarizing) {
-        const timer = setTimeout(() => {
-          handleAutoSummarize(messages, true);
-        }, 1000);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [isTyping, sessionKey, sessionLabel]);
-
-  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isMod = e.metaKey || e.ctrlKey;
       if (e.key === 'Escape') {

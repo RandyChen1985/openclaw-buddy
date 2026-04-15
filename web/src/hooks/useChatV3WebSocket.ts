@@ -7,6 +7,7 @@ import { useV3Messages } from './chatV3/useV3Messages';
 import { useV3AutoSummarize } from './chatV3/useV3AutoSummarize';
 import { useV3Sessions } from './chatV3/useV3Sessions';
 import { useV3UntitledAutoTitle } from './chatV3/useV3UntitledAutoTitle';
+import { isUntitledSessionLabel } from './chatV3/labelUtils';
 
 export interface FileInfo {
   url: string;
@@ -218,6 +219,29 @@ export const useChatV3WebSocket = ({
     }
   });
   autoSummarizeRef.current = handleAutoSummarize;
+
+  /**
+   * 当前会话自动补全标题（收敛触发源，避免在 UI 层与后台扫描层重复触发）。
+   *
+   * 触发条件：
+   * - 已认证
+   * - 当前会话存在且未命名
+   * - 非 typing，且已有足够上下文（>=2 条）
+   */
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    if (!sessionKey) return;
+    if (isTyping) return;
+    if (isSummarizing) return;
+    if (messages.length < 2) return;
+    if (!isUntitledSessionLabel(sessionLabel)) return;
+
+    const timer = setTimeout(() => {
+      // silent=true：避免频繁 toast；force=false：遵循“自动不覆盖已有标题”的语义
+      handleAutoSummarize(messages, true, sessionKey, false);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [handleAutoSummarize, isSummarizing, isTyping, messages, sessionKey, sessionLabel, status]);
 
   // 后台任务：为未命名会话自动补全标题（去抖 + 并发控制 + 可取消）
   useV3UntitledAutoTitle({
