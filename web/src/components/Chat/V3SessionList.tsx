@@ -1,6 +1,6 @@
 import React from 'react';
 import { Input, Button, Spin, Tooltip, Avatar, Badge as AntBadge } from 'antd';
-import { Search, Plus, Trash2, History, RefreshCw, Copy, Bot, XCircle, AlertCircle, Shield, Zap } from 'lucide-react';
+import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe } from 'lucide-react';
 
 interface V3SessionListProps {
   sessions: any[];
@@ -19,6 +19,32 @@ interface V3SessionListProps {
   copyToClipboard: (text: string) => void;
   t: any;
 }
+
+// --- Utils & Config ---
+const parseSessionKey = (key: string) => {
+  if (!key || !key.startsWith('agent:')) return { botId: 'main', source: 'dashboard' };
+  const parts = key.split(':');
+  return {
+    botId: parts[1] || 'main',
+    source: parts[2] || 'dashboard'
+  };
+};
+
+const SourceConfig: Record<string, { icon: any, color: string, label: string }> = {
+  'dashboard': { icon: <Monitor size={14} />, color: '#6366f1', label: '管理后台' },
+  'weixin': { icon: <MessageCircle size={14} />, color: '#07c160', label: '微信' },
+  'feishu': { icon: <Send size={14} />, color: '#3370ff', label: '飞书' },
+  'openai-user': { icon: <Zap size={14} />, color: '#f59e0b', label: 'OpenAI API' },
+  'fallback': { icon: <Globe size={14} />, color: '#94a3b8', label: '其他渠道' }
+};
+
+const getSourceMeta = (source: string) => {
+  const s = source?.toLowerCase();
+  if (SourceConfig[s]) return SourceConfig[s];
+  // 兼容逻辑：api -> openai-user
+  if (s === 'api') return SourceConfig['openai-user'];
+  return SourceConfig['fallback'];
+};
 
 const SessionStatusIcon = ({ status, t }: { status: string, t: any }) => {
   if (status === 'active') {
@@ -180,6 +206,9 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                   </div>
                   {items.map((s: any) => {
                     const isActive = sessionKey === s.key;
+                    const { source } = parseSessionKey(s.key);
+                    const sourceMeta = getSourceMeta(source);
+                    
                     return (
                       <div 
                           key={s.key}
@@ -191,34 +220,47 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                               padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4, transition: 'all 0.2s',
                               background: isActive ? '#eef2ff' : 'transparent',
                               border: '1px solid', borderColor: isActive ? '#c7d2fe' : 'transparent',
-                              display: 'flex', alignItems: 'center', gap: 10, position: 'relative'
+                              display: 'flex', alignItems: 'center', gap: 12, position: 'relative'
                           }}
                           className="session-item"
                       >
-                          <Avatar size={32} src={s.avatar} icon={<Bot size={16} />} style={{ background: isActive ? '#4f46e5' : '#f1f5f9', color: isActive ? '#fff' : '#64748b', flexShrink: 0 }} />
+                          <div style={{ position: 'relative', flexShrink: 0 }}>
+                            <Avatar 
+                              size={32} 
+                              icon={sourceMeta.icon} 
+                              style={{ 
+                                background: sourceMeta.color, 
+                                color: '#fff', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                boxShadow: isActive ? `0 0 0 2px ${sourceMeta.color}33` : 'none'
+                              }} 
+                            />
+                            {/* Bot Badge */}
+                            <div style={{
+                              position: 'absolute',
+                              bottom: -2,
+                              right: -2,
+                              width: 16,
+                              height: 16,
+                              background: '#fff',
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 10,
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                              border: '1px solid #f1f5f9'
+                            }}>
+                              {s.avatar ? <img src={s.avatar} style={{ width: '100%', height: '100%', borderRadius: '50%' }} /> : (s.emoji || '🤖')}
+                            </div>
+                          </div>
+
                           <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
                                 <div style={{ fontSize: 13, fontVariant: 'tabular-nums', fontWeight: 700, color: isActive ? '#3730a3' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
                                     {s.label || t('chat.noLabel', { defaultValue: '未命名会话' })}
-                                    {s.key === 'agent:main:main' && (
-                                      <span style={{ 
-                                          fontSize: 9, 
-                                          background: isActive ? 'rgba(99, 102, 241, 0.15)' : '#f1f5f9', 
-                                          color: isActive ? '#4f46e5' : '#64748b', 
-                                          padding: '1px 6px', 
-                                          borderRadius: 4, 
-                                          marginLeft: 6, 
-                                          fontWeight: 600,
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: 3,
-                                          flexShrink: 0,
-                                          border: isActive ? '1px solid rgba(99, 102, 241, 0.2)' : '1px solid transparent'
-                                      }}>
-                                          <Shield size={10} strokeWidth={2.5} />
-                                          {t('chat.systemSessionTag', { defaultValue: '系统' })}
-                                      </span>
-                                    )}
                                     <SessionStatusIcon status={s.status} t={t} />
                                 </div>
                                 {s.messagesCount !== undefined && (
@@ -235,7 +277,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                   <span>{new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                   <span>•</span>
                                   <span style={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                                    {s.key.includes(':') ? s.key.substring(s.key.indexOf(':') + 1) : s.key}
+                                    {sourceMeta.label}
                                   </span>
                                   {s.model && (
                                     <>
@@ -305,33 +347,47 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                 padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4, transition: 'all 0.2s',
                                 background: isActive ? 'linear-gradient(135deg, #fffbeb 0%, #ffedd5 100%)' : '#fffcf5',
                                 border: '1px solid', borderColor: isActive ? '#fde047' : '#fef3c7',
-                                display: 'flex', alignItems: 'center', gap: 10, position: 'relative',
+                                display: 'flex', alignItems: 'center', gap: 12, position: 'relative',
                                 boxShadow: isActive ? '0 4px 12px rgba(245, 158, 11, 0.12)' : 'none'
                             }}
                             className="session-item-main"
                         >
-                            <Avatar size={32} src={mainSession.avatar} icon={<Bot size={16} />} style={{ background: isActive ? '#f59e0b' : '#fef3c7', color: isActive ? '#fff' : '#d97706', flexShrink: 0 }} />
+                            <div style={{ position: 'relative', flexShrink: 0 }}>
+                              <Avatar 
+                                size={32} 
+                                icon={<Shield size={16} fill={isActive ? '#fff' : '#f59e0b'} />} 
+                                style={{ 
+                                  background: isActive ? '#f59e0b' : '#fef3c7', 
+                                  color: isActive ? '#fff' : '#d97706',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  boxShadow: isActive ? '0 0 0 2px rgba(245, 158, 11, 0.2)' : 'none'
+                                }} 
+                              />
+                              <div style={{
+                                position: 'absolute',
+                                bottom: -2,
+                                right: -2,
+                                width: 16,
+                                height: 16,
+                                background: '#fff',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 10,
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                border: '1px solid #fde047'
+                              }}>
+                                {mainSession.avatar ? <img src={mainSession.avatar} style={{ width: '100%', height: '100%', borderRadius: '50%' }} /> : (mainSession.emoji || '⚡')}
+                              </div>
+                            </div>
+
                             <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
                                   <div style={{ fontSize: 13, fontWeight: 800, color: isActive ? '#92400e' : '#b45309', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
                                       {t('chat.mainSession', { defaultValue: '主会话' })}
-                                      <span style={{ 
-                                          fontSize: 9, 
-                                          background: 'rgba(245, 158, 11, 0.15)', 
-                                          color: '#d97706', 
-                                          padding: '1px 6px', 
-                                          borderRadius: 4, 
-                                          marginLeft: 6, 
-                                          fontWeight: 700,
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: 3,
-                                          flexShrink: 0,
-                                          border: '1px solid rgba(245, 158, 11, 0.2)'
-                                      }}>
-                                          <Zap size={10} fill="#f59e0b" style={{ color: '#f59e0b' }} />
-                                          SYSTEM
-                                      </span>
                                       <SessionStatusIcon status={mainSession.status} t={t} />
                                   </div>
                                   {mainSession.messagesCount !== undefined && (
@@ -344,10 +400,10 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                     </div>
                                   )}
                                 </div>
-                                <div style={{ fontSize: 9, color: '#d97706', opacity: 0.6, marginTop: 1, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <div style={{ fontSize: 9, color: '#d97706', opacity: 0.6, marginTop: 1, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
                                     <span>{new Date(mainSession.updatedAt || mainSession.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                     <span>•</span>
-                                    <span>CORE SYSTEM</span>
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>CORE SYSTEM</span>
                                 </div>
                                 {/* Token 水位线 (主会话同步补全) */}
                                 {mainSession.contextTokens > 0 && (

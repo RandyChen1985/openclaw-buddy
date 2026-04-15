@@ -74,7 +74,7 @@ export const useChatV3WebSocket = ({
       storage.removeItem('v3_current_session_label');
     }
   }, [sessionKey, sessionLabel]);
-  const [thinkingLevel, setThinkingLevel] = useState<'low' | 'medium' | 'high' | 'pro'>('medium');
+  const [thinkingLevel, setThinkingLevel] = useState<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'>('medium');
   const [lastHealth, setLastHealth] = useState<{ ok: boolean, latency: number, ts: number } | null>(null);
   const [latencyHistory, setLatencyHistory] = useState<number[]>([]);
   const [pulse, setPulse] = useState(0);
@@ -941,11 +941,14 @@ export const useChatV3WebSocket = ({
     }
   }, [sessionKey, sendRPC, fetchSessions, t]);
 
-  const handleThinkingLevelChange = useCallback(async (newLevel: 'low' | 'medium' | 'high' | 'pro') => {
+  const handleThinkingLevelChange = useCallback(async (newLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh') => {
     setThinkingLevel(newLevel);
     if (!sessionKey) return;
-    sendRPC('sessions.patch', { key: sessionKey, thinkingLevel: newLevel });
-  }, [sessionKey, sendRPC]);
+    const res = await sendRPC('sessions.patch', { key: sessionKey, thinkingLevel: newLevel });
+    if (res.ok) {
+      message.success(t('chat.thinkingLevelUpdated', { defaultValue: '思考等级已更新' }));
+    }
+  }, [sessionKey, sendRPC, t]);
 
   // --- Effects ---
   useEffect(() => {
