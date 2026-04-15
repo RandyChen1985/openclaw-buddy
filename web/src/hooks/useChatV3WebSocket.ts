@@ -125,6 +125,16 @@ export const useChatV3WebSocket = ({
     lastUserMsg?: Message; // 💡 记录本轮对话的提问，防止切会话时因 DB 延迟导致提问“消失”或排在 AI 后面
   }>>(new Map());
 
+  /**
+   * 统一失败回调所有挂起中的 RPC 请求，避免断连后 Promise 悬挂导致 UI 卡死。
+   */
+  const rejectAllPendingRequests = useCallback((errorMessage: string) => {
+    if (pendingRequests.current.size === 0) return;
+    const resolvers = Array.from(pendingRequests.current.values());
+    pendingRequests.current.clear();
+    resolvers.forEach(resolve => resolve({ ok: false, error: { message: errorMessage } }));
+  }, []);
+
   // --- RPC Communication ---
   const sendRPC = useCallback((method: string, params: any): Promise<any> => {
     return new Promise((resolve) => {
@@ -539,7 +549,10 @@ export const useChatV3WebSocket = ({
 
   const connect = useCallback(async () => {
     if (!keyPair || !deviceId) return;
-    if (wsRef.current) wsRef.current.close();
+    // 先脱钩旧连接，防止旧 ws 的 onclose 误伤新连接状态
+    const oldWs = wsRef.current;
+    wsRef.current = null;
+    if (oldWs) oldWs.close();
     setStatus('connecting');
     const ticket = await getTicket();
     const token = storage.getItem('guardian_token');
@@ -548,9 +561,19 @@ export const useChatV3WebSocket = ({
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
-    ws.onopen = () => setStatus('challenging');
+    ws.onopen = () => {
+      if (ws !== wsRef.current) return;
+      setStatus('challenging');
+    };
     ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+      if (ws !== wsRef.current) return;
+      let data: any;
+      try {
+        data = JSON.parse(event.data);
+      } catch (err) {
+        console.warn('⚠️ [V3] 非法 WS 消息，已忽略:', event.data);
+        return;
+      }
       if (data.type === 'event') {
         if (data.event === 'health') {
           const { ok, durationMs, ts } = data.payload;
@@ -611,12 +634,19 @@ export const useChatV3WebSocket = ({
       }
     };
     ws.onclose = () => {
+      if (ws !== wsRef.current) return;
+      wsRef.current = null;
       setStatus('disconnected');
       setIsTyping(false);
+      rejectAllPendingRequests('WebSocket closed');
       clearStallTimer();
     };
-    ws.onerror = () => setStatus('error');
-  }, [keyPair, deviceId, handleChallenge, handleChatDelta, fetchSessions, clearStallTimer]);
+    ws.onerror = () => {
+      if (ws !== wsRef.current) return;
+      setStatus('error');
+      rejectAllPendingRequests('WebSocket error');
+    };
+  }, [keyPair, deviceId, handleChallenge, handleChatDelta, fetchSessions, clearStallTimer, rejectAllPendingRequests]);
 
   // --- More Session/Chat Logic ---
   const loadSessionHistory = useCallback(async (key: string) => {

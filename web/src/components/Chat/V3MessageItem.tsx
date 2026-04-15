@@ -329,12 +329,23 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
 };
 
 export default React.memo(V3MessageItem, (prev, next) => {
+  const prevTpsLast = prev.tpsData && prev.tpsData.length > 0 ? prev.tpsData[prev.tpsData.length - 1] : undefined;
+  const nextTpsLast = next.tpsData && next.tpsData.length > 0 ? next.tpsData[next.tpsData.length - 1] : undefined;
+  const prevMetrics = prev.msg.metrics || {};
+  const nextMetrics = next.msg.metrics || {};
+
   return prev.editContent === next.editContent && 
          prev.editingMsgIndex === next.editingMsgIndex &&
          prev.msg.content === next.msg.content &&
+         prev.msg.runId === next.msg.runId &&
+         prev.msg.timestamp === next.msg.timestamp &&
+         prevMetrics.ttft === nextMetrics.ttft &&
+         prevMetrics.tps === nextMetrics.tps &&
+         prevMetrics.duration === nextMetrics.duration &&
          prev.showThinking === next.showThinking &&
          prev.isTyping === next.isTyping &&
          prev.isLast === next.isLast &&
          prev.isStalled === next.isStalled &&
-         (prev.tpsData?.length === next.tpsData?.length);
+         (prev.tpsData?.length === next.tpsData?.length) &&
+         prevTpsLast === nextTpsLast;
 });
