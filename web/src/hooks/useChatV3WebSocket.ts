@@ -21,6 +21,7 @@ export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: string;
+  _sortTs?: number; // 💡 排序权重：毫秒级时间戳，用于消灭 UI 乱序
   metrics?: {
     ttft?: number;
     duration?: number;
@@ -104,14 +105,22 @@ export const useChatV3WebSocket = ({
   useEffect(() => { messagesCountRef.current = messages.length; }, [messages.length]);
 
   const stallTimerRef = useRef<any>(null);
-  const streamContentRef = useRef('');
   const lastUpdateRef = useRef(0);
-  const startTimeRef = useRef<number>(0);
-  const ttftRecordedRef = useRef<boolean>(false);
-  const tokenCountRef = useRef<number>(0);
-  const firstTokenTimeRef = useRef<number>(0);
   const showScrollBtnRef = useRef(false);
   const summarizingSessionsRef = useRef<Set<string>>(new Set());
+
+  // 💡 核心升级：按 sessionKey 隔离的后台状态存储
+  const sessionCacheRef = useRef<Map<string, {
+    fullText: string;
+    runId?: string; 
+    isTyping: boolean;
+    startTime: number;
+    firstTokenTime: number;
+    ttftRecorded: boolean;
+    tokenCount: number;
+    tpsData: number[];
+    lastUserMsg?: Message; // 💡 记录本轮对话的提问，防止切会话时因 DB 延迟导致提问“消失”或排在 AI 后面
+  }>>(new Map());
 
   // --- RPC Communication ---
   const sendRPC = useCallback((method: string, params: any): Promise<any> => {
@@ -139,51 +148,6 @@ export const useChatV3WebSocket = ({
       wsRef.current.send(JSON.stringify(req));
     });
   }, []);
-
-  // --- Session List actions ---
-  const fetchSessions = useCallback(async (isSilent = false) => {
-    if (!isSilent) setLoadingSessions(true);
-    
-    // 💡 视觉加固：使用 Promise.all 确保即使后端秒回，图标也至少旋转 800ms
-    const [res] = await Promise.all([
-      sendRPC('sessions.list', { limit: 50 }),
-      isSilent ? Promise.resolve() : new Promise(resolve => setTimeout(resolve, 800))
-    ]);
-
-    if (res.ok) {
-      const list = res.payload?.items || res.payload?.sessions || (Array.isArray(res.payload) ? res.payload : []);
-      setSessions(list);
-
-      // 💡 自动总结：刷新后识别未命名会话并后台生成标题
-      if (!isSilent) {
-        const untitled = list.filter((s: any) => !s.label || s.label === '未命名会话' || s.label === 'New Session' || s.label === '').slice(0, 15);
-        if (untitled.length > 0) {
-          // 缩短延时到 500ms
-          setTimeout(async () => {
-            for (const s of untitled) {
-              const hRes = await sendRPC('chat.history', { sessionKey: s.key, limit: 10 });
-              if (hRes.ok) {
-                const raw = hRes.payload.messages || hRes.payload.items || [];
-                // 💡 降低门槛：只要有 1 条用户消息即可尝试总结标题
-                if (raw.length >= 1) {
-                  const msgs = raw.map((m: any) => ({
-                    role: m.role === 'toolResult' ? 'assistant' : m.role,
-                    content: formatMessageContent(m.content)
-                  })).filter((m: any) => m.content);
-                  
-                  if (msgs.length > 0) {
-                    // 💡 视觉修复：后台扫描历史会话时，强制开启 silent 模式，禁止弹出 Toast！
-                    autoSummarizeRef.current?.(msgs, true, s.key);
-                  }
-                }
-              }
-            }
-          }, 500);
-        }
-      }
-    }
-    if (!isSilent) setLoadingSessions(false);
-  }, [sendRPC]);
 
   // --- Streaming Data Handlers ---
   const formatMessageContent = useCallback((msg: any): string => {
@@ -266,6 +230,58 @@ export const useChatV3WebSocket = ({
     return prefix + body;
   }, []);
 
+  // --- Session List actions ---
+  const fetchSessions = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoadingSessions(true);
+    
+    // 💡 视觉加固：使用 Promise.all 确保即使后端秒回，图标也至少旋转 800ms
+    const [res] = await Promise.all([
+      sendRPC('sessions.list', { limit: 50 }),
+      isSilent ? Promise.resolve() : new Promise(resolve => setTimeout(resolve, 800))
+    ]);
+
+    if (res.ok) {
+      const list = res.payload?.items || res.payload?.sessions || (Array.isArray(res.payload) ? res.payload : []);
+      
+      // 💡 核心防御：标题持久化锁。如果后端返回的 Label 是空的，但本地已有非空 Label，则强制保留本地的，防止闪退“未命名”
+      const patchedList = list.map((s: any) => {
+        if (s.key === sessionKeyRef.current && (!s.label || s.label.trim() === '') && sessionLabelRef.current) {
+          return { ...s, label: sessionLabelRef.current };
+        }
+        return s;
+      });
+      
+      setSessions(patchedList);
+
+      // 💡 自动总结：刷新后识别未命名会话并后台生成标题
+      if (!isSilent) {
+        // 增加过滤条件，只有真正没名字的才进入总结流程
+        const untitled = patchedList.filter((s: any) => !s.label || s.label === '未命名会话' || s.label === 'New Session' || s.label === '').slice(0, 15);
+        if (untitled.length > 0) {
+          setTimeout(async () => {
+            for (const s of untitled) {
+              const hRes = await sendRPC('chat.history', { sessionKey: s.key, limit: 10 });
+              if (hRes.ok) {
+                const raw = hRes.payload.messages || hRes.payload.items || [];
+                if (raw.length >= 1) {
+                  const msgs = raw.map((m: any) => ({
+                    role: m.role === 'toolResult' ? 'assistant' : m.role,
+                    content: formatMessageContent(m.content)
+                  })).filter((m: any) => m.content);
+                  
+                  if (msgs.length > 0) {
+                    autoSummarizeRef.current?.(msgs, true, s.key);
+                  }
+                }
+              }
+            }
+          }, 500);
+        }
+      }
+    }
+    if (!isSilent) setLoadingSessions(false);
+  }, [sendRPC, formatMessageContent]);
+
   const clearStallTimer = useCallback(() => {
     if (stallTimerRef.current) {
       clearTimeout(stallTimerRef.current);
@@ -282,156 +298,172 @@ export const useChatV3WebSocket = ({
   }, [clearStallTimer]);
 
   const handleChatDelta = useCallback((payload: any) => {
-    if (payload.state === 'delta') {
-      resetStallTimer();
-      const now = Date.now();
-      
-      if (showScrollBtnRef.current) {
-        setHasNewMessages(true);
-      }
+    const pSessionKey = payload.sessionKey || sessionKeyRef.current;
+    if (!pSessionKey) return;
 
-      if (!ttftRecordedRef.current) {
-        ttftRecordedRef.current = true;
-        firstTokenTimeRef.current = now;
+    // 💡 1. 确保缓存抽屉存在
+    if (!sessionCacheRef.current.has(pSessionKey)) {
+      sessionCacheRef.current.set(pSessionKey, {
+        fullText: '', isTyping: true, startTime: Date.now(),
+        firstTokenTime: 0, ttftRecorded: false, tokenCount: 0, tpsData: []
+      });
+    }
+    const cache = sessionCacheRef.current.get(pSessionKey)!;
+
+    if (payload.state === 'delta') {
+      // 💡 只有当前会话才重置打字停顿计时器和显示通知
+      if (pSessionKey === sessionKeyRef.current) {
+        resetStallTimer();
+        if (showScrollBtnRef.current) setHasNewMessages(true);
+      }
+      
+      const now = Date.now();
+      if (!cache.ttftRecorded) {
+        cache.ttftRecorded = true;
+        cache.firstTokenTime = now;
       }
 
       const messageObj = payload.message;
       if (!messageObj) return;
 
-      if (payload.sessionKey && payload.sessionKey !== sessionKeyRef.current) {
-        return;
-      }
-
       const fullText = formatMessageContent(messageObj);
-      
-      if (!fullText.trim() && streamContentRef.current.trim()) {
-        return;
-      }
+      if (!fullText.trim() && cache.fullText.trim()) return;
 
-      const oldLen = streamContentRef.current.length;
-      if (oldLen > 50 && fullText.length < oldLen - 20) {
-        return;
-      }
+      // 💡 鲁棒性保护：包长度突降检测
+      const oldLen = cache.fullText.length;
+      if (oldLen > 50 && fullText.length < oldLen - 20) return;
 
-      streamContentRef.current = fullText;
-      tokenCountRef.current = fullText.length;
+      cache.fullText = fullText;
+      cache.tokenCount = fullText.length;
+      cache.isTyping = true;
+      cache.runId = payload.runId; // 💡 同步 runId 到缓存
 
-      setIsTyping(prev => {
-        if (!prev) return true;
-        return prev;
-      });
+      // 💡 2. 状态分发：仅在活跃会话时推送 UI 更新
+      if (pSessionKey === sessionKeyRef.current) {
+        setIsTyping(true);
+        if (now - lastUpdateRef.current > 64) {
+          lastUpdateRef.current = now;
+          const elapsedFromFirst = (now - cache.firstTokenTime) / 1000;
+          const currentTPS = elapsedFromFirst > 0 ? (cache.tokenCount / elapsedFromFirst) : 0;
+          const ttft = cache.firstTokenTime - cache.startTime;
 
-      if (now - lastUpdateRef.current > 64) {
-        lastUpdateRef.current = now;
-        const elapsedFromFirst = (now - firstTokenTimeRef.current) / 1000;
-        const currentTPS = elapsedFromFirst > 0 ? (tokenCountRef.current / elapsedFromFirst) : 0;
-        const ttft = firstTokenTimeRef.current - startTimeRef.current;
-
-        if (tokenCountRef.current % 5 === 0) {
-          setTpsData(prev => [...prev.slice(-19), currentTPS]);
-        }
-
-        setMessages(prev => {
-          // 💡 核心优化：通过 runId 精准查找。
-          // 逻辑：1. 找 runId 匹配的；2. 没找到再找没有 runId 且是 assistant 的第一项（软绑定）。
-          const targetIndex = prev.findLastIndex(m => m.runId === payload.runId) !== -1 
-            ? prev.findLastIndex(m => m.runId === payload.runId)
-            : prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
-
-          if (targetIndex !== -1) {
-            const current = prev[targetIndex];
-            const updated = { 
-              ...current, 
-              runId: payload.runId, // 完成绑定
-              content: fullText,
-              metrics: { ...current.metrics, ttft, tps: currentTPS }
-            };
-            const next = [...prev];
-            next[targetIndex] = updated;
-            return next;
+          if (cache.tokenCount % 5 === 0) {
+            setTpsData(prev => [...prev.slice(-19), currentTPS]);
           }
-          return prev;
-        });
 
-        if (virtuosoRef.current) {
-          const isNearBottom = scrollRef.current 
-            ? (scrollRef.current.scrollHeight - scrollRef.current.scrollTop - scrollRef.current.clientHeight < 40)
-            : true;
-
-          if (!showScrollBtnRef.current || isNearBottom) {
-            virtuosoRef.current.scrollToIndex({ 
-              index: messagesCountRef.current - 1, 
-              align: 'end',
-              behavior: 'auto' 
-            });
-          }
-        }
-      }
-    } else if (payload.state === 'final' || payload.state === 'finished' || payload.state === 'done') {
-        // 💡 漏洞修复：如果 final 事件的 sessionKey 不是当前会话，拦截以防止跨会话状态清零和复写！
-        if (payload.sessionKey && payload.sessionKey !== sessionKeyRef.current) {
-          return;
-        }
-
-        clearStallTimer();
-        const now = Date.now();
-        const duration = (now - startTimeRef.current) / 1000;
-        const ttft = ttftRecordedRef.current ? (firstTokenTimeRef.current - startTimeRef.current) : 0;
-        const finalTPS = duration > 0 ? (tokenCountRef.current / (duration - (ttft/1000))) : 0;
-
-        setMessages(prev => {
+          setMessages(prev => {
             const targetIndex = prev.findLastIndex(m => m.runId === payload.runId) !== -1 
               ? prev.findLastIndex(m => m.runId === payload.runId)
               : prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
 
-            if (targetIndex === -1) return prev;
-            const last = prev[targetIndex];
-            
-            const incomingContent = payload.message?.content ? formatMessageContent(payload.message.content) : streamContentRef.current;
-            if (!incomingContent && last.content && last.content !== t('chat.thinking')) {
-                return prev;
-            }
-
-            const next = [...prev];
-            next[targetIndex] = { 
-                ...last, 
+            if (targetIndex !== -1) {
+              const current = prev[targetIndex];
+              const updated = { 
+                ...current, 
                 runId: payload.runId,
-                content: incomingContent,
-                metrics: { ...last.metrics, ttft, duration, tps: finalTPS }
-            };
-            return next;
-        });
+                content: fullText,
+                metrics: { ...current.metrics, ttft, tps: currentTPS },
+                _sortTs: current._sortTs // 💡 继承权重
+              };
+              const next = [...prev];
+              next[targetIndex] = updated;
+              // 💡 排序保险：考虑秒级精度撞车，User 优先
+              return next.sort((a, b) => {
+                const diff = (a._sortTs || 0) - (b._sortTs || 0);
+                if (diff !== 0) return diff;
+                const roleOrder: Record<string, number> = { 'system': 0, 'user': 1, 'assistant': 2 };
+                return (roleOrder[a.role] || 0) - (roleOrder[b.role] || 0);
+              });
+            }
+            return prev;
+          });
 
-        setIsTyping(false);
-        streamContentRef.current = '';
-        fetchSessions(true);
-        setTimeout(() => inputAreaRef.current?.focus(), 100);
-    } else if (payload.state === 'error' || payload.state === 'failed') {
-        // 💡 漏洞修复：拦截跨会话的错误信号
-        if (payload.sessionKey && payload.sessionKey !== sessionKeyRef.current) {
-          return;
+          if (virtuosoRef.current) {
+            const isNearBottom = scrollRef.current 
+              ? (scrollRef.current.scrollHeight - scrollRef.current.scrollTop - scrollRef.current.clientHeight < 40)
+              : true;
+
+            if (!showScrollBtnRef.current || isNearBottom) {
+              virtuosoRef.current.scrollToIndex({ 
+                index: messagesCountRef.current - 1, 
+                align: 'end',
+                behavior: 'auto' 
+              });
+            }
+          }
         }
-        clearStallTimer();
-        
-        const errorMsg = payload.message?.content || payload.error?.message || payload.error || '网关或模型响应异常，流式生成失败';
-        
-        setMessages(prev => {
-            const last = prev[prev.length - 1];
-            if (!last || last.role !== 'assistant') return prev;
-            
-            const errMsgFormatted = typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg);
-            const content = last.content === '思考中...' || last.content === t('chat.thinking') || !last.content 
-              ? `> **⚠️ 异常或错误**\n> ${errMsgFormatted}` 
-              : last.content + `\n\n> **⚠️ 生成被中断**\n> ${errMsgFormatted}`;
+      }
+    } else if (payload.state === 'final' || payload.state === 'finished' || payload.state === 'done') {
+        cache.isTyping = false;
+        if (pSessionKey === sessionKeyRef.current) clearStallTimer();
 
-            return [...prev.slice(0, -1), { ...last, content }];
-        });
+        const now = Date.now();
+        const duration = (now - cache.startTime) / 1000;
+        const ttft = cache.ttftRecorded ? (cache.firstTokenTime - cache.startTime) : 0;
+        const finalTPS = duration > 0 ? (cache.tokenCount / (duration - (ttft/1000))) : 0;
 
-        setIsTyping(false);
-        streamContentRef.current = '';
-        setTimeout(() => inputAreaRef.current?.focus(), 100);
+        const incomingContent = payload.message?.content ? formatMessageContent(payload.message.content) : cache.fullText;
+        cache.fullText = incomingContent;
+
+        if (pSessionKey === sessionKeyRef.current) {
+          setMessages(prev => {
+              const targetIndex = prev.findLastIndex(m => m.runId === payload.runId) !== -1 
+                ? prev.findLastIndex(m => m.runId === payload.runId)
+                : prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
+
+              if (targetIndex === -1) return prev;
+              const last = prev[targetIndex];
+              
+              if (!incomingContent && last.content && last.content !== t('chat.thinking')) return prev;
+
+              const next = [...prev];
+              next[targetIndex] = { 
+                  ...last, 
+                  runId: payload.runId,
+                  content: incomingContent,
+                  metrics: { ...last.metrics, ttft, duration, tps: finalTPS },
+                  _sortTs: last._sortTs // 💡 继承权重
+              };
+              // 💡 排序保险：考虑秒级精度撞车，User 优先
+              return next.sort((a, b) => {
+                const diff = (a._sortTs || 0) - (b._sortTs || 0);
+                if (diff !== 0) return diff;
+                const roleOrder: Record<string, number> = { 'system': 0, 'user': 1, 'assistant': 2 };
+                return (roleOrder[a.role] || 0) - (roleOrder[b.role] || 0);
+              });
+              });
+
+          setIsTyping(false);
+          fetchSessions(true);
+          setTimeout(() => inputAreaRef.current?.focus(), 100);
+        }
+        // 💡 哪怕是后台会话，也需要刷新列表以更新标题/摘要
+        else {
+          fetchSessions(true);
+        }
+    } else if (payload.state === 'error' || payload.state === 'failed') {
+        cache.isTyping = false;
+        if (pSessionKey === sessionKeyRef.current) {
+          clearStallTimer();
+          const errorMsg = payload.message?.content || payload.error?.message || payload.error || '网关或模型响应异常，流式生成失败';
+          
+          setMessages(prev => {
+              const last = prev[prev.length - 1];
+              if (!last || last.role !== 'assistant') return prev;
+              
+              const errMsgFormatted = typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg);
+              const content = last.content === '思考中...' || last.content === t('chat.thinking') || !last.content 
+                ? `> **⚠️ 异常或错误**\n> ${errMsgFormatted}` 
+                : last.content + `\n\n> **⚠️ 生成被中断**\n> ${errMsgFormatted}`;
+
+              return [...prev.slice(0, -1), { ...last, content }];
+          });
+
+          setIsTyping(false);
+          setTimeout(() => inputAreaRef.current?.focus(), 100);
+        }
     }
-  }, [resetStallTimer, clearStallTimer, fetchSessions, inputAreaRef, scrollRef, virtuosoRef]);
+  }, [resetStallTimer, clearStallTimer, fetchSessions, inputAreaRef, scrollRef, virtuosoRef, formatMessageContent, t]);
 
   // --- Connection Logic ---
   const handleChallenge = useCallback(async (nonce: string, ws: WebSocket) => {
@@ -587,17 +619,64 @@ export const useChatV3WebSocket = ({
             content = `> :::toolResult\n> **${toolName}**\n> ${text.split('\n').join('\n> ')}\n> :::\n`;
           }
 
+          const rawTs = new Date(item.createdAt || item.timestamp || Date.now()).getTime();
+
           return {
-            id: item.id || `msg-${new Date(item.createdAt || 0).getTime()}-${Math.random().toString(36).substring(2, 7)}`,
+            id: item.id || `msg-${rawTs}-${Math.random().toString(36).substring(2, 7)}`,
+            runId: item.runId,
             role: item.role === 'toolResult' ? 'assistant' : item.role,
             content: content || '',
-            timestamp: new Date(item.createdAt || item.timestamp || Date.now()).toLocaleTimeString(),
-            metrics: item.metrics
+            timestamp: new Date(rawTs).toLocaleTimeString(),
+            metrics: item.metrics,
+            _sortTs: rawTs // 💡 显式保留原始权重用于排序
           };
         }).filter((msg: any) => msg.content && msg.content.trim() !== '');
         
+        // 💡 缝合逻辑：加载完历史后，从缓存中恢复“内存中还未持久化”的消息
+        const cache = sessionCacheRef.current.get(key);
+        if (cache) {
+          // 1. 恢复 User 提问 (如果 DB 里还没存好)
+          if (cache.lastUserMsg) {
+            const hasUserMsg = history.some((m: any) => m.id === cache.lastUserMsg?.id || (m.role === 'user' && m.content === cache.lastUserMsg?.content));
+            if (!hasUserMsg) {
+              history.push(cache.lastUserMsg);
+            }
+          }
+
+          // 2. 恢复 AI 回答
+          if (cache.isTyping && cache.fullText) {
+            const existingIndex = cache.runId ? history.findIndex((m: any) => m.runId === cache.runId) : -1;
+            if (existingIndex !== -1) {
+              history[existingIndex].content = cache.fullText;
+            } else {
+              history.push({
+                id: `msg-ai-recovered-${Date.now()}`,
+                role: 'assistant' as const,
+                content: cache.fullText,
+                timestamp: new Date().toLocaleTimeString(),
+                _sortTs: (cache.lastUserMsg?._sortTs || Date.now()) + 1 // 💡 强锁：AI 必须排在 User 提问之后
+              });
+            }
+            setIsTyping(true);
+            resetStallTimer();
+          } else {
+            setIsTyping(false);
+            clearStallTimer();
+          }
+        } else {
+          setIsTyping(false);
+          clearStallTimer();
+        }
         
-        setMessages(history);
+        // 💡 三次加固：绝对时序排序。如果时间戳相等（由于秒级精度），则强制 User 在 Assistant 之前
+        const finalMessages = [...history].sort((a, b) => {
+          const diff = (a._sortTs || 0) - (b._sortTs || 0);
+          if (diff !== 0) return diff;
+          // 如果时间戳完全一致，通过角色定胜负：user(-1) < assistant(1)
+          const roleOrder: Record<string, number> = { 'system': 0, 'user': 1, 'assistant': 2 };
+          return (roleOrder[a.role] || 0) - (roleOrder[b.role] || 0);
+        });
+        setMessages(finalMessages);
 
         // 💡 历史加载对位：当历史记录加载完成后，自动瞬移到最后一条消息，符合聊天软件查看习惯
         if (history.length > 0) {
@@ -611,26 +690,36 @@ export const useChatV3WebSocket = ({
         }
     }
     setIsLoadingHistory(false);
-  }, [sendRPC]);
+  }, [sendRPC, formatMessageContent, resetStallTimer, clearStallTimer]);
 
   const handleSelectSession = useCallback((key: string) => {
     if (key === sessionKey) return;
     setSessionKey(key);
     const s = sessions.find(x => x.key === key);
     if (s) {
-      setSessionLabel(s.label);
+      // 💡 只有当 s.label 确实有意义时才覆盖当前 sessionLabel，防止被列表里的“空”数据偷袭
+      if (s.label && s.label.trim() !== '' && s.label !== '未命名会话' && s.label !== 'New Session') {
+        setSessionLabel(s.label);
+      }
       setSessionModel(s.model || '');
       if (key.startsWith('agent:')) {
         const parts = key.split(':');
         if (parts.length >= 2) setSelectedBot(`openclaw:${parts[1]}`);
       }
     }
+    // 💡 状态切换：先尝试从缓存恢复 UI 状态，防止加载历史期间输入框“闪现”可用状态
+    const cache = sessionCacheRef.current.get(key);
+    if (cache) {
+      setIsTyping(cache.isTyping);
+      if (cache.isTyping) resetStallTimer(); else clearStallTimer();
+    } else {
+      setIsTyping(false);
+      clearStallTimer();
+    }
+
     loadSessionHistory(key);
-    setIsTyping(false);
-    clearStallTimer();
-    streamContentRef.current = '';
     setHasNewMessages(false);
-  }, [sessionKey, sessions, setSelectedBot, loadSessionHistory, clearStallTimer]);
+  }, [sessionKey, sessions, setSelectedBot, loadSessionHistory, clearStallTimer, resetStallTimer]);
 
   const handleUpdateLabel = useCallback(async (newLabel: string) => {
     if (!sessionKey || !newLabel.trim()) return;
@@ -660,6 +749,13 @@ export const useChatV3WebSocket = ({
     
     // 💡 核心保护：禁止 AI 自动总结主会话
     if (activeKey === 'agent:main:main') {
+      return;
+    }
+
+    // 💡 核心保护 2：如果已经有了“像样”的名字（不是空、也不是未命名标识），则不要去改它
+    const existing = sessions.find(s => s.key === activeKey);
+    const currentLabel = activeKey === sessionKey ? sessionLabel : existing?.label;
+    if (currentLabel && currentLabel !== '未命名会话' && currentLabel !== 'New Session' && currentLabel.trim() !== '') {
       return;
     }
 
@@ -719,23 +815,6 @@ export const useChatV3WebSocket = ({
 
     setIsTyping(true);
     setTpsData([]);
-    streamContentRef.current = '';
-    startTimeRef.current = Date.now();
-    ttftRecordedRef.current = false;
-    tokenCountRef.current = 0;
-    firstTokenTimeRef.current = 0;
-
-    let finalContent = text;
-    if (attachedFiles && attachedFiles.length > 0) {
-      const fileLinks = attachedFiles.map(f => {
-        const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
-        return isImage ? `\n![${f.filename}](${f.thumbUrl || f.url} \"${f.url}\")\n(File path: ${f.path})` : `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
-      }).join('');
-      finalContent += fileLinks + `\n\n**System Note for Expert:** The user has uploaded files. Access them via absolute \"File path\" provided.`;
-    }
-
-    const newUserMsg: Message = { id: `msg-${Date.now()}`, role: 'user', content: finalContent, timestamp: new Date().toLocaleTimeString() };
-    setMessages(prev => [...prev, newUserMsg]);
 
     let currentKey = sessionKey;
     if (!currentKey) {
@@ -746,7 +825,6 @@ export const useChatV3WebSocket = ({
         await sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel });
         fetchSessions();
       } else {
-        // 💡 修复：如果创建会话失败，必须报错并重置状态，不能静默退出（解决“无反应”Bug）
         message.error(t('chat.failedToCreateSession') || 'Failed to create session: ' + (res.error?.message || 'Unknown'));
         setIsTyping(false);
         return;
@@ -754,14 +832,52 @@ export const useChatV3WebSocket = ({
     }
 
     if (currentKey) {
+      let finalContent = text;
+      if (attachedFiles && attachedFiles.length > 0) {
+        const fileLinks = attachedFiles.map(f => {
+          const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
+          return isImage ? `\n![${f.filename}](${f.thumbUrl || f.url} \"${f.url}\")\n(File path: ${f.path})` : `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
+        }).join('');
+        finalContent += fileLinks + `\n\n**System Note for Expert:** The user has uploaded files. Access them via absolute \"File path\" provided.`;
+      }
+
+      const newUserMsg: Message = { 
+        id: `msg-${Date.now()}`, 
+        role: 'user', 
+        content: finalContent, 
+        timestamp: new Date().toLocaleTimeString(),
+        _sortTs: Date.now() // 💡 分配用户消息权重
+      };
+
+      const aiSortTs = newUserMsg._sortTs! + 1; // 💡 强制 AI 紧随其后
       const assistantInitialMsg = text === '/stop' ? t('chat.terminated') : t('chat.thinking');
-      setMessages(prev => [...prev, { id: `msg-ai-${Date.now()}`, role: 'assistant', content: assistantInitialMsg, timestamp: new Date().toLocaleTimeString() }]);
+      const aiPlaceholderMsg: Message = { 
+        id: `msg-ai-${Date.now()}`, 
+        role: 'assistant', 
+        content: assistantInitialMsg, 
+        timestamp: new Date().toLocaleTimeString(),
+        _sortTs: aiSortTs // 💡 分配 AI 占位符权重
+      };
+
+      // 💡 初始化该会话的缓存状态
+      sessionCacheRef.current.set(currentKey, {
+        fullText: '',
+        isTyping: true,
+        startTime: Date.now(),
+        firstTokenTime: 0,
+        ttftRecorded: false,
+        tokenCount: 0,
+        tpsData: [],
+        lastUserMsg: newUserMsg
+      });
+
+      // 💡 一次性推入 User 和 AI 占位消息，确保时序正确
+      setMessages(prev => [...prev, newUserMsg, aiPlaceholderMsg]);
       resetStallTimer();
-      
-      // 💡 显式强制滚动到底部：由于用户主动发送消息，无论当前在什么位置，都应立即拉到底部以跟随最新对话
+
       setTimeout(() => {
         virtuosoRef.current?.scrollToIndex({ 
-          index: messagesCountRef.current + 1, // +1 是因为刚刚瞬发了两条记录 (User + AI Thinking)
+          index: messagesCountRef.current + 1,
           align: 'end',
           behavior: 'smooth' 
         });
@@ -774,7 +890,10 @@ export const useChatV3WebSocket = ({
       });
       
       if (res.ok && res.payload?.runId) {
-        // 💡 握手回填：将 RPC 返回的 runId 立即同步到刚才创建的 AI 消息对象中
+        // 💡 握手回填：将 RPC 返回的 runId 立即同步到缓存和消息对象中
+        const cache = sessionCacheRef.current.get(currentKey);
+        if (cache) cache.runId = res.payload.runId;
+
         setMessages(prev => {
           const lastIndex = prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
           if (lastIndex !== -1) {
@@ -790,16 +909,19 @@ export const useChatV3WebSocket = ({
         message.error('Failed to send: ' + (res.error?.message || 'Unknown'));
         setIsTyping(false);
         clearStallTimer();
+        const cache = sessionCacheRef.current.get(currentKey);
+        if (cache) cache.isTyping = false;
       } else if (text === '/stop') {
         setIsTyping(false);
         clearStallTimer();
+        const cache = sessionCacheRef.current.get(currentKey);
+        if (cache) cache.isTyping = false;
       }
     } else {
-      // 💡 修复：防止 sessionKey 依然为空导致的静默失败
       setIsTyping(false);
       message.error('Session key missing');
     }
-  }, [status, sessionKey, selectedBot, thinkingLevel, sessionModel, sendRPC, fetchSessions, resetStallTimer, clearStallTimer, t, isTyping]);
+  }, [status, sessionKey, selectedBot, thinkingLevel, sessionModel, sendRPC, fetchSessions, resetStallTimer, clearStallTimer, t, isTyping, messagesCountRef, virtuosoRef]);
 
   const handleRegenerate = useCallback(() => {
     if (isTyping) {
@@ -829,7 +951,15 @@ export const useChatV3WebSocket = ({
   const handleStopGeneration = useCallback(() => {
     setIsTyping(false);
     clearStallTimer();
-    streamContentRef.current = '';
+    
+    if (sessionKey) {
+      const cache = sessionCacheRef.current.get(sessionKey);
+      if (cache) {
+        cache.isTyping = false;
+        cache.fullText = '';
+      }
+    }
+
     setMessages(prev => {
       const last = prev[prev.length - 1];
       if (last?.role === 'assistant') {
@@ -840,7 +970,7 @@ export const useChatV3WebSocket = ({
       return prev;
     });
     handleSend('/stop');
-  }, [clearStallTimer, handleSend, t]);
+  }, [clearStallTimer, handleSend, t, sessionKey]);
 
   const handleDeleteSession = useCallback((_e: any, key: string) => {
     Modal.confirm({
@@ -860,7 +990,6 @@ export const useChatV3WebSocket = ({
               setSessionModel('');
               setIsTyping(false);
               clearStallTimer();
-              streamContentRef.current = '';
             }
             fetchSessions();
           } else {
@@ -992,7 +1121,6 @@ export const useChatV3WebSocket = ({
       setSessionLabel(null); 
       setIsTyping(false);
       clearStallTimer();
-      streamContentRef.current = '';
       
       // 💡 视觉反馈：提示已就绪并自动聚焦输入框
       message.info({ content: t('chat.newSessionReady', { defaultValue: '新会话已就绪' }), key: 'newSessionReady' });

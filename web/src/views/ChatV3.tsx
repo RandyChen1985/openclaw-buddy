@@ -407,6 +407,24 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa', position: 'relative', width: '100%', minWidth: 0, overflow: 'hidden' }}>
         
+        {/* 💡 注入局部样式强制锁死浮动按钮在各种状态下的颜色 */}
+        <style>{`
+          .v3-floating-btn-active {
+            background: #2563eb !important;
+            color: #ffffff !important;
+            border: none !important;
+          }
+          .v3-floating-btn-active:hover {
+            background: #1d4ed8 !important;
+            color: #ffffff !important;
+            opacity: 1 !important;
+          }
+          .v3-floating-btn-active .anticon, 
+          .v3-floating-btn-active .lucide {
+            color: #ffffff !important;
+          }
+        `}</style>
+
         <div style={{ padding: isMobile ? '6px 10px' : '10px 16px', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 10, gap: 8, width: '100%', boxSizing: 'border-box' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 10, minWidth: 0, flex: 1 }}>
             <Button 
@@ -771,31 +789,33 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                 animation: 'v3-fade-in 0.3s' 
             }}>
                 <Button
-                    className="v3-floating-btn"
+                    className={`v3-floating-btn ${hasNewMessages ? 'v3-floating-btn-active' : ''}`}
                     shape="round"
-                    type={hasNewMessages ? 'primary' : 'default'}
                     onClick={() => {
-                        virtuosoRef.current?.scrollToIndex({ 
-                            index: messages.length - 1, 
-                            behavior: 'smooth', 
-                            align: 'end' 
+                        virtuosoRef.current?.scrollToIndex({
+                            index: messages.length - 1,
+                            behavior: 'smooth',
+                            align: 'end'
                         });
                         setHasNewMessages(false);
                         setShowScrollBtn(false);
                     }}
                     icon={hasNewMessages ? <Activity size={14} className="animate-pulse" /> : <ChevronDown size={14} />}
-                    style={{ 
+                    style={{
                         height: 32,
                         fontSize: 12,
                         display: 'flex',
                         alignItems: 'center',
                         gap: 6,
                         padding: hasNewMessages ? '0 12px' : '0 10px',
-                        background: hasNewMessages ? '#2563eb' : undefined,
+                        background: hasNewMessages ? '#2563eb' : '#fff',
                         color: hasNewMessages ? '#fff' : '#64748b',
-                        border: hasNewMessages ? 'none' : undefined
+                        border: hasNewMessages ? 'none' : '1px solid #e2e8f0',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                        transition: 'all 0.2s'
                     }}
                 >
+
                     {hasNewMessages && '有新消息'}
                 </Button>
             </div>
