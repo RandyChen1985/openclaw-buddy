@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { message, Modal } from 'antd';
+import { useState, useEffect, useRef } from 'react';
+// antd message 已下沉到子模块（sessions/messages/summarize）内部处理
 import * as nacl from 'tweetnacl';
 import storage from '../utils/storage';
-import { getWsUrl } from '../utils/url';
-import { getTicket, summarizeSession } from '../api';
-import { APP_VERSION } from '../version';
+import { useV3GatewayConnection } from './chatV3/useV3GatewayConnection';
+import { useV3Messages } from './chatV3/useV3Messages';
+import { useV3AutoSummarize } from './chatV3/useV3AutoSummarize';
+import { useV3Sessions } from './chatV3/useV3Sessions';
 
 export interface FileInfo {
   url: string;
@@ -53,47 +54,14 @@ export const useChatV3WebSocket = ({
   scrollRef
 }: UseChatV3WebSocketProps) => {
   // --- States ---
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error'>('disconnected');
-  const [isTyping, setIsTyping] = useState(false);
-  const [isStalled, setIsStalled] = useState(false);
   const [sessionKey, setSessionKey] = useState<string | null>(() => storage.getItem('v3_current_session_key'));
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [sessionLabel, setSessionLabel] = useState<string | null>(() => storage.getItem('v3_current_session_label'));
   const [sessionModel, setSessionModel] = useState<string>('');
 
-  // 💡 持久化：当 sessionKey / sessionLabel 变化时，原子化同步到 storage 以应对窗口缩放/重挂载
-  useEffect(() => {
-    if (sessionKey) {
-      storage.setItem('v3_current_session', JSON.stringify({ key: sessionKey, label: sessionLabel }));
-      // 兼容旧版，保留单个 key (可选)
-      storage.setItem('v3_current_session_key', sessionKey);
-      if (sessionLabel) storage.setItem('v3_current_session_label', sessionLabel);
-    } else {
-      storage.removeItem('v3_current_session');
-      storage.removeItem('v3_current_session_key');
-      storage.removeItem('v3_current_session_label');
-    }
-  }, [sessionKey, sessionLabel]);
   const [thinkingLevel, setThinkingLevel] = useState<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'>('medium');
-  const [lastHealth, setLastHealth] = useState<{ ok: boolean, latency: number, ts: number } | null>(null);
-  const [latencyHistory, setLatencyHistory] = useState<number[]>([]);
-  const [pulse, setPulse] = useState(0);
-  const [tpsData, setTpsData] = useState<number[]>([]);
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [loadingSessions, setLoadingSessions] = useState(false);
-  const [isSummarizing, setIsSummarizing] = useState(false);
-  const [isUpdatingLabel, setIsUpdatingLabel] = useState(false);
-  const [hasNewMessages, setHasNewMessages] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
 
   // --- Refs ---
-  const wsRef = useRef<WebSocket | null>(null);
-  const requestIdRef = useRef(1);
-  const pendingRequests = useRef<Map<string, (res: any) => void>>(new Map());
-  const reconnectCountRef = useRef(0);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const MAX_RECONNECTS = 5;
-  
   const sessionKeyRef = useRef<string | null>(null);
   useEffect(() => { sessionKeyRef.current = sessionKey; }, [sessionKey]);
   const autoSummarizeRef = useRef<any>(null);
@@ -101,1206 +69,177 @@ export const useChatV3WebSocket = ({
   const sessionLabelRef = useRef<string | null>(null);
   useEffect(() => { sessionLabelRef.current = sessionLabel; }, [sessionLabel]);
 
-  const messagesCountRef = useRef(messages.length);
-  useEffect(() => { messagesCountRef.current = messages.length; }, [messages.length]);
-
-  // 💡 性能优化：缓存当前会话正在流式更新的 Assistant 消息索引，避免每个 delta 都 O(n) 扫描 + 排序
-  const streamingAssistantIndexRef = useRef<number | null>(null);
-
-  const stallTimerRef = useRef<any>(null);
-  const lastUpdateRef = useRef(0);
   const showScrollBtnRef = useRef(false);
-  const summarizingSessionsRef = useRef<Set<string>>(new Set());
 
-  // 💡 核心升级：按 sessionKey 隔离的后台状态存储
-  const sessionCacheRef = useRef<Map<string, {
-    fullText: string;
-    runId?: string; 
-    isTyping: boolean;
-    startTime: number;
-    firstTokenTime: number;
-    ttftRecorded: boolean;
-    tokenCount: number;
-    tpsData: number[];
-    lastUserMsg?: Message; // 💡 记录本轮对话的提问，防止切会话时因 DB 延迟导致提问“消失”或排在 AI 后面
-  }>>(new Map());
+  // 消息层 API 引用（用于在网关事件路由中调用，避免 TDZ）
+  const messagesApiRef = useRef<null | { handleChatDelta: (payload: any) => void }>(null);
+  const sessionMessageOpsRef = useRef<{
+    setMessages?: (updater: ((prev: Message[]) => Message[]) | Message[]) => void;
+    loadSessionHistory?: (key: string) => Promise<void> | void;
+    setHasNewMessages?: (val: boolean) => void;
+  }>({});
 
   /**
-   * 统一失败回调所有挂起中的 RPC 请求，避免断连后 Promise 悬挂导致 UI 卡死。
+   * 网关事件处理函数引用（通过 ref 注入），用于避免“连接层在上游，而业务处理函数在下游”造成的 TDZ 问题。
    */
-  const rejectAllPendingRequests = useCallback((errorMessage: string) => {
-    if (pendingRequests.current.size === 0) return;
-    const resolvers = Array.from(pendingRequests.current.values());
-    pendingRequests.current.clear();
-    resolvers.forEach(resolve => resolve({ ok: false, error: { message: errorMessage } }));
-  }, []);
+  const gatewayEventHandlerRef = useRef<((data: any) => void) | null>(null);
 
-  // --- RPC Communication ---
-  const sendRPC = useCallback((method: string, params: any): Promise<any> => {
-    return new Promise((resolve) => {
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-        resolve({ ok: false, error: { message: 'WebSocket not connected' } });
-        return;
-      }
-      const id = `${method}-${requestIdRef.current++}`;
-      const req = { type: 'req', id, method, params };
-      
-      // 💡 针对物理删除等磁盘 IO 较重的操作，放宽超时限制至 3 分钟
-      const timeoutValue = method === 'sessions.delete' ? 180000 : 30000;
-
-      const timer = setTimeout(() => {
-        if (pendingRequests.current.has(id)) {
-          pendingRequests.current.delete(id);
-          resolve({ ok: false, error: { message: `RPC timeout (${timeoutValue/1000}s)` } });
-        }
-      }, timeoutValue);
-      pendingRequests.current.set(id, (res: any) => {
-        clearTimeout(timer);
-        resolve(res);
-      });
-      wsRef.current.send(JSON.stringify(req));
-    });
-  }, []);
-
-  // --- Streaming Data Handlers ---
-  const formatMessageContent = useCallback((msg: any): string => {
-    if (!msg) return '';
-    
-    // 💡 兼容性设计：既支持传入完整的 message 对象，也支持仅传入 content 字段（用于历史回溯）
-    const content = (msg.content !== undefined && msg.content !== null) ? msg.content : msg;
-    const topThought = msg.thought || msg.thinking || msg.reasoning || '';
-    
-    let prefix = '';
-    if (topThought) {
-      prefix = `> :::thinking\n> ${String(topThought).replace(/\n/g, '\n> ')}\n> :::\n\n`;
+  const {
+    status,
+    connect,
+    sendRPC,
+    lastHealth,
+    latencyHistory,
+    pulse
+  } = useV3GatewayConnection({
+    keyPair,
+    deviceId,
+    handlers: {
+      onEvent: (data) => gatewayEventHandlerRef.current?.(data)
     }
+  });
 
-    // 处理主要内容部分
-    let body = '';
-    if (typeof content === 'string') {
-      const trimmed = content.trim();
-      if (trimmed === '[]' || trimmed === '{}') body = '';
-      else if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          body = formatMessageContent(parsed);
-        } catch (e) {
-          body = content;
-        }
-      } else {
-        body = content;
-      }
-    } else if (Array.isArray(content)) {
-      body = content.map((c: any) => {
-        let matched = false;
-        
-        // 1. 处理思考过程 (数组内部格式)
-        let thinkingPart = '';
-        if (c.thinking || c.thought || c.reasoning || c.type === 'thinking') {
-          const thought = c.thinking || c.thought || c.reasoning || c.content || '';
-          thinkingPart = `> :::thinking\n> ${String(thought).replace(/\n/g, '\n> ')}\n> :::\n\n`;
-          matched = true;
-        }
+  const {
+    sessions,
+    setSessions,
+    loadingSessions,
+    isUpdatingLabel,
+    fetchSessions,
+    handleSelectSession,
+    startNewSession,
+    handleUpdateLabel,
+    handleDeleteSession,
+    handleDeleteGroup,
+    handleClearAllHistory,
+    handleModelChange,
+    handleThinkingLevelChange
+  } = useV3Sessions({
+    t,
+    sendRPC,
+    status,
+    sessionKey,
+    setSessionKey,
+    sessionLabel,
+    setSessionLabel,
+    setSessionModel,
+    setThinkingLevel,
+    setSelectedBot,
+    messageOpsRef: sessionMessageOpsRef,
+    inputAreaRef
+  });
 
-        // 2. 处理工具调用
-        let toolCallPart = '';
-        if (c.type === 'toolCall' || c.toolCall || c.tool_call) {
-          const tc = c.toolCall || c.tool_call || c;
-          const name = tc.name || tc.function?.name || 'unknown_tool';
-          const args = typeof tc.arguments === 'string' ? tc.arguments : JSON.stringify(tc.arguments || {});
-          toolCallPart = `> :::toolCall\n> **${name}**\n> \`\`\`json\n> ${args}\n> \`\`\`\n> :::\n\n`;
-          matched = true;
-        }
+  const {
+    messages: v3Messages,
+    setMessages: setV3Messages,
+    isTyping,
+    isStalled,
+    isLoadingHistory,
+    tpsData,
+    hasNewMessages,
+    setHasNewMessages,
+    handleChatDelta,
+    loadSessionHistory,
+    handleSend,
+    handleStopGeneration,
+    handleRegenerate,
+    handleSaveEdit
+  } = useV3Messages({
+    t,
+    status,
+    sessionKey,
+    setSessionKey,
+    selectedBot,
+    thinkingLevel,
+    sessionModel,
+    sendRPC,
+    fetchSessions,
+    inputAreaRef,
+    virtuosoRef,
+    scrollRef,
+    showScrollBtnRef
+  });
 
-        // 3. 处理工具结果
-        let toolResultPart = '';
-        if (c.type === 'toolResult' || c.toolResult || c.tool_result) {
-          const tr = c.toolResult || c.tool_result || c;
-          const toolName = tr.toolName || tr.tool_name || tr.name || '';
-          const result = typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content || tr.result || {});
-          toolResultPart = `> :::toolResult\n> ${toolName ? `**${toolName}**\n> ` : ''}\`\`\`json\n> ${result}\n> \`\`\`\n> :::\n\n`;
-          matched = true;
-        }
-
-        // 4. 处理文本
-        const textPart = c.text || (typeof c.content === 'string' ? c.content : '');
-        if (textPart) matched = true;
-
-        // 5. 💡 兜底处理
-        let fallbackPart = '';
-        if (!matched && typeof c === 'object' && c !== null && Object.keys(c).length > 0) {
-          fallbackPart = `\n> :::warning 未知消息块 (${c.type || 'unknown'})\n> \`\`\`json\n> ${JSON.stringify(c, null, 2).split('\n').join('\n> ')}\n> \`\`\`\n> :::\n\n`;
-        }
-
-        return thinkingPart + toolCallPart + toolResultPart + fallbackPart + textPart;
-      }).join('');
-    } else if (typeof content === 'object' && content !== null) {
-      body = formatMessageContent([content]);
-    } else {
-      body = String(content);
-    }
-
-    return prefix + body;
-  }, []);
-
-  // --- Session List actions ---
-  const fetchSessions = useCallback(async (isSilent = false) => {
-    if (!isSilent) setLoadingSessions(true);
-    
-    // 💡 视觉加固：使用 Promise.all 确保即使后端秒回，图标也至少旋转 800ms
-    const [res] = await Promise.all([
-      sendRPC('sessions.list', { limit: 50 }),
-      isSilent ? Promise.resolve() : new Promise(resolve => setTimeout(resolve, 800))
-    ]);
-
-    if (res.ok) {
-      const list = res.payload?.items || res.payload?.sessions || (Array.isArray(res.payload) ? res.payload : []);
-      
-      // 💡 核心防御：标题持久化锁。如果后端返回的 Label 是空的，但本地已有非空 Label，则强制保留本地的，防止闪退“未命名”
-      const patchedList = list.map((s: any) => {
-        if (s.key === sessionKeyRef.current && (!s.label || s.label.trim() === '') && sessionLabelRef.current) {
-          return { ...s, label: sessionLabelRef.current };
-        }
-        return s;
-      });
-      
-      setSessions(patchedList);
-
-      // 💡 自动总结：刷新后识别未命名会话并后台生成标题
-      if (!isSilent) {
-        // 增加过滤条件，只有真正没名字的才进入总结流程
-        const untitled = patchedList.filter((s: any) => !s.label || s.label === '未命名会话' || s.label === 'New Session' || s.label === '').slice(0, 15);
-        if (untitled.length > 0) {
-          setTimeout(async () => {
-            for (const s of untitled) {
-              const hRes = await sendRPC('chat.history', { sessionKey: s.key, limit: 10 });
-              if (hRes.ok) {
-                const raw = hRes.payload.messages || hRes.payload.items || [];
-                if (raw.length >= 1) {
-                  const msgs = raw.map((m: any) => ({
-                    role: m.role === 'toolResult' ? 'assistant' : m.role,
-                    content: formatMessageContent(m.content)
-                  })).filter((m: any) => m.content);
-                  
-                  if (msgs.length > 0) {
-                    autoSummarizeRef.current?.(msgs, true, s.key);
-                  }
-                }
-              }
-            }
-          }, 500);
-        }
-      }
-    }
-    if (!isSilent) setLoadingSessions(false);
-  }, [sendRPC, formatMessageContent]);
-
-  const clearStallTimer = useCallback(() => {
-    if (stallTimerRef.current) {
-      clearTimeout(stallTimerRef.current);
-      stallTimerRef.current = null;
-    }
-    setIsStalled(false);
-  }, []);
-
-  const resetStallTimer = useCallback(() => {
-    clearStallTimer();
-    stallTimerRef.current = setTimeout(() => {
-      setIsStalled(true);
-    }, 3500);
-  }, [clearStallTimer]);
-
-  const handleChatDelta = useCallback((payload: any) => {
-    const pSessionKey = payload.sessionKey || sessionKeyRef.current;
-    if (!pSessionKey) return;
-
-    // 💡 1. 确保缓存抽屉存在
-    if (!sessionCacheRef.current.has(pSessionKey)) {
-      sessionCacheRef.current.set(pSessionKey, {
-        fullText: '', isTyping: true, startTime: Date.now(),
-        firstTokenTime: 0, ttftRecorded: false, tokenCount: 0, tpsData: []
-      });
-    }
-    const cache = sessionCacheRef.current.get(pSessionKey)!;
-
-    if (payload.state === 'delta') {
-      // 💡 只有当前会话才重置打字停顿计时器和显示通知
-      if (pSessionKey === sessionKeyRef.current) {
-        resetStallTimer();
-        if (showScrollBtnRef.current) setHasNewMessages(true);
-      }
-      
-      const now = Date.now();
-      if (!cache.ttftRecorded) {
-        cache.ttftRecorded = true;
-        cache.firstTokenTime = now;
-      }
-
-      const messageObj = payload.message;
-      if (!messageObj) return;
-
-      const fullText = formatMessageContent(messageObj);
-      if (!fullText.trim() && cache.fullText.trim()) return;
-
-      // 💡 鲁棒性保护：包长度突降检测
-      const oldLen = cache.fullText.length;
-      if (oldLen > 50 && fullText.length < oldLen - 20) return;
-
-      cache.fullText = fullText;
-      cache.tokenCount = fullText.length;
-      cache.isTyping = true;
-      cache.runId = payload.runId; // 💡 同步 runId 到缓存
-
-      // 💡 2. 状态分发：仅在活跃会话时推送 UI 更新
-      if (pSessionKey === sessionKeyRef.current) {
-        setIsTyping(true);
-        if (now - lastUpdateRef.current > 64) {
-          lastUpdateRef.current = now;
-          const elapsedFromFirst = (now - cache.firstTokenTime) / 1000;
-          const currentTPS = elapsedFromFirst > 0 ? (cache.tokenCount / elapsedFromFirst) : 0;
-          const ttft = cache.firstTokenTime - cache.startTime;
-
-          if (cache.tokenCount % 5 === 0) {
-            setTpsData(prev => [...prev.slice(-19), currentTPS]);
-          }
-
-          setMessages(prev => {
-            const idx = streamingAssistantIndexRef.current;
-            if (idx === null || idx < 0 || idx >= prev.length) {
-              // 兜底：找不到索引时保持旧行为，但不再排序（避免高频开销）
-              const runIdIndex = prev.findLastIndex(m => m.runId === payload.runId);
-              const fallbackIndex = runIdIndex !== -1 ? runIdIndex : prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
-              if (fallbackIndex === -1) return prev;
-              const next = [...prev];
-              const current = next[fallbackIndex];
-              next[fallbackIndex] = {
-                ...current,
-                runId: payload.runId,
-                content: fullText,
-                metrics: { ...current.metrics, ttft, tps: currentTPS },
-                _sortTs: current._sortTs
-              };
-              // 记录索引以便后续 delta 直接命中
-              streamingAssistantIndexRef.current = fallbackIndex;
-              return next;
-            }
-
-            const next = [...prev];
-            const current = next[idx];
-            next[idx] = {
-              ...current,
-              runId: payload.runId,
-              content: fullText,
-              metrics: { ...current.metrics, ttft, tps: currentTPS },
-              _sortTs: current._sortTs
-            };
-            return next;
-          });
-
-          if (virtuosoRef.current) {
-            const isNearBottom = scrollRef.current 
-              ? (scrollRef.current.scrollHeight - scrollRef.current.scrollTop - scrollRef.current.clientHeight < 40)
-              : true;
-
-            if (!showScrollBtnRef.current || isNearBottom) {
-              virtuosoRef.current.scrollToIndex({ 
-                index: messagesCountRef.current - 1, 
-                align: 'end',
-                behavior: 'auto' 
-              });
-            }
-          }
-        }
-      }
-    } else if (payload.state === 'final' || payload.state === 'finished' || payload.state === 'done') {
-        cache.isTyping = false;
-        if (pSessionKey === sessionKeyRef.current) clearStallTimer();
-
-        const now = Date.now();
-        const duration = (now - cache.startTime) / 1000;
-        const ttft = cache.ttftRecorded ? (cache.firstTokenTime - cache.startTime) : 0;
-        const finalTPS = duration > 0 ? (cache.tokenCount / (duration - (ttft/1000))) : 0;
-
-        const incomingContent = payload.message?.content ? formatMessageContent(payload.message.content) : cache.fullText;
-        cache.fullText = incomingContent;
-
-        if (pSessionKey === sessionKeyRef.current) {
-          setMessages(prev => {
-            const idx = streamingAssistantIndexRef.current;
-            const runIdIndex = prev.findLastIndex(m => m.runId === payload.runId);
-            const targetIndex = (idx !== null && idx >= 0 && idx < prev.length) ? idx : (runIdIndex !== -1 ? runIdIndex : prev.findLastIndex(m => m.role === 'assistant' && !m.runId));
-            if (targetIndex === -1) return prev;
-
-            const last = prev[targetIndex];
-            if (!incomingContent && last.content && last.content !== t('chat.thinking')) return prev;
-
-            const next = [...prev];
-            next[targetIndex] = {
-              ...last,
-              runId: payload.runId,
-              content: incomingContent,
-              metrics: { ...last.metrics, ttft, duration, tps: finalTPS },
-              _sortTs: last._sortTs
-            };
-            return next;
-          });
-
-          setIsTyping(false);
-          streamingAssistantIndexRef.current = null;
-          fetchSessions(true);
-          setTimeout(() => inputAreaRef.current?.focus(), 100);
-        }
-        // 💡 哪怕是后台会话，也需要刷新列表以更新标题/摘要
-        else {
-          fetchSessions(true);
-        }
-    } else if (payload.state === 'error' || payload.state === 'failed') {
-        cache.isTyping = false;
-        if (pSessionKey === sessionKeyRef.current) {
-          clearStallTimer();
-          const errorMsg = payload.message?.content || payload.error?.message || payload.error || t('chat.streamFailedDefault');
-          
-          setMessages(prev => {
-              const last = prev[prev.length - 1];
-              if (!last || last.role !== 'assistant') return prev;
-              
-              const errMsgFormatted = typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg);
-              const content = last.content === '思考中...' || last.content === t('chat.thinking') || !last.content 
-                ? `> **⚠️ 异常或错误**\n> ${errMsgFormatted}` 
-                : last.content + `\n\n> **⚠️ 生成被中断**\n> ${errMsgFormatted}`;
-
-              return [...prev.slice(0, -1), { ...last, content }];
-          });
-
-          setIsTyping(false);
-          streamingAssistantIndexRef.current = null;
-          setTimeout(() => inputAreaRef.current?.focus(), 100);
-        }
-    }
-  }, [resetStallTimer, clearStallTimer, fetchSessions, inputAreaRef, scrollRef, virtuosoRef, formatMessageContent, t]);
-
-  // --- Connection Logic ---
-  const handleChallenge = useCallback(async (nonce: string, ws: WebSocket) => {
-    if (!keyPair || !deviceId) return;
-    let gatewayToken = '';
-    try {
-      const api = await import('../api').then(m => m.default);
-      const res = await api.get('/v1/openclaw/gateway-token');
-      gatewayToken = res.data?.token || '';
-    } catch (e) {
-      console.error('❌ [V3] 获取 Gateway Token 失败:', e);
-      setStatus('error');
-      return;
-    }
-
-    const signedAt = Date.now();
-    const role = 'operator';
-    const scopes = 'operator.admin,operator.read,operator.write';
-    const clientId = 'openclaw-control-ui';
-    const clientMode = 'cli';
-    const platform = navigator.platform.toLowerCase().includes('mac') ? 'macos' : 'windows';
-
-    const handshakeStr = `v3|${deviceId}|${clientId}|${clientMode}|${role}|${scopes}|${signedAt}|${gatewayToken}|${nonce}|${platform}|`;
-    const signature = nacl.sign.detached(new TextEncoder().encode(handshakeStr), (keyPair as any).secretKey);
-
-    const authId = `auth-${Date.now()}`;
-    const req = {
-      type: 'req', id: authId, method: 'connect',
-      params: {
-        minProtocol: 3, maxProtocol: 3, role,
-        scopes: scopes.split(','),
-        auth: { token: gatewayToken },
-        client: { id: clientId, mode: clientMode, platform, version: APP_VERSION },
-        device: {
-          id: deviceId,
-          publicKey: btoa(String.fromCharCode(...keyPair.publicKey)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
-          signature: btoa(String.fromCharCode(...signature)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
-          signedAt, nonce
-        }
-      }
+  useEffect(() => {
+    sessionMessageOpsRef.current = {
+      setMessages: setV3Messages,
+      loadSessionHistory,
+      setHasNewMessages
     };
+  }, [loadSessionHistory, setHasNewMessages, setV3Messages]);
 
-    pendingRequests.current.set(authId, (res: any) => {
-      if (res.ok) {
-        setStatus('authenticated');
-        setTimeout(() => {
-          fetchSessions();
-          // 💡 核心修复：只有当本地没有消息时（初始加载），或者 session 发生了切换，才自动加载历史
-          // 如果已经在对话中且正在输入/已有内容，且 sessionKey 没变，则绝对不通过 loadSessionHistory 覆盖当前状态
-          // 这能防止网络抖动导致的“撤自/清屏”现象
-          if (sessionKeyRef.current && messagesCountRef.current === 0) {
-              loadSessionHistory(sessionKeyRef.current);
-          } else {
-              // 如果之前正在打字，重连后保持打字状态 (后续会有新的 Delta 进来恢复更新)
-          }
-        }, 300);
-      } else {
-        const errMsg = typeof res.error === 'object' ? JSON.stringify(res.error) : String(res.error);
-        if (errMsg.includes('NOT_PAIRED') || errMsg.includes('NOT_AUTHORIZED')) {
-            setStatus('authorizing');
-        } else {
-            console.error('❌ [V3] 握手失败:', res.error);
-            setStatus('error');
-        }
-      }
-    });
-    ws.send(JSON.stringify(req));
-  }, [keyPair, deviceId, fetchSessions, APP_VERSION]);
+  // 与网关事件路由兼容：将 chat delta 处理函数注入 ref
+  useEffect(() => {
+    messagesApiRef.current = { handleChatDelta };
+  }, [handleChatDelta]);
 
-  const connect = useCallback(async () => {
-    if (!keyPair || !deviceId) return;
-    // 先脱钩旧连接，防止旧 ws 的 onclose 误伤新连接状态
-    const oldWs = wsRef.current;
-    wsRef.current = null;
-    if (oldWs) oldWs.close();
-    setStatus('connecting');
-    const ticket = await getTicket();
-    const token = storage.getItem('guardian_token');
-    const wsUrl = ticket ? getWsUrl(`/v1/ws/gateway?ticket=${ticket}`) : getWsUrl(`/v1/ws/gateway?token=${token}`);
-    
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+  // 保持对外 messages/setMessages API 不变：对外仍以 messages 作为单一来源
+  useEffect(() => {
+    setMessages(v3Messages);
+  }, [v3Messages]);
 
-    ws.onopen = () => {
-      if (ws !== wsRef.current) return;
-      setStatus('challenging');
-    };
-    ws.onmessage = (event) => {
-      if (ws !== wsRef.current) return;
-      let data: any;
-      try {
-        data = JSON.parse(event.data);
-      } catch (err) {
-        console.warn('⚠️ [V3] 非法 WS 消息，已忽略:', event.data);
-        return;
-      }
-      if (data.type === 'event') {
-        if (data.event === 'health') {
-          const { ok, durationMs, ts } = data.payload;
-          setLastHealth({ ok, latency: durationMs || 0, ts });
-          setLatencyHistory(prev => [...prev.slice(-29), durationMs || 0]);
-          setPulse(p => p + 1);
-          return;
-        }
-        if (['tick', 'presence'].includes(data.event)) return;
-        if (data.event === 'connect.challenge') handleChallenge(data.payload.nonce, ws);
-        else if (data.event === 'chat') handleChatDelta(data.payload);
-        else if (data.event === 'sessions.changed') fetchSessions(true);
-        else if (data.event === 'exec.approval.requested') {
-          // 💡 关键修复：生成结构化的审批 Markdown 块
-          const { id, request } = data.payload;
-          const slug = id.substring(0, 8);
-          const command = request.command;
-          // 使用自定义容器语法，方便前端识别并渲染为按钮
-          const approvalBlock = `\n\n> :::approval\n> **${slug}**\n> \`\`\`bash\n> ${command}\n> \`\`\`\n> :::\n`;
-
-          setMessages(prev => {
-            const last = prev[prev.length - 1];
-            if (last && last.role === 'assistant') {
-              if (last.content.includes(slug)) return prev;
-              const newContent = (last.content === t('chat.thinking') || !last.content) 
-                ? approvalBlock 
-                : `${last.content}${approvalBlock}`;
-              return [...prev.slice(0, -1), { ...last, content: newContent }];
-            }
-            // 兜底：如果最后一条不是 assistant，则追加一个新的 assistant 消息承载审批卡片，避免事件丢失
-            const now = Date.now();
-            const newMsg: Message = {
-              id: `msg-approval-${now}`,
-              role: 'assistant',
-              content: approvalBlock,
-              timestamp: new Date(now).toLocaleTimeString(),
-              _sortTs: now
-            };
-            return [...prev, newMsg];
-          });
-          setIsTyping(false);
-          streamingAssistantIndexRef.current = null;
-          clearStallTimer();
-        }
- else if (data.event === 'agent') {
-          // 处理 agent 状态流，如“正在等待审批”
-          const { stream, data: agentData } = data.payload;
-          if (stream === 'item' && agentData.status === 'blocked') {
-            setIsTyping(false);
-            clearStallTimer();
-          }
-        }
-        return;
-      }
-      if (data.type === 'res') {
-        const resolve = pendingRequests.current.get(data.id);
-        if (resolve) { resolve(data); pendingRequests.current.delete(data.id); }
-      }
-    };
-    ws.onclose = () => {
-      if (ws !== wsRef.current) return;
-      wsRef.current = null;
-      setStatus('disconnected');
-      setIsTyping(false);
-      setHasNewMessages(false);
-      streamingAssistantIndexRef.current = null;
-      rejectAllPendingRequests('WebSocket closed');
-      clearStallTimer();
-    };
-    ws.onerror = () => {
-      if (ws !== wsRef.current) return;
-      setStatus('error');
-      setIsTyping(false);
-      setHasNewMessages(false);
-      streamingAssistantIndexRef.current = null;
-      rejectAllPendingRequests('WebSocket error');
-    };
-  }, [keyPair, deviceId, handleChallenge, handleChatDelta, fetchSessions, clearStallTimer, rejectAllPendingRequests]);
-
-  // --- More Session/Chat Logic ---
-  const loadSessionHistory = useCallback(async (key: string) => {
-    setIsLoadingHistory(true);
-    // 切换/加载历史时清空流式索引，防止命中旧索引导致“更新错消息”
-    streamingAssistantIndexRef.current = null;
-    const res = await sendRPC('chat.history', { sessionKey: key, limit: 500 });
-    if (res.ok) {
-        const items = (res.payload.messages || res.payload.items || []).sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
-        const history = items.map((item: any) => {
-          let content = formatMessageContent(item.content);
-          
-          if (item.role === 'toolResult' && !content.includes(':::toolResult')) {
-            const toolName = item.toolName || 'unknown';
-            const text = typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
-            content = `> :::toolResult\n> **${toolName}**\n> ${text.split('\n').join('\n> ')}\n> :::\n`;
-          }
-
-          const rawTs = new Date(item.createdAt || item.timestamp || Date.now()).getTime();
-
-          return {
-            id: item.id || `msg-${rawTs}-${Math.random().toString(36).substring(2, 7)}`,
-            runId: item.runId,
-            role: item.role === 'toolResult' ? 'assistant' : item.role,
-            content: content || '',
-            timestamp: new Date(rawTs).toLocaleTimeString(),
-            metrics: item.metrics,
-            _sortTs: rawTs // 💡 显式保留原始权重用于排序
-          };
-        }).filter((msg: any) => msg.content && msg.content.trim() !== '');
-        
-        // 💡 缝合逻辑：加载完历史后，从缓存中恢复“内存中还未持久化”的消息
-        const cache = sessionCacheRef.current.get(key);
-        if (cache) {
-          let userMsgSortTs = cache.lastUserMsg?._sortTs || Date.now();
-
-          // 1. 恢复 User 提问 (如果 DB 里还没存好)
-          if (cache.lastUserMsg) {
-            const dbUserMsg = history.find((m: any) => m.id === cache.lastUserMsg?.id || (m.role === 'user' && m.content === cache.lastUserMsg?.content));
-            if (!dbUserMsg) {
-              history.push(cache.lastUserMsg);
-            } else {
-              // 💡 如果 DB 已经存了，拿 DB 实际分配的高精度时间戳，防止本地生成的时间戳比 DB 旧而在排序时垫底
-              userMsgSortTs = dbUserMsg._sortTs || userMsgSortTs;
-            }
-          }
-
-          // 2. 恢复 AI 回答
-          if (cache.isTyping && cache.fullText) {
-            const existingIndex = cache.runId ? history.findIndex((m: any) => m.runId === cache.runId) : -1;
-            if (existingIndex !== -1) {
-              history[existingIndex].content = cache.fullText;
-            } else {
-              history.push({
-                id: `msg-ai-recovered-${Date.now()}`,
-                role: 'assistant' as const,
-                content: cache.fullText,
-                timestamp: new Date().toLocaleTimeString(),
-                _sortTs: userMsgSortTs + 1 // 💡 强锁：AI 必须严格排在最新获取的用户提问之后
-              });
-            }
-            setIsTyping(true);
-            resetStallTimer();
-          } else {
-            setIsTyping(false);
-            clearStallTimer();
-          }
-        } else {
-          setIsTyping(false);
-          clearStallTimer();
-        }
-        
-        // 💡 三次加固：绝对时序排序。如果时间戳相等（由于秒级精度），则强制 User 在 Assistant 之前
-        const finalMessages = [...history].sort((a, b) => {
-          const diff = (a._sortTs || 0) - (b._sortTs || 0);
-          if (diff !== 0) return diff;
-          // 如果时间戳完全一致，通过角色定胜负：user(-1) < assistant(1)
-          const roleOrder: Record<string, number> = { 'system': 0, 'user': 1, 'assistant': 2 };
-          return (roleOrder[a.role] || 0) - (roleOrder[b.role] || 0);
-        });
-        setMessages(finalMessages);
-
-        // 💡 历史加载对位：当历史记录加载完成后，自动瞬移到最后一条消息，符合聊天软件查看习惯
-        if (history.length > 0) {
-            setTimeout(() => {
-                virtuosoRef.current?.scrollToIndex({ 
-                    index: history.length - 1, 
-                    align: 'end',
-                    behavior: 'auto' 
-                });
-            }, 100);
-        }
-    }
-    setIsLoadingHistory(false);
-  }, [sendRPC, formatMessageContent, resetStallTimer, clearStallTimer]);
-
-  const handleSelectSession = useCallback((key: string) => {
-    if (key === sessionKey) return;
-    setSessionKey(key);
-    streamingAssistantIndexRef.current = null;
-    const s = sessions.find(x => x.key === key);
-    if (s) {
-      /**
-       * 会话切换时同步标题（label）。
-       *
-       * 关键修复：当目标会话未命名/为空时，必须清空当前 `sessionLabel`，否则会错误沿用上一个会话标题。
-       * 同时保留原本的防御意图：仅当目标会话 label“像样”时才使用它覆盖；否则用 null 触发 UI 的“未命名会话”兜底展示。
-       */
-      const nextLabel = (s.label || '').trim();
-      if (nextLabel && nextLabel !== '未命名会话' && nextLabel !== 'New Session') {
-        setSessionLabel(nextLabel);
-      } else {
-        setSessionLabel(null);
-      }
-      setSessionModel(s.model || '');
-      if (key.startsWith('agent:')) {
-        const parts = key.split(':');
-        if (parts.length >= 2) setSelectedBot(`openclaw:${parts[1]}`);
-      }
-    } else {
-      // 找不到会话元信息时也要避免串台
-      setSessionLabel(null);
-    }
-    // 💡 状态切换：先尝试从缓存恢复 UI 状态，防止加载历史期间输入框“闪现”可用状态
-    const cache = sessionCacheRef.current.get(key);
-    if (cache) {
-      setIsTyping(cache.isTyping);
-      if (cache.isTyping) resetStallTimer(); else clearStallTimer();
-    } else {
-      setIsTyping(false);
-      clearStallTimer();
-    }
-
-    loadSessionHistory(key);
-    setHasNewMessages(false);
-  }, [sessionKey, sessions, setSelectedBot, loadSessionHistory, clearStallTimer, resetStallTimer]);
-
-  const handleUpdateLabel = useCallback(async (newLabel: string) => {
-    if (!sessionKey || !newLabel.trim()) return;
-    
-    // 💡 核心保护：禁止平替主会话名称
-    if (sessionKey === 'agent:main:main') {
-      message.warning(t('chat.systemSessionNoRename', { defaultValue: '系统主会话名称不可修改' }));
-      return;
-    }
-
-    setIsUpdatingLabel(true);
-    try {
-      const res = await sendRPC('sessions.patch', { key: sessionKey, label: newLabel.trim() });
-      if (res.ok) {
-        message.success(t('common.success'));
-        setSessionLabel(newLabel.trim());
-        fetchSessions();
-      }
-    } finally {
-      setIsUpdatingLabel(false);
-    }
-  }, [sessionKey, sendRPC, fetchSessions, t]);
+  // 消息/流式/历史加载等逻辑已迁移到 useV3Messages
 
   /**
-   * 手动/自动汇总会话标题。
-   *
-   * - 自动模式（force=false）：仅在会话标题为空/未命名时生成，避免覆盖用户已命名标题。
-   * - 手动模式（force=true）：允许在已有标题时重新生成并覆盖标题（用于“手动触发 AI 汇总标题”）。
+   * 注入网关事件路由：将连接层 event 分发到 chat/sessions/approval 等业务处理。
    */
-  const handleAutoSummarize = useCallback(async (messagesOverride?: Message[], silent = false, targetKey?: string, force = false) => {
-    const activeKey = targetKey || sessionKey;
-    const targetMessages = messagesOverride || messages;
-    
-    // 💡 核心保护：禁止 AI 自动总结主会话
-    if (activeKey === 'agent:main:main') {
-      return;
-    }
-
-    // 💡 核心保护 2（自动模式）：如果已经有了“像样”的名字（不是空、也不是未命名标识），则不要去改它
-    // 手动模式允许覆盖，从而支持“已存在会话标题也能手动触发 AI 汇总标题”
-    const existing = sessions.find(s => s.key === activeKey);
-    const currentLabel = activeKey === sessionKey ? sessionLabel : existing?.label;
-    if (!force && currentLabel && currentLabel !== '未命名会话' && currentLabel !== 'New Session' && currentLabel.trim() !== '') {
-      return;
-    }
-
-    // 💡 鲁棒性加固：检查是否已经在总结该会话，防止并发冲突
-    if (!activeKey || targetMessages.length === 0 || summarizingSessionsRef.current.has(activeKey)) return;
-    
-    summarizingSessionsRef.current.add(activeKey);
-    if (!targetKey) setIsSummarizing(true);
-    
-    // 💡 视觉修复：修正逻辑，如果是前台活跃会话且非静默模式，显示 Loading
-    if (!silent) {
-      message.loading({ 
-        content: t('chat.summarizingTitle', { defaultValue: '正在生成标题...' }), 
-        key: `summarizing-${activeKey}` 
-      });
-    }
-
-    try {
-      const agentId = selectedBot.replace('openclaw:', '');
-      const bot = botsModels?.data?.bots?.find((b: any) => b.id === agentId);
-      const currentModelID = bot?.model || '';
-      const validMessages = targetMessages.map(m => {
-        let clean = m.content;
-        clean = clean.replace(/> :::thinking[\s\S]*?:::\n*/g, '')
-                     .replace(/> :::toolCall[\s\S]*?:::\n*/g, '')
-                     .replace(/> :::toolResult[\s\S]*?:::\n*/g, '');
-        return { role: m.role, content: clean.trim() };
-      }).filter(m => m.content.length > 0);
-      
-      const newTitle = await summarizeSession(validMessages, currentModelID);
-      if (newTitle) {
-        const res = await sendRPC('sessions.patch', { key: activeKey, label: newTitle });
-        if (res.ok) {
-          if (activeKey === sessionKey) setSessionLabel(newTitle);
-          // 💡 视觉修复：仅在非静默模式下显示成功提示
-          if (!silent) {
-            message.success({ content: t('chat.titleSummarized'), key: `summarizing-${activeKey}` });
-          }
-          setSessions(prev => prev.map(s => s.key === activeKey ? { ...s, label: newTitle } : s));
-        }
-      }
-    } catch (err) {
-      if (!silent) console.error('Summarize error:', err);
-    } finally {
-      summarizingSessionsRef.current.delete(activeKey);
-      if (!targetKey) setIsSummarizing(false);
-    }
-  }, [sessionKey, messages, selectedBot, botsModels, sendRPC, fetchSessions, t, sessions, sessionLabel]);
-  autoSummarizeRef.current = handleAutoSummarize;
-
-  const handleSend = useCallback(async (content?: any, attachedFiles?: FileInfo[]) => {
-    const text = (typeof content === 'string' ? content : '').trim();
-    
-    // 💡 健壮性加固 1：防止重复发送（解决“一遍又一遍”重复的问题），并确保在认证状态下操作
-    if (isTyping) return;
-    if ((!text && (!attachedFiles || attachedFiles.length === 0)) || status !== 'authenticated') return;
-
-    setIsTyping(true);
-    setTpsData([]);
-
-    let currentKey = sessionKey;
-    if (!currentKey) {
-      const res = await sendRPC('sessions.create', { agentId: selectedBot.replace('openclaw:', '') });
-      if (res.ok) {
-        currentKey = res.payload.key;
-        setSessionKey(currentKey);
-        await sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel });
-        fetchSessions();
-      } else {
-        message.error(t('chat.failedToCreateSession') || 'Failed to create session: ' + (res.error?.message || 'Unknown'));
-        setIsTyping(false);
-        return;
-      }
-    }
-
-    if (currentKey) {
-      let finalContent = text;
-      if (attachedFiles && attachedFiles.length > 0) {
-        const fileLinks = attachedFiles.map(f => {
-          const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
-          return isImage ? `\n![${f.filename}](${f.thumbUrl || f.url} \"${f.url}\")\n(File path: ${f.path})` : `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
-        }).join('');
-        finalContent += fileLinks + `\n\n**System Note for Expert:** The user has uploaded files. Access them via absolute \"File path\" provided.`;
-      }
-
-      const newUserMsg: Message = { 
-        id: `msg-${Date.now()}`, 
-        role: 'user', 
-        content: finalContent, 
-        timestamp: new Date().toLocaleTimeString(),
-        _sortTs: Date.now() // 💡 分配用户消息权重
-      };
-
-      const aiSortTs = newUserMsg._sortTs! + 1; // 💡 强制 AI 紧随其后
-      const assistantInitialMsg = text === '/stop' ? t('chat.terminated') : t('chat.thinking');
-      const aiPlaceholderMsg: Message = { 
-        id: `msg-ai-${Date.now()}`, 
-        role: 'assistant', 
-        content: assistantInitialMsg, 
-        timestamp: new Date().toLocaleTimeString(),
-        _sortTs: aiSortTs // 💡 分配 AI 占位符权重
-      };
-
-      // 💡 初始化该会话的缓存状态
-      sessionCacheRef.current.set(currentKey, {
-        fullText: '',
-        isTyping: true,
-        startTime: Date.now(),
-        firstTokenTime: 0,
-        ttftRecorded: false,
-        tokenCount: 0,
-        tpsData: [],
-        lastUserMsg: newUserMsg
-      });
-
-      // 💡 一次性推入 User 和 AI 占位消息，确保时序正确
-      setMessages(prev => [...prev, newUserMsg, aiPlaceholderMsg]);
-      // 记录当前流式 assistant 索引（assistant 占位符在追加的第二条）
-      streamingAssistantIndexRef.current = messagesCountRef.current + 1;
-      resetStallTimer();
-
-      setTimeout(() => {
-        virtuosoRef.current?.scrollToIndex({ 
-          index: messagesCountRef.current + 1,
-          align: 'end',
-          behavior: 'smooth' 
-        });
-      }, 100);
-
-      const res = await sendRPC('chat.send', { 
-        sessionKey: currentKey, 
-        message: finalContent, 
-        idempotencyKey: `ik-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
-      });
-      
-      if (res.ok && res.payload?.runId) {
-        // 💡 握手回填：将 RPC 返回的 runId 立即同步到缓存和消息对象中
-        const cache = sessionCacheRef.current.get(currentKey);
-        if (cache) cache.runId = res.payload.runId;
+  useEffect(() => {
+    gatewayEventHandlerRef.current = (data: any) => {
+      if (!data || data.type !== 'event') return;
+      if (['tick', 'presence'].includes(data.event)) return;
+      if (data.event === 'chat') messagesApiRef.current?.handleChatDelta(data.payload);
+      else if (data.event === 'sessions.changed') fetchSessions(true);
+      else if (data.event === 'exec.approval.requested') {
+        const { id, request } = data.payload;
+        const slug = id.substring(0, 8);
+        const command = request.command;
+        const approvalBlock = `\n\n> :::approval\n> **${slug}**\n> \`\`\`bash\n> ${command}\n> \`\`\`\n> :::\n`;
 
         setMessages(prev => {
-          const lastIndex = prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
-          if (lastIndex !== -1) {
-            const next = [...prev];
-            next[lastIndex] = { ...next[lastIndex], runId: res.payload.runId };
-            return next;
+          const last = prev[prev.length - 1];
+          if (last && last.role === 'assistant') {
+            if (last.content.includes(slug)) return prev;
+            const newContent = (last.content === t('chat.thinking') || !last.content)
+              ? approvalBlock
+              : `${last.content}${approvalBlock}`;
+            return [...prev.slice(0, -1), { ...last, content: newContent }];
           }
-          return prev;
+          const now = Date.now();
+          const newMsg: Message = {
+            id: `msg-approval-${now}`,
+            role: 'assistant',
+            content: approvalBlock,
+            timestamp: new Date(now).toLocaleTimeString(),
+            _sortTs: now
+          };
+          return [...prev, newMsg];
         });
+        // typing/stall 等状态由消息层统一维护，这里不额外干预
+      } else if (data.event === 'agent') {
+        const { stream, data: agentData } = data.payload;
+        if (stream === 'item' && agentData.status === 'blocked') {
+          // typing/stall 等状态由消息层统一维护，这里不额外干预
+        }
       }
-
-      if (!res.ok) {
-        message.error(t('chat.sendFailed', { reason: res.error?.message || 'Unknown' }));
-        setIsTyping(false);
-        streamingAssistantIndexRef.current = null;
-        clearStallTimer();
-        const cache = sessionCacheRef.current.get(currentKey);
-        if (cache) cache.isTyping = false;
-      } else if (text === '/stop') {
-        setIsTyping(false);
-        streamingAssistantIndexRef.current = null;
-        clearStallTimer();
-        const cache = sessionCacheRef.current.get(currentKey);
-        if (cache) cache.isTyping = false;
-      }
-    } else {
-      setIsTyping(false);
-      streamingAssistantIndexRef.current = null;
-      message.error(t('chat.sessionKeyMissing'));
-    }
-  }, [status, sessionKey, selectedBot, thinkingLevel, sessionModel, sendRPC, fetchSessions, resetStallTimer, clearStallTimer, t, isTyping, messagesCountRef, virtuosoRef]);
-
-  /**
-   * 重试/再生成：复用既有的 User 消息，不额外创建新的 User 消息，避免“每点一次重试就多一条新消息”。
-   *
-   * 仅追加一个新的 Assistant 占位符并重新发送到网关，保持会话里 User 消息的唯一性与时间线稳定。
-   */
-  const resendFromExistingUserMessage = useCallback(async (userMsg: Message) => {
-    if (!sessionKey) return;
-    if (status !== 'authenticated') return;
-    if (isTyping) return;
-
-    const finalContent = (userMsg.content || '').trim();
-    if (!finalContent) return;
-
-    setIsTyping(true);
-    setTpsData([]);
-
-    // 💡 AI 占位符必须紧跟该 User 消息之后
-    const baseSortTs = userMsg._sortTs || Date.now();
-    const aiPlaceholderMsg: Message = {
-      id: `msg-ai-${Date.now()}`,
-      role: 'assistant',
-      content: t('chat.thinking'),
-      timestamp: new Date().toLocaleTimeString(),
-      _sortTs: baseSortTs + 1
     };
+    return () => {
+      gatewayEventHandlerRef.current = null;
+    };
+  }, [fetchSessions, t]);
 
-    // 💡 更新该会话缓存状态（复用 lastUserMsg，不再新建 User 消息）
-    sessionCacheRef.current.set(sessionKey, {
-      fullText: '',
-      isTyping: true,
-      startTime: Date.now(),
-      firstTokenTime: 0,
-      ttftRecorded: false,
-      tokenCount: 0,
-      tpsData: [],
-      lastUserMsg: userMsg
-    });
-
-    setMessages(prev => [...prev, aiPlaceholderMsg]);
-    // 记录流式 assistant 索引（此处仅追加一条 assistant 占位符）
-    streamingAssistantIndexRef.current = messagesCountRef.current;
-    resetStallTimer();
-
-    setTimeout(() => {
-      virtuosoRef.current?.scrollToIndex({
-        index: messagesCountRef.current,
-        align: 'end',
-        behavior: 'smooth'
-      });
-    }, 100);
-
-    const res = await sendRPC('chat.send', {
-      sessionKey,
-      message: finalContent,
-      idempotencyKey: `regen-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
-    });
-
-    if (res.ok && res.payload?.runId) {
-      const cache = sessionCacheRef.current.get(sessionKey);
-      if (cache) cache.runId = res.payload.runId;
-
-      setMessages(prev => {
-        const lastIndex = prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
-        if (lastIndex !== -1) {
-          const next = [...prev];
-          next[lastIndex] = { ...next[lastIndex], runId: res.payload.runId };
-          return next;
-        }
-        return prev;
-      });
+  const { isSummarizing, handleAutoSummarize } = useV3AutoSummarize({
+    t,
+    sessionKey,
+    sessionLabel,
+    selectedBot,
+    botsModels,
+    sessions,
+    sendRPC,
+    onLocalLabelPatched: (key, newLabel) => {
+      if (key === sessionKey) setSessionLabel(newLabel);
+      setSessions(prev => prev.map(s => s.key === key ? { ...s, label: newLabel } : s));
     }
-
-    if (!res.ok) {
-      message.error(t('chat.sendFailed', { reason: res.error?.message || 'Unknown' }));
-      setIsTyping(false);
-      streamingAssistantIndexRef.current = null;
-      clearStallTimer();
-      const cache = sessionCacheRef.current.get(sessionKey);
-      if (cache) cache.isTyping = false;
-    }
-  }, [sessionKey, status, isTyping, sendRPC, t, resetStallTimer, clearStallTimer, virtuosoRef]);
-
-  const handleRegenerate = useCallback(() => {
-    if (isTyping) {
-      message.warning(t('chat.waitUntilFinishWarning'));
-      return;
-    }
-    const lastUserIndex = [...messages].reverse().findIndex(m => m.role === 'user');
-    if (lastUserIndex !== -1) {
-      const actualIndex = messages.length - 1 - lastUserIndex;
-      const lastUserMsg = messages[actualIndex];
-      // 1) 截断到最后一条 User 消息（保留它）
-      setMessages(prev => prev.slice(0, actualIndex + 1));
-      // 2) 复用该 User 消息重发，不再创建新的 User 消息
-      resendFromExistingUserMessage(lastUserMsg);
-    }
-  }, [messages, resendFromExistingUserMessage, isTyping]);
-
-  const handleSaveEdit = useCallback(async (editingMsgIndex: number, editContent: string) => {
-    if (isTyping) {
-      message.warning(t('chat.waitUntilFinishWarning'));
-      return;
-    }
-    const newText = editContent.trim();
-    if (!newText) return;
-    setMessages(prev => {
-      const target = prev[editingMsgIndex];
-      // 仅对“编辑 User 消息并重发”做无重复消息处理
-      if (target?.role === 'user') {
-        const updatedUser: Message = {
-          ...target,
-          content: newText
-        };
-        // 截断到该条 User（保留它），并用更新后的内容替换
-        return [...prev.slice(0, editingMsgIndex), updatedUser];
-      }
-      // 兜底：若目标不是 User（例如误触编辑 AI 消息），沿用旧行为：截断并当作新消息发送
-      return prev.slice(0, editingMsgIndex);
-    });
-
-    // 对 User 消息：复用既有消息重发，避免新建 User 消息
-    const target = messages[editingMsgIndex];
-    if (target?.role === 'user') {
-      resendFromExistingUserMessage({ ...target, content: newText });
-    } else {
-      handleSend(newText);
-    }
-  }, [handleSend, isTyping, messages, resendFromExistingUserMessage]);
-
-  const handleStopGeneration = useCallback(() => {
-    if (!sessionKey) return;
-
-    // 💡 1. 前端立即停机，恢复 UI 可用性
-    setIsTyping(false);
-    streamingAssistantIndexRef.current = null;
-    clearStallTimer();
-    
-    const cache = sessionCacheRef.current.get(sessionKey);
-    if (cache) {
-      cache.isTyping = false;
-      // 注意：不清除 fullText，保留已生成的文字
-    }
-
-    setMessages(prev => {
-      const last = prev[prev.length - 1];
-      if (last?.role === 'assistant') {
-        const label = t('chat.manuallyStopped', { defaultValue: '已手动停止' });
-        // 如果内容是“思考中”，直接替换为停止标签；否则在末尾追加
-        const content = (last.content === t('chat.thinking') || !last.content) ? label : last.content + ` (${label})`;
-        const next = [...prev.slice(0, -1), { ...last, content }];
-        return next.sort((a, b) => (a._sortTs || 0) - (b._sortTs || 0));
-      }
-      return prev;
-    });
-
-    // 💡 2. 核心修复：绕过 handleSend 的判断，强制发送停止信号
-    sendRPC('chat.send', { 
-      sessionKey, 
-      message: '/stop', 
-      idempotencyKey: `stop-${Date.now()}` 
-    }).then(res => {
-      if (!res.ok) console.warn('⚠️ 停止指令发送失败:', res.error);
-    });
-
-  }, [clearStallTimer, sendRPC, t, sessionKey]);
-
-  const handleDeleteSession = useCallback((_e: any, key: string) => {
-    Modal.confirm({
-      title: t('chat.deleteSessionConfirm'),
-      content: t('chat.deleteSessionContent'),
-      onOk: async () => {
-        try {
-          message.loading({ content: t('common.processing', { defaultValue: '正在处理...' }), key: 'deletingSession' });
-          const res = await sendRPC('sessions.delete', { key });
-          
-          if (res.ok) {
-            message.success({ content: t('common.success'), key: 'deletingSession' });
-            if (sessionKey === key) { 
-              setSessionKey(null); 
-              setMessages([]); 
-              setSessionLabel(null); 
-              setSessionModel('');
-              setIsTyping(false);
-              clearStallTimer();
-            }
-            fetchSessions();
-          } else {
-            // 💡 优化：确保透出具体的报错原因，方便定位是网络问题还是权限问题
-            const errMsgRaw = res.error?.message || res.error || 'Gateway Timeout or Unknown Error';
-            let errMsg = typeof errMsgRaw === 'string' ? errMsgRaw : JSON.stringify(errMsgRaw);
-            
-            // 💡 翻译优化：针对主会话不可删除的后端提示做特定翻译
-            if (errMsg.includes('Cannot delete the main session')) {
-              errMsg = t('chat.cannotDeleteMainSession');
-            }
-            
-            message.error({ 
-              content: `${t('common.error')}: ${errMsg}`, 
-              key: 'deletingSession',
-              duration: 5
-            });
-          }
-        } catch (err) {
-          console.error('❌ Delete Session Trap:', err);
-          message.error({ content: t('common.error'), key: 'deletingSession' });
-        }
-      }
-    });
-  }, [sessionKey, sendRPC, fetchSessions, t]);
-
-  const handleDeleteGroup = useCallback((label: string, sessionKeys: string[]) => {
-    if (sessionKeys.length === 0) return;
-    Modal.confirm({
-      title: t('chat.deleteGroupConfirm'),
-      content: t('chat.deleteGroupContent', { count: sessionKeys.length, label }),
-      okButtonProps: { danger: true },
-      onOk: async () => {
-        try {
-          message.loading({ content: t('chat.clearingGroup'), key: 'clearingGroup' });
-          const deletableKeys = sessionKeys.filter(k => k !== 'agent:main:main');
-          await Promise.all(deletableKeys.map(key => sendRPC('sessions.delete', { key })));
-          message.success({ content: t('common.success'), key: 'clearingGroup' });
-          if (sessionKey && sessionKeys.includes(sessionKey)) { 
-            setSessionKey(null); 
-            setMessages([]); 
-            setSessionLabel(null); 
-            setSessionModel('');
-            setThinkingLevel('medium');
-            setIsTyping(false);
-            setHasNewMessages(false);
-            streamingAssistantIndexRef.current = null;
-            clearStallTimer();
-          }
-          fetchSessions();
-        } catch (err) { message.error({ content: t('common.error'), key: 'clearingGroup' }); }
-      }
-    });
-  }, [sessionKey, sendRPC, fetchSessions, t]);
-
-  const handleClearAllHistory = useCallback(() => {
-    if (sessions.length === 0) return;
-    Modal.confirm({
-      title: t('chat.clearAllHistoryConfirm'),
-      content: t('chat.clearAllHistoryContent'),
-      okButtonProps: { danger: true },
-      onOk: async () => {
-        try {
-          message.loading({ content: t('chat.clearingAll'), key: 'clearingAll' });
-          const deletableSessions = sessions.filter(s => s.key !== 'agent:main:main');
-          await Promise.all(deletableSessions.map(s => sendRPC('sessions.delete', { key: s.key })));
-          message.success({ content: t('chat.clearAllSuccess'), key: 'clearingAll' });
-          setSessionKey(null); 
-          setMessages([]); 
-          setSessionLabel(null); 
-          setSessions([]);
-          setIsTyping(false);
-          setHasNewMessages(false);
-          streamingAssistantIndexRef.current = null;
-          clearStallTimer();
-          fetchSessions();
-        } catch (err) { message.error({ content: t('common.error'), key: 'clearingAll' }); }
-      }
-    });
-  }, [sessions, sendRPC, fetchSessions, t]);
-
-  const handleModelChange = useCallback(async (newModel: string) => {
-    setSessionModel(newModel);
-    if (!sessionKey) return;
-    const res = await sendRPC('sessions.patch', { key: sessionKey, model: newModel || null });
-    if (res.ok) {
-      message.success(t('chat.modelSwitchSuccess'));
-      fetchSessions();
-    }
-  }, [sessionKey, sendRPC, fetchSessions, t]);
-
-  const handleThinkingLevelChange = useCallback(async (newLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh') => {
-    setThinkingLevel(newLevel);
-    if (!sessionKey) return;
-    const res = await sendRPC('sessions.patch', { key: sessionKey, thinkingLevel: newLevel });
-    if (res.ok) {
-      message.success(t('chat.thinkingLevelUpdated', { defaultValue: '思考等级已更新' }));
-    }
-  }, [sessionKey, sendRPC, t]);
-
-  // --- Effects ---
-  useEffect(() => {
-    if (status === 'disconnected' && keyPair) {
-      if (reconnectCountRef.current >= MAX_RECONNECTS) { setStatus('error'); return; }
-      const delay = reconnectCountRef.current === 0 ? 0 : Math.min(2000 * reconnectCountRef.current, 10000);
-      reconnectTimerRef.current = setTimeout(() => { reconnectCountRef.current++; connect(); }, delay);
-      return () => { if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current); };
-    }
-    if (status === 'authenticated') reconnectCountRef.current = 0;
-  }, [status, keyPair, connect]);
-
-  useEffect(() => {
-    return () => { if (wsRef.current) { wsRef.current.close(); wsRef.current = null; } };
-  }, []);
+  });
+  autoSummarizeRef.current = handleAutoSummarize;
 
   return {
     messages, setMessages,
@@ -1323,19 +262,7 @@ export const useChatV3WebSocket = ({
     isUpdatingLabel,
     fetchSessions,
     handleSelectSession,
-    startNewSession: () => { 
-      setSessionKey(null); 
-      setMessages([]); 
-      setSessionLabel(null); 
-      setIsTyping(false);
-      setHasNewMessages(false);
-      streamingAssistantIndexRef.current = null;
-      clearStallTimer();
-      
-      // 💡 视觉反馈：提示已就绪并自动聚焦输入框
-      message.info({ content: t('chat.newSessionReady', { defaultValue: '新会话已就绪' }), key: 'newSessionReady' });
-      setTimeout(() => inputAreaRef.current?.focus(), 100);
-    },
+    startNewSession,
     handleSend,
     handleStopGeneration,
     handleRegenerate,
