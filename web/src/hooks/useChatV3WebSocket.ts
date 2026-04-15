@@ -946,6 +946,85 @@ export const useChatV3WebSocket = ({
     }
   }, [status, sessionKey, selectedBot, thinkingLevel, sessionModel, sendRPC, fetchSessions, resetStallTimer, clearStallTimer, t, isTyping, messagesCountRef, virtuosoRef]);
 
+  /**
+   * 重试/再生成：复用既有的 User 消息，不额外创建新的 User 消息，避免“每点一次重试就多一条新消息”。
+   *
+   * 仅追加一个新的 Assistant 占位符并重新发送到网关，保持会话里 User 消息的唯一性与时间线稳定。
+   */
+  const resendFromExistingUserMessage = useCallback(async (userMsg: Message) => {
+    if (!sessionKey) return;
+    if (status !== 'authenticated') return;
+    if (isTyping) return;
+
+    const finalContent = (userMsg.content || '').trim();
+    if (!finalContent) return;
+
+    setIsTyping(true);
+    setTpsData([]);
+
+    // 💡 AI 占位符必须紧跟该 User 消息之后
+    const baseSortTs = userMsg._sortTs || Date.now();
+    const aiPlaceholderMsg: Message = {
+      id: `msg-ai-${Date.now()}`,
+      role: 'assistant',
+      content: t('chat.thinking'),
+      timestamp: new Date().toLocaleTimeString(),
+      _sortTs: baseSortTs + 1
+    };
+
+    // 💡 更新该会话缓存状态（复用 lastUserMsg，不再新建 User 消息）
+    sessionCacheRef.current.set(sessionKey, {
+      fullText: '',
+      isTyping: true,
+      startTime: Date.now(),
+      firstTokenTime: 0,
+      ttftRecorded: false,
+      tokenCount: 0,
+      tpsData: [],
+      lastUserMsg: userMsg
+    });
+
+    setMessages(prev => [...prev, aiPlaceholderMsg]);
+    resetStallTimer();
+
+    setTimeout(() => {
+      virtuosoRef.current?.scrollToIndex({
+        index: messagesCountRef.current,
+        align: 'end',
+        behavior: 'smooth'
+      });
+    }, 100);
+
+    const res = await sendRPC('chat.send', {
+      sessionKey,
+      message: finalContent,
+      idempotencyKey: `regen-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+    });
+
+    if (res.ok && res.payload?.runId) {
+      const cache = sessionCacheRef.current.get(sessionKey);
+      if (cache) cache.runId = res.payload.runId;
+
+      setMessages(prev => {
+        const lastIndex = prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
+        if (lastIndex !== -1) {
+          const next = [...prev];
+          next[lastIndex] = { ...next[lastIndex], runId: res.payload.runId };
+          return next;
+        }
+        return prev;
+      });
+    }
+
+    if (!res.ok) {
+      message.error('Failed to send: ' + (res.error?.message || 'Unknown'));
+      setIsTyping(false);
+      clearStallTimer();
+      const cache = sessionCacheRef.current.get(sessionKey);
+      if (cache) cache.isTyping = false;
+    }
+  }, [sessionKey, status, isTyping, sendRPC, t, resetStallTimer, clearStallTimer, virtuosoRef]);
+
   const handleRegenerate = useCallback(() => {
     if (isTyping) {
       message.warning('⚠️ AI 正在狂奔输出中，请先等它说完或手动点击停止哦~');
@@ -955,10 +1034,12 @@ export const useChatV3WebSocket = ({
     if (lastUserIndex !== -1) {
       const actualIndex = messages.length - 1 - lastUserIndex;
       const lastUserMsg = messages[actualIndex];
+      // 1) 截断到最后一条 User 消息（保留它）
       setMessages(prev => prev.slice(0, actualIndex + 1));
-      handleSend(lastUserMsg.content);
+      // 2) 复用该 User 消息重发，不再创建新的 User 消息
+      resendFromExistingUserMessage(lastUserMsg);
     }
-  }, [messages, handleSend, isTyping]);
+  }, [messages, resendFromExistingUserMessage, isTyping]);
 
   const handleSaveEdit = useCallback(async (editingMsgIndex: number, editContent: string) => {
     if (isTyping) {
@@ -967,9 +1048,29 @@ export const useChatV3WebSocket = ({
     }
     const newText = editContent.trim();
     if (!newText) return;
-    setMessages(prev => prev.slice(0, editingMsgIndex));
-    handleSend(newText);
-  }, [handleSend, isTyping]);
+    setMessages(prev => {
+      const target = prev[editingMsgIndex];
+      // 仅对“编辑 User 消息并重发”做无重复消息处理
+      if (target?.role === 'user') {
+        const updatedUser: Message = {
+          ...target,
+          content: newText
+        };
+        // 截断到该条 User（保留它），并用更新后的内容替换
+        return [...prev.slice(0, editingMsgIndex), updatedUser];
+      }
+      // 兜底：若目标不是 User（例如误触编辑 AI 消息），沿用旧行为：截断并当作新消息发送
+      return prev.slice(0, editingMsgIndex);
+    });
+
+    // 对 User 消息：复用既有消息重发，避免新建 User 消息
+    const target = messages[editingMsgIndex];
+    if (target?.role === 'user') {
+      resendFromExistingUserMessage({ ...target, content: newText });
+    } else {
+      handleSend(newText);
+    }
+  }, [handleSend, isTyping, messages, resendFromExistingUserMessage]);
 
   const handleStopGeneration = useCallback(() => {
     if (!sessionKey) return;
