@@ -635,11 +635,16 @@ export const useChatV3WebSocket = ({
         // 💡 缝合逻辑：加载完历史后，从缓存中恢复“内存中还未持久化”的消息
         const cache = sessionCacheRef.current.get(key);
         if (cache) {
+          let userMsgSortTs = cache.lastUserMsg?._sortTs || Date.now();
+
           // 1. 恢复 User 提问 (如果 DB 里还没存好)
           if (cache.lastUserMsg) {
-            const hasUserMsg = history.some((m: any) => m.id === cache.lastUserMsg?.id || (m.role === 'user' && m.content === cache.lastUserMsg?.content));
-            if (!hasUserMsg) {
+            const dbUserMsg = history.find((m: any) => m.id === cache.lastUserMsg?.id || (m.role === 'user' && m.content === cache.lastUserMsg?.content));
+            if (!dbUserMsg) {
               history.push(cache.lastUserMsg);
+            } else {
+              // 💡 如果 DB 已经存了，拿 DB 实际分配的高精度时间戳，防止本地生成的时间戳比 DB 旧而在排序时垫底
+              userMsgSortTs = dbUserMsg._sortTs || userMsgSortTs;
             }
           }
 
@@ -654,7 +659,7 @@ export const useChatV3WebSocket = ({
                 role: 'assistant' as const,
                 content: cache.fullText,
                 timestamp: new Date().toLocaleTimeString(),
-                _sortTs: (cache.lastUserMsg?._sortTs || Date.now()) + 1 // 💡 强锁：AI 必须排在 User 提问之后
+                _sortTs: userMsgSortTs + 1 // 💡 强锁：AI 必须严格排在最新获取的用户提问之后
               });
             }
             setIsTyping(true);
