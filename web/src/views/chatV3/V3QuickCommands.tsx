@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Form, Input, Modal, message } from 'antd';
-import { ChevronDown, ChevronUp, Plus, Settings, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Command, Plus, Trash2 } from 'lucide-react';
 
 export interface V3QuickCommandsProps {
   t: any;
@@ -89,7 +89,7 @@ export function V3QuickCommands({ t, status, onSend, isMobile }: V3QuickCommands
                   onClick={() => setIsManageModalOpen(true)}
                   style={{ fontSize: 12, color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}
                 >
-                  {t('chat.noQuickCommandsAdd')} <Settings size={12} />
+                  {t('chat.noQuickCommandsAdd')} <Command size={12} />
                 </span>
               ) : quickCommands.map((item: any) => (
                 <Button
@@ -105,7 +105,7 @@ export function V3QuickCommands({ t, status, onSend, isMobile }: V3QuickCommands
             </div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
               <Button
-                type="text" size="small" icon={<Settings size={14} />}
+                type="text" size="small" icon={<Command size={14} />}
                 style={{ color: '#94a3b8', background: '#f1f5f9', borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 onClick={() => setIsManageModalOpen(true)}
               />
@@ -132,7 +132,7 @@ export function V3QuickCommands({ t, status, onSend, isMobile }: V3QuickCommands
       </div>
 
       <Modal
-        title={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Settings size={20} color="#2563eb" /><span>{t('chat.manageQuickCommands', { defaultValue: '管理快捷指令' })}</span></div>}
+        title={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Command size={20} color="#2563eb" /><span>{t('chat.manageQuickCommands', { defaultValue: '管理快捷指令' })}</span></div>}
         open={isManageModalOpen}
         onCancel={() => setIsManageModalOpen(false)}
         footer={null}
