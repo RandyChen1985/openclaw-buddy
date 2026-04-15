@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"openclaw-buddy/internal/utils"
 )
 
@@ -164,56 +165,70 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 		Models: []OpenClawModel{},
 	}
 
-	// --- 1. 解析 Bots ---
+	var wg sync.WaitGroup
+	var botsOut, modelsOut []byte
+	var botsErr, modelsErr error
 
-	// 首先尝试 JSON 模式
-	cmdBotsJSON := exec.Command("openclaw", "agents", "list", "--json")
-	outBotsJSON, err := cmdBotsJSON.CombinedOutput()
-	
+	wg.Add(2)
+
+	// --- 并发执行命令 ---
+	go func() {
+		defer wg.Done()
+		cmd := exec.Command("openclaw", "agents", "list", "--json")
+		botsOut, botsErr = cmd.Output()
+	}()
+
+	go func() {
+		defer wg.Done()
+		cmd := exec.Command("openclaw", "models", "list", "--json")
+		modelsOut, modelsErr = cmd.Output()
+	}()
+
+	wg.Wait()
+
+	// --- 1. 解析 Bots ---
 	usedJSON := false
-	if err == nil {
-		cleanOut := StripANSI(string(outBotsJSON))
-		// 支持数组格式或者带包裹的对象格式
-		idxStart := strings.Index(cleanOut, "[")
-		idxEnd := strings.LastIndex(cleanOut, "]")
-		if idxStart != -1 && idxEnd != -1 && idxEnd > idxStart {
-			jsonStr := cleanOut[idxStart : idxEnd+1]
-			var cliBots []cliBot
-			if jsonErr := json.Unmarshal([]byte(jsonStr), &cliBots); jsonErr == nil {
-				for _, b := range cliBots {
-					name := b.IdentityName
-					if name == "" {
-						name = b.ID
-					}
-					emoji := b.IdentityEmoji
-					if emoji == "" {
-						emoji = "🤖"
-					}
-					res.Bots = append(res.Bots, OpenClawBot{
-						ID:           b.ID,
-						Name:         name,
-						Emoji:        emoji,
-						Model:        b.Model,
-						Workspace:    b.Workspace,
-						AgentDir:     b.AgentDir,
-						RoutingRules: fmt.Sprintf("%d", b.Bindings),
-						Routing:      strings.Join(b.Routes, ", "),
-					})
+	if botsErr == nil {
+		cleanOut := StripANSI(string(botsOut))
+		jsonStr := ExtractJSON(cleanOut)
+		var cliBots []cliBot
+		if jsonErr := json.Unmarshal([]byte(jsonStr), &cliBots); jsonErr == nil {
+			for _, b := range cliBots {
+				name := b.IdentityName
+				if name == "" {
+					name = b.ID
 				}
-				usedJSON = true
+				emoji := b.IdentityEmoji
+				if emoji == "" {
+					emoji = "🤖"
+				}
+				if b.Workspace == "" {
+					continue
+				}
+				res.Bots = append(res.Bots, OpenClawBot{
+					ID:           b.ID,
+					Name:         name,
+					Emoji:        emoji,
+					Model:        b.Model,
+					Workspace:    b.Workspace,
+					AgentDir:     b.AgentDir,
+					RoutingRules: fmt.Sprintf("%d", b.Bindings),
+					Routing:      strings.Join(b.Routes, ", "),
+				})
 			}
+			usedJSON = true
 		}
 	}
 
-	// 兜底：如果 JSON 失败，则使用原始文本解析 (同时修复缩进导致误判的 Bug)
 	if !usedJSON {
 		var currentBot *OpenClawBot
-		scannerBots := bufio.NewScanner(strings.NewReader(string(outBotsJSON)))
-		if usedJSON == false { // 这里的 outBotsJSON 实际上是上面失败的输出，需要重新获取纯文本输出
-			cmdBotsPlain := exec.Command("openclaw", "agents", "list")
-			outBotsPlain, _ := cmdBotsPlain.CombinedOutput()
-			scannerBots = bufio.NewScanner(strings.NewReader(string(outBotsPlain)))
-		}
+		isAgentsSection := false
+		var scannerBots *bufio.Scanner
+		
+		// 如果 JSON 模式失败，重新获取纯文本输出（为了保持原始逻辑的健壮性）
+		cmdBotsPlain := exec.Command("openclaw", "agents", "list")
+		outBotsPlain, _ := cmdBotsPlain.CombinedOutput()
+		scannerBots = bufio.NewScanner(strings.NewReader(string(outBotsPlain)))
 
 		for scannerBots.Scan() {
 			line := scannerBots.Text()
@@ -223,14 +238,21 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 			rawLine := StripANSI(line)
 			trimmedLine := strings.TrimSpace(rawLine)
 
-			// 核心修复：只有行首紧跟 "- " 的才认为是 Agent 标题，排除掉 Providers 下方带空格缩进的横杠
+			if strings.HasPrefix(trimmedLine, "Agents:") {
+				isAgentsSection = true
+				continue
+			}
+			if !isAgentsSection {
+				continue
+			}
+
 			if strings.HasPrefix(rawLine, "- ") {
-				if currentBot != nil {
+				if currentBot != nil && currentBot.Workspace != "" {
 					res.Bots = append(res.Bots, *currentBot)
 				}
 				id := strings.TrimPrefix(trimmedLine, "- ")
 				id = strings.Split(id, " ")[0]
-				currentBot = &OpenClawBot{ID: id, Emoji: "🤖"} // 默认 emoji
+				currentBot = &OpenClawBot{ID: id, Emoji: "🤖"}
 			} else if currentBot != nil {
 				if strings.Contains(line, "Identity:") {
 					lineContent := strings.Split(line, "Identity:")[1]
@@ -260,54 +282,56 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 				}
 			}
 		}
-		if currentBot != nil {
+		if currentBot != nil && currentBot.Workspace != "" {
 			res.Bots = append(res.Bots, *currentBot)
 		}
 	}
 
 	// --- 2. 解析 Models ---
-
 	usedModelsJSON := false
-	cmdModelsJSON := exec.Command("openclaw", "models", "list", "--json")
-	outModelsJSON, err := cmdModelsJSON.CombinedOutput()
-	if err == nil {
-		cleanOut := StripANSI(string(outModelsJSON))
-		idxStart := strings.Index(cleanOut, "[")
-		idxEnd := strings.LastIndex(cleanOut, "]")
-		if idxStart != -1 && idxEnd != -1 && idxEnd > idxStart {
-			jsonStr := cleanOut[idxStart : idxEnd+1]
-			var cliModels []cliModel
-			if jsonErr := json.Unmarshal([]byte(jsonStr), &cliModels); jsonErr == nil {
-				for _, m := range cliModels {
-					isDefault := m.IsDefault
-					if !isDefault {
-						for _, t := range m.Tags {
-							if t == "default" {
-								isDefault = true
-								break
-							}
+	if modelsErr == nil {
+		cleanOut := StripANSI(string(modelsOut))
+		jsonStr := ExtractJSON(cleanOut)
+		var cliModels []cliModel
+		
+		// 增强解析：兼容对象包装和直接数组
+		var wrapper struct {
+			Models []cliModel `json:"models"`
+		}
+		if jsonErr := json.Unmarshal([]byte(jsonStr), &wrapper); jsonErr == nil && len(wrapper.Models) > 0 {
+			cliModels = wrapper.Models
+		} else {
+			_ = json.Unmarshal([]byte(jsonStr), &cliModels)
+		}
+
+		if len(cliModels) > 0 {
+			for _, m := range cliModels {
+				isDefault := m.IsDefault
+				if !isDefault {
+					for _, t := range m.Tags {
+						if t == "default" {
+							isDefault = true
+							break
 						}
 					}
-					
-					id := m.Key
-					if id == "" {
-						id = m.Name
-					}
-					
-					provider := m.Provider
-					if provider == "" && strings.Contains(id, "/") {
-						provider = strings.Split(id, "/")[0]
-					}
-
-					res.Models = append(res.Models, OpenClawModel{
-						ID:        id,
-						Name:      id,
-						Provider:  provider,
-						IsDefault: isDefault,
-					})
 				}
-				usedModelsJSON = true
+				id := m.Key
+				if id == "" {
+					id = m.Name
+				}
+				provider := m.Provider
+				if provider == "" && strings.Contains(id, "/") {
+					provider = strings.Split(id, "/")[0]
+				}
+
+				res.Models = append(res.Models, OpenClawModel{
+					ID:        id,
+					Name:      id,
+					Provider:  provider,
+					IsDefault: isDefault,
+				})
 			}
+			usedModelsJSON = true
 		}
 	}
 
@@ -348,6 +372,7 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 
 	return res, nil
 }
+
 
 func AddOpenClawBot(id, model, workspace string) error {
 	// 如果 workspace 为空，则根据 id 自动生成
@@ -660,20 +685,14 @@ type OpenClawPlugin struct {
 
 func GetOpenClawPlugins() (any, error) {
 	cmd := exec.Command("openclaw", "plugins", "list", "--json")
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list plugins: %v. Output: %s", err, string(out))
 	}
 
 	// 清理 ANSI 颜色代码
 	cleanOut := StripANSI(string(out))
-
-	// 找到第一个 '{'，跳过前面的日志行
-	index := strings.Index(cleanOut, "{")
-	if index == -1 {
-		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
-	}
-	cleanOut = cleanOut[index:]
+	cleanOut = ExtractJSON(cleanOut)
 
 	var data struct {
 		Plugins []OpenClawPlugin `json:"plugins"`
@@ -729,20 +748,14 @@ func UpdateOpenClawPlugins() error {
 
 func GetOpenClawSkills() (any, error) {
 	cmd := exec.Command("openclaw", "skills", "list", "--json")
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list skills: %v. Output: %s", err, string(out))
 	}
 
 	// 清理 ANSI 颜色代码，防止 JSON 解析失败
 	cleanOut := StripANSI(string(out))
-
-	// 找到第一个 '{'，跳过前面的日志行 (例如: 16:15:18+08:00 [plugins] ...)
-	index := strings.Index(cleanOut, "{")
-	if index == -1 {
-		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
-	}
-	cleanOut = cleanOut[index:]
+	cleanOut = ExtractJSON(cleanOut)
 
 	var skills interface{}
 	decoder := json.NewDecoder(strings.NewReader(cleanOut))
@@ -769,20 +782,14 @@ func ReloadOpenClawSkills() error {
 
 func GetOpenClawSessions() ([]OpenClawSession, error) {
 	cmd := exec.Command("openclaw", "sessions", "--all-agents", "--json")
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sessions: %v. Output: %s", err, string(out))
 	}
 
 	// 清理 ANSI 颜色代码，防止 JSON 解析失败
 	cleanOut := StripANSI(string(out))
-
-	// 找到第一个 '{'，跳过前面的日志行
-	index := strings.Index(cleanOut, "{")
-	if index == -1 {
-		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
-	}
-	cleanOut = cleanOut[index:]
+	cleanOut = ExtractJSON(cleanOut)
 
 	var data struct {
 		Sessions []OpenClawSession `json:"sessions"`
@@ -1201,17 +1208,13 @@ func CreateBotFromExpert(expertID, newBotID, modelID, customSoul, customIdentity
 
 func ExecPolicyShow() (*OpenClawExecPolicyResponse, error) {
 	cmd := exec.Command("openclaw", "exec-policy", "show", "--json")
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to show exec policy: %v. Output: %s", err, string(out))
 	}
 
 	cleanOut := StripANSI(string(out))
-	index := strings.Index(cleanOut, "{")
-	if index == -1 {
-		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
-	}
-	cleanOut = cleanOut[index:]
+	cleanOut = ExtractJSON(cleanOut)
 
 	var res OpenClawExecPolicyResponse
 	decoder := json.NewDecoder(strings.NewReader(cleanOut))
@@ -1224,17 +1227,13 @@ func ExecPolicyShow() (*OpenClawExecPolicyResponse, error) {
 
 func GetApprovalsSnapshot() (*OpenClawApprovalsSnapshot, error) {
 	cmd := exec.Command("openclaw", "approvals", "get", "--json")
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get approvals snapshot: %v. Output: %s", err, string(out))
 	}
 
 	cleanOut := StripANSI(string(out))
-	index := strings.Index(cleanOut, "{")
-	if index == -1 {
-		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
-	}
-	cleanOut = cleanOut[index:]
+	cleanOut = ExtractJSON(cleanOut)
 
 	var res OpenClawApprovalsSnapshot
 	decoder := json.NewDecoder(strings.NewReader(cleanOut))

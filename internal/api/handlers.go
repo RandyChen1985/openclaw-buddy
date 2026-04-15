@@ -1055,6 +1055,57 @@ func (s *Server) handleUpdateConfig(c *gin.Context) {
 	s.Success(c, nil)
 }
 
+func (s *Server) handleValidateConfig(c *gin.Context) {
+	var req struct {
+		Content string `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// 1. 创建临时目录进行隔离校验 (避免污染真实运行路径)
+	tmpDir, err := os.MkdirTemp("", "openclaw-config-val-*")
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to create temp dir: "+err.Error())
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// 补丁：为了让校验器支持“深度校验”(如识别渠道插件)，需要把真实配置目录的内容软链接过来
+	// 但排除掉 openclaw.json 本身，我们将使用待校验的内容
+	if s.cfg.OpenClawConfigDir != "" {
+		absSrc, _ := filepath.Abs(s.cfg.OpenClawConfigDir)
+		entries, _ := os.ReadDir(absSrc)
+		for _, entry := range entries {
+			name := entry.Name()
+			if name == "openclaw.json" {
+				continue
+			}
+			srcPath := filepath.Join(absSrc, name)
+			dstPath := filepath.Join(tmpDir, name)
+			// 创建软链接，让临时目录拥有完整的上下文环境
+			_ = os.Symlink(srcPath, dstPath)
+		}
+	}
+
+	// 2. 写入待校验的配置
+	tmpConfigPath := filepath.Join(tmpDir, "openclaw.json")
+	if err := os.WriteFile(tmpConfigPath, []byte(req.Content), 0644); err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to write temp config: "+err.Error())
+		return
+	}
+
+	// 3. 调用底座校验
+	isValid, problem, _ := process.CheckConfig(tmpDir)
+	if !isValid {
+		s.Error(c, http.StatusBadRequest, "Configuration validation failed: "+problem)
+		return
+	}
+
+	s.Success(c, gin.H{"message": "Configuration is valid"})
+}
+
 func (s *Server) handleRunDoctor(c *gin.Context) {
 	output, err := process.RunDoctorFixWithOutput()
 	if err != nil {

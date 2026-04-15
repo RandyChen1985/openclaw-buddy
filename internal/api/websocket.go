@@ -12,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"bytes"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -252,6 +253,27 @@ func (s *Server) handleGatewayProxy(c *gin.Context) {
 						handshakeDone = true // 标记握手已处理，后续包直接转发
 					}
 				}
+			} else {
+				// 💡 哨兵逻辑：拦截并禁止修改主会话标签
+				var raw map[string]interface{}
+				if json.Unmarshal(message, &raw) == nil && raw["method"] == "sessions.patch" {
+					if params, ok := raw["params"].(map[string]interface{}); ok {
+						if key, _ := params["key"].(string); key == "agent:main:main" {
+							log.Printf("🛡️ [WS-Proxy] 拦截到主会话修改请求并拒绝")
+							// 伪造一个失败的 RPC 响应直接返回给前端
+							errResp, _ := json.Marshal(map[string]interface{}{
+								"type": "res",
+								"id":   raw["id"],
+								"ok":   false,
+								"error": map[string]interface{}{
+									"message": "System session is immutable",
+								},
+							})
+							_ = clientConn.WriteMessage(mt, errResp)
+							continue // 停止转发到网关
+						}
+					}
+				}
 			}
 
 			if err := gatewayConn.WriteMessage(mt, message); err != nil {
@@ -269,31 +291,41 @@ func (s *Server) handleGatewayProxy(c *gin.Context) {
 				return
 			}
 
-			// 检查响应内容
-			var resp struct {
-				Type  string      `json:"type"`
-				OK    bool        `json:"ok"`
-				Error interface{} `json:"error"`
+			// --- 性能优化：快速路径转发 ---
+			// V3 协议中，99% 的包是 "type":"event" (流式输出)。
+			// 我们直接通过字节流判断，跳过 JSON 反序列化以节省 CPU 和降低延迟。
+			if bytes.Contains(message, []byte(`"type":"event"`)) {
+				if err := clientConn.WriteMessage(mt, message); err != nil {
+					return
+				}
+				continue
 			}
-			if json.Unmarshal(message, &resp) == nil && resp.Type == "res" && !resp.OK {
-				errStr := fmt.Sprintf("%v", resp.Error)
-				if strings.Contains(errStr, "NOT_PAIRED") && lastDeviceId != "" {
-					log.Printf("🛡️ [WS-Proxy] 检测到设备未授权 (NOT_PAIRED)，触发静默授权逻辑...")
-					go func(did string) {
-						// 稍微等待 300ms 确保网关已将该请求存入待处理列表
-						time.Sleep(300 * time.Millisecond)
-						devices, err := process.GetOpenClawDevices()
-						if err == nil {
-							for _, d := range devices {
-								// 精准匹配 DeviceId (或者是请求 ID)
-								if (d.DeviceId == did || d.RequestId == did) && d.Status == "pending" {
-									log.Printf("✅ [WS-Proxy] 自动批准设备请求: %s (DID: %s)", d.RequestId, did)
-									_ = process.ApproveDevice(d.RequestId)
-									break
+
+			// 只有可能是响应消息 (res) 时，才进行反序列化检查
+			if bytes.Contains(message, []byte(`"type":"res"`)) {
+				var resp struct {
+					Type  string      `json:"type"`
+					OK    bool        `json:"ok"`
+					Error interface{} `json:"error"`
+				}
+				if json.Unmarshal(message, &resp) == nil && !resp.OK {
+					errStr := fmt.Sprintf("%v", resp.Error)
+					if strings.Contains(errStr, "NOT_PAIRED") && lastDeviceId != "" {
+						log.Printf("🛡️ [WS-Proxy] 检测到设备未授权 (NOT_PAIRED)，触发静默授权逻辑...")
+						go func(did string) {
+							time.Sleep(300 * time.Millisecond)
+							devices, err := process.GetOpenClawDevices()
+							if err == nil {
+								for _, d := range devices {
+									if (d.DeviceId == did || d.RequestId == did) && d.Status == "pending" {
+										log.Printf("✅ [WS-Proxy] 自动批准设备请求: %s (DID: %s)", d.RequestId, did)
+										_ = process.ApproveDevice(d.RequestId)
+										break
+									}
 								}
 							}
-						}
-					}(lastDeviceId)
+						}(lastDeviceId)
+					}
 				}
 			}
 

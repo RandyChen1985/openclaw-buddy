@@ -74,7 +74,7 @@ export const useChatV3WebSocket = ({
       storage.removeItem('v3_current_session_label');
     }
   }, [sessionKey, sessionLabel]);
-  const [thinkingLevel, setThinkingLevel] = useState<'low' | 'medium' | 'high' | 'pro'>('medium');
+  const [thinkingLevel, setThinkingLevel] = useState<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'>('medium');
   const [lastHealth, setLastHealth] = useState<{ ok: boolean, latency: number, ts: number } | null>(null);
   const [latencyHistory, setLatencyHistory] = useState<number[]>([]);
   const [pulse, setPulse] = useState(0);
@@ -634,6 +634,13 @@ export const useChatV3WebSocket = ({
 
   const handleUpdateLabel = useCallback(async (newLabel: string) => {
     if (!sessionKey || !newLabel.trim()) return;
+    
+    // 💡 核心保护：禁止平替主会话名称
+    if (sessionKey === 'agent:main:main') {
+      message.warning(t('chat.systemSessionNoRename', { defaultValue: '系统主会话名称不可修改' }));
+      return;
+    }
+
     setIsUpdatingLabel(true);
     try {
       const res = await sendRPC('sessions.patch', { key: sessionKey, label: newLabel.trim() });
@@ -651,6 +658,11 @@ export const useChatV3WebSocket = ({
     const activeKey = targetKey || sessionKey;
     const targetMessages = messagesOverride || messages;
     
+    // 💡 核心保护：禁止 AI 自动总结主会话
+    if (activeKey === 'agent:main:main') {
+      return;
+    }
+
     // 💡 鲁棒性加固：检查是否已经在总结该会话，防止并发冲突
     if (!activeKey || targetMessages.length === 0 || summarizingSessionsRef.current.has(activeKey)) return;
     
@@ -853,9 +865,16 @@ export const useChatV3WebSocket = ({
             fetchSessions();
           } else {
             // 💡 优化：确保透出具体的报错原因，方便定位是网络问题还是权限问题
-            const errMsg = res.error?.message || res.error || 'Gateway Timeout or Unknown Error';
+            const errMsgRaw = res.error?.message || res.error || 'Gateway Timeout or Unknown Error';
+            let errMsg = typeof errMsgRaw === 'string' ? errMsgRaw : JSON.stringify(errMsgRaw);
+            
+            // 💡 翻译优化：针对主会话不可删除的后端提示做特定翻译
+            if (errMsg.includes('Cannot delete the main session')) {
+              errMsg = t('chat.cannotDeleteMainSession');
+            }
+            
             message.error({ 
-              content: `${t('common.error')}: ${typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg)}`, 
+              content: `${t('common.error')}: ${errMsg}`, 
               key: 'deletingSession',
               duration: 5
             });
@@ -877,7 +896,8 @@ export const useChatV3WebSocket = ({
       onOk: async () => {
         try {
           message.loading({ content: t('chat.clearingGroup'), key: 'clearingGroup' });
-          await Promise.all(sessionKeys.map(key => sendRPC('sessions.delete', { key })));
+          const deletableKeys = sessionKeys.filter(k => k !== 'agent:main:main');
+          await Promise.all(deletableKeys.map(key => sendRPC('sessions.delete', { key })));
           message.success({ content: t('common.success'), key: 'clearingGroup' });
           if (sessionKey && sessionKeys.includes(sessionKey)) { 
             setSessionKey(null); 
@@ -901,7 +921,8 @@ export const useChatV3WebSocket = ({
       onOk: async () => {
         try {
           message.loading({ content: t('chat.clearingAll'), key: 'clearingAll' });
-          await Promise.all(sessions.map(s => sendRPC('sessions.delete', { key: s.key })));
+          const deletableSessions = sessions.filter(s => s.key !== 'agent:main:main');
+          await Promise.all(deletableSessions.map(s => sendRPC('sessions.delete', { key: s.key })));
           message.success({ content: t('chat.clearAllSuccess'), key: 'clearingAll' });
           setSessionKey(null); setMessages([]); setSessionLabel(null); setSessions([]);
           fetchSessions();
@@ -920,11 +941,14 @@ export const useChatV3WebSocket = ({
     }
   }, [sessionKey, sendRPC, fetchSessions, t]);
 
-  const handleThinkingLevelChange = useCallback(async (newLevel: 'low' | 'medium' | 'high' | 'pro') => {
+  const handleThinkingLevelChange = useCallback(async (newLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh') => {
     setThinkingLevel(newLevel);
     if (!sessionKey) return;
-    sendRPC('sessions.patch', { key: sessionKey, thinkingLevel: newLevel });
-  }, [sessionKey, sendRPC]);
+    const res = await sendRPC('sessions.patch', { key: sessionKey, thinkingLevel: newLevel });
+    if (res.ok) {
+      message.success(t('chat.thinkingLevelUpdated', { defaultValue: '思考等级已更新' }));
+    }
+  }, [sessionKey, sendRPC, t]);
 
   // --- Effects ---
   useEffect(() => {
@@ -969,6 +993,10 @@ export const useChatV3WebSocket = ({
       setIsTyping(false);
       clearStallTimer();
       streamContentRef.current = '';
+      
+      // 💡 视觉反馈：提示已就绪并自动聚焦输入框
+      message.info({ content: t('chat.newSessionReady', { defaultValue: '新会话已就绪' }), key: 'newSessionReady' });
+      setTimeout(() => inputAreaRef.current?.focus(), 100);
     },
     handleSend,
     handleStopGeneration,

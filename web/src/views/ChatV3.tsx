@@ -3,7 +3,7 @@ import { Virtuoso } from 'react-virtuoso';
 import type { VirtuosoHandle } from 'react-virtuoso';
 import { Select, Input, Button, Spin, message, Badge, Modal, Form, Tooltip, Drawer, Switch, Tabs } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Bot, RefreshCw, Cpu, Plus, Trash2, LayoutPanelLeft, Settings, ChevronUp, ChevronDown, Sparkles, Save, X, Zap, Quote, Wand2, PenLine, Eye, Activity } from 'lucide-react';
+import { Bot, RefreshCw, Cpu, Plus, Trash2, LayoutPanelLeft, Settings, ChevronUp, ChevronDown, Sparkles, Save, X, Zap, Quote, Wand2, PenLine, Eye, Activity, Monitor, MessageCircle, Send, Globe, Shield } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -24,6 +24,30 @@ import ChatV3EmptyState from '../components/Chat/ChatV3EmptyState';
 import { useChatV3WebSocket } from '../hooks/useChatV3WebSocket';
 import '../styles/ChatV3.css';
 
+// --- Utils & Config ---
+const parseSessionKey = (key: string) => {
+  if (!key || !key.startsWith('agent:')) return { botId: 'main', source: 'dashboard' };
+  const parts = key.split(':');
+  return {
+    botId: parts[1] || 'main',
+    source: parts[2] || 'dashboard'
+  };
+};
+
+const SourceConfig: Record<string, { icon: any, color: string, label: string }> = {
+  'dashboard': { icon: <Monitor size={12} />, color: '#6366f1', label: '管理后台' },
+  'weixin': { icon: <MessageCircle size={12} />, color: '#07c160', label: '微信' },
+  'feishu': { icon: <Send size={12} />, color: '#3370ff', label: '飞书' },
+  'openai-user': { icon: <Zap size={12} />, color: '#f59e0b', label: 'OpenAI API' },
+  'fallback': { icon: <Globe size={12} />, color: '#94a3b8', label: '其他渠道' }
+};
+
+const getSourceMeta = (source: string) => {
+  const s = source?.toLowerCase();
+  if (SourceConfig[s]) return SourceConfig[s];
+  if (s === 'api') return SourceConfig['openai-user'];
+  return SourceConfig['fallback'];
+};
 
 // --- Types ---
 interface ChatV3Props {
@@ -398,69 +422,106 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               </div>
             )}
             
-            {status === 'authenticated' && sessionKey ? (
-              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                    <Tooltip title={t('chat.clickToCopy', { defaultValue: '点击复制会话 ID' })}>
-                    <span 
-                        style={{ 
-                        fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', cursor: 'pointer',
-                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                        maxWidth: isMobile ? 120 : 'none',
-                        lineHeight: '12px'
-                        }}
-                        className="v3-session-id-header"
-                        onClick={() => copyToClipboard(sessionKey)}
-                    >
-                        {sessionKey}
-                    </span>
-                    </Tooltip>
-                    
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {isEditingLabel ? (
-                    <Input
-                      size="small"
-                      autoFocus
-                      value={editingLabelText}
-                      onChange={e => setEditingLabelText(e.target.value)}
-                      onBlur={() => { handleUpdateLabel(editingLabelText); setIsEditingLabel(false); }}
-                      onPressEnter={() => { handleUpdateLabel(editingLabelText); setIsEditingLabel(false); }}
-                      disabled={isUpdatingLabel}
-                      style={{ height: 20, fontSize: 12, width: isMobile ? 120 : 200 }}
-                    />
-                  ) : (
-                    <>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile ? 150 : 300 }}>
-                        {sessionLabel || t('chat.noLabel', { defaultValue: '未命名会话' })}
-                      </span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Tooltip title={t('chat.autoSummarize', { defaultValue: 'AI 自动总结标题' })}>
-                          <Button 
-                            size="small" 
-                            type="text" 
-                            icon={isSummarizing ? <RefreshCw size={10} className="animate-spin" /> : <Wand2 size={10} />} 
-                            onClick={() => handleAutoSummarize()}
-                            disabled={isSummarizing || messages.length === 0}
-                            style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}
-                          />
+            {status === 'authenticated' && sessionKey ? (() => {
+              const { botId, source } = parseSessionKey(sessionKey);
+              const sourceMeta = getSourceMeta(source);
+              const isMain = sessionKey === 'agent:main:main';
+              const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
+              
+              return (
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      {!isMobile && (
+                        <Tooltip title={t('chat.clickToCopy', { defaultValue: '点击复制会话 ID' })}>
+                          <span 
+                              style={{ 
+                              fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', cursor: 'pointer',
+                              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                              maxWidth: 120,
+                              lineHeight: '12px'
+                              }}
+                              className="v3-session-id-header"
+                              onClick={() => copyToClipboard(sessionKey)}
+                          >
+                              {sessionKey}
+                          </span>
                         </Tooltip>
-                        <Button 
-                          size="small" 
-                          type="text" 
-                          icon={isUpdatingLabel ? <RefreshCw size={10} className="animate-spin" /> : <Save size={10} />} 
-                          onClick={() => {
-                            setEditingLabelText(sessionLabel || '');
-                            setIsEditingLabel(true);
-                          }}
-                          style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}
-                        />
-                      </div>
-                    </>
-                  )}
+                      )}
+                      
+                      {!isMobile && (
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: 4, 
+                          background: `${sourceMeta.color}15`, 
+                          padding: '1px 6px', 
+                          borderRadius: 4,
+                          border: `1px solid ${sourceMeta.color}33`
+                        }}>
+                          <span style={{ color: sourceMeta.color, display: 'flex', alignItems: 'center' }}>
+                            {isMain ? <Shield size={10} fill={sourceMeta.color} /> : React.cloneElement(sourceMeta.icon as React.ReactElement, { size: 10 })}
+                          </span>
+                          <span style={{ fontSize: 9, fontWeight: 700, color: sourceMeta.color, whiteSpace: 'nowrap' }}>
+                            {sourceMeta.label}
+                          </span>
+                        </div>
+                      )}
+
+                      {!isMobile && bot && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#64748b', background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>
+                          <span>{bot.identityEmoji || '🤖'}</span>
+                          <span style={{ fontWeight: 600 }}>{bot.identityName || bot.id}</span>
+                        </div>
+                      )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {isEditingLabel ? (
+                      <Input
+                        size="small"
+                        autoFocus
+                        value={editingLabelText}
+                        onChange={e => setEditingLabelText(e.target.value)}
+                        onBlur={() => { handleUpdateLabel(editingLabelText); setIsEditingLabel(false); }}
+                        onPressEnter={() => { handleUpdateLabel(editingLabelText); setIsEditingLabel(false); }}
+                        disabled={isUpdatingLabel}
+                        style={{ height: 20, fontSize: 12, width: isMobile ? 120 : 200 }}
+                      />
+                    ) : (
+                      <>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile ? 150 : 300 }}>
+                          {isMobile && bot ? `${bot.identityEmoji || '🤖'} ` : ''}
+                          {isMain ? t('chat.mainSession', { defaultValue: '主会话' }) : (sessionLabel || t('chat.noLabel', { defaultValue: '未命名会话' }))}
+                        </span>
+                        {!isMain && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Tooltip title={t('chat.autoSummarize', { defaultValue: 'AI 自动总结标题' })}>
+                              <Button 
+                                size="small" 
+                                type="text" 
+                                icon={isSummarizing ? <RefreshCw size={10} className="animate-spin" /> : <Wand2 size={10} />} 
+                                onClick={() => handleAutoSummarize()}
+                                disabled={isSummarizing || messages.length === 0}
+                                style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}
+                              />
+                            </Tooltip>
+                            <Button 
+                              size="small" 
+                              type="text" 
+                              icon={isUpdatingLabel ? <RefreshCw size={10} className="animate-spin" /> : <Save size={10} />} 
+                              onClick={() => {
+                                setEditingLabelText(sessionLabel || '');
+                                setIsEditingLabel(true);
+                              }}
+                              style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ) : (
+              );
+            })() : (
               !isMobile && status === 'authenticated' && (
                 null
               )
@@ -511,10 +572,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                   <div style={{ width: 1, height: 12, background: '#f1f5f9', marginRight: 2 }}></div>
                   <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{t('chat.thinkingLevel', { defaultValue: '思考等级' })}:</span>
                   <Select size="small" value={thinkingLevel} onChange={handleThinkingLevelChange} style={{ width: 100 }} dropdownStyle={{ borderRadius: 8 }}>
+                      <Select.Option value="off">Off</Select.Option>
+                      <Select.Option value="minimal">Minimal</Select.Option>
                       <Select.Option value="low">Low</Select.Option>
                       <Select.Option value="medium">Medium</Select.Option>
                       <Select.Option value="high">High</Select.Option>
-                      <Select.Option value="pro">Pro</Select.Option>
+                      <Select.Option value="xhigh">XHigh</Select.Option>
                   </Select>
                 </>
               )}
@@ -668,8 +731,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             <div style={{ 
                 position: 'absolute', 
                 top: isMobile ? 70 : 80, 
-                left: '50%', 
-                transform: 'translateX(-50%)', 
+                right: isMobile ? 16 : 24, 
                 zIndex: 100, 
                 animation: 'v3-fade-in 0.3s' 
             }}>
@@ -682,12 +744,16 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                     }}
                     icon={<ChevronUp size={16} />}
                     style={{ 
-                        height: 32,
-                        width: 32,
+                        height: 36,
+                        width: 36,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: '#64748b'
+                        color: '#64748b',
+                        background: 'rgba(255, 255, 255, 0.8)',
+                        backdropFilter: 'blur(8px)',
+                        border: '1px solid rgba(0,0,0,0.05)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
                     }}
                 />
             </div>
@@ -698,8 +764,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             <div style={{ 
                 position: 'absolute', 
                 bottom: isMobile ? (showQuickActions ? 170 : 130) : (showQuickActions ? 210 : 160), 
-                left: '50%', 
-                transform: 'translateX(-50%)', 
+                right: isMobile ? 16 : 24, 
                 zIndex: 100, 
                 animation: 'v3-fade-in 0.3s' 
             }}>

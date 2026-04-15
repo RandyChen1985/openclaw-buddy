@@ -1,6 +1,6 @@
 import React from 'react';
 import { Input, Button, Spin, Tooltip, Avatar, Badge as AntBadge } from 'antd';
-import { Search, Plus, Trash2, History, RefreshCw, Copy, Bot, XCircle, AlertCircle } from 'lucide-react';
+import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe } from 'lucide-react';
 
 interface V3SessionListProps {
   sessions: any[];
@@ -19,6 +19,32 @@ interface V3SessionListProps {
   copyToClipboard: (text: string) => void;
   t: any;
 }
+
+// --- Utils & Config ---
+const parseSessionKey = (key: string) => {
+  if (!key || !key.startsWith('agent:')) return { botId: 'main', source: 'dashboard' };
+  const parts = key.split(':');
+  return {
+    botId: parts[1] || 'main',
+    source: parts[2] || 'dashboard'
+  };
+};
+
+const SourceConfig: Record<string, { icon: any, color: string, label: string }> = {
+  'dashboard': { icon: <Monitor size={14} />, color: '#6366f1', label: '管理后台' },
+  'weixin': { icon: <MessageCircle size={14} />, color: '#07c160', label: '微信' },
+  'feishu': { icon: <Send size={14} />, color: '#3370ff', label: '飞书' },
+  'openai-user': { icon: <Zap size={14} />, color: '#f59e0b', label: 'OpenAI API' },
+  'fallback': { icon: <Globe size={14} />, color: '#94a3b8', label: '其他渠道' }
+};
+
+const getSourceMeta = (source: string) => {
+  const s = source?.toLowerCase();
+  if (SourceConfig[s]) return SourceConfig[s];
+  // 兼容逻辑：api -> openai-user
+  if (s === 'api') return SourceConfig['openai-user'];
+  return SourceConfig['fallback'];
+};
 
 const SessionStatusIcon = ({ status, t }: { status: string, t: any }) => {
   if (status === 'active') {
@@ -41,7 +67,7 @@ const SessionStatusIcon = ({ status, t }: { status: string, t: any }) => {
 const V3SessionList: React.FC<V3SessionListProps> = ({
   sessions, sessionKey, loadingSessions, sessionSearch, setSessionSearch,
   onSelectSession, onNewSession, onDeleteSession, onDeleteGroup, onClearAll, fetchSessions,
-  copyToClipboard, t
+  isMobile, setShowSider, copyToClipboard, t
 }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff' }}>
@@ -88,6 +114,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
             style={{ flex: 1, borderRadius: 8, height: 38, background: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onClick={() => {
               onNewSession();
+              if (isMobile) setShowSider(false);
             }}
         >
           {t('chat.v3NewSession', { defaultValue: '开启新会话' })}
@@ -111,15 +138,17 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
             allowClear
             style={{ borderRadius: 8, fontSize: 12, flex: 1 }}
           />
-          <Tooltip title={t('chat.clearAllHistory', { defaultValue: '清除全部历史' })}>
-              <Button 
-                  size="small" 
-                  type="text" 
-                  icon={<Trash2 size={13} />} 
-                  onClick={onClearAll}
-                  style={{ color: '#94a3b8', background: '#f8fafc', borderRadius: 8 }}
-              />
-          </Tooltip>
+          {sessions.some(s => s.key !== 'agent:main:main') && (
+            <Tooltip title={t('chat.clearAllHistory', { defaultValue: '清除全部历史' })}>
+                <Button 
+                    size="small" 
+                    type="text" 
+                    icon={<Trash2 size={13} />} 
+                    onClick={onClearAll}
+                    style={{ color: '#94a3b8', background: '#f8fafc', borderRadius: 8 }}
+                />
+            </Tooltip>
+          )}
         </div>
 
         {loadingSessions && sessions.length === 0 ? (
@@ -132,7 +161,9 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
         ) : (
           (() => {
             const filtered = sessions.filter((s: any) => !sessionSearch || (s.key || '').toLowerCase().includes(sessionSearch.toLowerCase()) || (s.label || '').toLowerCase().includes(sessionSearch.toLowerCase()));
-            
+            const mainSession = filtered.find((s: any) => s.key === 'agent:main:main');
+            const otherSessions = filtered.filter((s: any) => s.key !== 'agent:main:main');
+
             // 分组逻辑
             const groups: Record<string, any[]> = { today: [], yesterday: [], lastWeek: [], older: [] };
             const now = new Date();
@@ -141,7 +172,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
             const yesterdayStr = yesterday.toDateString();
             const lastWeek = new Date(now); lastWeek.setDate(now.getDate() - 7);
 
-            filtered.forEach((s: any) => {
+            otherSessions.forEach((s: any) => {
               const date = new Date(s.updatedAt || s.createdAt || Date.now());
               const dateStr = date.toDateString();
               if (dateStr === todayStr) groups.today.push(s);
@@ -175,21 +206,57 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                   </div>
                   {items.map((s: any) => {
                     const isActive = sessionKey === s.key;
+                    const { source } = parseSessionKey(s.key);
+                    const sourceMeta = getSourceMeta(source);
+                    
                     return (
                       <div 
                           key={s.key}
                           onClick={() => {
                             onSelectSession(s.key);
+                            if (isMobile) setShowSider(false);
                           }}
                           style={{ 
                               padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4, transition: 'all 0.2s',
                               background: isActive ? '#eef2ff' : 'transparent',
                               border: '1px solid', borderColor: isActive ? '#c7d2fe' : 'transparent',
-                              display: 'flex', alignItems: 'center', gap: 10, position: 'relative'
+                              display: 'flex', alignItems: 'center', gap: 12, position: 'relative'
                           }}
                           className="session-item"
                       >
-                          <Avatar size={32} src={s.avatar} icon={<Bot size={16} />} style={{ background: isActive ? '#4f46e5' : '#f1f5f9', color: isActive ? '#fff' : '#64748b', flexShrink: 0 }} />
+                          <div style={{ position: 'relative', flexShrink: 0 }}>
+                            <Avatar 
+                              size={32} 
+                              icon={sourceMeta.icon} 
+                              style={{ 
+                                background: sourceMeta.color, 
+                                color: '#fff', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                boxShadow: isActive ? `0 0 0 2px ${sourceMeta.color}33` : 'none'
+                              }} 
+                            />
+                            {/* Bot Badge */}
+                            <div style={{
+                              position: 'absolute',
+                              bottom: -2,
+                              right: -2,
+                              width: 16,
+                              height: 16,
+                              background: '#fff',
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 10,
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                              border: '1px solid #f1f5f9'
+                            }}>
+                              {s.avatar ? <img src={s.avatar} style={{ width: '100%', height: '100%', borderRadius: '50%' }} /> : (s.emoji || '🤖')}
+                            </div>
+                          </div>
+
                           <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
                                 <div style={{ fontSize: 13, fontVariant: 'tabular-nums', fontWeight: 700, color: isActive ? '#3730a3' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
@@ -210,7 +277,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                   <span>{new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                   <span>•</span>
                                   <span style={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                                    {s.key.includes(':') ? s.key.substring(s.key.indexOf(':') + 1) : s.key}
+                                    {sourceMeta.label}
                                   </span>
                                   {s.model && (
                                     <>
@@ -246,7 +313,9 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                           </div>
                           <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>
                               <Button size="small" type="text" icon={<Copy size={12} />} onClick={(e) => { e.stopPropagation(); copyToClipboard(s.key); }} />
-                              <Button size="small" type="text" icon={<Trash2 size={12} />} onClick={(e) => onDeleteSession(e, s.key)} />
+                              {s.key !== 'agent:main:main' && (
+                                <Button size="small" type="text" icon={<Trash2 size={12} />} onClick={(e) => onDeleteSession(e, s.key)} />
+                              )}
                           </div>
                       </div>
                     );
@@ -255,7 +324,121 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
               );
             };
 
-            return ['today', 'yesterday', 'lastWeek', 'older'].map(key => renderGroup(key, groups[key]));
+            return (
+              <>
+                {mainSession && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div className="session-group-header">
+                      <span style={{ fontSize: 10, fontWeight: 800, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Shield size={10} />
+                        {t('chat.pinnedSession', { defaultValue: '置顶会话' })}
+                      </span>
+                    </div>
+                    {(() => {
+                      const isActive = sessionKey === mainSession.key;
+                      return (
+                        <div 
+                            key={mainSession.key}
+                            onClick={() => {
+                              onSelectSession(mainSession.key);
+                              if (isMobile) setShowSider(false);
+                            }}
+                            style={{ 
+                                padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4, transition: 'all 0.2s',
+                                background: isActive ? 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)' : '#f8fafc',
+                                border: '1px solid', borderColor: isActive ? '#c7d2fe' : '#e2e8f0',
+                                display: 'flex', alignItems: 'center', gap: 12, position: 'relative',
+                                boxShadow: isActive ? '0 4px 12px rgba(79, 70, 229, 0.08)' : 'none'
+                            }}
+                            className="session-item-main"
+                        >
+                            <div style={{ position: 'relative', flexShrink: 0 }}>
+                              <Avatar 
+                                size={32} 
+                                icon={<Shield size={16} fill={isActive ? '#fff' : '#6366f1'} />} 
+                                style={{ 
+                                  background: isActive ? '#4f46e5' : '#e0e7ff', 
+                                  color: isActive ? '#fff' : '#4338ca',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  boxShadow: isActive ? '0 0 0 2px rgba(79, 70, 229, 0.2)' : 'none'
+                                }} 
+                              />
+                              <div style={{
+                                position: 'absolute',
+                                bottom: -2,
+                                right: -2,
+                                width: 16,
+                                height: 16,
+                                background: '#fff',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 10,
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                border: '1px solid #c7d2fe'
+                              }}>
+                                {mainSession.avatar ? <img src={mainSession.avatar} style={{ width: '100%', height: '100%', borderRadius: '50%' }} /> : (mainSession.emoji || '⚡')}
+                              </div>
+                            </div>
+
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                                  <div style={{ fontSize: 13, fontWeight: 800, color: isActive ? '#1e1b4b' : '#3730a3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
+                                      {t('chat.mainSession', { defaultValue: '主会话' })}
+                                      <SessionStatusIcon status={mainSession.status} t={t} />
+                                  </div>
+                                  {mainSession.messagesCount !== undefined && (
+                                    <div style={{ 
+                                      fontSize: 10, background: 'rgba(79, 70, 229, 0.1)', 
+                                      color: '#4f46e5', padding: '0 6px', 
+                                      borderRadius: 6, fontWeight: 600, flexShrink: 0
+                                    }}>
+                                      {mainSession.messagesCount}
+                                    </div>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: 9, color: '#6366f1', opacity: 0.7, marginTop: 1, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
+                                    <span>{new Date(mainSession.updatedAt || mainSession.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                    <span>•</span>
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>CORE SYSTEM</span>
+                                </div>
+                                {/* Token 水位线 (主会话同步补全) */}
+                                {mainSession.contextTokens > 0 && (
+                                    <div style={{ marginTop: 6, width: '100%' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, fontSize: 9, fontWeight: 700 }}>
+                                        <span style={{ color: '#6366f1', opacity: 0.7, transform: 'scale(0.9)', transformOrigin: 'left' }}>CONTEXT</span>
+                                        <span style={{ 
+                                            color: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : '#4f46e5',
+                                            opacity: 0.8
+                                        }}>
+                                            {Math.round((mainSession.totalTokens / mainSession.contextTokens) * 100)}%
+                                        </span>
+                                    </div>
+                                    <div style={{ height: 3, width: '100%', background: 'rgba(79, 70, 229, 0.15)', borderRadius: 2, overflow: 'hidden' }}>
+                                        <div style={{ 
+                                            height: '100%', 
+                                            width: `${Math.min(100, (mainSession.totalTokens / mainSession.contextTokens) * 100)}%`,
+                                            background: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : '#6366f1',
+                                            transition: 'width 0.3s ease'
+                                        }} />
+                                    </div>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>
+                                <Button size="small" type="text" icon={<Copy size={12} />} onClick={(e) => { e.stopPropagation(); copyToClipboard(mainSession.key); }} />
+                            </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+                {['today', 'yesterday', 'lastWeek', 'older'].map(key => renderGroup(key, groups[key]))}
+              </>
+            );
           })()
         )}
       </div>

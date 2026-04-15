@@ -131,7 +131,7 @@ func main() {
 		"method": "chat.send",
 		"params": map[string]interface{}{
 			"sessionKey": sessionKey,
-			"message": "请 ll /root 看看有没有什么",
+			"message": "系统目前配置了哪些模型",
 			"idempotencyKey": "debug-" + time.Now().Format("150405"),
 		},
 	}
