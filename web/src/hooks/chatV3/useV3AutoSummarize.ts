@@ -30,6 +30,7 @@ export function useV3AutoSummarize({
 }: UseV3AutoSummarizeParams) {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const summarizingSessionsRef = useRef<Set<string>>(new Set());
+  const lastSummarizedAtRef = useRef<Map<string, number>>(new Map());
 
   const handleAutoSummarize = useCallback(async (
     messagesOverride?: Message[],
@@ -47,6 +48,14 @@ export function useV3AutoSummarize({
     const currentLabel = activeKey === sessionKey ? sessionLabel : existing?.label;
     if (!force && !isUntitledSessionLabel(currentLabel)) {
       return;
+    }
+
+    // 自动补全：对同一会话做短期去重，避免在 sessions 列表频繁刷新时重复 patch
+    if (!force) {
+      const last = lastSummarizedAtRef.current.get(activeKey) || 0;
+      if (Date.now() - last < 2 * 60 * 1000) {
+        return;
+      }
     }
 
     if (summarizingSessionsRef.current.has(activeKey)) return;
@@ -77,6 +86,7 @@ export function useV3AutoSummarize({
       if (newTitle) {
         const res = await sendRPC('sessions.patch', { key: activeKey, label: newTitle });
         if (res.ok) {
+          lastSummarizedAtRef.current.set(activeKey, Date.now());
           onLocalLabelPatched?.(activeKey, newTitle);
           if (!silent) {
             antdMessage.success({ content: t('chat.titleSummarized'), key: `summarizing-${activeKey}` });

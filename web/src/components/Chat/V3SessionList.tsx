@@ -1,10 +1,11 @@
 import React from 'react';
 import { Input, Button, Spin, Tooltip, Avatar, Badge as AntBadge } from 'antd';
-import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe, Clock } from 'lucide-react';
+import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe, Clock, PenLine } from 'lucide-react';
 
-interface V3SessionListProps {
+export interface V3SessionListProps {
   sessions: any[];
   sessionKey: string | null;
+  typingSessionKeys?: string[];
   loadingSessions: boolean;
   sessionSearch: string;
   setSessionSearch: (val: string) => void;
@@ -30,14 +31,14 @@ const parseSessionKey = (key: string) => {
   };
 };
 
-const SourceConfig: Record<string, { icon: any, color: string, label: string }> = {
-  'dashboard': { icon: <Monitor size={14} />, color: '#6366f1', label: '管理后台' },
-  'weixin': { icon: <MessageCircle size={14} />, color: '#07c160', label: '微信' },
-  'feishu': { icon: <Send size={14} />, color: '#3370ff', label: '飞书' },
-  'telegram': { icon: <Send size={14} />, color: '#24A1DE', label: 'Telegram' },
-  'cron': { icon: <Clock size={14} />, color: '#8b5cf6', label: '定时任务' },
-  'openai-user': { icon: <Zap size={14} />, color: '#f59e0b', label: 'OpenAI API' },
-  'fallback': { icon: <Globe size={14} />, color: '#94a3b8', label: '其他渠道' }
+const SourceConfig: Record<string, { icon: any, color: string, labelKey: string, defaultLabel: string }> = {
+  'dashboard': { icon: <Monitor size={14} />, color: '#6366f1', labelKey: 'chat.source.dashboard', defaultLabel: '管理后台' },
+  'weixin': { icon: <MessageCircle size={14} />, color: '#07c160', labelKey: 'chat.source.weixin', defaultLabel: '微信' },
+  'feishu': { icon: <Send size={14} />, color: '#3370ff', labelKey: 'chat.source.feishu', defaultLabel: '飞书' },
+  'telegram': { icon: <Send size={14} />, color: '#24A1DE', labelKey: 'chat.source.telegram', defaultLabel: 'Telegram' },
+  'cron': { icon: <Clock size={14} />, color: '#8b5cf6', labelKey: 'chat.source.cron', defaultLabel: '定时任务' },
+  'openai-user': { icon: <Zap size={14} />, color: '#f59e0b', labelKey: 'chat.source.openaiUser', defaultLabel: 'OpenAI API' },
+  'fallback': { icon: <Globe size={14} />, color: '#94a3b8', labelKey: 'chat.source.fallback', defaultLabel: '其他渠道' }
 };
 
 const getSourceMeta = (source: string) => {
@@ -69,7 +70,8 @@ const SessionStatusIcon = ({ status, t }: { status: string, t: any }) => {
 const V3SessionList: React.FC<V3SessionListProps> = ({
   sessions, sessionKey, loadingSessions, sessionSearch, setSessionSearch,
   onSelectSession, onNewSession, onDeleteSession, onDeleteGroup, onClearAll, fetchSessions,
-  isMobile, setShowSider, copyToClipboard, t
+  isMobile, setShowSider, copyToClipboard, t,
+  typingSessionKeys = []
 }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff' }}>
@@ -108,6 +110,42 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
           color: #ef4444;
           background: rgba(239, 68, 68, 0.05);
         }
+        @keyframes v3-pencil {
+          0% { transform: rotate(-8deg) translateY(0); }
+          50% { transform: rotate(8deg) translateY(-1px); }
+          100% { transform: rotate(-8deg) translateY(0); }
+        }
+        .v3-pencil {
+          animation: v3-pencil 0.9s ease-in-out infinite;
+          margin-left: 6px;
+          opacity: 0.9;
+          display: inline-flex;
+          align-items: center;
+        }
+        @keyframes v3-dot {
+          0% { opacity: 0.2; transform: translateY(0); }
+          40% { opacity: 1; transform: translateY(-1px); }
+          80% { opacity: 0.2; transform: translateY(0); }
+          100% { opacity: 0.2; transform: translateY(0); }
+        }
+        .v3-dots {
+          display: inline-flex;
+          align-items: center;
+          margin-left: 3px;
+          letter-spacing: 1px;
+          font-weight: 900;
+          font-size: 12px;
+          line-height: 1;
+          opacity: 0.95;
+          transform: translateY(-0.5px);
+        }
+        .v3-dots span {
+          display: inline-block;
+          animation: v3-dot 1.2s infinite ease-in-out;
+        }
+        .v3-dots span:nth-child(1) { animation-delay: 0ms; }
+        .v3-dots span:nth-child(2) { animation-delay: 160ms; }
+        .v3-dots span:nth-child(3) { animation-delay: 320ms; }
       `}</style>
       <div style={{ padding: '16px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 8, alignItems: 'center' }}>
         <Button 
@@ -210,6 +248,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                     const isActive = sessionKey === s.key;
                     const { source } = parseSessionKey(s.key);
                     const sourceMeta = getSourceMeta(source);
+                    const sourceLabel = t(sourceMeta.labelKey, { defaultValue: sourceMeta.defaultLabel });
                     
                     return (
                       <div 
@@ -264,6 +303,14 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                 <div style={{ fontSize: 13, fontVariant: 'tabular-nums', fontWeight: 700, color: isActive ? '#3730a3' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
                                     {s.label || t('chat.noLabel', { defaultValue: '未命名会话' })}
                                     <SessionStatusIcon status={s.status} t={t} />
+                                    {typingSessionKeys.includes(s.key) && (
+                                      <span className="v3-pencil">
+                                        <PenLine size={12} color={isActive ? '#4f46e5' : '#94a3b8'} />
+                                        <span className="v3-dots" style={{ color: isActive ? '#4f46e5' : '#94a3b8' }} aria-label={t('chat.statusActive', { defaultValue: '正在生成中...' })}>
+                                          <span>.</span><span>.</span><span>.</span>
+                                        </span>
+                                      </span>
+                                    )}
                                 </div>
                                 {s.messagesCount !== undefined && (
                                   <div style={{ 
@@ -279,7 +326,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                   <span>{new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                   <span>•</span>
                                   <span style={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                                    {sourceMeta.label}
+                                    {sourceLabel}
                                   </span>
                                   {s.model && (
                                     <>

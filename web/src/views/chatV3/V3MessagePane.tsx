@@ -25,9 +25,14 @@ export interface V3MessagePaneProps {
   // empty state renderer
   emptyState: React.ReactNode;
 
-  // scrolling state setters
-  onAtBottomChange: (atBottom: boolean) => void;
-  onScrollStop: (scrollTop: number, scrollHeight: number, clientHeight: number) => void;
+  // scrolling state (由父组件持有，用于驱动浮动按钮与消息层滚动 ref)
+  scrollState: {
+    showScrollBtnRef: React.MutableRefObject<boolean>;
+    setShowScrollBtn: (val: boolean) => void;
+    showScrollTopBtn: boolean;
+    setShowScrollTopBtn: (val: boolean) => void;
+    setHasNewMessages: (val: boolean) => void;
+  };
 
   // message actions
   editingMsgIndex: number | null;
@@ -64,8 +69,7 @@ export function V3MessagePane({
   virtuosoRef,
   inputAreaRef,
   emptyState,
-  onAtBottomChange,
-  onScrollStop,
+  scrollState,
   editingMsgIndex,
   editContent,
   setEditContent,
@@ -202,12 +206,31 @@ export function V3MessagePane({
           overscan={200}
           followOutput={(isAtBottom) => isAtBottom ? (isTyping ? 'auto' : 'smooth') : false}
           atBottomStateChange={(atBottom) => {
-            onAtBottomChange(atBottom);
+            // 到底/离底：同步浮动按钮与消息层滚动 ref
+            scrollState.setShowScrollBtn(!atBottom);
+            scrollState.showScrollBtnRef.current = !atBottom;
+            if (atBottom) scrollState.setHasNewMessages(false);
           }}
           isScrolling={(scrolling) => {
             if (!scrolling && scrollRef.current) {
               const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-              onScrollStop(scrollTop, scrollHeight, clientHeight);
+
+              // 滚动停止时做一次“双重校验”，确保按钮显示状态绝对正确
+              const isActuallyAtBottom = scrollHeight - scrollTop - clientHeight < 20;
+              if (isActuallyAtBottom) {
+                scrollState.setShowScrollBtn(false);
+                scrollState.showScrollBtnRef.current = false;
+                scrollState.setHasNewMessages(false);
+              } else {
+                scrollState.setShowScrollBtn(true);
+                scrollState.showScrollBtnRef.current = true;
+              }
+
+              // 只要向下滚动超过阈值就显示返回顶部
+              const shouldShowTop = scrollTop > 400;
+              if (scrollState.showScrollTopBtn !== shouldShowTop) {
+                scrollState.setShowScrollTopBtn(shouldShowTop);
+              }
             }
           }}
           style={{ flex: 1, width: '100%' }}

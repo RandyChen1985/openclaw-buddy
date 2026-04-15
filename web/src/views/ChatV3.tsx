@@ -102,6 +102,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     pulse,
     tpsData,
     hasNewMessages, setHasNewMessages,
+    typingSessionKeys,
     isSummarizing,
     isUpdatingLabel,
     fetchSessions,
@@ -141,7 +142,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);
   const [showSider, setShowSider] = useState(!isMobile);
   const [quotedMsg, setQuotedMsg] = useState<string | null>(null);
-  const lastScrollTopRef = useRef(0);
   const [editingMsgIndex, setEditingMsgIndex] = useState<number | null>(null);
   const [editContent, setEditContent] = useState('');
   const [sessionSearch, setSessionSearch] = useState('');
@@ -249,6 +249,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             <V3SessionList
               sessions={sessions}
               sessionKey={sessionKey}
+              typingSessionKeys={typingSessionKeys}
               loadingSessions={loadingSessions}
               sessionSearch={sessionSearch}
               setSessionSearch={setSessionSearch}
@@ -302,7 +303,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           isSummarizing={isSummarizing}
           isUpdatingLabel={isUpdatingLabel}
           messagesCount={messages.length}
-          onAutoSummarize={() => handleAutoSummarize(undefined, false, undefined, true)}
+          onAutoSummarize={() => handleAutoSummarize(messages, false, undefined, true)}
           onUpdateLabel={handleUpdateLabel}
           onCopy={copyToClipboard}
           isEditingLabel={isEditingLabel}
@@ -335,27 +336,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           virtuosoRef={virtuosoRef}
           inputAreaRef={inputAreaRef}
           emptyState={<ChatV3EmptyState isMobile={!!isMobile} t={t} />}
-          onAtBottomChange={(atBottom) => {
-            setShowScrollBtn(!atBottom);
-            if (showScrollBtnRef) showScrollBtnRef.current = !atBottom;
-            if (atBottom) setHasNewMessages(false);
-          }}
-          onScrollStop={(scrollTop, scrollHeight, clientHeight) => {
-            const isActuallyAtBottom = scrollHeight - scrollTop - clientHeight < 20;
-            if (isActuallyAtBottom) {
-              setShowScrollBtn(false);
-              if (showScrollBtnRef) showScrollBtnRef.current = false;
-              setHasNewMessages(false);
-            } else {
-              setShowScrollBtn(true);
-              if (showScrollBtnRef) showScrollBtnRef.current = true;
-            }
-
-            const shouldShowTop = scrollTop > 400;
-            if (showScrollTopBtn !== shouldShowTop) {
-              setShowScrollTopBtn(shouldShowTop);
-            }
-            lastScrollTopRef.current = scrollTop;
+          scrollState={{
+            showScrollBtnRef,
+            setShowScrollBtn,
+            showScrollTopBtn,
+            setShowScrollTopBtn,
+            setHasNewMessages
           }}
           editingMsgIndex={editingMsgIndex}
           editContent={editContent}

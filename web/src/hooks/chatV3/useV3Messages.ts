@@ -42,6 +42,27 @@ export function useV3Messages({
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [tpsData, setTpsData] = useState<number[]>([]);
   const [hasNewMessages, setHasNewMessages] = useState(false);
+  const [typingSessionKeys, setTypingSessionKeys] = useState<string[]>([]);
+
+  const typingSessionsRef = useRef<Set<string>>(new Set());
+
+  /**
+   * 标记某个 session 是否处于“正在生成/流式推送中”。
+   * 用于会话列表显示“正在编辑”的动画提示。
+   */
+  const markSessionTyping = useCallback((key: string, typing: boolean) => {
+    if (!key) return;
+    const set = typingSessionsRef.current;
+    const had = set.has(key);
+    if (typing) {
+      if (had) return;
+      set.add(key);
+    } else {
+      if (!had) return;
+      set.delete(key);
+    }
+    setTypingSessionKeys(Array.from(set));
+  }, []);
 
   const sessionKeyRef = useRef<string | null>(null);
   useEffect(() => { sessionKeyRef.current = sessionKey; }, [sessionKey]);
@@ -182,6 +203,7 @@ export function useV3Messages({
     const cache = sessionCacheRef.current.get(pSessionKey)!;
 
     if (payload.state === 'delta') {
+      markSessionTyping(pSessionKey, true);
       if (pSessionKey === sessionKeyRef.current) {
         resetStallTimer();
         if (showScrollBtnRef.current) setHasNewMessages(true);
@@ -269,6 +291,7 @@ export function useV3Messages({
       }
     } else if (payload.state === 'final' || payload.state === 'finished' || payload.state === 'done') {
       cache.isTyping = false;
+      markSessionTyping(pSessionKey, false);
       if (pSessionKey === sessionKeyRef.current) clearStallTimer();
 
       const now = Date.now();
@@ -309,6 +332,7 @@ export function useV3Messages({
       }
     } else if (payload.state === 'error' || payload.state === 'failed') {
       cache.isTyping = false;
+      markSessionTyping(pSessionKey, false);
       if (pSessionKey === sessionKeyRef.current) {
         clearStallTimer();
         const errorMsg = payload.message?.content || payload.error?.message || payload.error || t('chat.streamFailedDefault');
@@ -330,7 +354,7 @@ export function useV3Messages({
         setTimeout(() => inputAreaRef.current?.focus(), 100);
       }
     }
-  }, [clearStallTimer, fetchSessions, formatMessageContent, inputAreaRef, resetStallTimer, scrollRef, showScrollBtnRef, t, virtuosoRef]);
+  }, [clearStallTimer, fetchSessions, formatMessageContent, inputAreaRef, markSessionTyping, resetStallTimer, scrollRef, showScrollBtnRef, t, virtuosoRef]);
 
   /**
    * 处理审批请求事件：将审批卡片以 Markdown block 注入到消息流中，确保 UI 一定可见。
@@ -520,6 +544,9 @@ export function useV3Messages({
       return;
     }
 
+    // 发送动作一开始就标记该会话“正在生成中”（即使尚未收到首个 delta）
+    markSessionTyping(currentKey, true);
+
     let finalContent = text;
     if (attachedFiles && attachedFiles.length > 0) {
       const fileLinks = attachedFiles.map(f => {
@@ -600,14 +627,16 @@ export function useV3Messages({
       clearStallTimer();
       const cache = sessionCacheRef.current.get(currentKey);
       if (cache) cache.isTyping = false;
+      markSessionTyping(currentKey, false);
     } else if (text === '/stop') {
       setIsTyping(false);
       streamingAssistantIndexRef.current = null;
       clearStallTimer();
       const cache = sessionCacheRef.current.get(currentKey);
       if (cache) cache.isTyping = false;
+      markSessionTyping(currentKey, false);
     }
-  }, [clearStallTimer, fetchSessions, inputAreaRef, isTyping, resetStallTimer, scrollRef, selectedBot, sendRPC, sessionKey, sessionModel, setSessionKey, status, t, thinkingLevel, virtuosoRef]);
+  }, [clearStallTimer, fetchSessions, inputAreaRef, isTyping, markSessionTyping, resetStallTimer, scrollRef, selectedBot, sendRPC, sessionKey, sessionModel, setSessionKey, status, t, thinkingLevel, virtuosoRef]);
 
   /**
    * 重试/再生成：复用既有的 User 消息，不额外创建新的 User 消息。
@@ -622,6 +651,8 @@ export function useV3Messages({
 
     setIsTyping(true);
     setTpsData([]);
+    // 重试/再生成：立刻标记“正在生成中”，覆盖首 token 空窗期
+    markSessionTyping(sessionKey, true);
 
     const baseSortTs = userMsg._sortTs || Date.now();
     const aiPlaceholderMsg: Message = {
@@ -682,8 +713,9 @@ export function useV3Messages({
       clearStallTimer();
       const cache = sessionCacheRef.current.get(sessionKey);
       if (cache) cache.isTyping = false;
+      markSessionTyping(sessionKey, false);
     }
-  }, [clearStallTimer, isTyping, resetStallTimer, sendRPC, sessionKey, status, t, virtuosoRef]);
+  }, [clearStallTimer, isTyping, markSessionTyping, resetStallTimer, sendRPC, sessionKey, status, t, virtuosoRef]);
 
   /**
    * 停止生成：更新 UI 并向网关发送 `/stop`。
@@ -695,6 +727,8 @@ export function useV3Messages({
     setIsTyping(false);
     clearStallTimer();
     streamingAssistantIndexRef.current = null;
+    // 停止生成时，同时清理会话列表的 generating 标记
+    markSessionTyping(sessionKey, false);
 
     setMessages(prev => {
       const last = prev[prev.length - 1];
@@ -715,7 +749,7 @@ export function useV3Messages({
       // eslint-disable-next-line no-console
       console.warn('⚠️ 停止指令发送失败:', res.error);
     }
-  }, [clearStallTimer, sendRPC, sessionKey, status, t]);
+  }, [clearStallTimer, markSessionTyping, sendRPC, sessionKey, status, t]);
 
   /**
    * 再生成：截断到最后一条 user 并复用该 user 消息重发。
@@ -770,6 +804,8 @@ export function useV3Messages({
       setHasNewMessages(false);
       streamingAssistantIndexRef.current = null;
       clearStallTimer();
+      typingSessionsRef.current.clear();
+      setTypingSessionKeys([]);
     }
   }, [status, clearStallTimer]);
 
@@ -783,6 +819,7 @@ export function useV3Messages({
       tpsData,
       hasNewMessages,
       setHasNewMessages,
+      typingSessionKeys,
       handleChatDelta,
       handleApprovalRequested,
       handleGatewayEvent,
@@ -799,6 +836,6 @@ export function useV3Messages({
        */
       getMessagesCount: () => messagesCountRef.current
     };
-  }, [handleApprovalRequested, handleChatDelta, handleGatewayEvent, handleRegenerate, handleSaveEdit, handleSend, handleStopGeneration, hasNewMessages, isLoadingHistory, isStalled, isTyping, messages, setMessages, tpsData, showScrollBtnRef]);
+  }, [handleApprovalRequested, handleChatDelta, handleGatewayEvent, handleRegenerate, handleSaveEdit, handleSend, handleStopGeneration, hasNewMessages, isLoadingHistory, isStalled, isTyping, messages, setMessages, tpsData, typingSessionKeys, showScrollBtnRef]);
 }
 

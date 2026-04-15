@@ -141,7 +141,9 @@ export function V3SoulEditorDrawer({ t, isMobile, selectedBot, botsModels, statu
         {isLoading ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, background: '#f8fafc' }}>
             <Spin size="large" />
-            <div style={{ color: '#94a3b8', fontSize: 13, fontFamily: 'monospace' }}>RECOVERING_SOUL_FRAGMENTS...</div>
+            <div style={{ color: '#94a3b8', fontSize: 13, fontFamily: 'monospace' }}>
+              {t('chat.soulEditorRecovering', { defaultValue: '正在加载专家灵魂...' })}
+            </div>
           </div>
         ) : (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -164,12 +166,12 @@ export function V3SoulEditorDrawer({ t, isMobile, selectedBot, botsModels, statu
                   children: (
                     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 'calc(100vh - 250px)' }}>
                       <div style={{ padding: '8px 16px', background: '#f8fafc', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>
-                        Soul Source (Markdown)
+                        {t('chat.soulEditorSourceTitle', { defaultValue: '灵魂内容 (Markdown)' })}
                       </div>
                       <Input.TextArea
                         value={soulContent}
                         onChange={e => setSoulContent(e.target.value)}
-                        placeholder="Enter expert's soul (Prompt)..."
+                        placeholder={t('chat.soulEditorPlaceholder', { defaultValue: '请输入专家灵魂（提示词）...' })}
                         style={{
                           flex: 1,
                           border: 'none',
@@ -197,12 +199,12 @@ export function V3SoulEditorDrawer({ t, isMobile, selectedBot, botsModels, statu
                   children: (
                     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 'calc(100vh - 250px)', background: '#fafafa' }}>
                       <div style={{ padding: '8px 16px', background: '#f1f5f9', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>
-                        Live Preview
+                        {t('chat.soulEditorLivePreviewTitle', { defaultValue: '实时预览' })}
                       </div>
                       <div style={{ flex: 1, padding: 20, overflowY: 'auto' }}>
                         <div style={{ maxWidth: 800, margin: '0 auto', background: '#fff', padding: 24, borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.02)', minHeight: '100%' }}>
                           <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" }}>
-                            {soulContent || '*No content to preview*'}
+                            {soulContent || t('common.noContent')}
                           </pre>
                         </div>
                       </div>
@@ -214,7 +216,7 @@ export function V3SoulEditorDrawer({ t, isMobile, selectedBot, botsModels, statu
             <div style={{ padding: '12px 20px', background: '#fff', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fbbf24', animation: 'v3-heartbeat 1.5s infinite' }} />
               <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
-                修改后点击保存，网关将立即应用最新的专家人格设置。
+                {t('chat.soulEditorFooterHint', { defaultValue: '修改后点击保存，网关将立即应用最新的专家人格设置。' })}
               </div>
             </div>
           </div>

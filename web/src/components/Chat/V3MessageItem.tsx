@@ -249,7 +249,23 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                           </div>
                         );
                       }
-                      return <blockquote style={{ borderLeft: '4px solid #e2e8f0', paddingLeft: '12px', color: '#64748b', fontStyle: 'italic', margin: '8px 0' }}>{children}</blockquote>;
+                      // 普通引用块（用户气泡/助手气泡分别做对比度适配）
+                      return (
+                        <blockquote
+                          style={{
+                            borderLeft: `4px solid ${isUser ? 'rgba(255,255,255,0.7)' : '#e2e8f0'}`,
+                            padding: '8px 10px',
+                            paddingLeft: 12,
+                            color: isUser ? 'rgba(255,255,255,0.92)' : '#64748b',
+                            background: isUser ? 'rgba(255,255,255,0.12)' : 'rgba(241, 245, 249, 0.6)',
+                            borderRadius: 10,
+                            margin: '8px 0',
+                            fontStyle: 'normal'
+                          }}
+                        >
+                          {children}
+                        </blockquote>
+                      );
                     },
                     code: ({ inline, className, children, ...props }: any) => {
                       const match = /language-(\w+)/.exec(className || '');

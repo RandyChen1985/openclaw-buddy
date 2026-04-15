@@ -184,16 +184,14 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                   </span>
                   {!sessionMeta.isMain && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Tooltip title={t('chat.autoSummarize', { defaultValue: 'AI 自动总结标题' })}>
-                        <Button
-                          size="small"
-                          type="text"
-                          icon={isSummarizing ? <RefreshCw size={10} className="animate-spin" /> : <Wand2 size={10} />}
-                          onClick={onAutoSummarize}
-                          disabled={isSummarizing || messagesCount === 0}
-                          style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}
-                        />
-                      </Tooltip>
+                      <Button
+                        size="small"
+                        type="text"
+                        icon={isSummarizing ? <RefreshCw size={10} className="animate-spin" /> : <Wand2 size={10} />}
+                        onClick={onAutoSummarize}
+                        disabled={isSummarizing || messagesCount === 0}
+                        style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}
+                      />
                       <Button
                         size="small"
                         type="text"
