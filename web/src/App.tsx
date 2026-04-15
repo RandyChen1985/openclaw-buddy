@@ -315,6 +315,7 @@ const Dashboard = () => {
     try {
       const res = await api.get(`/v1/openclaw/bots-models${force ? '?refresh=true' : ''}`);
       setBotsModels(res.data);
+      if (force) message.success(t('chat.syncAssetsSuccess'));
     } catch (e) {
       message.error(t('chat.syncAssetsError'));
     } finally {
@@ -339,6 +340,7 @@ const Dashboard = () => {
     try {
       const res = await api.get(`/v1/wechat/config/status${force ? '?refresh=true' : ''}`);
       setChatChannels(res.data);
+      if (force) message.success(t('channels.syncSuccess', { defaultValue: '渠道列表已同步并更新' }));
     } catch (e) {
       console.warn(t('chat.syncChannelsError'), e);
     } finally {
@@ -367,6 +369,7 @@ const Dashboard = () => {
     try {
       const res = await api.get(`/v1/openclaw/devices${force ? '?refresh=true' : ''}`);
       setDevices(res.data);
+      if (force) message.success(t('common.refreshSuccess', { defaultValue: '列表已同步并刷新' }));
     } catch (err) {
       message.error(t('chat.syncDevicesError'));
     } finally {

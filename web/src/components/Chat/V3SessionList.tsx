@@ -41,7 +41,7 @@ const SessionStatusIcon = ({ status, t }: { status: string, t: any }) => {
 const V3SessionList: React.FC<V3SessionListProps> = ({
   sessions, sessionKey, loadingSessions, sessionSearch, setSessionSearch,
   onSelectSession, onNewSession, onDeleteSession, onDeleteGroup, onClearAll, fetchSessions,
-  copyToClipboard, t
+  isMobile, setShowSider, copyToClipboard, t
 }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff' }}>
@@ -88,6 +88,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
             style={{ flex: 1, borderRadius: 8, height: 38, background: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onClick={() => {
               onNewSession();
+              if (isMobile) setShowSider(false);
             }}
         >
           {t('chat.v3NewSession', { defaultValue: '开启新会话' })}
@@ -184,6 +185,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                           key={s.key}
                           onClick={() => {
                             onSelectSession(s.key);
+                            if (isMobile) setShowSider(false);
                           }}
                           style={{ 
                               padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4, transition: 'all 0.2s',
@@ -295,7 +297,10 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                       return (
                         <div 
                             key={mainSession.key}
-                            onClick={() => onSelectSession(mainSession.key)}
+                            onClick={() => {
+                              onSelectSession(mainSession.key);
+                              if (isMobile) setShowSider(false);
+                            }}
                             style={{ 
                                 padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4, transition: 'all 0.2s',
                                 background: isActive ? 'linear-gradient(135deg, #fffbeb 0%, #ffedd5 100%)' : '#fffcf5',
