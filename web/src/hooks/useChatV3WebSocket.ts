@@ -949,28 +949,40 @@ export const useChatV3WebSocket = ({
   }, [handleSend, isTyping]);
 
   const handleStopGeneration = useCallback(() => {
+    if (!sessionKey) return;
+
+    // 💡 1. 前端立即停机，恢复 UI 可用性
     setIsTyping(false);
     clearStallTimer();
     
-    if (sessionKey) {
-      const cache = sessionCacheRef.current.get(sessionKey);
-      if (cache) {
-        cache.isTyping = false;
-        cache.fullText = '';
-      }
+    const cache = sessionCacheRef.current.get(sessionKey);
+    if (cache) {
+      cache.isTyping = false;
+      // 注意：不清除 fullText，保留已生成的文字
     }
 
     setMessages(prev => {
       const last = prev[prev.length - 1];
       if (last?.role === 'assistant') {
-        const label = t('chat.manuallyStopped');
-        const content = (last.content === t('chat.thinking') || last.content === '') ? label : last.content + ` (${label})`;
-        return [...prev.slice(0, -1), { ...last, content }];
+        const label = t('chat.manuallyStopped', { defaultValue: '已手动停止' });
+        // 如果内容是“思考中”，直接替换为停止标签；否则在末尾追加
+        const content = (last.content === t('chat.thinking') || !last.content) ? label : last.content + ` (${label})`;
+        const next = [...prev.slice(0, -1), { ...last, content }];
+        return next.sort((a, b) => (a._sortTs || 0) - (b._sortTs || 0));
       }
       return prev;
     });
-    handleSend('/stop');
-  }, [clearStallTimer, handleSend, t, sessionKey]);
+
+    // 💡 2. 核心修复：绕过 handleSend 的判断，强制发送停止信号
+    sendRPC('chat.send', { 
+      sessionKey, 
+      message: '/stop', 
+      idempotencyKey: `stop-${Date.now()}` 
+    }).then(res => {
+      if (!res.ok) console.warn('⚠️ 停止指令发送失败:', res.error);
+    });
+
+  }, [clearStallTimer, sendRPC, t, sessionKey]);
 
   const handleDeleteSession = useCallback((_e: any, key: string) => {
     Modal.confirm({
