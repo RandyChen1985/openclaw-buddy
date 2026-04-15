@@ -337,29 +337,61 @@ func (g *Guardian) heal(reason string) {
 
 	// 4. Restart
 	_ = process.ForceStartGateway()
-	time.Sleep(3 * time.Second)
-	statusAfter := process.GetGatewayStatus()
+	// 闭环验收：等待网关起来并通过健康检查后才视为 Success
+	ok := false
+	var lastHealthErr error
+	backoffs := []time.Duration{1 * time.Second, 2 * time.Second, 3 * time.Second, 5 * time.Second, 8 * time.Second}
+	verifyStart := time.Now()
+	verifyAttempts := 0
+	for i, d := range backoffs {
+		time.Sleep(d)
+		verifyAttempts = i + 1
+		// 先快速看端口，再做 health
+		if !process.IsPortListening(g.config.HealthPort) {
+			lastHealthErr = fmt.Errorf("port %d is not listening", g.config.HealthPort)
+			log.Printf("⏳ [HEAL] 网关端口仍未监听，继续等待... (%d/%d)", i+1, len(backoffs))
+			continue
+		}
+		if _, err := process.CheckHealth(); err != nil {
+			lastHealthErr = err
+			log.Printf("⏳ [HEAL] 健康检查未通过，继续等待... (%d/%d) err=%v", i+1, len(backoffs), err)
+			continue
+		}
+		ok = true
+		lastHealthErr = nil
+		break
+	}
+	verifyDurationMs := time.Since(verifyStart).Milliseconds()
 
+	statusAfter := process.GetGatewayStatus()
 	if !recovered {
 		recoveryMethodUsed = "强行重启 (未执行配置恢复)"
 	}
 
-	g.notifyFeishu(context.Background(), "✅ 小龙虾自愈成功", fmt.Sprintf("节点: %s\n状态: ✅ 已自动恢复上线\n操作: %s 并强行重启%s\n\n---\n**恢复后状态详情:**\n%s", hostname, recoveryMethodUsed, reportMsg, statusAfter))
-	
-	// Record to DB
-	g.recordHealEvent(reason, recoveryMethodUsed, "Success", reportPath)
+	if ok {
+		g.notifyFeishu(context.Background(), "✅ 小龙虾自愈成功", fmt.Sprintf("节点: %s\n状态: ✅ 已自动恢复上线\n操作: %s 并强行重启%s\n\n---\n**恢复后状态详情:**\n%s", hostname, recoveryMethodUsed, reportMsg, statusAfter))
+		g.recordHealEvent(reason, recoveryMethodUsed, "Success", reportPath, verifyAttempts, verifyDurationMs, "")
+	} else {
+		errText := "unknown"
+		if lastHealthErr != nil {
+			errText = lastHealthErr.Error()
+		}
+		utils.RecordSystemEvent("ERROR", fmt.Sprintf("自愈验收失败: %s", errText))
+		g.notifyFeishu(context.Background(), "❌ 小龙虾自愈失败", fmt.Sprintf("节点: %s\n状态: ❌ 自愈动作已执行，但验收未通过\n原因: %s\n操作: %s%s\n错误: %s\n\n---\n**当前状态详情:**\n%s", hostname, reason, recoveryMethodUsed, reportMsg, errText, statusAfter))
+		g.recordHealEvent(reason, recoveryMethodUsed, "Failed", reportPath, verifyAttempts, verifyDurationMs, errText)
+	}
 
 	log.Printf("🔄 Returning to monitoring loop...")
 }
 
-func (g *Guardian) recordHealEvent(reason, method, result, reportPath string) {
+func (g *Guardian) recordHealEvent(reason, method, result, reportPath string, verifyRetries int, verifyDurationMs int64, verifyError string) {
 	if utils.DB == nil {
 		return
 	}
 	_, err := utils.DB.Exec(`
-		INSERT INTO heal_events (reason, method, result, report_path)
-		VALUES (?, ?, ?, ?)
-	`, reason, method, result, reportPath)
+		INSERT INTO heal_events (reason, method, result, report_path, verify_retries, verify_duration_ms, verify_error)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, reason, method, result, reportPath, verifyRetries, verifyDurationMs, verifyError)
 	if err != nil {
 		log.Printf("❌ Failed to record heal event to DB: %v", err)
 	}
