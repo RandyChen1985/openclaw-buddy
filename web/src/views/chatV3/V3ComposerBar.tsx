@@ -79,11 +79,11 @@ export function V3ComposerBar({
 
   const containerStyle = useMemo(() => ({
     display: 'flex',
-    background: '#fff',
+    background: 'var(--v3-surface, #fff)',
     borderRadius: 20,
     boxShadow: isFocused
-      ? '0 20px 40px -10px rgba(99, 102, 241, 0.25), 0 0 0 4px rgba(99, 102, 241, 0.3)'
-      : '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 0 0 2px rgba(99, 102, 241, 0.1)',
+      ? '0 20px 40px -10px var(--v3-input-focus-glow, rgba(99, 102, 241, 0.25)), 0 0 0 4px var(--v3-input-focus-ring, rgba(99, 102, 241, 0.3))'
+      : '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 0 0 2px var(--v3-input-idle-ring, rgba(99, 102, 241, 0.1))',
     border: 'none',
     flexDirection: 'column' as const,
     overflow: 'hidden',

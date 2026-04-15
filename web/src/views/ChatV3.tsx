@@ -18,6 +18,7 @@ import { V3ChatHeader } from './chatV3/V3ChatHeader';
 import { V3FloatingButtons } from './chatV3/V3FloatingButtons';
 import { V3MessagePane } from './chatV3/V3MessagePane';
 import { V3ComposerBar } from './chatV3/V3ComposerBar';
+import { useV3Theme } from '../hooks/chatV3/useV3Theme';
 import '../styles/ChatV3.css';
 
 // --- Utils & Config ---
@@ -58,6 +59,7 @@ const hexToUint8Array = (hex: string): Uint8Array => {
 
 const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRunning, onNavigateToDashboard }) => {
   const { t } = useTranslation();
+  const v3Theme = useV3Theme();
 
   /**
    * 获取会话来源（渠道）的 icon/color/label。
@@ -217,7 +219,20 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   return (
     <>
       {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
-      <div style={{ flex: 1, display: 'flex', background: '#f8fafc', overflowX: 'hidden', height: '100%', position: 'relative', width: '100%' }}>
+      <div
+        className="chat-v3-root"
+        data-v3-theme={v3Theme.rootAttrs['data-v3-theme']}
+        style={{
+          ...(v3Theme.rootAttrs.styleVars || {}),
+          flex: 1,
+          display: 'flex',
+          background: '#f8fafc',
+          overflowX: 'hidden',
+          height: '100%',
+          position: 'relative',
+          width: '100%'
+        } as any}
+      >
         
         <div style={{ position: 'absolute', width: '100%', height: '100%', overflow: 'hidden', zIndex: 0, pointerEvents: 'none' }}>
           <div className="v3-blob" style={{ background: '#6366f1', top: '-10%', left: '-10%', animationDelay: '0s' }} />
@@ -320,6 +335,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           parseSessionKey={parseSessionKey}
           getSourceMeta={getSourceMeta}
           botsModels={botsModels}
+            v3Theme={v3Theme}
         />
   
         <V3MessagePane

@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
-import { Badge, Button, Input, Select, Switch, Tooltip } from 'antd';
-import { LayoutPanelLeft, RefreshCw, Save, Shield, Wand2 } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Badge, Button, Dropdown, Input, Modal, Radio, Select, Switch, Tooltip } from 'antd';
+import { LayoutPanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2 } from 'lucide-react';
+import type { V3ThemeMode, V3ThemePresetId, V3ThemeTokens } from '../../hooks/chatV3/useV3Theme';
 
 export interface V3ChatHeaderProps {
   t: any;
@@ -45,6 +46,20 @@ export interface V3ChatHeaderProps {
 
   // bots for showing identity chip
   botsModels: any;
+
+  /**
+   * v3 主题控制（仅作用于 V3 聊天）。
+   */
+  v3Theme: {
+    mode: V3ThemeMode;
+    presetId: V3ThemePresetId;
+    customTokens: V3ThemeTokens;
+    presets: { id: V3ThemePresetId; name: string; description: string; swatches: { primary: string; surface: string; userBubble: string } }[];
+    setMode: (mode: V3ThemeMode) => void;
+    setPresetId: (id: V3ThemePresetId) => void;
+    setCustomTokens: (updater: (prev: V3ThemeTokens) => V3ThemeTokens) => void;
+    resetCustomTokens: () => void;
+  };
 }
 
 /**
@@ -81,8 +96,59 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     onThinkingLevelChange,
     parseSessionKey,
     getSourceMeta,
-    botsModels
+    botsModels,
+    v3Theme
   } = props;
+
+  const [themeModalOpen, setThemeModalOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  /**
+   * 校验/规范化颜色字符串（允许 `#rgb/#rrggbb` 或 `rgba(...)` 等 CSS 颜色）。
+   */
+  const normalizeColor = (val: string) => (val || '').trim();
+
+  /**
+   * 渲染一个“自定义调色盘”的字段：颜色选择器 + 文本输入。
+   * 说明：为了兼容 antd 版本差异，这里使用原生 `input[type=color]`。
+   */
+  const ThemeColorField = ({
+    label,
+    token,
+    placeholder
+  }: {
+    label: string;
+    token: keyof V3ThemeTokens;
+    placeholder?: string;
+  }) => {
+    const value = (v3Theme.customTokens[token] || '') as string;
+    const isHex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value);
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={{ width: 120, fontSize: 12, color: '#64748b', fontWeight: 600 }}>{label}</div>
+        <input
+          type="color"
+          value={isHex ? value : '#4f46e5'}
+          onChange={(e) => {
+            const next = e.target.value;
+            v3Theme.setCustomTokens(prev => ({ ...prev, [token]: next }));
+          }}
+          style={{ width: 34, height: 28, padding: 0, border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff' }}
+        />
+        <Input
+          size="small"
+          value={value}
+          placeholder={placeholder || '#RRGGBB / rgba(...)'}
+          onChange={(e) => {
+            const next = normalizeColor(e.target.value);
+            v3Theme.setCustomTokens(prev => ({ ...prev, [token]: next }));
+          }}
+          style={{ width: 220, borderRadius: 8 }}
+        />
+        <div style={{ flex: 1 }} />
+      </div>
+    );
+  };
 
   const sessionMeta = useMemo(() => {
     if (!sessionKey) return null;
@@ -93,6 +159,90 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     return { botId, sourceMeta, isMain, bot };
   }, [botsModels, getSourceMeta, parseSessionKey, sessionKey]);
 
+  /**
+   * 顶部“设置”菜单内容：
+   * - 主题设置入口（打开主题弹窗）
+   * - 思考过程开关
+   * - 思考等级选择
+   */
+  const settingsOverlay = (
+    <div
+      style={{
+        width: 320,
+        padding: 12,
+        background: '#fff',
+        borderRadius: 12,
+        border: '1px solid #e2e8f0',
+        boxShadow: '0 12px 30px rgba(0,0,0,0.12)'
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ fontSize: 12, fontWeight: 900, color: '#0f172a' }}>
+          {t('chat.settings', { defaultValue: '设置' })}
+        </div>
+        <Button size="small" type="text" onClick={() => setSettingsOpen(false)} style={{ color: '#94a3b8' }}>
+          {t('common.close', { defaultValue: '关闭' })}
+        </Button>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+            {t('chat.theme', { defaultValue: '主题' })}
+          </div>
+          <Button
+            size="small"
+            icon={<Palette size={14} />}
+            onClick={() => {
+              setThemeModalOpen(true);
+              setSettingsOpen(false);
+            }}
+            style={{ borderRadius: 10 }}
+          >
+            {t('chat.themeSettings', { defaultValue: '主题设置' })}
+          </Button>
+        </div>
+
+        <div style={{ height: 1, background: '#f1f5f9' }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+            {t('chat.showThinking', { defaultValue: '思考过程' })}
+          </div>
+          <Switch size="small" checked={showThinking} onChange={(val) => setShowThinking(val)} />
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+            {t('chat.thinkingLevel', { defaultValue: '思考等级' })}
+          </div>
+          <Select
+            size="small"
+            value={thinkingLevel}
+            onChange={onThinkingLevelChange}
+            style={{ width: 140 }}
+            dropdownStyle={{ borderRadius: 10 }}
+            disabled={isMobile}
+          >
+            <Select.Option value="off">Off</Select.Option>
+            <Select.Option value="minimal">Minimal</Select.Option>
+            <Select.Option value="low">Low</Select.Option>
+            <Select.Option value="medium">Medium</Select.Option>
+            <Select.Option value="high">High</Select.Option>
+            <Select.Option value="xhigh">XHigh</Select.Option>
+          </Select>
+        </div>
+
+        {isMobile && (
+          <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.3 }}>
+            {t('chat.thinkingLevelMobileHint', { defaultValue: '移动端为避免拥挤，思考等级请在桌面端调整。' })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ padding: isMobile ? '6px 10px' : '10px 16px', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 10, gap: 8, width: '100%', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 10, minWidth: 0, flex: 1 }}>
@@ -100,7 +250,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           type="text"
           icon={<LayoutPanelLeft size={18} />}
           onClick={onToggleSider}
-          style={{ marginLeft: -6, color: showSider ? '#4f46e5' : '#64748b', flexShrink: 0 }}
+          style={{ marginLeft: -6, color: showSider ? 'var(--v3-primary, #4f46e5)' : 'var(--v3-text-muted, #64748b)', flexShrink: 0 }}
         />
 
         {status !== 'authenticated' && (
@@ -142,15 +292,15 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                   display: 'flex',
                   alignItems: 'center',
                   gap: 4,
-                  background: `${sessionMeta.sourceMeta.color}15`,
+                  background: 'var(--v3-source-chip-bg, rgba(79, 70, 229, 0.10))',
                   padding: '1px 6px',
                   borderRadius: 4,
-                  border: `1px solid ${sessionMeta.sourceMeta.color}33`
+                  border: '1px solid var(--v3-source-chip-border, rgba(79, 70, 229, 0.22))'
                 }}>
-                  <span style={{ color: sessionMeta.sourceMeta.color, display: 'flex', alignItems: 'center' }}>
-                    {sessionMeta.isMain ? <Shield size={10} fill={sessionMeta.sourceMeta.color} /> : React.cloneElement(sessionMeta.sourceMeta.icon as React.ReactElement, { size: 10 })}
+                  <span style={{ color: 'var(--v3-source-chip-text, var(--v3-primary, #4f46e5))', display: 'flex', alignItems: 'center' }}>
+                    {sessionMeta.isMain ? <Shield size={10} fill={'var(--v3-source-chip-text, var(--v3-primary, #4f46e5))' as any} /> : React.cloneElement(sessionMeta.sourceMeta.icon as React.ReactElement, { size: 10 })}
                   </span>
-                  <span style={{ fontSize: 9, fontWeight: 700, color: sessionMeta.sourceMeta.color, whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--v3-source-chip-text, var(--v3-primary, #4f46e5))', whiteSpace: 'nowrap' }}>
                     {sessionMeta.sourceMeta.label}
                   </span>
                 </div>
@@ -249,30 +399,6 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 2 : 6, flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 4 }}>
-          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>{t('chat.showThinking', { defaultValue: '思考过程' })}</span>
-          <Switch
-            size="small"
-            checked={showThinking}
-            onChange={(val) => setShowThinking(val)}
-          />
-        </div>
-
-        {!isMobile && (
-          <>
-            <div style={{ width: 1, height: 12, background: '#f1f5f9', marginRight: 2 }} />
-            <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{t('chat.thinkingLevel', { defaultValue: '思考等级' })}:</span>
-            <Select size="small" value={thinkingLevel} onChange={onThinkingLevelChange} style={{ width: 100 }} dropdownStyle={{ borderRadius: 8 }}>
-              <Select.Option value="off">Off</Select.Option>
-              <Select.Option value="minimal">Minimal</Select.Option>
-              <Select.Option value="low">Low</Select.Option>
-              <Select.Option value="medium">Medium</Select.Option>
-              <Select.Option value="high">High</Select.Option>
-              <Select.Option value="xhigh">XHigh</Select.Option>
-            </Select>
-          </>
-        )}
-
         {status === 'authenticated' && sessionKey && !isMobile && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px', background: '#f8fafc', borderRadius: 8, height: 24, marginLeft: 4 }}>
             <span style={{ fontSize: 10, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600 }}>
@@ -296,7 +422,163 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
         )}
 
         <Button size="small" type="text" icon={<RefreshCw size={13} />} onClick={onReconnect} title={t('common.restart')} />
+
+        <Dropdown
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          trigger={['click']}
+          dropdownRender={() => settingsOverlay}
+          placement="bottomRight"
+        >
+          <Button size="small" type="text" icon={<Settings size={14} />} title={t('chat.settings', { defaultValue: '设置' })} />
+        </Dropdown>
       </div>
+
+      <Modal
+        title={t('chat.themeSettings', { defaultValue: '主题设置（仅 V3 聊天）' })}
+        open={themeModalOpen}
+        onCancel={() => setThemeModalOpen(false)}
+        maskClosable={false}
+        keyboard={false}
+        footer={null}
+        width={720}
+        styles={{ body: { paddingTop: 12 } }}
+      >
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 320, flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+              {t('chat.themeMode', { defaultValue: '主题模式' })}
+            </div>
+            <Radio.Group
+              value={v3Theme.mode}
+              onChange={(e) => v3Theme.setMode(e.target.value)}
+              style={{ marginBottom: 12 }}
+            >
+              <Radio.Button value="preset">{t('chat.themePreset', { defaultValue: '预设主题' })}</Radio.Button>
+              <Radio.Button value="custom">{t('chat.themeCustom', { defaultValue: '自定义' })}</Radio.Button>
+            </Radio.Group>
+
+            {v3Theme.mode === 'preset' ? (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+                  {t('chat.themePresetSelect', { defaultValue: '选择预设' })}
+                </div>
+                <Select
+                  value={v3Theme.presetId}
+                  onChange={(val) => v3Theme.setPresetId(val)}
+                  style={{ width: '100%' }}
+                  dropdownStyle={{ borderRadius: 10 }}
+                >
+                  {v3Theme.presets.map(p => (
+                    <Select.Option key={p.id} value={p.id}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                          <span style={{ width: 10, height: 10, borderRadius: 3, background: p.swatches.primary, border: '1px solid rgba(0,0,0,0.08)' }} />
+                          <span style={{ width: 10, height: 10, borderRadius: 3, background: p.swatches.userBubble, border: '1px solid rgba(0,0,0,0.08)' }} />
+                          <span style={{ width: 10, height: 10, borderRadius: 3, background: p.swatches.surface, border: '1px solid rgba(0,0,0,0.08)' }} />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+                          <span style={{ fontWeight: 800 }}>{p.name}</span>
+                          <span style={{ fontSize: 11, color: '#64748b' }}>{p.description}</span>
+                        </div>
+                      </div>
+                    </Select.Option>
+                  ))}
+                </Select>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>
+                    {t('chat.themeCustomPalette', { defaultValue: '自定义调色盘' })}
+                  </div>
+                  <Button size="small" onClick={() => v3Theme.resetCustomTokens()}>
+                    {t('chat.themeReset', { defaultValue: '重置' })}
+                  </Button>
+                </div>
+                <ThemeColorField label={t('chat.themePrimary', { defaultValue: '主色' })} token="--v3-primary" placeholder="#4f46e5" />
+                <ThemeColorField label={t('chat.themeUserBubble', { defaultValue: '用户气泡' })} token="--v3-user-bubble" placeholder="#4b5bdc" />
+                <ThemeColorField label={t('chat.themeLink', { defaultValue: '链接色' })} token="--v3-link" placeholder="#2563eb" />
+                <ThemeColorField label={t('chat.themeSurface', { defaultValue: '卡片底色' })} token="--v3-surface" placeholder="#ffffff" />
+                <ThemeColorField label={t('chat.themeMuted', { defaultValue: '次级文字' })} token="--v3-text-muted" placeholder="#64748b" />
+                <ThemeColorField label={t('chat.themeBorder', { defaultValue: '边框' })} token="--v3-border" placeholder="#e2e8f0" />
+              </>
+            )}
+          </div>
+
+          <div style={{ minWidth: 280, flex: '0 0 300px' }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+              {t('chat.themePreview', { defaultValue: '预览' })}
+            </div>
+            <div style={{
+              borderRadius: 14,
+              border: '1px solid #e2e8f0',
+              background: '#fff',
+              padding: 12
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: '#0f172a' }}>V3</div>
+                <div style={{
+                  height: 24,
+                  padding: '0 10px',
+                  borderRadius: 10,
+                  background: 'var(--v3-primary)',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  fontSize: 11,
+                  fontWeight: 800
+                }}>
+                  {t('chat.themeButton', { defaultValue: '按钮' })}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexDirection: 'column' }}>
+                <div style={{
+                  alignSelf: 'flex-start',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  color: '#0f172a',
+                  borderRadius: 14,
+                  padding: '10px 12px',
+                  maxWidth: 240
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 6 }}>
+                    {t('chat.themeAssistant', { defaultValue: '助手消息' })}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>
+                    {t('chat.themeQuotePreview', { defaultValue: '引用/链接/代码在这里会更清晰。' })}
+                  </div>
+                </div>
+                <div style={{
+                  alignSelf: 'flex-end',
+                  background: 'var(--v3-user-bubble)',
+                  color: 'var(--v3-user-text, rgba(255,255,255,0.95))',
+                  borderRadius: 14,
+                  padding: '10px 12px',
+                  maxWidth: 240,
+                  boxShadow: '0 6px 18px rgba(0,0,0,0.06)'
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 6 }}>
+                    {t('chat.themeUser', { defaultValue: '用户消息' })}
+                  </div>
+                  <div style={{
+                    borderLeft: '4px solid var(--v3-user-border, rgba(255,255,255,0.22))',
+                    background: 'var(--v3-user-surface, rgba(255,255,255,0.12))',
+                    padding: '6px 8px',
+                    borderRadius: 10,
+                    fontSize: 12
+                  }}>
+                    &gt; {t('chat.themeQuote', { defaultValue: '这是引用内容' })}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style={{ marginTop: 10, fontSize: 11, color: '#64748b' }}>
+              {t('chat.themeHint', { defaultValue: '提示：自定义模式会用你设置的 tokens 覆盖预设。' })}
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
