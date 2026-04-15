@@ -235,7 +235,7 @@ func (s *Server) runAsyncTaskWithPriority(c *gin.Context, task *process.Task, pr
 	// 提交到调度器排队执行
 	scheduler.GetScheduler().Submit(scheduler.TaskRequest{
 		Task:     task,
-		Execute:  run,
+		Execute:  func(_ context.Context) (string, error) { return run() },
 		Priority: priority,
 	})
 

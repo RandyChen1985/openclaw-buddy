@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"log"
 	"openclaw-buddy/internal/process"
 	"sync"
@@ -16,7 +17,7 @@ const (
 
 type TaskRequest struct {
 	Task     *process.Task
-	Execute  func() (string, error)
+	Execute  func(ctx context.Context) (string, error)
 	Priority Priority
 }
 
@@ -108,13 +109,15 @@ func (s *Scheduler) run(req TaskRequest) {
 	process.LockModule(req.Task.Module)
 
 	// 正式执行闭包逻辑
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	done := make(chan struct{})
 	var result string
 	var err error
 
 	go func() {
 		log.Printf("🧵 [Scheduler] 正在串行执行任务: %s (Priority: %v)", req.Task.Name, req.Priority)
-		result, err = req.Execute()
+		result, err = req.Execute(ctx)
 		close(done)
 	}()
 
@@ -131,5 +134,8 @@ func (s *Scheduler) run(req TaskRequest) {
 	case <-time.After(3 * time.Minute):
 		log.Printf("⏰ [Scheduler] 任务超时: %s", req.Task.Name)
 		process.UpdateTaskStatus(req.Task.ID, process.TaskStatusTimeout, "", "任务执行超时 (3分钟)")
+		// 超时后显式发送取消信号；并等待执行体实际退出后再解锁模块，避免串行语义被破坏。
+		cancel()
+		<-done
 	}
 }

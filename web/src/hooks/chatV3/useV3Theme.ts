@@ -6,6 +6,7 @@ export type V3ThemeMode = 'preset' | 'custom';
 export type V3ThemePresetId =
   | 'enterprise'
   | 'slate'
+  | 'slateV2'
   | 'ocean'
   | 'grape'
   | 'mint'
@@ -59,6 +60,12 @@ const PRESETS: V3ThemePreset[] = [
     name: '沉稳灰蓝',
     description: '更低饱和，更像企业控制台',
     swatches: { primary: '#334155', surface: '#ffffff', userBubble: '#475569' }
+  },
+  {
+    id: 'slateV2',
+    name: '沉稳灰蓝V2',
+    description: '在沉稳灰蓝基础上整体提亮，更轻盈',
+    swatches: { primary: '#475569', surface: '#ffffff', userBubble: '#64748b' }
   },
   {
     id: 'ocean',
@@ -122,7 +129,7 @@ export function useV3Theme() {
 
   const [presetId, setPresetIdState] = useState<V3ThemePresetId>(() => {
     const v = storage.getItem(LS_KEYS.preset);
-    return isValidPresetId(v) ? v : 'slate';
+    return isValidPresetId(v) ? v : 'slateV2';
   });
 
   const [customTokens, setCustomTokensState] = useState<V3ThemeTokens>(() => {

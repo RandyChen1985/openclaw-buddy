@@ -70,6 +70,22 @@
   --v3-source-chip-border: rgba(51, 65, 85, 0.22);
 }
 
+.chat-v3-root[data-v3-theme="slateV2"] {
+  --v3-primary: #475569;
+  --v3-primary-strong: #334155;
+  --v3-user-bubble: #64748b;
+  --v3-user-bubble-shadow: rgba(30, 41, 59, 0.12);
+  --v3-link: #334155;
+  --v3-input-focus-ring: rgba(71, 85, 105, 0.22);
+  --v3-input-focus-glow: rgba(71, 85, 105, 0.18);
+  --v3-input-idle-ring: rgba(71, 85, 105, 0.08);
+  --v3-pinned-bg-active: linear-gradient(135deg, rgba(71, 85, 105, 0.07) 0%, rgba(71, 85, 105, 0.12) 100%);
+  --v3-pinned-border-active: rgba(71, 85, 105, 0.22);
+  --v3-source-chip-text: #475569;
+  --v3-source-chip-bg: rgba(71, 85, 105, 0.08);
+  --v3-source-chip-border: rgba(71, 85, 105, 0.18);
+}
+
 .chat-v3-root[data-v3-theme="ocean"] {
   --v3-primary: #2563eb;
   --v3-primary-strong: #1d4ed8;

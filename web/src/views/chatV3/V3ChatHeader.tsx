@@ -112,19 +112,11 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
    * 渲染一个“自定义调色盘”的字段：颜色选择器 + 文本输入。
    * 说明：为了兼容 antd 版本差异，这里使用原生 `input[type=color]`。
    */
-  const ThemeColorField = ({
-    label,
-    token,
-    placeholder
-  }: {
-    label: string;
-    token: keyof V3ThemeTokens;
-    placeholder?: string;
-  }) => {
+  const renderColorField = (label: string, token: keyof V3ThemeTokens, placeholder?: string) => {
     const value = (v3Theme.customTokens[token] || '') as string;
     const isHex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value);
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+      <div key={token} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
         <div style={{ width: 120, fontSize: 12, color: '#64748b', fontWeight: 600 }}>{label}</div>
         <input
           type="color"
@@ -223,7 +215,6 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
             onChange={onThinkingLevelChange}
             style={{ width: 140 }}
             dropdownStyle={{ borderRadius: 10 }}
-            disabled={isMobile}
           >
             <Select.Option value="off">Off</Select.Option>
             <Select.Option value="minimal">Minimal</Select.Option>
@@ -233,12 +224,6 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
             <Select.Option value="xhigh">XHigh</Select.Option>
           </Select>
         </div>
-
-        {isMobile && (
-          <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.3 }}>
-            {t('chat.thinkingLevelMobileHint', { defaultValue: '移动端为避免拥挤，思考等级请在桌面端调整。' })}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -468,6 +453,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                   onChange={(val) => v3Theme.setPresetId(val)}
                   style={{ width: '100%' }}
                   dropdownStyle={{ borderRadius: 10 }}
+                  getPopupContainer={(trigger) => trigger.parentElement || document.body}
                 >
                   {v3Theme.presets.map(p => (
                     <Select.Option key={p.id} value={p.id}>
@@ -496,12 +482,12 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                     {t('chat.themeReset', { defaultValue: '重置' })}
                   </Button>
                 </div>
-                <ThemeColorField label={t('chat.themePrimary', { defaultValue: '主色' })} token="--v3-primary" placeholder="#4f46e5" />
-                <ThemeColorField label={t('chat.themeUserBubble', { defaultValue: '用户气泡' })} token="--v3-user-bubble" placeholder="#4b5bdc" />
-                <ThemeColorField label={t('chat.themeLink', { defaultValue: '链接色' })} token="--v3-link" placeholder="#2563eb" />
-                <ThemeColorField label={t('chat.themeSurface', { defaultValue: '卡片底色' })} token="--v3-surface" placeholder="#ffffff" />
-                <ThemeColorField label={t('chat.themeMuted', { defaultValue: '次级文字' })} token="--v3-text-muted" placeholder="#64748b" />
-                <ThemeColorField label={t('chat.themeBorder', { defaultValue: '边框' })} token="--v3-border" placeholder="#e2e8f0" />
+                {renderColorField(t('chat.themePrimary', { defaultValue: '主色' }), '--v3-primary', '#4f46e5')}
+                {renderColorField(t('chat.themeUserBubble', { defaultValue: '用户气泡' }), '--v3-user-bubble', '#4b5bdc')}
+                {renderColorField(t('chat.themeLink', { defaultValue: '链接色' }), '--v3-link', '#2563eb')}
+                {renderColorField(t('chat.themeSurface', { defaultValue: '卡片底色' }), '--v3-surface', '#ffffff')}
+                {renderColorField(t('chat.themeMuted', { defaultValue: '次级文字' }), '--v3-text-muted', '#64748b')}
+                {renderColorField(t('chat.themeBorder', { defaultValue: '边框' }), '--v3-border', '#e2e8f0')}
               </>
             )}
           </div>

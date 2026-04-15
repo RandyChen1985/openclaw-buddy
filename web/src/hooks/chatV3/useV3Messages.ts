@@ -2,6 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { message as antdMessage } from 'antd';
 import type { FileInfo, Message } from '../useChatV3WebSocket';
 
+const MAX_SESSION_CACHE_ENTRIES = 30;
+
+type SessionStreamCache = {
+  fullText: string;
+  runId?: string;
+  isTyping: boolean;
+  startTime: number;
+  firstTokenTime: number;
+  ttftRecorded: boolean;
+  tokenCount: number;
+  tpsData: number[];
+  lastUserMsg?: Message;
+  lastTouched: number;
+};
+
 export interface UseV3MessagesParams {
   t: any;
   status: 'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error';
@@ -73,18 +88,44 @@ export function useV3Messages({
   const stallTimerRef = useRef<any>(null);
   const lastUpdateRef = useRef(0);
   const streamingAssistantIndexRef = useRef<number | null>(null);
+  const historyRequestSeqRef = useRef(0);
+  const latestHistoryRequestRef = useRef(0);
 
-  const sessionCacheRef = useRef<Map<string, {
-    fullText: string;
-    runId?: string;
-    isTyping: boolean;
-    startTime: number;
-    firstTokenTime: number;
-    ttftRecorded: boolean;
-    tokenCount: number;
-    tpsData: number[];
-    lastUserMsg?: Message;
-  }>>(new Map());
+  const sessionCacheRef = useRef<Map<string, SessionStreamCache>>(new Map());
+
+  const touchAndPruneSessionCache = useCallback((key: string, cache: SessionStreamCache) => {
+    cache.lastTouched = Date.now();
+    sessionCacheRef.current.set(key, cache);
+    if (sessionCacheRef.current.size <= MAX_SESSION_CACHE_ENTRIES) return;
+
+    const victims = [...sessionCacheRef.current.entries()]
+      .sort((a, b) => a[1].lastTouched - b[1].lastTouched)
+      .slice(0, sessionCacheRef.current.size - MAX_SESSION_CACHE_ENTRIES);
+
+    victims.forEach(([victimKey]) => {
+      sessionCacheRef.current.delete(victimKey);
+    });
+  }, []);
+
+  const getOrCreateSessionCache = useCallback((key: string): SessionStreamCache => {
+    const existing = sessionCacheRef.current.get(key);
+    if (existing) {
+      touchAndPruneSessionCache(key, existing);
+      return existing;
+    }
+    const created: SessionStreamCache = {
+      fullText: '',
+      isTyping: true,
+      startTime: Date.now(),
+      firstTokenTime: 0,
+      ttftRecorded: false,
+      tokenCount: 0,
+      tpsData: [],
+      lastTouched: Date.now()
+    };
+    touchAndPruneSessionCache(key, created);
+    return created;
+  }, [touchAndPruneSessionCache]);
 
   /**
    * 清除 stall 计时器，并同步 `isStalled` 标记。
@@ -188,19 +229,7 @@ export function useV3Messages({
   const handleChatDelta = useCallback((payload: any) => {
     const pSessionKey = payload.sessionKey || sessionKeyRef.current;
     if (!pSessionKey) return;
-
-    if (!sessionCacheRef.current.has(pSessionKey)) {
-      sessionCacheRef.current.set(pSessionKey, {
-        fullText: '',
-        isTyping: true,
-        startTime: Date.now(),
-        firstTokenTime: 0,
-        ttftRecorded: false,
-        tokenCount: 0,
-        tpsData: []
-      });
-    }
-    const cache = sessionCacheRef.current.get(pSessionKey)!;
+    const cache = getOrCreateSessionCache(pSessionKey);
 
     if (payload.state === 'delta') {
       markSessionTyping(pSessionKey, true);
@@ -230,6 +259,7 @@ export function useV3Messages({
       cache.tokenCount = fullText.length;
       cache.isTyping = true;
       cache.runId = payload.runId;
+      touchAndPruneSessionCache(pSessionKey, cache);
 
       if (pSessionKey === sessionKeyRef.current) {
         setIsTyping(true);
@@ -291,6 +321,7 @@ export function useV3Messages({
       }
     } else if (payload.state === 'final' || payload.state === 'finished' || payload.state === 'done') {
       cache.isTyping = false;
+      touchAndPruneSessionCache(pSessionKey, cache);
       markSessionTyping(pSessionKey, false);
       if (pSessionKey === sessionKeyRef.current) clearStallTimer();
 
@@ -332,6 +363,7 @@ export function useV3Messages({
       }
     } else if (payload.state === 'error' || payload.state === 'failed') {
       cache.isTyping = false;
+      touchAndPruneSessionCache(pSessionKey, cache);
       markSessionTyping(pSessionKey, false);
       if (pSessionKey === sessionKeyRef.current) {
         clearStallTimer();
@@ -354,7 +386,7 @@ export function useV3Messages({
         setTimeout(() => inputAreaRef.current?.focus(), 100);
       }
     }
-  }, [clearStallTimer, fetchSessions, formatMessageContent, inputAreaRef, markSessionTyping, resetStallTimer, scrollRef, showScrollBtnRef, t, virtuosoRef]);
+  }, [clearStallTimer, fetchSessions, formatMessageContent, getOrCreateSessionCache, inputAreaRef, markSessionTyping, resetStallTimer, scrollRef, showScrollBtnRef, t, touchAndPruneSessionCache, virtuosoRef]);
 
   /**
    * 处理审批请求事件：将审批卡片以 Markdown block 注入到消息流中，确保 UI 一定可见。
@@ -435,81 +467,99 @@ export function useV3Messages({
    * 加载会话历史并写入 messages；同时用 sessionCacheRef 缝合 DB 未落盘的临时消息。
    */
   const loadSessionHistory = useCallback(async (key: string) => {
+    const requestId = ++historyRequestSeqRef.current;
+    latestHistoryRequestRef.current = requestId;
     setIsLoadingHistory(true);
     streamingAssistantIndexRef.current = null;
+
     const res = await sendRPC('chat.history', { sessionKey: key, limit: 500 });
-    if (res.ok) {
-      const items = (res.payload.messages || res.payload.items || []).sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
-      const history = items.map((item: any) => {
-        let content = formatMessageContent(item.content);
-        if (item.role === 'toolResult' && !content.includes(':::toolResult')) {
-          const toolName = item.toolName || 'unknown';
-          const text = typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
-          content = `> :::toolResult\n> **${toolName}**\n> ${text.split('\n').join('\n> ')}\n> :::\n`;
-        }
-        const rawTs = new Date(item.createdAt || item.timestamp || Date.now()).getTime();
-        return {
-          id: item.id || `msg-${rawTs}-${Math.random().toString(36).substring(2, 7)}`,
-          runId: item.runId,
-          role: item.role === 'toolResult' ? 'assistant' : item.role,
-          content: content || '',
-          timestamp: new Date(rawTs).toLocaleTimeString(),
-          metrics: item.metrics,
-          _sortTs: rawTs
-        } as Message;
-      }).filter((msg: any) => msg.content && msg.content.trim() !== '');
+    const isActiveRequest = () =>
+      latestHistoryRequestRef.current === requestId && sessionKeyRef.current === key;
 
-      const cache = sessionCacheRef.current.get(key);
-      if (cache) {
-        let userMsgSortTs = cache.lastUserMsg?._sortTs || Date.now();
-        if (cache.lastUserMsg) {
-          const dbUserMsg = history.find((m: any) => m.id === cache.lastUserMsg?.id || (m.role === 'user' && m.content === cache.lastUserMsg?.content));
-          if (!dbUserMsg) {
-            history.push(cache.lastUserMsg);
-          } else {
-            userMsgSortTs = (dbUserMsg as any)._sortTs || userMsgSortTs;
-          }
-        }
-        if (cache.isTyping && cache.fullText) {
-          const existingIndex = cache.runId ? history.findIndex((m: any) => m.runId === cache.runId) : -1;
-          if (existingIndex !== -1) {
-            (history[existingIndex] as any).content = cache.fullText;
-          } else {
-            history.push({
-              id: `msg-ai-recovered-${Date.now()}`,
-              role: 'assistant' as const,
-              content: cache.fullText,
-              timestamp: new Date().toLocaleTimeString(),
-              _sortTs: userMsgSortTs + 1
-            } as Message);
-          }
-          setIsTyping(true);
-          resetStallTimer();
-        } else {
-          setIsTyping(false);
-          clearStallTimer();
-        }
-      } else {
-        setIsTyping(false);
-        clearStallTimer();
+    if (!res.ok) {
+      if (latestHistoryRequestRef.current === requestId) {
+        setIsLoadingHistory(false);
       }
+      return;
+    }
 
-      const roleOrder: Record<string, number> = { system: 0, user: 1, assistant: 2 };
-      const finalMessages = [...history].sort((a: any, b: any) => {
-        const diff = (a._sortTs || 0) - (b._sortTs || 0);
-        if (diff !== 0) return diff;
-        return (roleOrder[a.role] || 0) - (roleOrder[b.role] || 0);
-      });
-      setMessages(finalMessages);
+    const items = (res.payload.messages || res.payload.items || [])
+      .sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    const history = items.map((item: any) => {
+      let content = formatMessageContent(item.content);
+      if (item.role === 'toolResult' && !content.includes(':::toolResult')) {
+        const toolName = item.toolName || 'unknown';
+        const text = typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
+        content = `> :::toolResult\n> **${toolName}**\n> ${text.split('\n').join('\n> ')}\n> :::\n`;
+      }
+      const rawTs = new Date(item.createdAt || item.timestamp || Date.now()).getTime();
+      return {
+        id: item.id || `msg-${rawTs}-${Math.random().toString(36).substring(2, 7)}`,
+        runId: item.runId,
+        role: item.role === 'toolResult' ? 'assistant' : item.role,
+        content: content || '',
+        timestamp: new Date(rawTs).toLocaleTimeString(),
+        metrics: item.metrics,
+        _sortTs: rawTs
+      } as Message;
+    }).filter((msg: any) => msg.content && msg.content.trim() !== '');
 
-      if (history.length > 0) {
-        setTimeout(() => {
-          virtuosoRef.current?.scrollToIndex({ index: history.length - 1, align: 'end', behavior: 'auto' });
-        }, 50);
+    let shouldKeepTyping = false;
+    const cache = sessionCacheRef.current.get(key);
+    if (cache) {
+      touchAndPruneSessionCache(key, cache);
+      let userMsgSortTs = cache.lastUserMsg?._sortTs || Date.now();
+      if (cache.lastUserMsg) {
+        const dbUserMsg = history.find((m: any) => m.id === cache.lastUserMsg?.id || (m.role === 'user' && m.content === cache.lastUserMsg?.content));
+        if (!dbUserMsg) {
+          history.push(cache.lastUserMsg);
+        } else {
+          userMsgSortTs = (dbUserMsg as any)._sortTs || userMsgSortTs;
+        }
+      }
+      if (cache.isTyping && cache.fullText) {
+        const existingIndex = cache.runId ? history.findIndex((m: any) => m.runId === cache.runId) : -1;
+        if (existingIndex !== -1) {
+          (history[existingIndex] as any).content = cache.fullText;
+        } else {
+          history.push({
+            id: `msg-ai-recovered-${Date.now()}`,
+            role: 'assistant' as const,
+            content: cache.fullText,
+            timestamp: new Date().toLocaleTimeString(),
+            _sortTs: userMsgSortTs + 1
+          } as Message);
+        }
+        shouldKeepTyping = true;
       }
     }
+
+    const roleOrder: Record<string, number> = { system: 0, user: 1, assistant: 2 };
+    const finalMessages = [...history].sort((a: any, b: any) => {
+      const diff = (a._sortTs || 0) - (b._sortTs || 0);
+      if (diff !== 0) return diff;
+      return (roleOrder[a.role] || 0) - (roleOrder[b.role] || 0);
+    });
+
+    if (!isActiveRequest()) return;
+
+    if (shouldKeepTyping) {
+      setIsTyping(true);
+      resetStallTimer();
+    } else {
+      setIsTyping(false);
+      clearStallTimer();
+    }
+    setMessages(finalMessages);
+
+    if (history.length > 0) {
+      setTimeout(() => {
+        if (!isActiveRequest()) return;
+        virtuosoRef.current?.scrollToIndex({ index: history.length - 1, align: 'end', behavior: 'auto' });
+      }, 50);
+    }
     setIsLoadingHistory(false);
-  }, [clearStallTimer, formatMessageContent, resetStallTimer, sendRPC, virtuosoRef]);
+  }, [clearStallTimer, formatMessageContent, resetStallTimer, sendRPC, touchAndPruneSessionCache, virtuosoRef]);
 
   /**
    * 发送消息：必要时创建会话并写入初始占位消息，然后向网关发起 chat.send。
@@ -577,7 +627,7 @@ export function useV3Messages({
       _sortTs: aiSortTs
     };
 
-    sessionCacheRef.current.set(currentKey, {
+    const nextCache: SessionStreamCache = {
       fullText: '',
       isTyping: true,
       startTime: Date.now(),
@@ -585,8 +635,10 @@ export function useV3Messages({
       ttftRecorded: false,
       tokenCount: 0,
       tpsData: [],
-      lastUserMsg: newUserMsg
-    });
+      lastUserMsg: newUserMsg,
+      lastTouched: Date.now()
+    };
+    touchAndPruneSessionCache(currentKey, nextCache);
 
     setMessages(prev => [...prev, newUserMsg, aiPlaceholderMsg]);
     streamingAssistantIndexRef.current = messagesCountRef.current + 1;
@@ -608,7 +660,10 @@ export function useV3Messages({
 
     if (res.ok && res.payload?.runId) {
       const cache = sessionCacheRef.current.get(currentKey);
-      if (cache) cache.runId = res.payload.runId;
+      if (cache) {
+        cache.runId = res.payload.runId;
+        touchAndPruneSessionCache(currentKey, cache);
+      }
       setMessages(prev => {
         const lastIndex = prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
         if (lastIndex !== -1) {
@@ -626,17 +681,23 @@ export function useV3Messages({
       streamingAssistantIndexRef.current = null;
       clearStallTimer();
       const cache = sessionCacheRef.current.get(currentKey);
-      if (cache) cache.isTyping = false;
+      if (cache) {
+        cache.isTyping = false;
+        touchAndPruneSessionCache(currentKey, cache);
+      }
       markSessionTyping(currentKey, false);
     } else if (text === '/stop') {
       setIsTyping(false);
       streamingAssistantIndexRef.current = null;
       clearStallTimer();
       const cache = sessionCacheRef.current.get(currentKey);
-      if (cache) cache.isTyping = false;
+      if (cache) {
+        cache.isTyping = false;
+        touchAndPruneSessionCache(currentKey, cache);
+      }
       markSessionTyping(currentKey, false);
     }
-  }, [clearStallTimer, fetchSessions, inputAreaRef, isTyping, markSessionTyping, resetStallTimer, scrollRef, selectedBot, sendRPC, sessionKey, sessionModel, setSessionKey, status, t, thinkingLevel, virtuosoRef]);
+  }, [clearStallTimer, fetchSessions, inputAreaRef, isTyping, markSessionTyping, resetStallTimer, scrollRef, selectedBot, sendRPC, sessionKey, sessionModel, setSessionKey, status, t, thinkingLevel, touchAndPruneSessionCache, virtuosoRef]);
 
   /**
    * 重试/再生成：复用既有的 User 消息，不额外创建新的 User 消息。
@@ -663,7 +724,7 @@ export function useV3Messages({
       _sortTs: baseSortTs + 1
     };
 
-    sessionCacheRef.current.set(sessionKey, {
+    const nextCache: SessionStreamCache = {
       fullText: '',
       isTyping: true,
       startTime: Date.now(),
@@ -671,8 +732,10 @@ export function useV3Messages({
       ttftRecorded: false,
       tokenCount: 0,
       tpsData: [],
-      lastUserMsg: userMsg
-    });
+      lastUserMsg: userMsg,
+      lastTouched: Date.now()
+    };
+    touchAndPruneSessionCache(sessionKey, nextCache);
 
     setMessages(prev => [...prev, aiPlaceholderMsg]);
     streamingAssistantIndexRef.current = messagesCountRef.current;
@@ -694,7 +757,10 @@ export function useV3Messages({
 
     if (res.ok && res.payload?.runId) {
       const cache = sessionCacheRef.current.get(sessionKey);
-      if (cache) cache.runId = res.payload.runId;
+      if (cache) {
+        cache.runId = res.payload.runId;
+        touchAndPruneSessionCache(sessionKey, cache);
+      }
       setMessages(prev => {
         const lastIndex = prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
         if (lastIndex !== -1) {
@@ -712,10 +778,13 @@ export function useV3Messages({
       streamingAssistantIndexRef.current = null;
       clearStallTimer();
       const cache = sessionCacheRef.current.get(sessionKey);
-      if (cache) cache.isTyping = false;
+      if (cache) {
+        cache.isTyping = false;
+        touchAndPruneSessionCache(sessionKey, cache);
+      }
       markSessionTyping(sessionKey, false);
     }
-  }, [clearStallTimer, isTyping, markSessionTyping, resetStallTimer, sendRPC, sessionKey, status, t, virtuosoRef]);
+  }, [clearStallTimer, isTyping, markSessionTyping, resetStallTimer, sendRPC, sessionKey, status, t, touchAndPruneSessionCache, virtuosoRef]);
 
   /**
    * 停止生成：更新 UI 并向网关发送 `/stop`。
