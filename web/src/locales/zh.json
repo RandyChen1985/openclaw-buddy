@@ -387,7 +387,29 @@
     "defaultSuffix": "(默认)",
     "approvalRequired": "指令执行需要您的审批",
     "approvalTip": "审批指令已自动填入输入框，请点击发送确认",
-    "approveNow": "一键通过此指令 (allow-once)"
+    "approveNow": "一键通过此指令 (allow-once)",
+    "uploadFailed": "文件上传失败",
+    "aiGeneratingPlaceholder": "AI 内容生成中，请稍后...",
+    "fileUploadingPlaceholder": "文件上传中...",
+    "streamFailedDefault": "网关或模型响应异常，流式生成失败",
+    "sendFailed": "发送失败：{{reason}}",
+    "sessionKeyMissing": "会话 Key 缺失",
+    "waitUntilFinishWarning": "AI 正在输出中，请先等待完成或手动停止",
+    "gatewayConnectFailed": "网关连接失败",
+    "gatewayConnecting": "网关连接中...",
+    "gatewayFluctuating": "网关波动",
+    "connected": "已连接",
+    "newMessages": "有新消息",
+    "noQuickCommandsAdd": "暂无快捷指令，点击",
+    "source": {
+      "dashboard": "管理后台",
+      "weixin": "微信",
+      "feishu": "飞书",
+      "telegram": "Telegram",
+      "cron": "定时任务",
+      "openaiUser": "OpenAI API",
+      "fallback": "其他渠道"
+    }
   },
   "channels": {
     "boundChannels": "已绑定渠道",

@@ -458,7 +458,7 @@ export const useChatV3WebSocket = ({
         cache.isTyping = false;
         if (pSessionKey === sessionKeyRef.current) {
           clearStallTimer();
-          const errorMsg = payload.message?.content || payload.error?.message || payload.error || '网关或模型响应异常，流式生成失败';
+          const errorMsg = payload.message?.content || payload.error?.message || payload.error || t('chat.streamFailedDefault');
           
           setMessages(prev => {
               const last = prev[prev.length - 1];
@@ -638,12 +638,17 @@ export const useChatV3WebSocket = ({
       wsRef.current = null;
       setStatus('disconnected');
       setIsTyping(false);
+      setHasNewMessages(false);
+      streamingAssistantIndexRef.current = null;
       rejectAllPendingRequests('WebSocket closed');
       clearStallTimer();
     };
     ws.onerror = () => {
       if (ws !== wsRef.current) return;
       setStatus('error');
+      setIsTyping(false);
+      setHasNewMessages(false);
+      streamingAssistantIndexRef.current = null;
       rejectAllPendingRequests('WebSocket error');
     };
   }, [keyPair, deviceId, handleChallenge, handleChatDelta, fetchSessions, clearStallTimer, rejectAllPendingRequests]);
@@ -978,7 +983,7 @@ export const useChatV3WebSocket = ({
       }
 
       if (!res.ok) {
-        message.error('Failed to send: ' + (res.error?.message || 'Unknown'));
+        message.error(t('chat.sendFailed', { reason: res.error?.message || 'Unknown' }));
         setIsTyping(false);
         streamingAssistantIndexRef.current = null;
         clearStallTimer();
@@ -994,7 +999,7 @@ export const useChatV3WebSocket = ({
     } else {
       setIsTyping(false);
       streamingAssistantIndexRef.current = null;
-      message.error('Session key missing');
+      message.error(t('chat.sessionKeyMissing'));
     }
   }, [status, sessionKey, selectedBot, thinkingLevel, sessionModel, sendRPC, fetchSessions, resetStallTimer, clearStallTimer, t, isTyping, messagesCountRef, virtuosoRef]);
 
@@ -1071,7 +1076,7 @@ export const useChatV3WebSocket = ({
     }
 
     if (!res.ok) {
-      message.error('Failed to send: ' + (res.error?.message || 'Unknown'));
+      message.error(t('chat.sendFailed', { reason: res.error?.message || 'Unknown' }));
       setIsTyping(false);
       streamingAssistantIndexRef.current = null;
       clearStallTimer();
@@ -1082,7 +1087,7 @@ export const useChatV3WebSocket = ({
 
   const handleRegenerate = useCallback(() => {
     if (isTyping) {
-      message.warning('⚠️ AI 正在狂奔输出中，请先等它说完或手动点击停止哦~');
+      message.warning(t('chat.waitUntilFinishWarning'));
       return;
     }
     const lastUserIndex = [...messages].reverse().findIndex(m => m.role === 'user');
@@ -1098,7 +1103,7 @@ export const useChatV3WebSocket = ({
 
   const handleSaveEdit = useCallback(async (editingMsgIndex: number, editContent: string) => {
     if (isTyping) {
-      message.warning('⚠️ AI 正在狂奔输出中，请先等它说完或手动点击停止哦~');
+      message.warning(t('chat.waitUntilFinishWarning'));
       return;
     }
     const newText = editContent.trim();
@@ -1226,6 +1231,10 @@ export const useChatV3WebSocket = ({
             setSessionLabel(null); 
             setSessionModel('');
             setThinkingLevel('medium');
+            setIsTyping(false);
+            setHasNewMessages(false);
+            streamingAssistantIndexRef.current = null;
+            clearStallTimer();
           }
           fetchSessions();
         } catch (err) { message.error({ content: t('common.error'), key: 'clearingGroup' }); }
@@ -1245,7 +1254,14 @@ export const useChatV3WebSocket = ({
           const deletableSessions = sessions.filter(s => s.key !== 'agent:main:main');
           await Promise.all(deletableSessions.map(s => sendRPC('sessions.delete', { key: s.key })));
           message.success({ content: t('chat.clearAllSuccess'), key: 'clearingAll' });
-          setSessionKey(null); setMessages([]); setSessionLabel(null); setSessions([]);
+          setSessionKey(null); 
+          setMessages([]); 
+          setSessionLabel(null); 
+          setSessions([]);
+          setIsTyping(false);
+          setHasNewMessages(false);
+          streamingAssistantIndexRef.current = null;
+          clearStallTimer();
           fetchSessions();
         } catch (err) { message.error({ content: t('common.error'), key: 'clearingAll' }); }
       }
@@ -1312,6 +1328,8 @@ export const useChatV3WebSocket = ({
       setMessages([]); 
       setSessionLabel(null); 
       setIsTyping(false);
+      setHasNewMessages(false);
+      streamingAssistantIndexRef.current = null;
       clearStallTimer();
       
       // 💡 视觉反馈：提示已就绪并自动聚焦输入框

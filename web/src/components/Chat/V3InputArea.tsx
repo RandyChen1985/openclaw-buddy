@@ -62,11 +62,11 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
         });
         const res = await response.json();
         if (res.code === 200) return res.data;
-        throw new Error(res.message || 'Upload failed');
+        throw new Error(res.message || t('chat.uploadFailed'));
       }));
       setFiles(prev => [...prev, ...results]);
     } catch (err: any) {
-      message.error(err.message || 'Upload failed');
+      message.error(err.message || t('chat.uploadFailed'));
     } finally {
       setUploading(false);
     }
@@ -226,8 +226,8 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
             // 优化 4: 回归原生占位符，移除模拟光标和额外层
             placeholder={
               status !== 'authenticated' ? t('chat.v3Connecting') : 
-              isTyping ? (t('chat.thinking') || 'AI内容生成中,请稍后...') : 
-              uploading ? '文件上传中...' :
+              isTyping ? (t('chat.aiGeneratingPlaceholder') || t('chat.thinking')) : 
+              uploading ? t('chat.fileUploadingPlaceholder') :
               t('chat.v3InputPlaceholder')
             }
             // 优化 1: 保持 autoSize 但精简配置

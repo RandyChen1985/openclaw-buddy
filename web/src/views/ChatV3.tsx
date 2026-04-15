@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import type { VirtuosoHandle } from 'react-virtuoso';
 import { Select, Input, Button, Spin, message, Badge, Modal, Form, Tooltip, Drawer, Switch, Tabs } from 'antd';
@@ -34,21 +34,14 @@ const parseSessionKey = (key: string) => {
   };
 };
 
-const SourceConfig: Record<string, { icon: any, color: string, label: string }> = {
-  'dashboard': { icon: <Monitor size={12} />, color: '#6366f1', label: '管理后台' },
-  'weixin': { icon: <MessageCircle size={12} />, color: '#07c160', label: '微信' },
-  'feishu': { icon: <Send size={12} />, color: '#3370ff', label: '飞书' },
-  'telegram': { icon: <Send size={12} />, color: '#24A1DE', label: 'Telegram' },
-  'cron': { icon: <Clock size={12} />, color: '#8b5cf6', label: '定时任务' },
-  'openai-user': { icon: <Zap size={12} />, color: '#f59e0b', label: 'OpenAI API' },
-  'fallback': { icon: <Globe size={12} />, color: '#94a3b8', label: '其他渠道' }
-};
-
-const getSourceMeta = (source: string) => {
-  const s = source?.toLowerCase();
-  if (SourceConfig[s]) return SourceConfig[s];
-  if (s === 'api') return SourceConfig['openai-user'];
-  return SourceConfig['fallback'];
+const SourceConfig: Record<string, { icon: any; color: string; labelKey: string; defaultLabel: string }> = {
+  'dashboard': { icon: <Monitor size={12} />, color: '#6366f1', labelKey: 'chat.source.dashboard', defaultLabel: '管理后台' },
+  'weixin': { icon: <MessageCircle size={12} />, color: '#07c160', labelKey: 'chat.source.weixin', defaultLabel: '微信' },
+  'feishu': { icon: <Send size={12} />, color: '#3370ff', labelKey: 'chat.source.feishu', defaultLabel: '飞书' },
+  'telegram': { icon: <Send size={12} />, color: '#24A1DE', labelKey: 'chat.source.telegram', defaultLabel: 'Telegram' },
+  'cron': { icon: <Clock size={12} />, color: '#8b5cf6', labelKey: 'chat.source.cron', defaultLabel: '定时任务' },
+  'openai-user': { icon: <Zap size={12} />, color: '#f59e0b', labelKey: 'chat.source.openaiUser', defaultLabel: 'OpenAI API' },
+  'fallback': { icon: <Globe size={12} />, color: '#94a3b8', labelKey: 'chat.source.fallback', defaultLabel: '其他渠道' }
 };
 
 // --- Types ---
@@ -69,6 +62,21 @@ const hexToUint8Array = (hex: string): Uint8Array => {
 
 const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRunning, onNavigateToDashboard }) => {
   const { t } = useTranslation();
+
+  /**
+   * 获取会话来源（渠道）的 icon/color/label。
+   *
+   * 说明：label 走 i18n，避免顶部 `SourceConfig` 出现硬编码文案。
+   */
+  const getSourceMeta = useCallback((source: string) => {
+    const s = source?.toLowerCase();
+    const cfg = (s && SourceConfig[s]) ? SourceConfig[s] : (s === 'api' ? SourceConfig['openai-user'] : SourceConfig['fallback']);
+    return {
+      icon: cfg.icon,
+      color: cfg.color,
+      label: t(cfg.labelKey, { defaultValue: cfg.defaultLabel })
+    };
+  }, [t]);
   
   // Local UI States
   const [selectedBot, setSelectedBot] = useState<string>('');
@@ -437,7 +445,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                 <Badge status={status === 'error' ? 'error' : 'processing'} />
                 <span style={{ fontSize: 11, color: status === 'error' ? '#ef4444' : '#94a3b8', fontWeight: 500 }}>
-                    {status === 'error' ? '网关连接失败' : '网关连接中...'}
+                    {status === 'error' ? t('chat.gatewayConnectFailed') : t('chat.gatewayConnecting')}
                 </span>
               </div>
             )}
@@ -551,7 +559,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 8, flexShrink: 0, marginLeft: 4 }}>
                 <div style={{ height: 12, width: 1, background: '#f1f5f9', marginRight: 2 }}></div>
                 <span style={{ fontSize: 11, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600, marginRight: 2 }}>
-                    {lastHealth?.ok === false ? '网关波动' : '已连接'}
+                    {lastHealth?.ok === false ? t('chat.gatewayFluctuating') : t('chat.connected')}
                 </span>
                 <div key={pulse} style={{ 
                   width: 7, height: 7, borderRadius: '50%', 
@@ -604,7 +612,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               {status === 'authenticated' && sessionKey && !isMobile && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px', background: '#f8fafc', borderRadius: 8, height: 24, marginLeft: 4 }}>
                     <span style={{ fontSize: 10, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600 }}>
-                        {lastHealth?.ok === false ? '网关波动' : '已连接'}
+                        {lastHealth?.ok === false ? t('chat.gatewayFluctuating') : t('chat.connected')}
                     </span>
                     <div key={pulse} style={{ 
                       width: 6, height: 6, borderRadius: '50%', 
@@ -816,7 +824,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                     }}
                 >
 
-                    {hasNewMessages && '有新消息'}
+                    {hasNewMessages && t('chat.newMessages')}
                 </Button>
             </div>
         )}
@@ -832,7 +840,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
                        onClick={() => setIsManageModalOpen(true)}
                        style={{ fontSize: 12, color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}
                      >
-                       暂无快捷指令，点击 <Settings size={12} /> 添加
+                      {t('chat.noQuickCommandsAdd')} <Settings size={12} />
                      </span>
                    ) : quickCommands.map((item: any) => (
                      <Button

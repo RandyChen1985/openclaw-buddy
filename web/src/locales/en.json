@@ -379,7 +379,29 @@
     "defaultSuffix": "(Default)",
     "approvalRequired": "Command execution needs your approval",
     "approvalTip": "Approval command filled, please click send to confirm",
-    "approveNow": "Approve this command (allow-once)"
+    "approveNow": "Approve this command (allow-once)",
+    "uploadFailed": "File upload failed",
+    "aiGeneratingPlaceholder": "AI is generating, please wait...",
+    "fileUploadingPlaceholder": "Uploading file...",
+    "streamFailedDefault": "Gateway or model response error, streaming generation failed",
+    "sendFailed": "Failed to send: {{reason}}",
+    "sessionKeyMissing": "Session key is missing",
+    "waitUntilFinishWarning": "AI is still generating, please wait or stop it first",
+    "gatewayConnectFailed": "Gateway connection failed",
+    "gatewayConnecting": "Connecting to gateway...",
+    "gatewayFluctuating": "Gateway unstable",
+    "connected": "Connected",
+    "newMessages": "New messages",
+    "noQuickCommandsAdd": "No quick commands, click",
+    "source": {
+      "dashboard": "Dashboard",
+      "weixin": "WeChat",
+      "feishu": "Feishu",
+      "telegram": "Telegram",
+      "cron": "Cron",
+      "openaiUser": "OpenAI API",
+      "fallback": "Other"
+    }
   },
   "channels": {
     "boundChannels": "Bound Channels",
