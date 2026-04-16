@@ -216,6 +216,21 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     handleSend(finalContent, files);
   }, [handleSend, quotedMsg]);
 
+  const handleSendReasoningCommand = useCallback(
+    (text: string) => {
+      if (status !== 'authenticated') {
+        message.warning(t('chat.v3Connecting'));
+        return;
+      }
+      if (isTyping) {
+        message.info(t('chat.reasoningWaitReply', { defaultValue: '请等待当前回复结束后再切换思考模式' }));
+        return;
+      }
+      void handleSend(text);
+    },
+    [status, isTyping, handleSend, t]
+  );
+
   return (
     <>
       {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
@@ -332,10 +347,11 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           }}
           thinkingLevel={thinkingLevel}
           onThinkingLevelChange={handleThinkingLevelChange}
+          onSendReasoningCommand={handleSendReasoningCommand}
           parseSessionKey={parseSessionKey}
           getSourceMeta={getSourceMeta}
           botsModels={botsModels}
-            v3Theme={v3Theme}
+          v3Theme={v3Theme}
         />
   
         <V3MessagePane

@@ -40,6 +40,9 @@ export interface V3ChatHeaderProps {
   thinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   onThinkingLevelChange: (val: any) => void;
 
+  /** 发送 `/reasoning …` 等用户消息（需在已连接且非生成中时由父组件校验） */
+  onSendReasoningCommand?: (text: string) => void;
+
   // source meta helper
   parseSessionKey: (key: string) => { botId: string; source: string };
   getSourceMeta: (source: string) => { icon: any; color: string; label: string };
@@ -94,6 +97,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     setShowThinking,
     thinkingLevel,
     onThinkingLevelChange,
+    onSendReasoningCommand,
     parseSessionKey,
     getSourceMeta,
     botsModels,
@@ -157,10 +161,13 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
    * - 思考过程开关
    * - 思考等级选择
    */
+  const reasoningModes = ['on', 'off', 'stream'] as const;
+
   const settingsOverlay = (
     <div
       style={{
-        width: 320,
+        width: 360,
+        maxWidth: 'calc(100vw - 16px)',
         padding: 12,
         background: '#fff',
         borderRadius: 12,
@@ -200,29 +207,85 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
-            {t('chat.showThinking', { defaultValue: '思考过程' })}
+            {t('chat.showThinking', { defaultValue: '显示思考过程' })}
           </div>
           <Switch size="small" checked={showThinking} onChange={(val) => setShowThinking(val)} />
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
-            {t('chat.thinkingLevel', { defaultValue: '思考等级' })}
+        <div style={{ height: 1, background: '#f1f5f9' }} />
+
+        <div>
+          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700, marginBottom: 4 }}>
+            {t('chat.reasoningMode', { defaultValue: '思考模式' })}
           </div>
-          <Select
-            size="small"
-            value={thinkingLevel}
-            onChange={onThinkingLevelChange}
-            style={{ width: 140 }}
-            dropdownStyle={{ borderRadius: 10 }}
+          <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.4, marginBottom: 8 }}>
+            {t('chat.reasoningModeHint')}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {reasoningModes.map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className="v3-settings-reasoning-btn"
+                onClick={() => {
+                  onSendReasoningCommand?.(`/reasoning ${mode}`);
+                  setSettingsOpen(false);
+                }}
+              >
+                <code style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#334155' }}>/reasoning {mode}</code>
+                <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.45, marginTop: 6 }}>
+                  {t(`chat.reasoningDesc.${mode}`, {
+                    defaultValue:
+                      mode === 'on'
+                        ? 'On: deep reasoning; thinking stays collapsed.'
+                        : mode === 'off'
+                          ? 'Off: faster replies.'
+                          : 'Stream: live thinking output.'
+                  })}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ height: 1, background: '#f1f5f9' }} />
+
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+              {t('chat.thinkingLevel', { defaultValue: '思考等级' })}
+            </div>
+            <Select
+              size="small"
+              value={thinkingLevel}
+              onChange={onThinkingLevelChange}
+              style={{ width: 140 }}
+              dropdownStyle={{ borderRadius: 10 }}
+            >
+              <Select.Option value="off">Off</Select.Option>
+              <Select.Option value="minimal">Minimal</Select.Option>
+              <Select.Option value="low">Low</Select.Option>
+              <Select.Option value="medium">Medium</Select.Option>
+              <Select.Option value="high">High</Select.Option>
+              <Select.Option value="xhigh">XHigh</Select.Option>
+            </Select>
+          </div>
+          <div
+            style={{
+              marginTop: 10,
+              padding: '10px 12px',
+              background: '#f8fafc',
+              borderRadius: 10,
+              border: '1px solid #f1f5f9'
+            }}
           >
-            <Select.Option value="off">Off</Select.Option>
-            <Select.Option value="minimal">Minimal</Select.Option>
-            <Select.Option value="low">Low</Select.Option>
-            <Select.Option value="medium">Medium</Select.Option>
-            <Select.Option value="high">High</Select.Option>
-            <Select.Option value="xhigh">XHigh</Select.Option>
-          </Select>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', lineHeight: 1.45, marginBottom: 6 }}>
+              {t('chat.thinkingLevelHelpTitle')}
+            </div>
+            <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.55 }}>
+              {t('chat.thinkingLevelHelpBody')}
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -87,31 +87,31 @@
 }
 
 .chat-v3-root[data-v3-theme="paleGray"] {
-  --v3-primary: #71717a;
-  --v3-primary-strong: #52525b;
-  --v3-surface: #fafafa;
-  --v3-surface-muted: #f4f4f5;
-  --v3-border: #e4e4e7;
-  --v3-text: #3f3f46;
-  --v3-text-muted: #71717a;
-  --v3-user-bubble: #e4e4e7;
-  --v3-user-bubble-shadow: rgba(63, 63, 70, 0.08);
-  --v3-user-text: #3f3f46;
-  --v3-user-text-muted: rgba(63, 63, 70, 0.72);
-  --v3-user-surface: rgba(63, 63, 70, 0.06);
-  --v3-user-border: rgba(63, 63, 70, 0.12);
-  --v3-link: #52525b;
-  --v3-link-user: #3f3f46;
-  --v3-input-focus-ring: rgba(113, 113, 122, 0.22);
-  --v3-input-focus-glow: rgba(113, 113, 122, 0.14);
-  --v3-input-idle-ring: rgba(113, 113, 122, 0.08);
-  --v3-pinned-bg: #f4f4f5;
-  --v3-pinned-bg-active: linear-gradient(135deg, rgba(113, 113, 122, 0.06) 0%, rgba(113, 113, 122, 0.11) 100%);
-  --v3-pinned-border: #e4e4e7;
-  --v3-pinned-border-active: rgba(113, 113, 122, 0.20);
-  --v3-source-chip-text: #52525b;
-  --v3-source-chip-bg: rgba(113, 113, 122, 0.09);
-  --v3-source-chip-border: rgba(113, 113, 122, 0.16);
+  --v3-primary: #65656f;
+  --v3-primary-strong: #494952;
+  --v3-surface: #f4f4f5;
+  --v3-surface-muted: #eaeaec;
+  --v3-border: #d4d4d8;
+  --v3-text: #27272a;
+  --v3-text-muted: #5c5c66;
+  --v3-user-bubble: #d4d4d8;
+  --v3-user-bubble-shadow: rgba(24, 24, 27, 0.1);
+  --v3-user-text: #27272a;
+  --v3-user-text-muted: rgba(39, 39, 42, 0.74);
+  --v3-user-surface: rgba(24, 24, 27, 0.07);
+  --v3-user-border: rgba(24, 24, 27, 0.14);
+  --v3-link: #45454e;
+  --v3-link-user: #27272a;
+  --v3-input-focus-ring: rgba(82, 82, 92, 0.26);
+  --v3-input-focus-glow: rgba(82, 82, 92, 0.16);
+  --v3-input-idle-ring: rgba(82, 82, 92, 0.1);
+  --v3-pinned-bg: #eaeaec;
+  --v3-pinned-bg-active: linear-gradient(135deg, rgba(82, 82, 92, 0.08) 0%, rgba(82, 82, 92, 0.13) 100%);
+  --v3-pinned-border: #d4d4d8;
+  --v3-pinned-border-active: rgba(82, 82, 92, 0.22);
+  --v3-source-chip-text: #45454e;
+  --v3-source-chip-bg: rgba(82, 82, 92, 0.1);
+  --v3-source-chip-border: rgba(82, 82, 92, 0.18);
 }
 
 .chat-v3-root[data-v3-theme="ocean"] {
@@ -221,6 +221,29 @@
 .v3-settings-theme-btn.ant-btn.ant-btn-sm .ant-btn-icon,
 .v3-settings-theme-btn.ant-btn.ant-btn-sm svg {
   color: #fff;
+}
+
+/* V3 设置浮层：/reasoning 模式入口 */
+button.v3-settings-reasoning-btn {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+button.v3-settings-reasoning-btn:hover {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08);
+}
+button.v3-settings-reasoning-btn:active {
+  filter: brightness(0.98);
 }
 
 /* --- 1. 基础动画 & 背景 --- */

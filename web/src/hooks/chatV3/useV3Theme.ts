@@ -71,8 +71,8 @@ const PRESETS: V3ThemePreset[] = [
   {
     id: 'paleGray',
     name: '浅灰素雅',
-    description: '米白与浅灰层次，安静不抢眼',
-    swatches: { primary: '#71717a', surface: '#fafafa', userBubble: '#e4e4e7' }
+    description: '浅灰层次略加深，素雅易读',
+    swatches: { primary: '#65656f', surface: '#f4f4f5', userBubble: '#d4d4d8' }
   },
   {
     id: 'ocean',
