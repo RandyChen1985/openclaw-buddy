@@ -306,9 +306,9 @@
     "thinkingLevelHelpTitle": "Think Level (preset → reasoning depth / resource use)",
     "thinkingLevelHelpBody": "After reasoning is enabled (e.g. with /reasoning on), Think Level sets how much effort the model spends in the reasoning phase and roughly how many reasoning-style tokens it may emit. Each preset usually maps to a different reasoning strategy, latency, and compute cost.",
     "dropToUpload": "Drop to Upload",
-    "showThinking": "Show reasoning stream",
+    "showThinking": "Show thinking (history only)",
     "reasoningMode": "Reasoning mode",
-    "reasoningModeHint": "Sends /reasoning on, off, or stream as a user message (handled by gateway/model). Separate from “show reasoning stream”, which only toggles local display.",
+    "reasoningModeHint": "Sends /reasoning on or off as a user message (handled by gateway/model). Separate from “show thinking (history only)”, which only toggles local display.",
     "reasoningDesc": {
       "on": "On: deep reasoning enabled; intermediate steps stay collapsed—mainly the final answer is shown.",
       "off": "Off: faster replies without deep multi-step reasoning.",

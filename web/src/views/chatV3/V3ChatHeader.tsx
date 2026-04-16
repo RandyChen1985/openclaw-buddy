@@ -161,7 +161,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
    * - 思考过程开关
    * - 思考等级选择
    */
-  const reasoningModes = ['on', 'off', 'stream'] as const;
+  const reasoningModes = ['on', 'off'] as const;
 
   /** 设置浮层：移动端挂 body + 可滚动，避免被 chat 区域 overflow 裁剪或贴边溢出 */
   const settingsPanelStyle: React.CSSProperties = {
@@ -220,7 +220,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
-            {t('chat.showThinking', { defaultValue: '显示思考过程' })}
+            {t('chat.showThinking', { defaultValue: '显示思考过程(仅历史会话)' })}
           </div>
           <Switch size="small" checked={showThinking} onChange={(val) => setShowThinking(val)} />
         </div>

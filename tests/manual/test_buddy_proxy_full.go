@@ -43,6 +43,69 @@ func logRPC(direction string, method string, data interface{}) {
 	f.WriteString(entry)
 }
 
+// sendChatAndWait 发送 chat.send 并阻塞等待该轮结束（final），返回是否出现过 thought 状态事件。
+func sendChatAndWait(conn *websocket.Conn, sessionKey string, reqID string, message string) (sawThought bool, err error) {
+	chatReq := map[string]interface{}{
+		"type":   "req",
+		"id":     reqID,
+		"method": "chat.send",
+		"params": map[string]interface{}{
+			"sessionKey":     sessionKey,
+			"message":        message,
+			"idempotencyKey": fmt.Sprintf("%s-%d", reqID, time.Now().UnixNano()),
+		},
+	}
+	logRPC("OUT", "chat.send", chatReq)
+	if err := conn.WriteJSON(chatReq); err != nil {
+		return false, err
+	}
+
+	fmt.Println("⏳ 等待流式输出...")
+	for {
+		_, msg, readErr := conn.ReadMessage()
+		if readErr != nil {
+			return sawThought, readErr
+		}
+		var m map[string]interface{}
+		_ = json.Unmarshal(msg, &m)
+
+		if m["type"] == "event" && m["event"] == "chat" {
+			logRPC("IN", "chat.event", m)
+			payload, _ := m["payload"].(map[string]interface{})
+			state, _ := payload["state"].(string)
+
+			switch state {
+			case "thought":
+				sawThought = true
+				fmt.Print("💭") // 思考中...
+			case "delta":
+				msgObj, _ := payload["message"].(map[string]interface{})
+				content, _ := msgObj["content"].([]interface{})
+				if len(content) > 0 {
+					item, _ := content[0].(map[string]interface{})
+					text, _ := item["text"].(string)
+					if text != "" {
+						// 兼容：部分网关/模型不会发独立的 state=thought 事件，
+						// 而是把思考过程包在 <think>…</think> 或 :::thinking 容器里直接走 delta。
+						if strings.Contains(text, "<think") || strings.Contains(text, "</think>") || strings.Contains(text, ":::thinking") {
+							sawThought = true
+						}
+						fmt.Printf("\r💬 回复: %s", text)
+					}
+				}
+			case "final":
+				fmt.Println("\n✅ 轮次完成！")
+				return sawThought, nil
+			}
+		} else if m["type"] == "res" && m["id"] == reqID {
+			logRPC("IN", "chat.send.response", m)
+			if m["ok"] != true {
+				return sawThought, fmt.Errorf("chat.send failed: %v", m["error"])
+			}
+		}
+	}
+}
+
 func main() {
 	// 初始化审计文件
 	os.WriteFile(auditFile, []byte("# WebSocket Chat V3 协议审计报告\n\n生成时间: "+time.Now().Format(time.RFC3339)+"\n"), 0644)
@@ -213,59 +276,35 @@ func main() {
 		}
 	}
 
-	// 多轮对话定义
-	rounds := []string{
-		"你好，请用一句话介绍你自己",
-		"请详细分析 1+1 等于几，展示你的思考过程，逻辑要严密",
-		"刚才我问了你什么？",
+	// 8.1 先切到 reasoning on（如网关/模型支持），观察是否会输出 think/思考内容
+	fmt.Println("\n--- Step A: 发送 /reasoning on (启用思考) ---")
+	_, err = sendChatAndWait(conn, sessionKey, "c-reasoning-on", "/reasoning on")
+	if err != nil {
+		fmt.Println("⚠️ /reasoning on 发送或响应异常:", err)
+	} else {
+		fmt.Println("✅ /reasoning on 已发送完成")
 	}
 
-	for i, query := range rounds {
-		fmt.Printf("\n💬 第 %d 轮对话: %s\n", i+1, query)
-		chatReq := map[string]interface{}{
-			"type": "req",
-			"id": fmt.Sprintf("c-send-%d", i),
-			"method": "chat.send",
-			"params": map[string]interface{}{
-				"sessionKey": sessionKey,
-				"message": query,
-				"idempotencyKey": fmt.Sprintf("test-%d-%d", i, time.Now().Unix()),
-			},
-		}
-		logRPC("OUT", "chat.send", chatReq)
-		conn.WriteJSON(chatReq)
+	// 8.2 提一个“需要多步推理”的问题，验证是否推送 thought/thinking 事件
+	fmt.Println("\n--- Step B: 提问需要思考的问题，检查是否推送 thought ---")
+	question := "请用严谨的推理过程解决：一个袋子里有 3 红 2 蓝球，不放回连续抽 2 个，至少抽到 1 个红球的概率是多少？请给出推导步骤与最终答案。"
+	fmt.Println("💬 问题:", question)
+	sawThought, err := sendChatAndWait(conn, sessionKey, "c-think-check", question)
+	if err != nil {
+		fmt.Println("❌ 提问失败:", err)
+	} else if sawThought {
+		fmt.Println("✅ 检测到 thought 事件：网关确实推送了思考状态/过程信号")
+	} else {
+		fmt.Println("⚠️ 未检测到 thought 事件：可能未开启 reasoning、模型不支持，或协议字段/状态名有变")
+	}
 
-		fmt.Println("⏳ 等待流式输出...")
-		for {
-			_, msg, _ := conn.ReadMessage()
-			var m map[string]interface{}
-			json.Unmarshal(msg, &m)
-
-			if m["type"] == "event" && m["event"] == "chat" {
-				logRPC("IN", "chat.event", m)
-				payload := m["payload"].(map[string]interface{})
-				state := payload["state"].(string)
-				if state == "thought" {
-					fmt.Print("💭") // 思考中...
-				} else if state == "delta" {
-					msgObj := payload["message"].(map[string]interface{})
-					content := msgObj["content"].([]interface{})
-					if len(content) > 0 {
-						text := content[0].(map[string]interface{})["text"].(string)
-						fmt.Printf("\r💬 回复: %s", text)
-					}
-				} else if state == "final" {
-					fmt.Println("\n✅ 轮次完成！")
-					break
-				}
-			} else if m["type"] == "res" && m["id"] == fmt.Sprintf("c-send-%d", i) {
-				logRPC("IN", "chat.send.response", m)
-				if m["ok"] != true {
-					fmt.Printf("❌ 发送失败: %v\n", m["error"])
-					break
-				}
-			}
-		}
+	// 8.3 再做一轮上下文验证
+	fmt.Println("\n--- Step C: 上下文追问 ---")
+	followUp := "你刚才的解法里，等价事件/补集法是哪一步？用一句话指出。"
+	fmt.Println("💬 追问:", followUp)
+	_, err = sendChatAndWait(conn, sessionKey, "c-followup", followUp)
+	if err != nil {
+		fmt.Println("⚠️ 追问失败:", err)
 	}
 
 	fmt.Println("\n🎉 所有关键协议路径验证通过！审计日志已保存至:", auditFile)
