@@ -635,11 +635,27 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
                     <List.Item style={{ padding: '16px 0' }}>
                       <div style={{ width: '100%' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                          <Tag color="warning" style={{ borderRadius: 4, fontWeight: 600 }}>{item.reason}</Tag>
+                          <Space size={8} wrap>
+                            <Tag color="warning" style={{ borderRadius: 4, fontWeight: 600 }}>{item.reason}</Tag>
+                            <Tag color={item.result === 'Success' ? 'success' : (item.result === 'Failed' ? 'error' : 'default')} style={{ borderRadius: 4, fontWeight: 700 }}>
+                              {item.result || '-'}
+                            </Tag>
+                            <Tag style={{ borderRadius: 4, color: '#475569' }}>
+                              验收: {Number(item.verify_retries || 0)} 次 / {Number(item.verify_duration_ms || 0)}ms
+                            </Tag>
+                          </Space>
                           <span style={{ fontSize: 12, color: '#94a3b8', fontFamily: 'monospace' }}>{dayjs(item.timestamp).format('YYYY-MM-DD HH:mm:ss')}</span>
                         </div>
                         <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: 8, border: '1px solid #f1f5f9' }}>
                           <div style={{ display: 'flex', gap: 12, fontSize: 13 }}><span style={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>{t('heal.recoveryMethod')}:</span><span style={{ color: '#1e293b' }}>{item.method}</span></div>
+                          {item.result === 'Failed' && item.verify_error && (
+                            <div style={{ marginTop: 10, display: 'flex', gap: 12, fontSize: 12 }}>
+                              <span style={{ color: '#ef4444', fontWeight: 700, whiteSpace: 'nowrap' }}>失败原因:</span>
+                              <span style={{ color: '#991b1b', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                {String(item.verify_error)}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </List.Item>

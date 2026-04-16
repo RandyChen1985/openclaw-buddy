@@ -156,7 +156,8 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
         try {
           // 物理接入异步任务机制
           const res = await api.delete(`/v1/openclaw/skills/${name}`);
-          if (res.data.taskId) {
+          const tid = res.data?.taskID ?? res.data?.taskId;
+          if (tid) {
             message.info(t('chat.waitingGatewaySync'));
           } else {
             message.success(t('skills.uninstallSuccess', { name }));

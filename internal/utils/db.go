@@ -61,7 +61,10 @@ func createTables(existingToken string) (string, error) {
 			reason TEXT,
 			method TEXT,
 			result TEXT,
-			report_path TEXT
+			report_path TEXT,
+			verify_retries INTEGER DEFAULT 0,
+			verify_duration_ms INTEGER DEFAULT 0,
+			verify_error TEXT
 		);`,
 		`CREATE TABLE IF NOT EXISTS settings (
 			key TEXT PRIMARY KEY,
@@ -114,6 +117,9 @@ func createTables(existingToken string) (string, error) {
 	_, _ = DB.Exec("ALTER TABLE health_checks ADD COLUMN cpu_usage REAL")
 	_, _ = DB.Exec("ALTER TABLE health_checks ADD COLUMN mem_usage REAL")
 	_, _ = DB.Exec("ALTER TABLE tasks ADD COLUMN command TEXT")
+	_, _ = DB.Exec("ALTER TABLE heal_events ADD COLUMN verify_retries INTEGER DEFAULT 0")
+	_, _ = DB.Exec("ALTER TABLE heal_events ADD COLUMN verify_duration_ms INTEGER DEFAULT 0")
+	_, _ = DB.Exec("ALTER TABLE heal_events ADD COLUMN verify_error TEXT")
 
 	// 初始化“首次启动时间”
 	firstRun := GetSetting("first_run_at", "")

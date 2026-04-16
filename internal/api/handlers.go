@@ -235,7 +235,7 @@ func (s *Server) runAsyncTaskWithPriority(c *gin.Context, task *process.Task, pr
 	// 提交到调度器排队执行
 	scheduler.GetScheduler().Submit(scheduler.TaskRequest{
 		Task:     task,
-		Execute:  run,
+		Execute:  func(_ context.Context) (string, error) { return run() },
 		Priority: priority,
 	})
 
@@ -370,7 +370,7 @@ func (s *Server) updateSelfHealingSetting(c *gin.Context) {
 
 func (s *Server) getHealEvents(c *gin.Context) {
 	rows, err := utils.DB.Query(`
-		SELECT id, timestamp, reason, method, result, report_path 
+		SELECT id, timestamp, reason, method, result, report_path, verify_retries, verify_duration_ms, verify_error
 		FROM heal_events 
 		ORDER BY timestamp DESC 
 		LIMIT 50
@@ -388,12 +388,15 @@ func (s *Server) getHealEvents(c *gin.Context) {
 		Method     string `json:"method"`
 		Result     string `json:"result"`
 		ReportPath string `json:"report_path"`
+		VerifyRetries    int   `json:"verify_retries"`
+		VerifyDurationMS int64 `json:"verify_duration_ms"`
+		VerifyError      string `json:"verify_error"`
 	}
 
 	events := []HealEvent{}
 	for rows.Next() {
 		var ev HealEvent
-		if err := rows.Scan(&ev.ID, &ev.Timestamp, &ev.Reason, &ev.Method, &ev.Result, &ev.ReportPath); err != nil {
+		if err := rows.Scan(&ev.ID, &ev.Timestamp, &ev.Reason, &ev.Method, &ev.Result, &ev.ReportPath, &ev.VerifyRetries, &ev.VerifyDurationMS, &ev.VerifyError); err != nil {
 			continue
 		}
 		events = append(events, ev)

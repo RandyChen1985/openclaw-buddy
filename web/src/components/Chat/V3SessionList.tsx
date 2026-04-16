@@ -1,10 +1,11 @@
 import React from 'react';
 import { Input, Button, Spin, Tooltip, Avatar, Badge as AntBadge } from 'antd';
-import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe } from 'lucide-react';
+import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe, Clock, PenLine } from 'lucide-react';
 
-interface V3SessionListProps {
+export interface V3SessionListProps {
   sessions: any[];
   sessionKey: string | null;
+  typingSessionKeys?: string[];
   loadingSessions: boolean;
   sessionSearch: string;
   setSessionSearch: (val: string) => void;
@@ -30,12 +31,14 @@ const parseSessionKey = (key: string) => {
   };
 };
 
-const SourceConfig: Record<string, { icon: any, color: string, label: string }> = {
-  'dashboard': { icon: <Monitor size={14} />, color: '#6366f1', label: '管理后台' },
-  'weixin': { icon: <MessageCircle size={14} />, color: '#07c160', label: '微信' },
-  'feishu': { icon: <Send size={14} />, color: '#3370ff', label: '飞书' },
-  'openai-user': { icon: <Zap size={14} />, color: '#f59e0b', label: 'OpenAI API' },
-  'fallback': { icon: <Globe size={14} />, color: '#94a3b8', label: '其他渠道' }
+const SourceConfig: Record<string, { icon: any, color: string, labelKey: string, defaultLabel: string }> = {
+  'dashboard': { icon: <Monitor size={14} />, color: 'var(--v3-primary, #6366f1)', labelKey: 'chat.source.dashboard', defaultLabel: '管理后台' },
+  'weixin': { icon: <MessageCircle size={14} />, color: '#07c160', labelKey: 'chat.source.weixin', defaultLabel: '微信' },
+  'feishu': { icon: <Send size={14} />, color: '#3370ff', labelKey: 'chat.source.feishu', defaultLabel: '飞书' },
+  'telegram': { icon: <Send size={14} />, color: '#24A1DE', labelKey: 'chat.source.telegram', defaultLabel: 'Telegram' },
+  'cron': { icon: <Clock size={14} />, color: '#8b5cf6', labelKey: 'chat.source.cron', defaultLabel: '定时任务' },
+  'openai-user': { icon: <Zap size={14} />, color: '#f59e0b', labelKey: 'chat.source.openaiUser', defaultLabel: 'OpenAI API' },
+  'fallback': { icon: <Globe size={14} />, color: '#94a3b8', labelKey: 'chat.source.fallback', defaultLabel: '其他渠道' }
 };
 
 const getSourceMeta = (source: string) => {
@@ -67,10 +70,11 @@ const SessionStatusIcon = ({ status, t }: { status: string, t: any }) => {
 const V3SessionList: React.FC<V3SessionListProps> = ({
   sessions, sessionKey, loadingSessions, sessionSearch, setSessionSearch,
   onSelectSession, onNewSession, onDeleteSession, onDeleteGroup, onClearAll, fetchSessions,
-  isMobile, setShowSider, copyToClipboard, t
+  isMobile, setShowSider, copyToClipboard, t,
+  typingSessionKeys = []
 }) => {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--v3-surface, #fff)' }}>
       <style>{`
         .session-group-header { 
           display: flex; 
@@ -106,12 +110,48 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
           color: #ef4444;
           background: rgba(239, 68, 68, 0.05);
         }
+        @keyframes v3-pencil {
+          0% { transform: rotate(-8deg) translateY(0); }
+          50% { transform: rotate(8deg) translateY(-1px); }
+          100% { transform: rotate(-8deg) translateY(0); }
+        }
+        .v3-pencil {
+          animation: v3-pencil 0.9s ease-in-out infinite;
+          margin-left: 6px;
+          opacity: 0.9;
+          display: inline-flex;
+          align-items: center;
+        }
+        @keyframes v3-dot {
+          0% { opacity: 0.2; transform: translateY(0); }
+          40% { opacity: 1; transform: translateY(-1px); }
+          80% { opacity: 0.2; transform: translateY(0); }
+          100% { opacity: 0.2; transform: translateY(0); }
+        }
+        .v3-dots {
+          display: inline-flex;
+          align-items: center;
+          margin-left: 3px;
+          letter-spacing: 1px;
+          font-weight: 900;
+          font-size: 12px;
+          line-height: 1;
+          opacity: 0.95;
+          transform: translateY(-0.5px);
+        }
+        .v3-dots span {
+          display: inline-block;
+          animation: v3-dot 1.2s infinite ease-in-out;
+        }
+        .v3-dots span:nth-child(1) { animation-delay: 0ms; }
+        .v3-dots span:nth-child(2) { animation-delay: 160ms; }
+        .v3-dots span:nth-child(3) { animation-delay: 320ms; }
       `}</style>
       <div style={{ padding: '16px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 8, alignItems: 'center' }}>
         <Button 
             type="primary" 
             icon={<Plus size={16} />} 
-            style={{ flex: 1, borderRadius: 8, height: 38, background: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ flex: 1, borderRadius: 8, height: 38, background: 'var(--v3-primary, #4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onClick={() => {
               onNewSession();
               if (isMobile) setShowSider(false);
@@ -208,6 +248,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                     const isActive = sessionKey === s.key;
                     const { source } = parseSessionKey(s.key);
                     const sourceMeta = getSourceMeta(source);
+                    const sourceLabel = t(sourceMeta.labelKey, { defaultValue: sourceMeta.defaultLabel });
                     
                     return (
                       <div 
@@ -225,7 +266,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                           className="session-item"
                       >
                           <div style={{ position: 'relative', flexShrink: 0 }}>
-                            <Avatar 
+            <Avatar 
                               size={32} 
                               icon={sourceMeta.icon} 
                               style={{ 
@@ -259,14 +300,22 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
 
                           <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-                                <div style={{ fontSize: 13, fontVariant: 'tabular-nums', fontWeight: 700, color: isActive ? '#3730a3' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
+                                <div style={{ fontSize: 13, fontVariant: 'tabular-nums', fontWeight: 700, color: isActive ? 'var(--v3-primary-strong, #3730a3)' : 'var(--v3-text, #1e293b)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
                                     {s.label || t('chat.noLabel', { defaultValue: '未命名会话' })}
                                     <SessionStatusIcon status={s.status} t={t} />
+                                    {typingSessionKeys.includes(s.key) && (
+                                      <span className="v3-pencil">
+                                        <PenLine size={12} color={isActive ? 'var(--v3-primary, #4f46e5)' : '#94a3b8'} />
+                                        <span className="v3-dots" style={{ color: isActive ? 'var(--v3-primary, #4f46e5)' : '#94a3b8' }} aria-label={t('chat.statusActive', { defaultValue: '正在生成中...' })}>
+                                          <span>.</span><span>.</span><span>.</span>
+                                        </span>
+                                      </span>
+                                    )}
                                 </div>
                                 {s.messagesCount !== undefined && (
                                   <div style={{ 
                                     fontSize: 10, background: isActive ? 'rgba(79, 70, 229, 0.1)' : '#f1f5f9', 
-                                    color: isActive ? '#4f46e5' : '#94a3b8', padding: '0 6px', 
+                                    color: isActive ? 'var(--v3-primary, #4f46e5)' : '#94a3b8', padding: '0 6px', 
                                     borderRadius: 6, fontWeight: 600, flexShrink: 0
                                   }}>
                                     {s.messagesCount}
@@ -277,12 +326,12 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                   <span>{new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                   <span>•</span>
                                   <span style={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                                    {sourceMeta.label}
+                                    {sourceLabel}
                                   </span>
                                   {s.model && (
                                     <>
                                       <span>•</span>
-                                      <span style={{ fontSize: 8, background: isActive ? 'rgba(79, 70, 229, 0.05)' : '#f8fafc', padding: '0 4px', borderRadius: 4, fontWeight: 600, color: isActive ? '#6366f1' : '#94a3b8' }}>
+                                      <span style={{ fontSize: 8, background: isActive ? 'rgba(79, 70, 229, 0.05)' : '#f8fafc', padding: '0 4px', borderRadius: 4, fontWeight: 600, color: isActive ? 'var(--v3-primary, #6366f1)' : '#94a3b8' }}>
                                         {s.model.split('/').pop() || s.model}
                                       </span>
                                     </>
@@ -329,7 +378,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                 {mainSession && (
                   <div style={{ marginBottom: 12 }}>
                     <div className="session-group-header">
-                      <span style={{ fontSize: 10, fontWeight: 800, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--v3-primary, #6366f1)', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: 4 }}>
                         <Shield size={10} />
                         {t('chat.pinnedSession', { defaultValue: '置顶会话' })}
                       </span>
@@ -345,24 +394,24 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                             }}
                             style={{ 
                                 padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4, transition: 'all 0.2s',
-                                background: isActive ? 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)' : '#f8fafc',
-                                border: '1px solid', borderColor: isActive ? '#c7d2fe' : '#e2e8f0',
+                                background: isActive ? 'var(--v3-pinned-bg-active, linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(79, 70, 229, 0.16) 100%))' : 'var(--v3-pinned-bg, #f8fafc)',
+                                border: '1px solid', borderColor: isActive ? 'var(--v3-pinned-border-active, rgba(79, 70, 229, 0.28))' : 'var(--v3-pinned-border, #e2e8f0)',
                                 display: 'flex', alignItems: 'center', gap: 12, position: 'relative',
-                                boxShadow: isActive ? '0 4px 12px rgba(79, 70, 229, 0.08)' : 'none'
+                                boxShadow: isActive ? '0 4px 12px rgba(0, 0, 0, 0.04)' : 'none'
                             }}
                             className="session-item-main"
                         >
                             <div style={{ position: 'relative', flexShrink: 0 }}>
                               <Avatar 
                                 size={32} 
-                                icon={<Shield size={16} fill={isActive ? '#fff' : '#6366f1'} />} 
+                                icon={<Shield size={16} fill={isActive ? '#fff' : 'var(--v3-primary, #6366f1)'} />} 
                                 style={{ 
-                                  background: isActive ? '#4f46e5' : '#e0e7ff', 
-                                  color: isActive ? '#fff' : '#4338ca',
+                                  background: isActive ? 'var(--v3-primary, #4f46e5)' : 'rgba(79, 70, 229, 0.12)', 
+                                  color: isActive ? '#fff' : 'var(--v3-primary-strong, #4338ca)',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
-                                  boxShadow: isActive ? '0 0 0 2px rgba(79, 70, 229, 0.2)' : 'none'
+                                  boxShadow: isActive ? '0 0 0 2px rgba(0, 0, 0, 0.06)' : 'none'
                                 }} 
                               />
                               <div style={{
@@ -371,14 +420,14 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                 right: -2,
                                 width: 16,
                                 height: 16,
-                                background: '#fff',
+                                background: 'var(--v3-surface, #fff)',
                                 borderRadius: '50%',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 fontSize: 10,
                                 boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                                border: '1px solid #c7d2fe'
+                                border: '1px solid var(--v3-border, #c7d2fe)'
                               }}>
                                 {mainSession.avatar ? <img src={mainSession.avatar} style={{ width: '100%', height: '100%', borderRadius: '50%' }} /> : (mainSession.emoji || '⚡')}
                               </div>
@@ -386,21 +435,21 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
 
                             <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-                                  <div style={{ fontSize: 13, fontWeight: 800, color: isActive ? '#1e1b4b' : '#3730a3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
+                                  <div style={{ fontSize: 13, fontWeight: 800, color: isActive ? 'var(--v3-text, #0f172a)' : 'var(--v3-primary-strong, #3730a3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
                                       {t('chat.mainSession', { defaultValue: '主会话' })}
                                       <SessionStatusIcon status={mainSession.status} t={t} />
                                   </div>
                                   {mainSession.messagesCount !== undefined && (
                                     <div style={{ 
                                       fontSize: 10, background: 'rgba(79, 70, 229, 0.1)', 
-                                      color: '#4f46e5', padding: '0 6px', 
+                                      color: 'var(--v3-primary, #4f46e5)', padding: '0 6px', 
                                       borderRadius: 6, fontWeight: 600, flexShrink: 0
                                     }}>
                                       {mainSession.messagesCount}
                                     </div>
                                   )}
                                 </div>
-                                <div style={{ fontSize: 9, color: '#6366f1', opacity: 0.7, marginTop: 1, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
+                                <div style={{ fontSize: 9, color: 'var(--v3-primary, #6366f1)', opacity: 0.7, marginTop: 1, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
                                     <span>{new Date(mainSession.updatedAt || mainSession.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                     <span>•</span>
                                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>CORE SYSTEM</span>
@@ -409,9 +458,9 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                 {mainSession.contextTokens > 0 && (
                                     <div style={{ marginTop: 6, width: '100%' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, fontSize: 9, fontWeight: 700 }}>
-                                        <span style={{ color: '#6366f1', opacity: 0.7, transform: 'scale(0.9)', transformOrigin: 'left' }}>CONTEXT</span>
+                                        <span style={{ color: 'var(--v3-primary, #6366f1)', opacity: 0.7, transform: 'scale(0.9)', transformOrigin: 'left' }}>CONTEXT</span>
                                         <span style={{ 
-                                            color: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : '#4f46e5',
+                                            color: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : 'var(--v3-primary, #4f46e5)',
                                             opacity: 0.8
                                         }}>
                                             {Math.round((mainSession.totalTokens / mainSession.contextTokens) * 100)}%
@@ -421,7 +470,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                         <div style={{ 
                                             height: '100%', 
                                             width: `${Math.min(100, (mainSession.totalTokens / mainSession.contextTokens) * 100)}%`,
-                                            background: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : '#6366f1',
+                                            background: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : 'var(--v3-primary, #6366f1)',
                                             transition: 'width 0.3s ease'
                                         }} />
                                     </div>

@@ -310,10 +310,10 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           nameChanged ? values.name : undefined, 
           modelChanged ? values.model : undefined
         );
+        onRefresh();
       } else {
         message.info(t('common.noChanges'));
       }
-      onRefresh();
     } catch (err) {
     } finally {
       setProcessing(false);
@@ -849,14 +849,20 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                 if (lat === undefined) return '-';
                                 return <Tag color={lat > 0 ? 'success' : 'error'}>{lat > 0 ? `${lat}ms` : t('bots.fail')}</Tag>;
                               }},
-                              { title: t('common.action'), key: 'action', width: 150, render: (_, r: any) => (
-                                <div style={{ display: 'flex', gap: 4 }}>
-                                  <Button size="small" type="text" icon={<Zap size={14} />} onClick={() => handleTestModel(providerName, r.id)} loading={testingModelId === `${providerName}/${r.id}`} />
-                                  <Button size="small" type="text" icon={<Pencil size={14} />} onClick={() => handleEditModel(providerName, r)} />
-                                  <Button size="small" type="text" icon={<Star size={14} />} onClick={() => handleSetDefaultModel(`${providerName}/${r.id}`)} />
-                                  <Button size="small" type="text" danger icon={<Trash2 size={14} />} onClick={() => handleDeleteModel(providerName, r.id)} />
-                                </div>
-                              )}
+                              { title: t('common.action'), key: 'action', width: 150, render: (_, r: any) => {
+                                const fullId = `${providerName}/${r.id}`;
+                                const rowIsDefault = !!botsModels?.data?.models?.find((dm: any) => dm.id === fullId)?.isDefault;
+                                return (
+                                  <div style={{ display: 'flex', gap: 4 }}>
+                                    <Button size="small" type="text" icon={<Zap size={14} />} onClick={() => handleTestModel(providerName, r.id)} loading={testingModelId === fullId} />
+                                    <Button size="small" type="text" icon={<Pencil size={14} />} onClick={() => handleEditModel(providerName, r)} />
+                                    {!rowIsDefault && (
+                                      <Button size="small" type="text" icon={<Star size={14} />} onClick={() => handleSetDefaultModel(fullId)} />
+                                    )}
+                                    <Button size="small" type="text" danger icon={<Trash2 size={14} />} onClick={() => handleDeleteModel(providerName, r.id)} />
+                                  </div>
+                                );
+                              }}
                             ]}
                           />
                         )
@@ -940,19 +946,25 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                     title: t('bots.tokenUsage'),
                     key: 'tokens',
                     render: (_, record: any) => {
-                      const percent = Math.round((record.totalTokens / record.contextTokens) * 100) || 0;
+                      const ctx = Number(record.contextTokens) || 0;
+                      const used = Number(record.totalTokens) || 0;
+                      const percent = ctx > 0 ? Math.round((used / ctx) * 100) : 0;
+                      const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
                       let color = '#22c55e';
-                      if (percent > 80) color = '#ef4444';
-                      else if (percent > 50) color = '#f59e0b';
-                      
+                      if (safePercent > 80) color = '#ef4444';
+                      else if (safePercent > 50) color = '#f59e0b';
+
+                      const ctxK = ctx > 0 ? Math.round(ctx / 1000) : 0;
+                      const usedK = Math.round(used / 1000);
+
                       return (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: isMobile ? 80 : 120 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-                            <span>{Math.round(record.totalTokens / 1000)}k / {Math.round(record.contextTokens / 1000)}k</span>
-                            {!isMobile && <span style={{ fontWeight: 700, color }}>{percent}%</span>}
+                            <span>{usedK}k / {ctx > 0 ? `${ctxK}k` : '—'}</span>
+                            {!isMobile && ctx > 0 && <span style={{ fontWeight: 700, color }}>{safePercent}%</span>}
                           </div>
                           <div style={{ width: '100%', height: 4, background: '#f1f5f9', borderRadius: 2, overflow: 'hidden' }}>
-                            <div style={{ width: `${Math.min(percent, 100)}%`, height: '100%', background: color, transition: 'width 0.3s ease' }}></div>
+                            <div style={{ width: `${ctx > 0 ? safePercent : 0}%`, height: '100%', background: color, transition: 'width 0.3s ease' }} />
                           </div>
                         </div>
                       );

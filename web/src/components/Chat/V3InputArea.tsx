@@ -41,41 +41,47 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
   const [uploading, setUploading] = useState(false);
   const textAreaRef = useRef<any>(null);
 
+  /**
+   * 统一上传入口：拖拽上传与点击上传都走该方法，避免两套上传逻辑长期漂移。
+   */
+  const uploadRawFiles = async (rawFiles: File[]) => {
+    if (!rawFiles || rawFiles.length === 0) return;
+    setUploading(true);
+    try {
+      const results = await Promise.all(rawFiles.map(async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('botId', selectedBot.replace('openclaw:', ''));
+        
+        const response = await fetch(`${getBaseURL()}/v1/openclaw/chat/upload`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${storage.getItem('guardian_token')}`
+          },
+          body: formData
+        });
+        const res = await response.json();
+        if (res.code === 200) return res.data;
+        throw new Error(res.message || t('chat.uploadFailed'));
+      }));
+      setFiles(prev => [...prev, ...results]);
+    } catch (err: any) {
+      message.error(err.message || t('chat.uploadFailed'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
   // 暴露 addFiles 方法供拖拽上传调用
   useImperativeHandle(ref, () => ({
     addFiles: (newFiles: FileInfo[]) => {
       setFiles(prev => [...prev, ...newFiles]);
     },
-    uploadFiles: async (rawFiles: File[]) => {
-      setUploading(true);
-      try {
-        const results = await Promise.all(rawFiles.map(async (file) => {
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('botId', selectedBot.replace('openclaw:', ''));
-          
-          const response = await fetch(`${getBaseURL()}/v1/openclaw/chat/upload`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${storage.getItem('guardian_token')}`
-            },
-            body: formData
-          });
-          const res = await response.json();
-          if (res.code === 200) return res.data;
-          throw new Error(res.message || 'Upload failed');
-        }));
-        setFiles(prev => [...prev, ...results]);
-      } catch (err: any) {
-        message.error(err.message);
-      } finally {
-        setUploading(false);
-      }
-    },
+    uploadFiles: async (rawFiles: File[]) => uploadRawFiles(rawFiles),
     focus: () => {
       textAreaRef.current?.focus();
     }
-  }));
+  }), [selectedBot]);
 
   const handleInnerSend = () => {
     if ((!text.trim() && files.length === 0) || status !== 'authenticated' || isTyping || uploading) return;
@@ -189,29 +195,12 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
         <div style={{ flexShrink: 0, marginBottom: 2 }}>
           <Upload
             name="file"
-            action={`${getBaseURL()}/v1/openclaw/chat/upload`}
-            data={{ botId: selectedBot.replace('openclaw:', '') }}
-            headers={{
-              Authorization: `Bearer ${storage.getItem('guardian_token')}`
-            }}
+            multiple
             showUploadList={false}
             disabled={uploading || isTyping}
-            onChange={(info) => {
-              if (info.file.status === 'uploading') {
-                setUploading(true);
-              }
-              if (info.file.status === 'done') {
-                setUploading(false);
-                const res = info.file.response;
-                if (res && res.code === 200) {
-                  setFiles(prev => [...prev, res.data]);
-                } else {
-                  message.error(res?.message || 'Upload failed');
-                }
-              } else if (info.file.status === 'error') {
-                setUploading(false);
-                message.error(`${info.file.name} upload failed.`);
-              }
+            beforeUpload={(file) => {
+              uploadRawFiles([file]);
+              return false;
             }}
           >
               <Button 
@@ -237,8 +226,8 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
             // 优化 4: 回归原生占位符，移除模拟光标和额外层
             placeholder={
               status !== 'authenticated' ? t('chat.v3Connecting') : 
-              isTyping ? (t('chat.thinking') || 'AI内容生成中,请稍后...') : 
-              uploading ? '文件上传中...' :
+              isTyping ? (t('chat.aiGeneratingPlaceholder') || t('chat.thinking')) : 
+              uploading ? t('chat.fileUploadingPlaceholder') :
               t('chat.v3InputPlaceholder')
             }
             // 优化 1: 保持 autoSize 但精简配置

@@ -128,7 +128,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
 
   return (
     <div 
-      className="message-in" 
+      className={`message-in ${isUser ? 'v3-message-user' : 'v3-message-assistant'}`} 
       style={{ 
         display: 'flex', gap: 14, flexDirection: isUser ? 'row-reverse' : 'row',
         animation: 'v3-message-enter 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards' 
@@ -139,16 +139,16 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       ) : (
         <div style={{ flexShrink: 0, marginTop: 4, visibility: 'visible' }}>
           <div style={{ width: isMobile ? 32 : 36, height: isMobile ? 32 : 36, borderRadius: '50%', background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #c7d2fe' }}>
-            <Bot size={isMobile ? 22 : 25} color="#6366f1" />
+            <Bot size={isMobile ? 22 : 25} color="var(--v3-primary, #6366f1)" />
           </div>
         </div>
       )}
       
       <div style={{ 
         maxWidth: isMobile ? '92%' : '85%', padding: isMobile ? '10px 14px' : '12px 18px', borderRadius: isUser ? '18px 18px 4px 18px' : '4px 18px 18px 18px', 
-        background: isUser ? '#4f46e5' : '#fff', color: isUser ? '#fff' : '#1e293b',
-        boxShadow: isUser ? '0 4px 15px rgba(79, 70, 229, 0.15)' : '0 4px 12px rgba(0,0,0,0.03)',
-        border: !isUser ? '1px solid #e8eff6' : 'none',
+        background: isUser ? 'var(--v3-user-bubble, #4b5bdc)' : 'var(--v3-surface, #fff)', color: isUser ? 'var(--v3-user-text, #fff)' : 'var(--v3-text, #1e293b)',
+        boxShadow: isUser ? '0 4px 15px var(--v3-user-bubble-shadow, rgba(79, 70, 229, 0.15))' : '0 4px 12px rgba(0,0,0,0.03)',
+        border: !isUser ? '1px solid var(--v3-border, #e8eff6)' : 'none',
         position: 'relative', wordBreak: 'break-word', overflowWrap: 'anywhere', minWidth: 0,
       }}>
         {editingMsgIndex === index ? (
@@ -249,7 +249,24 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                           </div>
                         );
                       }
-                      return <blockquote style={{ borderLeft: '4px solid #e2e8f0', paddingLeft: '12px', color: '#64748b', fontStyle: 'italic', margin: '8px 0' }}>{children}</blockquote>;
+                      // 普通引用块（用户气泡/助手气泡分别做对比度适配）
+                      return (
+                        <blockquote
+                          className="v3-quote"
+                          style={{
+                            borderLeft: `4px solid ${isUser ? 'var(--v3-user-border, rgba(255,255,255,0.7))' : 'var(--v3-border, #e2e8f0)'}`,
+                            padding: '8px 10px',
+                            paddingLeft: 12,
+                            color: isUser ? 'var(--v3-user-text, rgba(255,255,255,0.92))' : 'var(--v3-text-muted, #64748b)',
+                            background: isUser ? 'var(--v3-user-surface, rgba(255,255,255,0.12))' : 'rgba(241, 245, 249, 0.6)',
+                            borderRadius: 10,
+                            margin: '8px 0',
+                            fontStyle: 'normal'
+                          }}
+                        >
+                          {children}
+                        </blockquote>
+                      );
                     },
                     code: ({ inline, className, children, ...props }: any) => {
                       const match = /language-(\w+)/.exec(className || '');
@@ -329,12 +346,23 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
 };
 
 export default React.memo(V3MessageItem, (prev, next) => {
+  const prevTpsLast = prev.tpsData && prev.tpsData.length > 0 ? prev.tpsData[prev.tpsData.length - 1] : undefined;
+  const nextTpsLast = next.tpsData && next.tpsData.length > 0 ? next.tpsData[next.tpsData.length - 1] : undefined;
+  const prevMetrics = prev.msg.metrics || {};
+  const nextMetrics = next.msg.metrics || {};
+
   return prev.editContent === next.editContent && 
          prev.editingMsgIndex === next.editingMsgIndex &&
          prev.msg.content === next.msg.content &&
+         prev.msg.runId === next.msg.runId &&
+         prev.msg.timestamp === next.msg.timestamp &&
+         prevMetrics.ttft === nextMetrics.ttft &&
+         prevMetrics.tps === nextMetrics.tps &&
+         prevMetrics.duration === nextMetrics.duration &&
          prev.showThinking === next.showThinking &&
          prev.isTyping === next.isTyping &&
          prev.isLast === next.isLast &&
          prev.isStalled === next.isStalled &&
-         (prev.tpsData?.length === next.tpsData?.length);
+         (prev.tpsData?.length === next.tpsData?.length) &&
+         prevTpsLast === nextTpsLast;
 });

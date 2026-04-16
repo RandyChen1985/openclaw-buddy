@@ -1,5 +1,259 @@
 /* ChatV3 核心样式提取 */
 
+/* --- 0. V3 主题变量（克制企业蓝紫） --- */
+.chat-v3-root {
+  --v3-primary: #4f46e5;
+  --v3-primary-strong: #4338ca;
+  --v3-surface: #ffffff;
+  --v3-surface-muted: #f8fafc;
+  --v3-border: #e2e8f0;
+  --v3-text: #0f172a;
+  --v3-text-muted: #64748b;
+
+  /* 用户气泡（更克制：略降饱和 + 提升对比度层级） */
+  --v3-user-bubble: #4b5bdc;
+  --v3-user-bubble-shadow: rgba(79, 70, 229, 0.14);
+  --v3-user-text: rgba(255, 255, 255, 0.95);
+  --v3-user-text-muted: rgba(255, 255, 255, 0.78);
+  --v3-user-surface: rgba(255, 255, 255, 0.12);
+  --v3-user-border: rgba(255, 255, 255, 0.22);
+
+  /* 链接 */
+  --v3-link: #2563eb;
+  --v3-link-user: rgba(255, 255, 255, 0.95);
+
+  /* 输入框高亮（聚焦态） */
+  --v3-input-focus-ring: rgba(99, 102, 241, 0.30);
+  --v3-input-focus-glow: rgba(99, 102, 241, 0.25);
+  --v3-input-idle-ring: rgba(99, 102, 241, 0.10);
+
+  /* 置顶会话（主会话） */
+  --v3-pinned-bg: #f8fafc;
+  --v3-pinned-bg-active: linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(79, 70, 229, 0.16) 100%);
+  --v3-pinned-border: #e2e8f0;
+  --v3-pinned-border-active: rgba(79, 70, 229, 0.28);
+
+  /* 顶部来源标签（Chip） */
+  --v3-source-chip-text: var(--v3-primary);
+  --v3-source-chip-bg: rgba(79, 70, 229, 0.10);
+  --v3-source-chip-border: rgba(79, 70, 229, 0.22);
+}
+
+/* --- 0.1 预设主题覆盖（仅作用于 V3 聊天） --- */
+.chat-v3-root[data-v3-theme="enterprise"] {
+  --v3-primary: #4f46e5;
+  --v3-primary-strong: #4338ca;
+  --v3-user-bubble: #4b5bdc;
+  --v3-input-focus-ring: rgba(79, 70, 229, 0.30);
+  --v3-input-focus-glow: rgba(79, 70, 229, 0.24);
+  --v3-input-idle-ring: rgba(79, 70, 229, 0.10);
+  --v3-pinned-bg-active: linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(79, 70, 229, 0.16) 100%);
+  --v3-pinned-border-active: rgba(79, 70, 229, 0.28);
+  --v3-source-chip-text: #4f46e5;
+  --v3-source-chip-bg: rgba(79, 70, 229, 0.10);
+  --v3-source-chip-border: rgba(79, 70, 229, 0.22);
+}
+
+.chat-v3-root[data-v3-theme="slate"] {
+  --v3-primary: #334155;
+  --v3-primary-strong: #1f2937;
+  --v3-user-bubble: #475569;
+  --v3-user-bubble-shadow: rgba(15, 23, 42, 0.14);
+  --v3-link: #0f172a;
+  --v3-input-focus-ring: rgba(51, 65, 85, 0.25);
+  --v3-input-focus-glow: rgba(51, 65, 85, 0.22);
+  --v3-input-idle-ring: rgba(51, 65, 85, 0.10);
+  --v3-pinned-bg-active: linear-gradient(135deg, rgba(51, 65, 85, 0.08) 0%, rgba(51, 65, 85, 0.14) 100%);
+  --v3-pinned-border-active: rgba(51, 65, 85, 0.26);
+  --v3-source-chip-text: #334155;
+  --v3-source-chip-bg: rgba(51, 65, 85, 0.10);
+  --v3-source-chip-border: rgba(51, 65, 85, 0.22);
+}
+
+.chat-v3-root[data-v3-theme="slateV2"] {
+  --v3-primary: #475569;
+  --v3-primary-strong: #334155;
+  --v3-user-bubble: #64748b;
+  --v3-user-bubble-shadow: rgba(30, 41, 59, 0.12);
+  --v3-link: #334155;
+  --v3-input-focus-ring: rgba(71, 85, 105, 0.22);
+  --v3-input-focus-glow: rgba(71, 85, 105, 0.18);
+  --v3-input-idle-ring: rgba(71, 85, 105, 0.08);
+  --v3-pinned-bg-active: linear-gradient(135deg, rgba(71, 85, 105, 0.07) 0%, rgba(71, 85, 105, 0.12) 100%);
+  --v3-pinned-border-active: rgba(71, 85, 105, 0.22);
+  --v3-source-chip-text: #475569;
+  --v3-source-chip-bg: rgba(71, 85, 105, 0.08);
+  --v3-source-chip-border: rgba(71, 85, 105, 0.18);
+}
+
+.chat-v3-root[data-v3-theme="paleGray"] {
+  --v3-primary: #65656f;
+  --v3-primary-strong: #494952;
+  --v3-surface: #f4f4f5;
+  --v3-surface-muted: #eaeaec;
+  --v3-border: #d4d4d8;
+  --v3-text: #27272a;
+  --v3-text-muted: #5c5c66;
+  --v3-user-bubble: #d4d4d8;
+  --v3-user-bubble-shadow: rgba(24, 24, 27, 0.1);
+  --v3-user-text: #27272a;
+  --v3-user-text-muted: rgba(39, 39, 42, 0.74);
+  --v3-user-surface: rgba(24, 24, 27, 0.07);
+  --v3-user-border: rgba(24, 24, 27, 0.14);
+  --v3-link: #45454e;
+  --v3-link-user: #27272a;
+  --v3-input-focus-ring: rgba(82, 82, 92, 0.26);
+  --v3-input-focus-glow: rgba(82, 82, 92, 0.16);
+  --v3-input-idle-ring: rgba(82, 82, 92, 0.1);
+  --v3-pinned-bg: #eaeaec;
+  --v3-pinned-bg-active: linear-gradient(135deg, rgba(82, 82, 92, 0.08) 0%, rgba(82, 82, 92, 0.13) 100%);
+  --v3-pinned-border: #d4d4d8;
+  --v3-pinned-border-active: rgba(82, 82, 92, 0.22);
+  --v3-source-chip-text: #45454e;
+  --v3-source-chip-bg: rgba(82, 82, 92, 0.1);
+  --v3-source-chip-border: rgba(82, 82, 92, 0.18);
+}
+
+.chat-v3-root[data-v3-theme="ocean"] {
+  --v3-primary: #2563eb;
+  --v3-primary-strong: #1d4ed8;
+  --v3-user-bubble: #1d4ed8;
+  --v3-user-bubble-shadow: rgba(37, 99, 235, 0.14);
+  --v3-link: #1d4ed8;
+  --v3-input-focus-ring: rgba(37, 99, 235, 0.30);
+  --v3-input-focus-glow: rgba(37, 99, 235, 0.24);
+  --v3-input-idle-ring: rgba(37, 99, 235, 0.10);
+  --v3-pinned-bg-active: linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(37, 99, 235, 0.16) 100%);
+  --v3-pinned-border-active: rgba(37, 99, 235, 0.28);
+  --v3-source-chip-text: #2563eb;
+  --v3-source-chip-bg: rgba(37, 99, 235, 0.10);
+  --v3-source-chip-border: rgba(37, 99, 235, 0.22);
+}
+
+.chat-v3-root[data-v3-theme="grape"] {
+  --v3-primary: #6d28d9;
+  --v3-primary-strong: #5b21b6;
+  --v3-user-bubble: #5b21b6;
+  --v3-user-bubble-shadow: rgba(109, 40, 217, 0.14);
+  --v3-link: #5b21b6;
+  --v3-input-focus-ring: rgba(109, 40, 217, 0.30);
+  --v3-input-focus-glow: rgba(109, 40, 217, 0.24);
+  --v3-input-idle-ring: rgba(109, 40, 217, 0.10);
+  --v3-pinned-bg-active: linear-gradient(135deg, rgba(109, 40, 217, 0.08) 0%, rgba(109, 40, 217, 0.16) 100%);
+  --v3-pinned-border-active: rgba(109, 40, 217, 0.28);
+  --v3-source-chip-text: #6d28d9;
+  --v3-source-chip-bg: rgba(109, 40, 217, 0.10);
+  --v3-source-chip-border: rgba(109, 40, 217, 0.22);
+}
+
+.chat-v3-root[data-v3-theme="mint"] {
+  --v3-primary: #0f766e;
+  --v3-primary-strong: #115e59;
+  --v3-user-bubble: #0f766e;
+  --v3-user-bubble-shadow: rgba(15, 118, 110, 0.14);
+  --v3-link: #0f766e;
+  --v3-input-focus-ring: rgba(15, 118, 110, 0.28);
+  --v3-input-focus-glow: rgba(15, 118, 110, 0.22);
+  --v3-input-idle-ring: rgba(15, 118, 110, 0.10);
+  --v3-pinned-bg-active: linear-gradient(135deg, rgba(15, 118, 110, 0.08) 0%, rgba(15, 118, 110, 0.14) 100%);
+  --v3-pinned-border-active: rgba(15, 118, 110, 0.26);
+  --v3-source-chip-text: #0f766e;
+  --v3-source-chip-bg: rgba(15, 118, 110, 0.10);
+  --v3-source-chip-border: rgba(15, 118, 110, 0.22);
+}
+
+.chat-v3-root[data-v3-theme="amber"] {
+  --v3-primary: #b45309;
+  --v3-primary-strong: #92400e;
+  --v3-user-bubble: #b45309;
+  --v3-user-bubble-shadow: rgba(180, 83, 9, 0.14);
+  --v3-link: #b45309;
+  --v3-input-focus-ring: rgba(180, 83, 9, 0.26);
+  --v3-input-focus-glow: rgba(180, 83, 9, 0.20);
+  --v3-input-idle-ring: rgba(180, 83, 9, 0.10);
+  --v3-pinned-bg-active: linear-gradient(135deg, rgba(180, 83, 9, 0.08) 0%, rgba(180, 83, 9, 0.14) 100%);
+  --v3-pinned-border-active: rgba(180, 83, 9, 0.26);
+  --v3-source-chip-text: #b45309;
+  --v3-source-chip-bg: rgba(180, 83, 9, 0.10);
+  --v3-source-chip-border: rgba(180, 83, 9, 0.22);
+}
+
+.chat-v3-root[data-v3-theme="highContrast"] {
+  --v3-primary: #111827;
+  --v3-primary-strong: #0f172a;
+  --v3-surface-muted: #ffffff;
+  --v3-border: #111827;
+  --v3-text: #111827;
+  --v3-text-muted: #374151;
+  --v3-user-bubble: #111827;
+  --v3-user-bubble-shadow: rgba(17, 24, 39, 0.18);
+  --v3-link: #111827;
+  --v3-input-focus-ring: rgba(17, 24, 39, 0.28);
+  --v3-input-focus-glow: rgba(17, 24, 39, 0.22);
+  --v3-input-idle-ring: rgba(17, 24, 39, 0.12);
+  --v3-pinned-bg-active: linear-gradient(135deg, rgba(17, 24, 39, 0.08) 0%, rgba(17, 24, 39, 0.14) 100%);
+  --v3-pinned-border-active: rgba(17, 24, 39, 0.30);
+  --v3-source-chip-text: #111827;
+  --v3-source-chip-bg: rgba(17, 24, 39, 0.08);
+  --v3-source-chip-border: rgba(17, 24, 39, 0.22);
+}
+
+/*
+ * 设置浮层里的「主题设置」入口（dropdown 常挂到 body，故不用 .chat-v3-root 限定）
+ */
+.v3-settings-theme-btn.ant-btn.ant-btn-sm {
+  border: none;
+  border-radius: 10px;
+  font-weight: 700;
+  color: #fff !important;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 42%, #db2777 100%);
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.38);
+}
+.v3-settings-theme-btn.ant-btn.ant-btn-sm:hover {
+  color: #fff !important;
+  background: linear-gradient(135deg, #5b52f0 0%, #8b45f5 42%, #e11d74 100%) !important;
+  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.45);
+}
+.v3-settings-theme-btn.ant-btn.ant-btn-sm:active {
+  color: #fff !important;
+  filter: brightness(0.95);
+}
+.v3-settings-theme-btn.ant-btn.ant-btn-sm .ant-btn-icon,
+.v3-settings-theme-btn.ant-btn.ant-btn-sm svg {
+  color: #fff;
+}
+
+/* V3 设置浮层：/reasoning 模式入口 */
+button.v3-settings-reasoning-btn {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+button.v3-settings-reasoning-btn:hover {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08);
+}
+button.v3-settings-reasoning-btn:active {
+  filter: brightness(0.98);
+}
+
+@media (max-width: 767px) {
+  button.v3-settings-reasoning-btn {
+    min-height: 44px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+}
+
 /* --- 1. 基础动画 & 背景 --- */
 @keyframes v3-blob-animate {
   0% { transform: translate(0, 0) scale(1); }
@@ -173,7 +427,7 @@
 
 /* --- 4. Markdown 增强样式 --- */
 .markdown-body-v3 { line-height: 1.6; font-size: 14px; }
-.markdown-body-v3 a { color: #2563eb; text-decoration: none; }
+.markdown-body-v3 a { color: var(--v3-link); text-decoration: none; }
 .markdown-body-v3 a:hover { text-decoration: underline; }
 .markdown-body-v3 h1, .markdown-body-v3 h2, .markdown-body-v3 h3 { margin-top: 16px; margin-bottom: 8px; font-weight: 700; color: inherit; }
 .markdown-body-v3 h1 { font-size: 1.5em; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
@@ -189,16 +443,16 @@
 .markdown-body-v3 blockquote:not([class]) { border-left: 4px solid #cbd5e1; padding-left: 12px; color: #64748b; margin: 10px 0; font-style: italic; }
 
 /* 用户消息中的 Markdown 颜色适配 (基于 row-reverse 判定) */
-.message-in[style*="row-reverse"] .markdown-body-v3 strong,
-.message-in[style*="row-reverse"] .markdown-body-v3 h1,
-.message-in[style*="row-reverse"] .markdown-body-v3 h2,
-.message-in[style*="row-reverse"] .markdown-body-v3 h3 { color: #fff; }
-.message-in[style*="row-reverse"] .markdown-body-v3 a { color: #fff; text-decoration: underline; text-underline-offset: 2px; }
-.message-in[style*="row-reverse"] .markdown-body-v3 a:hover { color: #dbeafe; }
-.message-in[style*="row-reverse"] .markdown-body-v3 hr { background: rgba(255,255,255,0.2); }
-.message-in[style*="row-reverse"] .markdown-body-v3 th, 
-.message-in[style*="row-reverse"] .markdown-body-v3 td { border-color: rgba(255,255,255,0.2); }
-.message-in[style*="row-reverse"] .markdown-body-v3 th { background: rgba(255,255,255,0.1); }
+.v3-message-user .markdown-body-v3 strong,
+.v3-message-user .markdown-body-v3 h1,
+.v3-message-user .markdown-body-v3 h2,
+.v3-message-user .markdown-body-v3 h3 { color: var(--v3-user-text); }
+.v3-message-user .markdown-body-v3 a { color: var(--v3-link-user); text-decoration: underline; text-underline-offset: 2px; }
+.v3-message-user .markdown-body-v3 a:hover { color: rgba(219, 234, 254, 0.95); }
+.v3-message-user .markdown-body-v3 hr { background: rgba(255,255,255,0.22); }
+.v3-message-user .markdown-body-v3 th, 
+.v3-message-user .markdown-body-v3 td { border-color: rgba(255,255,255,0.22); }
+.v3-message-user .markdown-body-v3 th { background: rgba(255,255,255,0.10); }
 
 /* --- 5. 鉴权动画 (Auth Overlay) --- */
 @keyframes v3-pulse-ring {

@@ -22,6 +22,13 @@ interface Plugin {
   _processing?: boolean;
 }
 
+/** 后端 202 解包后为 { taskID }，兼容历史/误写的 taskId */
+function pickAsyncTaskId(data: unknown): string | undefined {
+  if (data == null || typeof data !== 'object') return undefined;
+  const d = data as Record<string, any>;
+  return d.taskID ?? d.taskId ?? d.data?.taskID ?? d.data?.taskId;
+}
+
 interface PluginManagementProps {
   isMobile?: boolean;
   plugins: Plugin[];
@@ -153,7 +160,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
           response = await api.post(url, { id });
         }
 
-        const realTaskId = response.data.taskId || response.data.data?.taskId;
+        const realTaskId = pickAsyncTaskId(response.data);
         if (realTaskId) {
           onTaskUpdate({ ...pendingTask, id: realTaskId, progress: 20 });
           message.info(t('chat.waitingGatewaySync'));
@@ -195,7 +202,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
 
     try {
       const response = await api.post('/v1/openclaw/plugins/update');
-      const realTaskId = response.data.taskId || response.data.data?.taskId;
+      const realTaskId = pickAsyncTaskId(response.data);
       
       if (realTaskId && onTaskUpdate) {
         onTaskUpdate({ ...pendingTask, id: realTaskId, progress: 10 });
@@ -287,13 +294,13 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
       title: t('plugins.status'),
       key: 'status',
       width: 120,
-      render: (record: Plugin) => getStatusTag(record),
+      render: (_: unknown, record: Plugin) => getStatusTag(record),
     },
     {
       title: t('plugins.enable'),
       key: 'enabled',
       width: 80,
-      render: (record: Plugin) => {
+      render: (_: unknown, record: Plugin) => {
         const isProcessing = processingIds.has(record.id) || hasActiveTask(record.id);
         const switchComp = (
           <Switch 
@@ -321,7 +328,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
       title: t('common.action'),
       key: 'actions',
       width: 150,
-      render: (record: Plugin) => {
+      render: (_: unknown, record: Plugin) => {
         const isProcessing = processingIds.has(record.id) || hasActiveTask(record.id, 'uninstall');
         return (
           <div style={{ display: 'flex', gap: 8 }}>
