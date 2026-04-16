@@ -139,7 +139,7 @@ const ShellView: React.FC = () => {
       };
 
       socket.onclose = () => {
-        term.write('\r\n\x1b[31m[Session Closed]\x1b[0m\r\n');
+        term.write(`\r\n\x1b[31m[${t('common.sessionClosed')}]\x1b[0m\r\n`);
       };
 
       term.onData((data) => {
@@ -206,7 +206,7 @@ const ShellView: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8' }}>
             <TerminalIcon size={16} style={{ color: '#312e81' }} />
-            {!isMobile && <span style={{ fontWeight: 600, color: '#f8fafc', fontSize: '13px' }}>运维终端</span>}
+            {!isMobile && <span style={{ fontWeight: 600, color: '#f8fafc', fontSize: '13px' }}>{t('common.shell')}</span>}
           </div>
 
           {serverInfo && (

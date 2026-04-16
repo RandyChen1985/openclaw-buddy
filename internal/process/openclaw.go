@@ -685,21 +685,29 @@ type OpenClawPlugin struct {
 
 func GetOpenClawPlugins() (any, error) {
 	cmd := exec.Command("openclaw", "plugins", "list", "--json")
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list plugins: %v. Output: %s", err, string(out))
 	}
 
 	// 清理 ANSI 颜色代码
 	cleanOut := StripANSI(string(out))
-	cleanOut = ExtractJSON(cleanOut)
+	if jsonStr, ok := ExtractFirstJSONValue(cleanOut); ok {
+		cleanOut = jsonStr
+	} else {
+		cleanOut = ExtractJSON(cleanOut) // legacy fallback
+	}
 
 	var data struct {
 		Plugins []OpenClawPlugin `json:"plugins"`
 	}
 	decoder := json.NewDecoder(strings.NewReader(cleanOut))
 	if err := decoder.Decode(&data); err != nil {
-		return nil, fmt.Errorf("failed to parse plugins json: %v", err)
+		preview := cleanOut
+		if len(preview) > 400 {
+			preview = preview[:400] + "...(truncated)"
+		}
+		return nil, fmt.Errorf("failed to parse plugins json: %v. Output: %s", err, preview)
 	}
 	return data.Plugins, nil
 }

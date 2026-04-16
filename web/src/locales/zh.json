@@ -67,7 +67,10 @@
     "systemUpgradeFailed": "系统升级失败",
     "restarting": "正在执行静默重启...",
     "systemRestartFailed": "系统自重启失败",
-    "timeout": "请求超时"
+    "timeout": "请求超时",
+    "connectionError": "连接失败，请检查网络或服务状态",
+    "connectionClosed": "连接已关闭",
+    "sessionClosed": "会话已关闭"
   },
   "experts": {
     "title": "专家市场",

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Tag, Progress, Button, Timeline, Badge, Spin, Empty, message, notification, Tabs, Radio } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Server, Activity, Play, Square, RefreshCw, Trophy, Zap, Monitor } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import dayjs from 'dayjs';
 import api from '../api';
 import { APP_VERSION } from '../version';
@@ -158,7 +158,25 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     return num.toFixed(0);
   };
 
-  const renderChart = (data: any[], dataKey: string, color: string, label: string, unit: string, isDailyUsage: boolean = false) => (
+  const getWaterlines = (data: any[], dataKey: string) => {
+    const values = (data || [])
+      .map((d) => Number(d?.[dataKey]))
+      .filter((v) => Number.isFinite(v));
+    const max = values.length ? Math.max(...values) : 0;
+    if (!Number.isFinite(max) || max <= 0) return [];
+    // 25% / 50% / 75% 水位线，便于肉眼估算区间
+    return [0.25, 0.5, 0.75].map((p) => max * p);
+  };
+
+  const renderChart = (
+    data: any[],
+    dataKey: string,
+    color: string,
+    label: string,
+    unit: string,
+    isDailyUsage: boolean = false,
+    showWaterlines: boolean = false
+  ) => (
     <div style={{ height: 120 }}>
       {!isDailyUsage && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -182,6 +200,22 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             tickFormatter={(v) => isDailyUsage ? dayjs(v).format('MM-DD') : v}
           />
           <YAxis hide domain={['auto', 'auto']} />
+          {showWaterlines && getWaterlines(data, dataKey).map((y, idx) => (
+            <ReferenceLine
+              key={`${dataKey}-wl-${idx}`}
+              y={y}
+              stroke="#94a3b8"
+              strokeDasharray="4 4"
+              strokeWidth={1}
+              ifOverflow="extendDomain"
+              label={{
+                value: `${formatLargeNumber(y)}${unit ? ' ' + unit : ''}`,
+                position: 'insideTopRight',
+                fill: '#94a3b8',
+                fontSize: 10,
+              }}
+            />
+          ))}
           <ChartTooltip
             contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: 11 }}
             labelFormatter={(v) => isDailyUsage ? dayjs(v).format('YYYY-MM-DD') : dayjs(v).format('HH:mm:ss')}
@@ -449,9 +483,9 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spin size="small" /></div>
                 ) : usageData?.daily ? (
                   <>
-                    {activeTab === 'tokens' && renderChart(usageData.daily, 'totalTokens', '#f59e0b', t('dashboard.tokens'), '', true)}
-                    {activeTab === 'costs' && renderChart(usageData.daily, 'totalCost', '#ef4444', t('dashboard.costs'), 'Credits', true)}
-                    {activeTab === 'cache' && renderChart(usageData.daily, 'cacheRead', '#3b82f6', t('dashboard.cache'), '', true)}
+                    {activeTab === 'tokens' && renderChart(usageData.daily, 'totalTokens', '#f59e0b', t('dashboard.tokens'), '', true, true)}
+                    {activeTab === 'costs' && renderChart(usageData.daily, 'totalCost', '#ef4444', t('dashboard.costs'), 'Credits', true, true)}
+                    {activeTab === 'cache' && renderChart(usageData.daily, 'cacheRead', '#3b82f6', t('dashboard.cache'), '', true, true)}
                   </>
                 ) : (
                   <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 11 }}>

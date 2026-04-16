@@ -60,7 +60,10 @@
     "refreshNow": "Refresh Now",
     "taskAlreadyRunning": "A task is already running, please wait",
     "noChanges": "No changes detected",
-    "timeout": "Request Timeout"
+    "timeout": "Request Timeout",
+    "connectionError": "Connection failed. Please check network or service status.",
+    "connectionClosed": "Connection closed",
+    "sessionClosed": "Session closed"
   },
   "experts": {
     "title": "Expert Market",
