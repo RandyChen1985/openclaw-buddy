@@ -123,9 +123,11 @@ export function useV3Sessions({
 
     // 取消订阅旧会话的消息推送，订阅新会话
     if (sessionKey) {
-      sendRPC('sessions.messages.unsubscribe', { sessionKey }).catch(() => {});
+      // 兼容：部分网关版本只认 key 字段
+      sendRPC('sessions.messages.unsubscribe', { key: sessionKey, sessionKey }).catch(() => {});
     }
-    sendRPC('sessions.messages.subscribe', { sessionKey: key }).catch(() => {});
+    // 兼容：部分网关版本只认 key 字段
+    sendRPC('sessions.messages.subscribe', { key, sessionKey: key }).catch(() => {});
 
     setSessionKey(key);
 
@@ -154,7 +156,8 @@ export function useV3Sessions({
    */
   const startNewSession = useCallback(() => {
     if (sessionKey) {
-      sendRPC('sessions.messages.unsubscribe', { sessionKey }).catch(() => {});
+      // 兼容：部分网关版本只认 key 字段
+      sendRPC('sessions.messages.unsubscribe', { key: sessionKey, sessionKey }).catch(() => {});
     }
     setSessionKey(null);
     messageOpsRef.current.setMessages?.([]);
@@ -202,7 +205,8 @@ export function useV3Sessions({
 
           if (res.ok) {
             antdMessage.success({ content: t('common.success'), key: 'deletingSession' });
-            sendRPC('sessions.messages.unsubscribe', { sessionKey: key }).catch(() => {});
+            // 兼容：部分网关版本只认 key 字段
+            sendRPC('sessions.messages.unsubscribe', { key, sessionKey: key }).catch(() => {});
             if (sessionKey === key) {
               setSessionKey(null);
               messageOpsRef.current.setMessages?.([]);
@@ -249,7 +253,8 @@ export function useV3Sessions({
           antdMessage.success({ content: t('common.success'), key: 'clearingGroup' });
 
           if (sessionKey && sessionKeys.includes(sessionKey)) {
-            sendRPC('sessions.messages.unsubscribe', { sessionKey }).catch(() => {});
+            // 兼容：部分网关版本只认 key 字段
+            sendRPC('sessions.messages.unsubscribe', { key: sessionKey, sessionKey }).catch(() => {});
             setSessionKey(null);
             messageOpsRef.current.setMessages?.([]);
             setSessionLabel(null);
@@ -282,7 +287,8 @@ export function useV3Sessions({
           antdMessage.success({ content: t('chat.clearAllSuccess'), key: 'clearingAll' });
 
           if (sessionKeyRef.current) {
-            sendRPC('sessions.messages.unsubscribe', { sessionKey: sessionKeyRef.current }).catch(() => {});
+            // 兼容：部分网关版本只认 key 字段
+            sendRPC('sessions.messages.unsubscribe', { key: sessionKeyRef.current, sessionKey: sessionKeyRef.current }).catch(() => {});
           }
           setSessionKey(null);
           messageOpsRef.current.setMessages?.([]);
@@ -346,7 +352,8 @@ export function useV3Sessions({
     // 订阅 sessions.changed 事件（网关为订阅制，不订阅不推送）
     sendRPC('sessions.subscribe', {}).catch(() => {});
     if (sessionKeyRef.current) {
-      sendRPC('sessions.messages.subscribe', { sessionKey: sessionKeyRef.current }).catch(() => {});
+      // 兼容：部分网关版本只认 key 字段
+      sendRPC('sessions.messages.subscribe', { key: sessionKeyRef.current, sessionKey: sessionKeyRef.current }).catch(() => {});
     }
     fetchSessions(true);
     if (sessionKeyRef.current) {

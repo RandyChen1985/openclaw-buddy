@@ -288,6 +288,7 @@ func (s *Server) handleGatewayProxy(c *gin.Context) {
 									"id":   raw["id"],
 									"ok":   false,
 									"error": map[string]interface{}{
+										"code":    "INVALID_REQUEST",
 										"message": "System session is immutable",
 									},
 								})

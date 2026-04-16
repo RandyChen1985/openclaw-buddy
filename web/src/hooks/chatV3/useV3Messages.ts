@@ -376,6 +376,7 @@ export function useV3Messages({
         }
       }
     } else if (payload.state === 'final' || payload.state === 'finished' || payload.state === 'done') {
+      const wasUserAbort = abortRequestedRef.current?.key === pSessionKey;
       abortRequestedRef.current = null;
       cache.isTyping = false;
       touchAndPruneSessionCache(pSessionKey, cache);
@@ -383,42 +384,54 @@ export function useV3Messages({
       streamEndGraceRef.current = { key: pSessionKey, until: Date.now() + 3000 };
       if (pSessionKey === sessionKeyRef.current) clearStallTimer();
 
-      const now = Date.now();
-      const duration = (now - cache.startTime) / 1000;
-      const ttft = cache.ttftRecorded ? (cache.firstTokenTime - cache.startTime) : 0;
-      const generationDuration = duration - (ttft / 1000);
-      const finalTPS = generationDuration > 0.05 ? (cache.tokenCount / generationDuration) : 0;
-
-      const incomingContent = payload.message?.content ? formatMessageContent(payload.message.content) : cache.fullText;
-      cache.fullText = incomingContent;
-
-      if (pSessionKey === sessionKeyRef.current) {
-        setMessages(prev => {
-          const idx = streamingAssistantIndexRef.current;
-          const runIdIndex = prev.findLastIndex(m => m.runId === payload.runId);
-          const targetIndex = (idx !== null && idx >= 0 && idx < prev.length) ? idx : (runIdIndex !== -1 ? runIdIndex : prev.findLastIndex(m => m.role === 'assistant' && !m.runId));
-          if (targetIndex === -1) return prev;
-
-          const last = prev[targetIndex];
-          if (!incomingContent && last.content && last.content !== t('chat.thinking')) return prev;
-
-          const next = [...prev];
-          next[targetIndex] = {
-            ...last,
-            runId: payload.runId,
-            content: incomingContent,
-            metrics: { ...last.metrics, ttft, duration, tps: finalTPS },
-            _sortTs: last._sortTs
-          };
-          return next;
-        });
-
-        setIsTyping(false);
-        streamingAssistantIndexRef.current = null;
-        fetchSessions(true);
-        setTimeout(() => inputAreaRef.current?.focus(), 100);
+      // 用户已主动停止且 UI 已标记"已手动停止"，不再用服务端 final 覆盖
+      if (wasUserAbort) {
+        if (pSessionKey === sessionKeyRef.current) {
+          setIsTyping(false);
+          streamingAssistantIndexRef.current = null;
+          fetchSessions(true);
+        } else {
+          fetchSessions(true);
+        }
       } else {
-        fetchSessions(true);
+        const now = Date.now();
+        const duration = (now - cache.startTime) / 1000;
+        const ttft = cache.ttftRecorded ? (cache.firstTokenTime - cache.startTime) : 0;
+        const generationDuration = duration - (ttft / 1000);
+        const finalTPS = generationDuration > 0.05 ? (cache.tokenCount / generationDuration) : 0;
+
+        // final 阶段网关可能返回完整 message 对象（含 thinking/tool 块），必须走统一格式化避免丢内容
+        const incomingContent = payload.message ? formatMessageContent(payload.message) : cache.fullText;
+        cache.fullText = incomingContent;
+
+        if (pSessionKey === sessionKeyRef.current) {
+          setMessages(prev => {
+            const idx = streamingAssistantIndexRef.current;
+            const runIdIndex = prev.findLastIndex(m => m.runId === payload.runId);
+            const targetIndex = (idx !== null && idx >= 0 && idx < prev.length) ? idx : (runIdIndex !== -1 ? runIdIndex : prev.findLastIndex(m => m.role === 'assistant' && !m.runId));
+            if (targetIndex === -1) return prev;
+
+            const last = prev[targetIndex];
+            if (!incomingContent && last.content && last.content !== t('chat.thinking')) return prev;
+
+            const next = [...prev];
+            next[targetIndex] = {
+              ...last,
+              runId: payload.runId,
+              content: incomingContent,
+              metrics: { ...last.metrics, ttft, duration, tps: finalTPS },
+              _sortTs: last._sortTs
+            };
+            return next;
+          });
+
+          setIsTyping(false);
+          streamingAssistantIndexRef.current = null;
+          fetchSessions(true);
+          setTimeout(() => inputAreaRef.current?.focus(), 100);
+        } else {
+          fetchSessions(true);
+        }
       }
     } else if (payload.state === 'aborted') {
       // 判断是否由 handleStopGeneration 发起的 abort（已在 UI 侧处理过消息标记）
@@ -452,6 +465,7 @@ export function useV3Messages({
         setTimeout(() => inputAreaRef.current?.focus(), 100);
       }
     } else if (payload.state === 'error' || payload.state === 'failed') {
+      const wasUserAbort = abortRequestedRef.current?.key === pSessionKey;
       abortRequestedRef.current = null;
       cache.isTyping = false;
       touchAndPruneSessionCache(pSessionKey, cache);
@@ -459,29 +473,31 @@ export function useV3Messages({
       streamEndGraceRef.current = { key: pSessionKey, until: Date.now() + 3000 };
       if (pSessionKey === sessionKeyRef.current) {
         clearStallTimer();
-        const errorMsg = payload.message?.content || payload.errorMessage || payload.error?.message || payload.error || t('chat.streamFailedDefault');
-        const errorKind = payload.errorKind as string | undefined;
+        // 用户已主动停止，不追加错误信息（避免覆盖"已手动停止"）
+        if (!wasUserAbort) {
+          const errorMsg = payload.message?.content || payload.errorMessage || payload.error?.message || payload.error || t('chat.streamFailedDefault');
+          const errorKind = payload.errorKind as string | undefined;
 
-        const errorKindLabels: Record<string, string> = {
-          'context_length': t('chat.errorContextLength', { defaultValue: '上下文长度超限，建议压缩会话或新建对话' }),
-          'rate_limit': t('chat.errorRateLimit', { defaultValue: '请求频率过高，请稍后重试' }),
-          'refusal': t('chat.errorRefusal', { defaultValue: '内容被模型拒绝生成' }),
-          'timeout': t('chat.errorTimeout', { defaultValue: '推理超时，请重试或简化问题' }),
-        };
-        const kindHint = errorKind && errorKindLabels[errorKind] ? `\n> 💡 ${errorKindLabels[errorKind]}` : '';
+          const errorKindLabels: Record<string, string> = {
+            'context_length': t('chat.errorContextLength', { defaultValue: '上下文长度超限，建议压缩会话或新建对话' }),
+            'rate_limit': t('chat.errorRateLimit', { defaultValue: '请求频率过高，请稍后重试' }),
+            'refusal': t('chat.errorRefusal', { defaultValue: '内容被模型拒绝生成' }),
+            'timeout': t('chat.errorTimeout', { defaultValue: '推理超时，请重试或简化问题' }),
+          };
+          const kindHint = errorKind && errorKindLabels[errorKind] ? `\n> 💡 ${errorKindLabels[errorKind]}` : '';
 
-        setMessages(prev => {
-          const last = prev[prev.length - 1];
-          if (!last || last.role !== 'assistant') return prev;
+          setMessages(prev => {
+            const last = prev[prev.length - 1];
+            if (!last || last.role !== 'assistant') return prev;
 
-          const errMsgFormatted = typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg);
-          const content = last.content === '思考中...' || last.content === t('chat.thinking') || !last.content
-            ? `> **⚠️ 异常或错误**\n> ${errMsgFormatted}${kindHint}`
-            : last.content + `\n\n> **⚠️ 生成被中断**\n> ${errMsgFormatted}${kindHint}`;
+            const errMsgFormatted = typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg);
+            const content = last.content === '思考中...' || last.content === t('chat.thinking') || !last.content
+              ? `> **⚠️ 异常或错误**\n> ${errMsgFormatted}${kindHint}`
+              : last.content + `\n\n> **⚠️ 生成被中断**\n> ${errMsgFormatted}${kindHint}`;
 
-          return [...prev.slice(0, -1), { ...last, content }];
-        });
-
+            return [...prev.slice(0, -1), { ...last, content }];
+          });
+        }
         setIsTyping(false);
         streamingAssistantIndexRef.current = null;
         setTimeout(() => inputAreaRef.current?.focus(), 100);
@@ -868,7 +884,8 @@ export function useV3Messages({
       if (res.ok) {
         currentKey = res.payload.key;
         setSessionKey(currentKey);
-        sendRPC('sessions.messages.subscribe', { sessionKey: currentKey }).catch(() => {});
+        // 兼容：部分网关版本只认 key 字段
+        sendRPC('sessions.messages.subscribe', { key: currentKey, sessionKey: currentKey }).catch(() => {});
         await sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel });
         fetchSessions();
       } else {
