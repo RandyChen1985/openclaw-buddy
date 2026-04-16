@@ -90,6 +90,9 @@ export function useV3Messages({
 
   const stallTimerRef = useRef<any>(null);
   const lastUpdateRef = useRef(0);
+  // 最近一次“流式相关事件”(chat.delta/thought/final/error/aborted/agent lifecycle)的时间戳
+  // 用于：当 typing 状态异常卡住时，允许 session.message 兜底把内容推到 UI
+  const lastStreamEventAtRef = useRef(0);
   const streamingAssistantIndexRef = useRef<number | null>(null);
   const historyRequestSeqRef = useRef(0);
   const latestHistoryRequestRef = useRef(0);
@@ -253,6 +256,32 @@ export function useV3Messages({
   }, []);
 
   /**
+   * 降噪：Agent 在触发审批卡片（exec.approval.requested）时，往往还会在文本流里重复输出
+   * “需要批准…请运行 /approve <slug> allow-once” 的提示语。UI 已有审批卡片时，这段文字应隐藏。
+   */
+  const extractApprovalSlugFromHint = useCallback((text: string): string => {
+    if (!text) return '';
+    const m = /\/approve\s+([a-f0-9]{8,})\s+allow-once/i.exec(text);
+    return m ? m[1] : '';
+  }, []);
+
+  const isApprovalHintText = useCallback((text: string): boolean => {
+    if (!text) return false;
+    const t = text.toLowerCase();
+    return (
+      (text.includes('需要批准') || text.includes('审批') || t.includes('approve')) &&
+      t.includes('/approve') &&
+      t.includes('allow-once')
+    );
+  }, []);
+
+  const hasApprovalCardForSlug = useCallback((slug: string): boolean => {
+    if (!slug) return false;
+    const current = messagesRef.current || [];
+    return current.some(m => m.role === 'assistant' && typeof m.content === 'string' && m.content.includes(':::approval') && m.content.includes(slug));
+  }, []);
+
+  /**
    * 处理 chat 流式事件：delta/final/error 合并到 messages，并维护性能优化索引。
    */
   const handleChatDelta = useCallback((payload: any) => {
@@ -260,6 +289,7 @@ export function useV3Messages({
     if (!pSessionKey) return;
     const cache = getOrCreateSessionCache(pSessionKey);
     chatEventSeenSinceSendRef.current = true;
+    lastStreamEventAtRef.current = Date.now();
 
     if (payload.state === 'thought' || payload.state === 'thinking') {
       const abortReq = abortRequestedRef.current;
@@ -295,6 +325,7 @@ export function useV3Messages({
       }
 
       const now = Date.now();
+      lastStreamEventAtRef.current = now;
       if (!cache.ttftRecorded) {
         cache.ttftRecorded = true;
         cache.firstTokenTime = now;
@@ -304,6 +335,11 @@ export function useV3Messages({
       if (!messageObj) return;
 
       const fullText = formatMessageContent(messageObj);
+      // 如果是审批提示语，且审批卡片已存在，则丢弃（避免重复提示污染消息流）
+      if (isApprovalHintText(fullText)) {
+        const slug = extractApprovalSlugFromHint(fullText);
+        if (slug && hasApprovalCardForSlug(slug)) return;
+      }
       if (fullText === cache.fullText) return;
       if (!fullText.trim() && cache.fullText.trim()) return;
 
@@ -376,6 +412,7 @@ export function useV3Messages({
         }
       }
     } else if (payload.state === 'final' || payload.state === 'finished' || payload.state === 'done') {
+      lastStreamEventAtRef.current = Date.now();
       const wasUserAbort = abortRequestedRef.current?.key === pSessionKey;
       abortRequestedRef.current = null;
       cache.isTyping = false;
@@ -402,6 +439,16 @@ export function useV3Messages({
 
         // final 阶段网关可能返回完整 message 对象（含 thinking/tool 块），必须走统一格式化避免丢内容
         const incomingContent = payload.message ? formatMessageContent(payload.message) : cache.fullText;
+        if (isApprovalHintText(incomingContent)) {
+          const slug = extractApprovalSlugFromHint(incomingContent);
+          if (slug && hasApprovalCardForSlug(slug)) {
+            // final 若只是重复提示语，则不覆盖现有 assistant 内容
+            setIsTyping(false);
+            streamingAssistantIndexRef.current = null;
+            fetchSessions(true);
+            return;
+          }
+        }
         cache.fullText = incomingContent;
 
         if (pSessionKey === sessionKeyRef.current) {
@@ -434,6 +481,7 @@ export function useV3Messages({
         }
       }
     } else if (payload.state === 'aborted') {
+      lastStreamEventAtRef.current = Date.now();
       // 判断是否由 handleStopGeneration 发起的 abort（已在 UI 侧处理过消息标记）
       const wasUserAbort = abortRequestedRef.current?.key === pSessionKey;
       abortRequestedRef.current = null;
@@ -465,6 +513,7 @@ export function useV3Messages({
         setTimeout(() => inputAreaRef.current?.focus(), 100);
       }
     } else if (payload.state === 'error' || payload.state === 'failed') {
+      lastStreamEventAtRef.current = Date.now();
       const wasUserAbort = abortRequestedRef.current?.key === pSessionKey;
       abortRequestedRef.current = null;
       cache.isTyping = false;
@@ -517,11 +566,14 @@ export function useV3Messages({
     const evtKey = payload.sessionKey;
     if (evtKey && evtKey !== sessionKeyRef.current) return;
     const { id, request } = payload;
-    const slug = (id || '').toString().substring(0, 8);
+    const approvalId = (id || '').toString();
+    const slug = approvalId ? approvalId.substring(0, 8) : '';
     const command = request?.command || '';
-    if (!slug || !command) return;
+    if (!approvalId || !slug || !command) return;
 
-    const approvalBlock = `\n\n> :::approval\n> **${slug}**\n> \`\`\`bash\n> ${command}\n> \`\`\`\n> :::\n`;
+    // 重要：按钮点击时需要用“完整 approvalId”做 exec.approval.resolve，
+    // 不能只用截断 slug（否则可能 resolve 成功回执但 agent 未真正放行）。
+    const approvalBlock = `\n\n> :::approval\n> **${slug}**\n> approvalId: ${approvalId}\n> \`\`\`bash\n> ${command}\n> \`\`\`\n> :::\n`;
 
     setMessages(prev => {
       const last = prev[prev.length - 1];
@@ -593,14 +645,64 @@ export function useV3Messages({
     const { sessionKey: evtKey, message: msg } = payload;
     if (!evtKey || evtKey !== sessionKeyRef.current) return;
     if (!msg || !msg.role) return;
-    if (typingSessionsRef.current.has(evtKey)) return;
+    if (typingSessionsRef.current.has(evtKey)) {
+      // 兜底：若 typing 卡住且一段时间没有任何流式事件，则允许 session.message 落 UI
+      const lastStreamAt = lastStreamEventAtRef.current;
+      const staleMs = 4500;
+      if (!lastStreamAt || Date.now() - lastStreamAt < staleMs) return;
+
+      // typing 可能因事件丢失而卡住：此处主动解除，避免用户只能靠刷新看见内容
+      typingSessionsRef.current.delete(evtKey);
+      setTypingSessionKeys(Array.from(typingSessionsRef.current));
+      if (evtKey === sessionKeyRef.current) {
+        setIsTyping(false);
+        clearStallTimer();
+        streamingAssistantIndexRef.current = null;
+      }
+    }
 
     // 流刚结束的冷却窗口内忽略 session.message，避免 transcript 推送追加重复消息
     const grace = streamEndGraceRef.current;
     if (grace && grace.key === evtKey && Date.now() < grace.until) return;
 
-    const content = formatMessageContent(msg.content);
+    let content = formatMessageContent(msg.content);
     if (!content || !content.trim()) return;
+
+    // 如果是审批提示语且审批卡片已存在，则忽略（避免重复提示）
+    if (isApprovalHintText(content)) {
+      const slug = extractApprovalSlugFromHint(content);
+      if (slug && hasApprovalCardForSlug(slug)) return;
+    }
+
+    // 降噪：部分网关/Agent 会把工具回执/元信息写入 transcript，且错误地标记为 role=user，
+    // 导致 UI 看起来像“用户发了一条系统提示”。这里识别常见模板并改写为 toolResult（UI 默认隐藏）。
+    const isExecCompletionTemplate =
+      typeof content === 'string' &&
+      content.includes('An async command the user already approved has completed.') &&
+      content.includes('Exact completion details:') &&
+      content.includes('Exec finished');
+
+    const isSenderMetadataTemplate =
+      typeof content === 'string' &&
+      (content.includes('Sender (untrusted metadata):') || content.includes('Sender(untrusted metadata):'));
+
+    if (isExecCompletionTemplate || isSenderMetadataTemplate) {
+      const safeText = content.trim().split('\n').join('\n> ');
+      const toolName = isSenderMetadataTemplate ? 'sender_metadata' : 'exec';
+      content = `> :::toolResult\n> **${toolName}**\n> ${safeText}\n> :::\n`;
+    }
+
+    // 降噪："Approval allow-once submitted for <slug>." 是网关对 /approve 的确认回执
+    const isApprovalConfirm = /^Approval\s+\S+\s+submitted\s+for\s+[a-f0-9]{8,}/i.test(content.trim());
+    if (isApprovalConfirm) {
+      content = `> :::toolResult\n> **approval**\n> ${content.trim()}\n> :::\n`;
+    }
+
+    // 降噪：用户通过审批按钮发出的 "/approve <slug> allow-once" 命令行消息
+    const isApproveCommand = /^\/approve\s+[a-f0-9]{8,}\s+allow-once$/i.test(content.trim());
+    if (isApproveCommand) {
+      content = `> :::toolResult\n> **approval**\n> ${content.trim()}\n> :::\n`;
+    }
 
     const msgId = msg.id || payload.messageId || `msg-sm-${Date.now()}`;
 
@@ -613,13 +715,13 @@ export function useV3Messages({
       return [...prev, {
         id: msgId,
         runId: msg.runId,
-        role: msg.role === 'toolResult' ? 'assistant' : msg.role,
+        role: (msg.role === 'toolResult' || isExecCompletionTemplate || isSenderMetadataTemplate || isApprovalConfirm || isApproveCommand) ? 'assistant' : msg.role,
         content,
         timestamp: new Date(rawTs).toLocaleTimeString(),
         _sortTs: rawTs
       } as Message];
     });
-  }, [formatMessageContent]);
+  }, [clearStallTimer, extractApprovalSlugFromHint, formatMessageContent, hasApprovalCardForSlug, isApprovalHintText]);
 
   /**
    * 处理 session.tool 事件：展示工具调用进度。
@@ -702,12 +804,14 @@ export function useV3Messages({
       const effectiveKey = agentSessionKey || sessionKeyRef.current;
 
       if (stream === 'item' && agentData?.status === 'blocked') {
+        lastStreamEventAtRef.current = Date.now();
         setIsTyping(false);
         clearStallTimer();
         streamingAssistantIndexRef.current = null;
       }
 
       if (stream === 'lifecycle.start') {
+        lastStreamEventAtRef.current = Date.now();
         if (effectiveKey) markSessionTyping(effectiveKey, true);
         if (effectiveKey === sessionKeyRef.current) {
           setIsTyping(true);
@@ -716,6 +820,7 @@ export function useV3Messages({
       }
 
       if (stream === 'lifecycle.end') {
+        lastStreamEventAtRef.current = Date.now();
         if (effectiveKey) markSessionTyping(effectiveKey, false);
         if (effectiveKey === sessionKeyRef.current) {
           setIsTyping(false);
@@ -725,6 +830,7 @@ export function useV3Messages({
       }
 
       if (stream === 'lifecycle.error') {
+        lastStreamEventAtRef.current = Date.now();
         if (effectiveKey) markSessionTyping(effectiveKey, false);
         if (effectiveKey === sessionKeyRef.current) {
           clearStallTimer();
@@ -792,11 +898,55 @@ export function useV3Messages({
         const text = typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
         content = `> :::toolResult\n> **${toolName}**\n> ${text.split('\n').join('\n> ')}\n> :::\n`;
       }
+
+      // 降噪（与实时 handleSessionMessage 保持一致）：
+      // 1) exec 完成回执被网关错误标记为 user —— 改写为隐藏的 toolResult
+      let roleOverride: string | null = null;
+      const isExec =
+        typeof content === 'string' &&
+        content.includes('An async command the user already approved has completed.') &&
+        content.includes('Exact completion details:') &&
+        content.includes('Exec finished');
+      const isSender =
+        typeof content === 'string' &&
+        (content.includes('Sender (untrusted metadata):') || content.includes('Sender(untrusted metadata):'));
+      if (isExec || isSender) {
+        const safeText = content.trim().split('\n').join('\n> ');
+        const toolName = isSender ? 'sender_metadata' : 'exec';
+        content = `> :::toolResult\n> **${toolName}**\n> ${safeText}\n> :::\n`;
+        roleOverride = 'assistant';
+      }
+
+      // 2) 审批提示语（与审批卡片重复）—— 直接丢弃
+      if (isApprovalHintText(content)) {
+        const slug = extractApprovalSlugFromHint(content);
+        const hasCard = items.some((it: any) => {
+          const c = formatMessageContent(it.content);
+          return c && c.includes(':::approval') && slug && c.includes(slug);
+        });
+        if (slug && hasCard) {
+          content = '';
+        }
+      }
+
+      // 3) "Approval allow-once submitted for <slug>." —— 网关确认回执
+      if (/^Approval\s+\S+\s+submitted\s+for\s+[a-f0-9]{8,}/i.test(content.trim())) {
+        content = `> :::toolResult\n> **approval**\n> ${content.trim()}\n> :::\n`;
+        roleOverride = 'assistant';
+      }
+
+      // 4) "/approve <slug> allow-once" —— 按钮触发的指令消息
+      if (/^\/approve\s+[a-f0-9]{8,}\s+allow-once$/i.test(content.trim())) {
+        content = `> :::toolResult\n> **approval**\n> ${content.trim()}\n> :::\n`;
+        roleOverride = 'assistant';
+      }
+
       const rawTs = new Date(item.createdAt || item.timestamp || Date.now()).getTime();
+      const finalRole = roleOverride || (item.role === 'toolResult' ? 'assistant' : item.role);
       return {
         id: item.id || `msg-${rawTs}-${Math.random().toString(36).substring(2, 7)}`,
         runId: item.runId,
-        role: item.role === 'toolResult' ? 'assistant' : item.role,
+        role: finalRole,
         content: content || '',
         timestamp: new Date(rawTs).toLocaleTimeString(),
         metrics: item.metrics,
@@ -862,7 +1012,7 @@ export function useV3Messages({
       }, 50);
     }
     setIsLoadingHistory(false);
-  }, [clearStallTimer, formatMessageContent, resetStallTimer, sendRPC, touchAndPruneSessionCache, virtuosoRef]);
+  }, [clearStallTimer, extractApprovalSlugFromHint, formatMessageContent, isApprovalHintText, resetStallTimer, sendRPC, touchAndPruneSessionCache, virtuosoRef]);
 
   /**
    * 发送消息：必要时创建会话并写入初始占位消息，然后向网关发起 chat.send。

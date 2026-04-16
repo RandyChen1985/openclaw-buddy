@@ -105,6 +105,8 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   copyToClipboard, isTyping, isLast, isStalled, tpsData, t
 }) => {
   const [thinkingSeconds, setThinkingSeconds] = useState(0);
+  // 防止审批按钮重复点击：记录每个 approvalId 是否已点击过“通过”
+  const [approvalClicked, setApprovalClicked] = useState<Record<string, boolean>>({});
 
   const processedContent = useMemo(() => {
     let content = msg.content;
@@ -112,7 +114,26 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
     // 1. :::toolResult 物理隐藏
     content = content.replace(/> :::toolResult[\s\S]*?:::\n*/g, '');
 
-    // 注意：不要在此处剔除 :::approval，否则 blockquote 渲染器无法捕获并渲染卡片
+    // 审批卡片：保留 :::approval 标记（blockquote 渲染器依赖），但剔除元信息行
+    content = content.replace(
+      /(> :::approval\n)([\s\S]*?)(> :::\n*)/g,
+      (_match: string, head: string, body: string, tail: string) => {
+        const cleanBody = body
+          .split('\n')
+          .filter((line: string) => {
+            const trimmed = line.replace(/^>\s?/, '').trim();
+            if (!trimmed) return false;
+            if (trimmed === ':::approval' || trimmed === ':::') return false;
+            if (/^approvalId:\s*/i.test(trimmed)) return false;
+            // slug 行（纯 hex 或加粗 hex）由卡片标题展示，不在 body 里重复
+            if (/^\*\*[a-f0-9]{8,}\*\*$/.test(trimmed) || /^[a-f0-9]{8,}$/.test(trimmed)) return false;
+            // "— ✅/❌/⏱️" 状态行保留（已由 resolved handler 写入）
+            return true;
+          })
+          .join('\n');
+        return head + cleanBody + '\n' + tail;
+      }
+    );
 
     if (!showThinking) {
       content = content
@@ -129,6 +150,17 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
 
   const isUser = msg.role === 'user';
   const hasApproval = msg.content.includes(':::approval');
+
+  // 从原始消息提取完整 approvalId（UUID），供审批按钮 RPC 使用
+  const approvalMeta = useMemo(() => {
+    if (!hasApproval) return { slug: '', approvalId: '' };
+    const raw = msg.content;
+    const idMatch = /approvalId:\s*([A-Za-z0-9-]+)/.exec(raw) || /approvalId\s*=\s*([A-Za-z0-9-]+)/.exec(raw);
+    const slugMatch = /\*\*([a-f0-9]{8,})\*\*/.exec(raw) || /([a-f0-9]{8,})/.exec(raw);
+    const slug = slugMatch ? (slugMatch[1] || slugMatch[0]) : '';
+    const approvalId = idMatch ? idMatch[1] : slug;
+    return { slug, approvalId };
+  }, [hasApproval, msg.content]);
   const rawIsDeepThinking = msg.content === t('chat.deepThinking', { defaultValue: '深度思考中...' });
   const isDeepThinking = rawIsDeepThinking && showThinking;
   const isThinkingState = msg.content === t('chat.thinking') || rawIsDeepThinking || (!processedContent && isTyping && isLast && !isUser);
@@ -227,10 +259,21 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                       if (fullText.includes(':::toolCall')) {
                         return <CollapsibleMeta title={t('chat.systemTool', { defaultValue: 'System Tool' })} icon={Terminal} defaultExpanded={false}>{children}</CollapsibleMeta>;
                       }
-                      if (fullText.includes(':::approval')) {
-                        // 改进的 Slug 提取：支持加粗、原样或独立单词
-                        const slugMatch = /\*\*([a-f0-9]{8,})\*\*/.exec(fullText) || /([a-f0-9]{8,})/.exec(fullText);
-                        const slug = slugMatch ? (slugMatch[1] || slugMatch[0]) : '';
+                      if (fullText.includes(':::approval') || hasApproval) {
+                        const approvalIdForRPC = approvalMeta.approvalId;
+                        const slug = approvalMeta.slug;
+
+                        const rawContent = msg.content;
+                        const alreadyResolved =
+                          rawContent.includes('— ✅') ||
+                          rawContent.includes('— ❌') ||
+                          rawContent.includes('— ⏱️') ||
+                          rawContent.includes('已超时');
+
+                        const approvalClickKey = approvalIdForRPC || slug;
+                        const isClicked = approvalClickKey ? !!approvalClicked[approvalClickKey] : false;
+                        const isDisabled = alreadyResolved || isClicked;
+
                         return (
                           <div style={{ 
                             margin: '12px 0', padding: '16px', background: '#fef2f2', 
@@ -244,15 +287,24 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                             <div style={{ marginBottom: 12, opacity: 0.9 }}>{children}</div>
                             <Button 
                               type="primary" danger block icon={<ShieldCheck size={16} />}
+                              disabled={isDisabled}
                               onClick={() => {
-                                if (slug) {
-                                  if (onApprovalResolve) {
-                                    onApprovalResolve(slug, 'allow-once');
-                                  } else {
-                                    onSend(`/approve ${slug} allow-once`);
-                                  }
-                                  message.success(t('chat.approvalSent', { defaultValue: '已提交审批指令' }));
+                                // 审批走 WebSocket RPC：exec.approval.resolve
+                                // 优先使用完整 approvalId（UUID），避免只用 slug 导致放行失败
+                                if (!approvalIdForRPC || isDisabled) return;
+
+                                setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true }));
+                                if (onApprovalResolve) {
+                                  const maybePromise = (onApprovalResolve as any)(approvalIdForRPC, 'allow-once');
+                                  Promise.resolve(maybePromise).catch(() => {
+                                    // 若 resolve 失败，恢复按钮，避免“卡死禁用”
+                                    setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: false }));
+                                  });
+                                } else {
+                                  // 兜底：没有注入 resolve handler 时，退回到发送命令
+                                  onSend(`/approve ${approvalIdForRPC} allow-once`);
                                 }
+                                message.success(t('chat.approvalSent', { defaultValue: '已提交审批指令' }));
                               }}
                               style={{ borderRadius: 8, fontWeight: 600, height: 36 }}
                             >
