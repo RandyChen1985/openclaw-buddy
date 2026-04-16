@@ -24,7 +24,8 @@ type Server struct {
 }
 
 func NewServer(cfg *config.Config, g *guardian.Guardian) *Server {
-	engine := gin.Default()
+	gin.DisableConsoleColor()
+	engine := gin.New()
 
 	s := &Server{
 		cfg:      cfg,
@@ -32,6 +33,11 @@ func NewServer(cfg *config.Config, g *guardian.Guardian) *Server {
 		tickets:  NewTicketStore(1 * time.Minute), // Ticket valid for 1 minute
 		guardian: g,
 	}
+
+	// Recovery must be first
+	engine.Use(gin.Recovery())
+	// Reduce noise: only log slow/error requests via standard logger
+	engine.Use(s.accessLogMiddleware())
 
 	// Configure CORS (deny-by-default; allow same-host/localhost + explicit allowlist)
 	engine.Use(cors.New(cors.Config{
@@ -152,6 +158,10 @@ func (s *Server) setupRoutes() {
 			oc.POST("/plugins/disable", s.disablePlugin)
 			oc.DELETE("/plugins/:id", s.uninstallPlugin)
 			oc.POST("/plugins/update", s.updatePlugins)
+			oc.GET("/cron-jobs", s.getOpenClawCronJobs)
+			oc.POST("/cron-jobs/enable", s.enableCronJob)
+			oc.POST("/cron-jobs/disable", s.disableCronJob)
+			oc.DELETE("/cron-jobs/:id", s.removeCronJob)
 			oc.GET("/experts", s.getOpenClawExperts)
 			oc.POST("/bots/template", s.createBotFromExpert)
 			oc.GET("/sessions", s.getSessions)

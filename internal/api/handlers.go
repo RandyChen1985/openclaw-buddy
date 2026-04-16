@@ -1652,6 +1652,107 @@ func (s *Server) getOpenClawPlugins(c *gin.Context) {
 	})
 }
 
+func (s *Server) getOpenClawCronJobs(c *gin.Context) {
+	refresh := c.Query("refresh") == "true"
+	if refresh {
+		if err := process.SyncKeySingle("cron_jobs", s.cfg.OpenClawConfigDir); err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+
+	data, updatedAt, err := process.GetCachedData("cron_jobs")
+	if err != nil {
+		// 如果缓存没有，尝试同步一次
+		if err := process.SyncKeySingle("cron_jobs", s.cfg.OpenClawConfigDir); err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		data, updatedAt, _ = process.GetCachedData("cron_jobs")
+	}
+
+	s.Success(c, gin.H{
+		"data":       data,
+		"updated_at": updatedAt,
+	})
+}
+
+func (s *Server) enableCronJob(c *gin.Context) {
+	var req struct {
+		ID string `json:"id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "cron job id is required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【启用定时任务】 (ID: %s)", req.ID)
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   "tasks.enable_cron_job:" + req.ID,
+		Module: "cron",
+		Action: "enable",
+		Target: req.ID,
+	}
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.EnableOpenClawCronJob(req.ID); err != nil {
+			return "", err
+		}
+		_ = process.SyncKeySingle("cron_jobs", s.cfg.OpenClawConfigDir)
+		return "tasks.results.enabled", nil
+	})
+}
+
+func (s *Server) disableCronJob(c *gin.Context) {
+	var req struct {
+		ID string `json:"id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "cron job id is required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【禁用定时任务】 (ID: %s)", req.ID)
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   "tasks.disable_cron_job:" + req.ID,
+		Module: "cron",
+		Action: "disable",
+		Target: req.ID,
+	}
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.DisableOpenClawCronJob(req.ID); err != nil {
+			return "", err
+		}
+		_ = process.SyncKeySingle("cron_jobs", s.cfg.OpenClawConfigDir)
+		return "tasks.results.disabled", nil
+	})
+}
+
+func (s *Server) removeCronJob(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		s.Error(c, http.StatusBadRequest, "cron job id is required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【删除定时任务】 (ID: %s)", id)
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   "tasks.remove_cron_job:" + id,
+		Module: "cron",
+		Action: "remove",
+		Target: id,
+	}
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.RemoveOpenClawCronJob(id); err != nil {
+			return "", err
+		}
+		_ = process.SyncKeySingle("cron_jobs", s.cfg.OpenClawConfigDir)
+		return "tasks.results.removed", nil
+	})
+}
+
 func (s *Server) reloadPlugins(c *gin.Context) {
 	log.Printf("🎮 [控制] 用户请求: 【热重载插件引擎】")
 	err := process.ReloadOpenClawPlugins()

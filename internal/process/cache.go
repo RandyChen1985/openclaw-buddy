@@ -25,6 +25,7 @@ func SyncAll(configDir string) {
 		{"devices", func() (any, error) { return GetOpenClawDevices() }},
 		{"skills", func() (any, error) { return GetOpenClawSkills() }},
 		{"plugins", func() (any, error) { return GetOpenClawPlugins() }},
+		{"cron_jobs", func() (any, error) { return GetOpenClawCronJobs() }},
 		{"sessions", func() (any, error) { return GetOpenClawSessions() }},
 		{"ranking", func() (any, error) { return GetBotRanking(configDir) }},
 		{"security_status", func() (any, error) { return GetSecurityStatusData() }},
@@ -57,6 +58,8 @@ func SyncKeySingle(key string, configDir string) error {
 		fetcher = func() (any, error) { return GetOpenClawSkills() }
 	case "plugins":
 		fetcher = func() (any, error) { return GetOpenClawPlugins() }
+	case "cron_jobs":
+		fetcher = func() (any, error) { return GetOpenClawCronJobs() }
 	case "sessions":
 		fetcher = func() (any, error) { return GetOpenClawSessions() }
 	case "ranking":
