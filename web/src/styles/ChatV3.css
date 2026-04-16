@@ -86,6 +86,34 @@
   --v3-source-chip-border: rgba(71, 85, 105, 0.18);
 }
 
+.chat-v3-root[data-v3-theme="paleGray"] {
+  --v3-primary: #71717a;
+  --v3-primary-strong: #52525b;
+  --v3-surface: #fafafa;
+  --v3-surface-muted: #f4f4f5;
+  --v3-border: #e4e4e7;
+  --v3-text: #3f3f46;
+  --v3-text-muted: #71717a;
+  --v3-user-bubble: #e4e4e7;
+  --v3-user-bubble-shadow: rgba(63, 63, 70, 0.08);
+  --v3-user-text: #3f3f46;
+  --v3-user-text-muted: rgba(63, 63, 70, 0.72);
+  --v3-user-surface: rgba(63, 63, 70, 0.06);
+  --v3-user-border: rgba(63, 63, 70, 0.12);
+  --v3-link: #52525b;
+  --v3-link-user: #3f3f46;
+  --v3-input-focus-ring: rgba(113, 113, 122, 0.22);
+  --v3-input-focus-glow: rgba(113, 113, 122, 0.14);
+  --v3-input-idle-ring: rgba(113, 113, 122, 0.08);
+  --v3-pinned-bg: #f4f4f5;
+  --v3-pinned-bg-active: linear-gradient(135deg, rgba(113, 113, 122, 0.06) 0%, rgba(113, 113, 122, 0.11) 100%);
+  --v3-pinned-border: #e4e4e7;
+  --v3-pinned-border-active: rgba(113, 113, 122, 0.20);
+  --v3-source-chip-text: #52525b;
+  --v3-source-chip-bg: rgba(113, 113, 122, 0.09);
+  --v3-source-chip-border: rgba(113, 113, 122, 0.16);
+}
+
 .chat-v3-root[data-v3-theme="ocean"] {
   --v3-primary: #2563eb;
   --v3-primary-strong: #1d4ed8;
@@ -168,6 +196,31 @@
   --v3-source-chip-text: #111827;
   --v3-source-chip-bg: rgba(17, 24, 39, 0.08);
   --v3-source-chip-border: rgba(17, 24, 39, 0.22);
+}
+
+/*
+ * 设置浮层里的「主题设置」入口（dropdown 常挂到 body，故不用 .chat-v3-root 限定）
+ */
+.v3-settings-theme-btn.ant-btn.ant-btn-sm {
+  border: none;
+  border-radius: 10px;
+  font-weight: 700;
+  color: #fff !important;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 42%, #db2777 100%);
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.38);
+}
+.v3-settings-theme-btn.ant-btn.ant-btn-sm:hover {
+  color: #fff !important;
+  background: linear-gradient(135deg, #5b52f0 0%, #8b45f5 42%, #e11d74 100%) !important;
+  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.45);
+}
+.v3-settings-theme-btn.ant-btn.ant-btn-sm:active {
+  color: #fff !important;
+  filter: brightness(0.95);
+}
+.v3-settings-theme-btn.ant-btn.ant-btn-sm .ant-btn-icon,
+.v3-settings-theme-btn.ant-btn.ant-btn-sm svg {
+  color: #fff;
 }
 
 /* --- 1. 基础动画 & 背景 --- */

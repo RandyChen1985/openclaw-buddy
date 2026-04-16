@@ -7,6 +7,7 @@ export type V3ThemePresetId =
   | 'enterprise'
   | 'slate'
   | 'slateV2'
+  | 'paleGray'
   | 'ocean'
   | 'grape'
   | 'mint'
@@ -66,6 +67,12 @@ const PRESETS: V3ThemePreset[] = [
     name: '沉稳灰蓝V2',
     description: '在沉稳灰蓝基础上整体提亮，更轻盈',
     swatches: { primary: '#475569', surface: '#ffffff', userBubble: '#64748b' }
+  },
+  {
+    id: 'paleGray',
+    name: '浅灰素雅',
+    description: '米白与浅灰层次，安静不抢眼',
+    swatches: { primary: '#71717a', surface: '#fafafa', userBubble: '#e4e4e7' }
   },
   {
     id: 'ocean',

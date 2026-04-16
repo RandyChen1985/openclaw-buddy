@@ -184,13 +184,13 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
             {t('chat.theme', { defaultValue: '主题' })}
           </div>
           <Button
+            className="v3-settings-theme-btn"
             size="small"
             icon={<Palette size={14} />}
             onClick={() => {
               setThemeModalOpen(true);
               setSettingsOpen(false);
             }}
-            style={{ borderRadius: 10 }}
           >
             {t('chat.themeSettings', { defaultValue: '主题设置' })}
           </Button>
