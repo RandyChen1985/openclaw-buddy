@@ -163,19 +163,23 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
    */
   const reasoningModes = ['on', 'off', 'stream'] as const;
 
+  /** 设置浮层：移动端挂 body + 可滚动，避免被 chat 区域 overflow 裁剪或贴边溢出 */
+  const settingsPanelStyle: React.CSSProperties = {
+    width: isMobile ? 'calc(100vw - 20px)' : 360,
+    maxWidth: isMobile ? 'calc(100vw - 20px)' : 'min(360px, calc(100vw - 16px))',
+    maxHeight: isMobile ? 'min(88dvh, 720px)' : 'min(78vh, 680px)',
+    overflowY: 'auto',
+    WebkitOverflowScrolling: 'touch',
+    padding: isMobile ? 10 : 12,
+    boxSizing: 'border-box',
+    background: '#fff',
+    borderRadius: 12,
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 12px 30px rgba(0,0,0,0.12)'
+  };
+
   const settingsOverlay = (
-    <div
-      style={{
-        width: 360,
-        maxWidth: 'calc(100vw - 16px)',
-        padding: 12,
-        background: '#fff',
-        borderRadius: 12,
-        border: '1px solid #e2e8f0',
-        boxShadow: '0 12px 30px rgba(0,0,0,0.12)'
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
+    <div style={settingsPanelStyle} onClick={(e) => e.stopPropagation()}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ fontSize: 12, fontWeight: 900, color: '#0f172a' }}>
           {t('chat.settings', { defaultValue: '设置' })}
@@ -186,7 +190,15 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: isMobile ? 'stretch' : 'center',
+            justifyContent: 'space-between',
+            gap: isMobile ? 8 : 8
+          }}
+        >
           <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
             {t('chat.theme', { defaultValue: '主题' })}
           </div>
@@ -198,6 +210,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
               setThemeModalOpen(true);
               setSettingsOpen(false);
             }}
+            style={isMobile ? { width: '100%', height: 40 } : undefined}
           >
             {t('chat.themeSettings', { defaultValue: '主题设置' })}
           </Button>
@@ -218,7 +231,16 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700, marginBottom: 4 }}>
             {t('chat.reasoningMode', { defaultValue: '思考模式' })}
           </div>
-          <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.4, marginBottom: 8 }}>
+          <div
+            style={{
+              fontSize: 11,
+              color: '#94a3b8',
+              lineHeight: 1.45,
+              marginBottom: 8,
+              overflowWrap: 'break-word',
+              wordBreak: 'break-word'
+            }}
+          >
             {t('chat.reasoningModeHint')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -233,7 +255,16 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                 }}
               >
                 <code style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#334155' }}>/reasoning {mode}</code>
-                <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.45, marginTop: 6 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: '#64748b',
+                    lineHeight: 1.45,
+                    marginTop: 6,
+                    overflowWrap: 'break-word',
+                    wordBreak: 'break-word'
+                  }}
+                >
                   {t(`chat.reasoningDesc.${mode}`, {
                     defaultValue:
                       mode === 'on'
@@ -251,7 +282,15 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
         <div style={{ height: 1, background: '#f1f5f9' }} />
 
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              alignItems: isMobile ? 'stretch' : 'center',
+              justifyContent: 'space-between',
+              gap: 8
+            }}
+          >
             <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
               {t('chat.thinkingLevel', { defaultValue: '思考等级' })}
             </div>
@@ -259,8 +298,9 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
               size="small"
               value={thinkingLevel}
               onChange={onThinkingLevelChange}
-              style={{ width: 140 }}
+              style={{ width: isMobile ? '100%' : 140 }}
               dropdownStyle={{ borderRadius: 10 }}
+              getPopupContainer={() => document.body}
             >
               <Select.Option value="off">Off</Select.Option>
               <Select.Option value="minimal">Minimal</Select.Option>
@@ -279,10 +319,20 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
               border: '1px solid #f1f5f9'
             }}
           >
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', lineHeight: 1.45, marginBottom: 6 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                color: '#475569',
+                lineHeight: 1.45,
+                marginBottom: 6,
+                overflowWrap: 'break-word',
+                wordBreak: 'break-word'
+              }}
+            >
               {t('chat.thinkingLevelHelpTitle')}
             </div>
-            <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.55 }}>
+            <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.55, overflowWrap: 'break-word', wordBreak: 'break-word' }}>
               {t('chat.thinkingLevelHelpBody')}
             </div>
           </div>
@@ -476,7 +526,9 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           onOpenChange={setSettingsOpen}
           trigger={['click']}
           dropdownRender={() => settingsOverlay}
-          placement="bottomRight"
+          placement={isMobile ? 'bottom' : 'bottomRight'}
+          getPopupContainer={() => document.body}
+          destroyPopupOnHide
         >
           <Button size="small" type="text" icon={<Settings size={14} />} title={t('chat.settings', { defaultValue: '设置' })} />
         </Dropdown>
@@ -489,11 +541,13 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
         maskClosable={false}
         keyboard={false}
         footer={null}
-        width={720}
-        styles={{ body: { paddingTop: 12 } }}
+        width={isMobile ? 'calc(100vw - 16px)' : 720}
+        centered={!isMobile}
+        style={isMobile ? { top: 12, paddingBottom: 0 } : undefined}
+        styles={{ body: { paddingTop: 12, maxHeight: isMobile ? 'calc(100dvh - 120px)' : undefined, overflowY: isMobile ? 'auto' : undefined } }}
       >
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ minWidth: 320, flex: 1 }}>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', width: '100%', boxSizing: 'border-box' }}>
+          <div style={{ minWidth: isMobile ? 0 : 320, flex: 1, width: isMobile ? '100%' : undefined, maxWidth: '100%' }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
               {t('chat.themeMode', { defaultValue: '主题模式' })}
             </div>
@@ -555,7 +609,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
             )}
           </div>
 
-          <div style={{ minWidth: 280, flex: '0 0 300px' }}>
+          <div style={{ minWidth: isMobile ? 0 : 280, flex: isMobile ? '1 1 100%' : '0 0 300px', width: isMobile ? '100%' : undefined, maxWidth: '100%' }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
               {t('chat.themePreview', { defaultValue: '预览' })}
             </div>

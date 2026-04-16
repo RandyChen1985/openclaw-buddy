@@ -246,6 +246,14 @@ button.v3-settings-reasoning-btn:active {
   filter: brightness(0.98);
 }
 
+@media (max-width: 767px) {
+  button.v3-settings-reasoning-btn {
+    min-height: 44px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+}
+
 /* --- 1. 基础动画 & 背景 --- */
 @keyframes v3-blob-animate {
   0% { transform: translate(0, 0) scale(1); }
