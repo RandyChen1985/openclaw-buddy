@@ -78,11 +78,15 @@ export function useV3Sessions({
    */
   const fetchSessions = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoadingSessions(true);
+    const startTime = Date.now();
 
-    const [res] = await Promise.all([
-      sendRPC('sessions.list', { limit: 50 }),
-      isSilent ? Promise.resolve() : new Promise(resolve => setTimeout(resolve, 800))
-    ]);
+    const res = await sendRPC('sessions.list', { limit: 50 });
+
+    // 非静默模式下保证 loading 状态至少显示 300ms，避免闪烁
+    if (!isSilent) {
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 300) await new Promise(r => setTimeout(r, 300 - elapsed));
+    }
 
     if (res.ok) {
       const list = res.payload?.items || res.payload?.sessions || (Array.isArray(res.payload) ? res.payload : []);
@@ -116,6 +120,13 @@ export function useV3Sessions({
    */
   const handleSelectSession = useCallback((key: string) => {
     if (key === sessionKey) return;
+
+    // 取消订阅旧会话的消息推送，订阅新会话
+    if (sessionKey) {
+      sendRPC('sessions.messages.unsubscribe', { sessionKey }).catch(() => {});
+    }
+    sendRPC('sessions.messages.subscribe', { sessionKey: key }).catch(() => {});
+
     setSessionKey(key);
 
     const s = sessions.find(x => x.key === key);
@@ -136,12 +147,15 @@ export function useV3Sessions({
 
     messageOpsRef.current.loadSessionHistory?.(key);
     messageOpsRef.current.setHasNewMessages?.(false);
-  }, [messageOpsRef, sessionKey, sessions, setSelectedBot, setSessionKey, setSessionLabel, setSessionModel]);
+  }, [messageOpsRef, sendRPC, sessionKey, sessions, setSelectedBot, setSessionKey, setSessionLabel, setSessionModel]);
 
   /**
    * 开始新会话：清空当前会话状态并提示用户。
    */
   const startNewSession = useCallback(() => {
+    if (sessionKey) {
+      sendRPC('sessions.messages.unsubscribe', { sessionKey }).catch(() => {});
+    }
     setSessionKey(null);
     messageOpsRef.current.setMessages?.([]);
     setSessionLabel(null);
@@ -149,7 +163,7 @@ export function useV3Sessions({
 
     antdMessage.info({ content: t('chat.newSessionReady', { defaultValue: '新会话已就绪' }), key: 'newSessionReady' });
     setTimeout(() => inputAreaRef.current?.focus(), 100);
-  }, [inputAreaRef, messageOpsRef, setSessionKey, setSessionLabel, t]);
+  }, [inputAreaRef, messageOpsRef, sendRPC, sessionKey, setSessionKey, setSessionLabel, t]);
 
   /**
    * 更新会话标题（重命名）。
@@ -188,6 +202,7 @@ export function useV3Sessions({
 
           if (res.ok) {
             antdMessage.success({ content: t('common.success'), key: 'deletingSession' });
+            sendRPC('sessions.messages.unsubscribe', { sessionKey: key }).catch(() => {});
             if (sessionKey === key) {
               setSessionKey(null);
               messageOpsRef.current.setMessages?.([]);
@@ -234,6 +249,7 @@ export function useV3Sessions({
           antdMessage.success({ content: t('common.success'), key: 'clearingGroup' });
 
           if (sessionKey && sessionKeys.includes(sessionKey)) {
+            sendRPC('sessions.messages.unsubscribe', { sessionKey }).catch(() => {});
             setSessionKey(null);
             messageOpsRef.current.setMessages?.([]);
             setSessionLabel(null);
@@ -265,6 +281,9 @@ export function useV3Sessions({
           await Promise.all(deletableSessions.map(s => sendRPC('sessions.delete', { key: s.key })));
           antdMessage.success({ content: t('chat.clearAllSuccess'), key: 'clearingAll' });
 
+          if (sessionKeyRef.current) {
+            sendRPC('sessions.messages.unsubscribe', { sessionKey: sessionKeyRef.current }).catch(() => {});
+          }
           setSessionKey(null);
           messageOpsRef.current.setMessages?.([]);
           setSessionLabel(null);
@@ -293,6 +312,21 @@ export function useV3Sessions({
   }, [fetchSessions, sendRPC, sessionKey, setSessionModel, t]);
 
   /**
+   * 压缩会话上下文：当对话过长导致上下文溢出时，调用 sessions.compact 来截断历史。
+   */
+  const handleCompactSession = useCallback(async () => {
+    if (!sessionKey) return;
+    const res = await sendRPC('sessions.compact', { key: sessionKey });
+    if (res.ok) {
+      antdMessage.success(t('chat.compactSuccess', { defaultValue: '上下文已压缩' }));
+      messageOpsRef.current.loadSessionHistory?.(sessionKey);
+    } else {
+      const errMsg = res.error?.message || res.error || 'Unknown';
+      antdMessage.error(t('chat.compactFailed', { defaultValue: `压缩失败: ${errMsg}` }));
+    }
+  }, [messageOpsRef, sendRPC, sessionKey, t]);
+
+  /**
    * 切换思考等级（会话维度）。
    */
   const handleThinkingLevelChange = useCallback(async (newLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh') => {
@@ -309,7 +343,11 @@ export function useV3Sessions({
    */
   useEffect(() => {
     if (status !== 'authenticated') return;
-    // 首次进入 authenticated 时拉一下列表
+    // 订阅 sessions.changed 事件（网关为订阅制，不订阅不推送）
+    sendRPC('sessions.subscribe', {}).catch(() => {});
+    if (sessionKeyRef.current) {
+      sendRPC('sessions.messages.subscribe', { sessionKey: sessionKeyRef.current }).catch(() => {});
+    }
     fetchSessions(true);
     if (sessionKeyRef.current) {
       // 保持旧逻辑：只有当消息为空时才加载历史（避免“撤自/清屏”）
@@ -318,7 +356,7 @@ export function useV3Sessions({
         messageOpsRef.current.loadSessionHistory?.(sessionKeyRef.current);
       }
     }
-  }, [fetchSessions, messageOpsRef, status]);
+  }, [fetchSessions, messageOpsRef, sendRPC, status]);
 
   return useMemo(() => {
     return {
@@ -335,10 +373,12 @@ export function useV3Sessions({
       handleDeleteGroup,
       handleClearAllHistory,
       handleModelChange,
-      handleThinkingLevelChange
+      handleThinkingLevelChange,
+      handleCompactSession
     };
   }, [
     fetchSessions,
+    handleCompactSession,
     handleGatewayEvent,
     handleClearAllHistory,
     handleDeleteGroup,

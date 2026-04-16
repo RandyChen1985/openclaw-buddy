@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 // antd message 已下沉到子模块（sessions/messages/summarize）内部处理
 import * as nacl from 'tweetnacl';
 import storage from '../utils/storage';
@@ -61,7 +61,6 @@ export const useChatV3WebSocket = ({
   const [sessionModel, setSessionModel] = useState<string>('');
 
   const [thinkingLevel, setThinkingLevel] = useState<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'>('medium');
-  const [messages, setMessages] = useState<Message[]>([]);
 
   // --- Refs ---
   const sessionKeyRef = useRef<string | null>(null);
@@ -91,6 +90,10 @@ export const useChatV3WebSocket = ({
    */
   const gatewayEventHandlerRef = useRef<((data: any) => void) | null>(null);
 
+  const handlers = useMemo(() => ({
+    onEvent: (data: any) => gatewayEventHandlerRef.current?.(data)
+  }), []);
+
   const {
     status,
     connect,
@@ -101,9 +104,7 @@ export const useChatV3WebSocket = ({
   } = useV3GatewayConnection({
     keyPair,
     deviceId,
-    handlers: {
-      onEvent: (data) => gatewayEventHandlerRef.current?.(data)
-    }
+    handlers
   });
 
   const {
@@ -120,7 +121,8 @@ export const useChatV3WebSocket = ({
     handleDeleteGroup,
     handleClearAllHistory,
     handleModelChange,
-    handleThinkingLevelChange
+    handleThinkingLevelChange,
+    handleCompactSession
   } = useV3Sessions({
     t,
     sendRPC,
@@ -152,6 +154,7 @@ export const useChatV3WebSocket = ({
     handleStopGeneration,
     handleRegenerate,
     handleSaveEdit,
+    handleInjectMessage,
     handleApprovalRequested,
     handleGatewayEvent,
     getMessagesCount
@@ -185,12 +188,7 @@ export const useChatV3WebSocket = ({
     messagesApiRef.current = { handleChatDelta, handleApprovalRequested, handleGatewayEvent };
   }, [handleApprovalRequested, handleChatDelta, handleGatewayEvent]);
 
-  // 保持对外 messages/setMessages API 不变：对外仍以 messages 作为单一来源
-  useEffect(() => {
-    setMessages(v3Messages);
-  }, [v3Messages]);
-
-  // 消息/流式/历史加载等逻辑已迁移到 useV3Messages
+  // 直接透传 v3Messages 作为 messages 的单一来源，避免双重同步导致的 2x 渲染
 
   /**
    * 注入网关事件路由：将连接层 event 分发到 chat/sessions/approval 等业务处理。
@@ -234,15 +232,15 @@ export const useChatV3WebSocket = ({
     if (!sessionKey) return;
     if (isTyping) return;
     if (isSummarizing) return;
-    if (messages.length < 2) return;
+    if (v3Messages.length < 2) return;
     if (!isUntitledSessionLabel(sessionLabel)) return;
 
     const timer = setTimeout(() => {
       // silent=true：避免频繁 toast；force=false：遵循“自动不覆盖已有标题”的语义
-      handleAutoSummarize(messages, true, sessionKey, false);
+      handleAutoSummarize(v3Messages, true, sessionKey, false);
     }, 1000);
     return () => clearTimeout(timer);
-  }, [handleAutoSummarize, isSummarizing, isTyping, messages, sessionKey, sessionLabel, status]);
+  }, [handleAutoSummarize, isSummarizing, isTyping, v3Messages, sessionKey, sessionLabel, status]);
 
   // 后台任务：为未命名会话自动补全标题（去抖 + 并发控制 + 可取消）
   useV3UntitledAutoTitle({
@@ -253,7 +251,7 @@ export const useChatV3WebSocket = ({
   });
 
   return {
-    messages, setMessages,
+    messages: v3Messages, setMessages: setV3Messages,
     status,
     sessionKey, setSessionKey,
     sessionLabel, setSessionLabel,
@@ -282,10 +280,12 @@ export const useChatV3WebSocket = ({
     handleDeleteGroup,
     handleClearAllHistory,
     handleSaveEdit,
+    handleInjectMessage,
     handleUpdateLabel,
     handleAutoSummarize,
     handleModelChange,
     handleThinkingLevelChange,
+    handleCompactSession,
     sendRPC,
     connect,
     showScrollBtnRef

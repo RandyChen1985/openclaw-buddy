@@ -338,9 +338,9 @@
     "thinkingLevelHelpTitle": "Think Level（档位 → 思考的深度 / 资源投入）",
     "thinkingLevelHelpBody": "当你通过 /reasoning 等方式开启思考模式后，Think Level 决定模型在推理阶段愿意投入多少「精力」、大致会生成多少推理类 token。不同挡位通常对应不同的推理策略，以及不同的耗时与算力成本。",
     "dropToUpload": "松开即可上传文件",
-    "showThinking": "显示思考过程(仅历史会话)",
+    "showThinking": "显示思考或工具调用",
     "reasoningMode": "思考模式",
-    "reasoningModeHint": "点击后将发送用户消息 /reasoning on 或 off（由网关/模型解析；与上方「显示思考过程(仅历史会话)」仅控制本地展示不同）。",
+    "reasoningModeHint": "点击后将发送用户消息 /reasoning on 或 off（由网关/模型解析；与上方「显示思考或工具调用」仅控制本地展示不同）。",
     "reasoningDesc": {
       "on": "开启思考：深度推理开启；思考过程默认不单独展开，界面以最终回答为主。",
       "off": "关闭思考：不做深度链式推理，响应更快。",

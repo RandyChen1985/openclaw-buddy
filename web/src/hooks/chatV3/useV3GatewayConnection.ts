@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import storage from '../../utils/storage';
 import { getWsUrl } from '../../utils/url';
-import { getTicket } from '../../api';
+import api, { getTicket } from '../../api';
 import { APP_VERSION } from '../../version';
 import * as nacl from 'tweetnacl';
 
@@ -123,7 +123,13 @@ export function useV3GatewayConnection({
       const id = `${method}-${requestIdRef.current++}`;
       const req = { type: 'req', id, method, params };
 
-      const timeoutValue = method === 'sessions.delete' ? 180000 : 30000;
+      const timeoutMap: Record<string, number> = {
+        'sessions.delete': 180000,
+        'chat.send': 120000,
+        'chat.history': 60000,
+        'chat.abort': 15000,
+      };
+      const timeoutValue = timeoutMap[method] || 30000;
       const timer = setTimeout(() => {
         if (pendingRequests.current.has(id)) {
           pendingRequests.current.delete(id);
@@ -147,7 +153,6 @@ export function useV3GatewayConnection({
 
     let gatewayToken = '';
     try {
-      const api = await import('../../api').then(m => m.default);
       const res = await api.get('/v1/openclaw/gateway-token');
       gatewayToken = res.data?.token || '';
     } catch (e) {
@@ -238,13 +243,28 @@ export function useV3GatewayConnection({
     wsRef.current = null;
     if (oldWs) oldWs.close();
 
-    const ticket = await getTicket();
+    let ticket: string | null = null;
+    try {
+      ticket = await getTicket();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('❌ [V3] getTicket 失败，回退到 token 认证:', e);
+    }
     const token = storage.getItem('guardian_token');
     const wsUrl = ticket
       ? getWsUrl(`/v1/ws/gateway?ticket=${ticket}`)
       : getWsUrl(`/v1/ws/gateway?token=${token}`);
 
-    const ws = new WebSocket(wsUrl);
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('❌ [V3] WebSocket 构造失败:', e);
+      connectInFlightRef.current = false;
+      dispatch({ type: 'WS_ERROR' });
+      return;
+    }
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -291,10 +311,16 @@ export function useV3GatewayConnection({
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       if (ws !== wsRef.current) return;
       wsRef.current = null;
       connectInFlightRef.current = false;
+      // 4001 = gateway auth rotated; reset reconnect counter for immediate retry
+      if (ev.code === 4001) {
+        reconnectCountRef.current = 0;
+        // eslint-disable-next-line no-console
+        console.warn('⚠️ [V3] 网关认证已轮换 (4001)，立即重连');
+      }
       dispatch({ type: 'WS_CLOSE' });
       rejectAllPendingRequests('WebSocket closed');
     };
@@ -302,17 +328,20 @@ export function useV3GatewayConnection({
     ws.onerror = () => {
       if (ws !== wsRef.current) return;
       connectInFlightRef.current = false;
-      dispatch({ type: 'WS_ERROR' });
+      // 浏览器中 onerror 总会紧跟 onclose；这里只 reject 挂起请求，
+      // 不再 dispatch WS_ERROR，由后续 onclose -> WS_CLOSE 统一触发重连，
+      // 避免 error+close 连续触发导致重连计数被双倍消耗。
       rejectAllPendingRequests('WebSocket error');
     };
   }, [keyPair, deviceId, handlers, handleChallenge, rejectAllPendingRequests]);
 
   /**
    * 重连调度：当进入 disconnected 且仍具备 keyPair 时，按退避策略尝试重连。
+   * 只监听 disconnected（onerror 不再直接触发 error 状态，而是由 onclose 统一收归为 disconnected）。
    */
   useEffect(() => {
     if (!keyPair) return;
-    if (status !== 'disconnected' && status !== 'error') return;
+    if (status !== 'disconnected') return;
     if (reconnectCountRef.current >= maxReconnects) {
       dispatch({ type: 'AUTH_FAILED' });
       return;

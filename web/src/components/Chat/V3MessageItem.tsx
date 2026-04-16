@@ -8,8 +8,25 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import remarkMath from 'remark-math';
-import rehypeSanitize from 'rehype-sanitize';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import rehypeKatex from 'rehype-katex';
+
+const katexSanitizeSchema: typeof defaultSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    div: [...(defaultSchema.attributes?.div || []), 'className', 'style'],
+    span: [...(defaultSchema.attributes?.span || []), 'className', 'style'],
+    math: ['xmlns'],
+    annotation: ['encoding']
+  },
+  tagNames: [
+    ...(defaultSchema.tagNames || []),
+    'math', 'semantics', 'mrow', 'mi', 'mn', 'mo', 'ms', 'mtext',
+    'msup', 'msub', 'mfrac', 'mroot', 'msqrt', 'mover', 'munder',
+    'mtable', 'mtr', 'mtd', 'annotation'
+  ]
+};
 import { Mermaid, CodeBlock, ECharts } from '../ChatComponents';
 
 interface V3MessageItemProps {
@@ -26,7 +43,8 @@ interface V3MessageItemProps {
   onCancelEdit: () => void;
   onDelete: (index: number) => void;
   onQuote: (content: string) => void;
-  onSend: (content: string) => void; // 新增：直接发送
+  onSend: (content: string) => void;
+  onApprovalResolve?: (approvalId: string, decision: string) => void;
   onRegenerate: () => void;
   copyToClipboard: (text: string) => void;
   isTyping: boolean;
@@ -83,7 +101,7 @@ const CollapsibleMeta = ({ title, icon: Icon, children, defaultExpanded = true }
 const V3MessageItem: React.FC<V3MessageItemProps> = ({ 
   msg, index, isMobile, showThinking,
   editingMsgIndex, editContent, setEditContent,
-  onEdit, onSaveEdit, onCancelEdit, onQuote, onSend, onRegenerate,
+  onEdit, onSaveEdit, onCancelEdit, onQuote, onSend, onApprovalResolve, onRegenerate,
   copyToClipboard, isTyping, isLast, isStalled, tpsData, t
 }) => {
   const [thinkingSeconds, setThinkingSeconds] = useState(0);
@@ -100,9 +118,10 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       content = content
         .replace(/> :::thinking[\s\S]*?:::\n*/g, '')
         .replace(/> :::toolCall[\s\S]*?:::\n*/g, '')
+        .replace(/\n*> [🔧✅❌] `[^`]*` (?:执行中…|完成|失败)(?:<!--[^>]*-->)?/g, '')
         .trim();
-      
-      if (!content && (msg.content.includes(':::thinking') || msg.content.includes(':::toolCall'))) return null;
+
+      if (!content && (msg.content.includes(':::thinking') || msg.content.includes(':::toolCall') || msg.content.includes('🔧'))) return null;
     }
 
     return content.trim();
@@ -110,7 +129,9 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
 
   const isUser = msg.role === 'user';
   const hasApproval = msg.content.includes(':::approval');
-  const isThinkingState = msg.content === t('chat.thinking') || (!processedContent && isTyping && isLast && !isUser);
+  const rawIsDeepThinking = msg.content === t('chat.deepThinking', { defaultValue: '深度思考中...' });
+  const isDeepThinking = rawIsDeepThinking && showThinking;
+  const isThinkingState = msg.content === t('chat.thinking') || rawIsDeepThinking || (!processedContent && isTyping && isLast && !isUser);
 
   useEffect(() => {
     let interval: any;
@@ -166,11 +187,14 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         ) : (
           isThinkingState ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13, color: '#64748b' }}>{t('chat.thinking')}{thinkingSeconds > 0 ? ` (${thinkingSeconds}s)` : ''}</span>
+              <span style={{ fontSize: 13, color: isDeepThinking ? '#7c3aed' : '#64748b', fontWeight: isDeepThinking ? 600 : 400 }}>
+                {isDeepThinking ? t('chat.deepThinking', { defaultValue: '深度思考中...' }) : t('chat.thinking')}
+                {thinkingSeconds > 0 ? ` (${thinkingSeconds}s)` : ''}
+              </span>
               <div className="typing-indicator" style={{ display: 'flex', gap: 4 }}>
-                <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>
-                <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>
-                <div className="typing-dot" style={{ width: 4, height: 4, background: '#2563eb', borderRadius: '50%' }}></div>
+                <div className="typing-dot" style={{ width: 4, height: 4, background: isDeepThinking ? '#7c3aed' : '#2563eb', borderRadius: '50%' }}></div>
+                <div className="typing-dot" style={{ width: 4, height: 4, background: isDeepThinking ? '#7c3aed' : '#2563eb', borderRadius: '50%' }}></div>
+                <div className="typing-dot" style={{ width: 4, height: 4, background: isDeepThinking ? '#7c3aed' : '#2563eb', borderRadius: '50%' }}></div>
               </div>
             </div>
           ) : (
@@ -178,7 +202,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
               <div className="markdown-body-v3" id={`msg-content-v3-${index}`}>
                 <ReactMarkdown 
                   remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
-                  rehypePlugins={[rehypeSanitize, rehypeKatex]}
+                  rehypePlugins={[rehypeKatex, [rehypeSanitize, katexSanitizeSchema]]}
                   components={{
                     p: ({children}: any) => <p style={{margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere'}}>{children}</p>,
                     img: ({ node, ...props }: any) => (
@@ -222,7 +246,11 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                               type="primary" danger block icon={<ShieldCheck size={16} />}
                               onClick={() => {
                                 if (slug) {
-                                  onSend(`/approve ${slug} allow-once`);
+                                  if (onApprovalResolve) {
+                                    onApprovalResolve(slug, 'allow-once');
+                                  } else {
+                                    onSend(`/approve ${slug} allow-once`);
+                                  }
                                   message.success(t('chat.approvalSent', { defaultValue: '已提交审批指令' }));
                                 }
                               }}
@@ -351,7 +379,9 @@ export default React.memo(V3MessageItem, (prev, next) => {
   const prevMetrics = prev.msg.metrics || {};
   const nextMetrics = next.msg.metrics || {};
 
-  return prev.editContent === next.editContent && 
+  return prev.isMobile === next.isMobile &&
+         prev.index === next.index &&
+         prev.editContent === next.editContent && 
          prev.editingMsgIndex === next.editingMsgIndex &&
          prev.msg.content === next.msg.content &&
          prev.msg.runId === next.msg.runId &&

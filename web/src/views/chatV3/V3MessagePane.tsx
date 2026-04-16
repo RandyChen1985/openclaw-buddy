@@ -44,6 +44,7 @@ export interface V3MessagePaneProps {
   onDelete: (idx: number) => void;
   onQuote: (content: string) => void;
   onSend: (text: string, files?: any[]) => void;
+  onApprovalResolve?: (approvalId: string, decision: string) => void;
   onRegenerate: () => void;
   copyToClipboard: (text: string) => void;
 }
@@ -79,6 +80,7 @@ export function V3MessagePane({
   onDelete,
   onQuote,
   onSend,
+  onApprovalResolve,
   onRegenerate,
   copyToClipboard
 }: V3MessagePaneProps) {
@@ -253,6 +255,7 @@ export function V3MessagePane({
                 onDelete={(idx) => onDelete(idx)}
                 onQuote={onQuote}
                 onSend={onSend}
+                onApprovalResolve={onApprovalResolve}
                 onRegenerate={onRegenerate}
                 copyToClipboard={copyToClipboard}
                 isTyping={isTyping}

@@ -220,7 +220,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
-            {t('chat.showThinking', { defaultValue: '显示思考过程(仅历史会话)' })}
+            {t('chat.showThinking', { defaultValue: '显示思考或工具调用' })}
           </div>
           <Switch size="small" checked={showThinking} onChange={(val) => setShowThinking(val)} />
         </div>

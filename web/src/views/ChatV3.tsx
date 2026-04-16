@@ -121,6 +121,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     handleAutoSummarize,
     handleModelChange,
     handleThinkingLevelChange,
+    sendRPC,
     connect,
     showScrollBtnRef
   } = useChatV3WebSocket({
@@ -135,6 +136,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     scrollRef
   });
 
+  const handleApprovalResolve = useCallback(async (approvalId: string, decision: string) => {
+    const res = await sendRPC('exec.approval.resolve', { id: approvalId, decision });
+    if (!res.ok) {
+      message.error(t('chat.approvalFailed', { defaultValue: `审批失败: ${res.error?.message || res.error || '未知错误'}` }));
+    }
+  }, [sendRPC, t]);
 
   // Local UI States
   const [isEditingLabel, setIsEditingLabel] = useState(false);
@@ -181,7 +188,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   }, [botsModels, selectedBot]);
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => { message.success(t('chat.copySuccess')); });
+    navigator.clipboard.writeText(text)
+      .then(() => { message.success(t('chat.copySuccess')); })
+      .catch(() => { message.error(t('chat.copyFailed', { defaultValue: '复制失败，请手动复制' })); });
   };
 
   useEffect(() => {
@@ -383,13 +392,15 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             setEditContent(content);
           }}
           onSaveEdit={() => {
-            handleSaveEdit(editingMsgIndex!, editContent);
+            if (editingMsgIndex === null) return;
+            handleSaveEdit(editingMsgIndex, editContent);
             setEditingMsgIndex(null);
           }}
           onCancelEdit={() => setEditingMsgIndex(null)}
           onDelete={(idx) => setMessages((prev: any) => prev.filter((_: any, i: any) => i !== idx))}
           onQuote={setQuotedMsg}
           onSend={handleWrappedSend}
+          onApprovalResolve={handleApprovalResolve}
           onRegenerate={handleRegenerate}
           copyToClipboard={copyToClipboard}
         />
