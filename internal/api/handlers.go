@@ -71,6 +71,12 @@ func (s *Server) getDashboardURL(c *gin.Context) {
 }
 
 func (s *Server) proxyLobsterDashboard(c *gin.Context) {
+	// 额外防线：即使已鉴权，也禁止跨站 Origin 直接调用代理（防止被第三方站点利用）
+	if !s.isOriginAllowed(c.Request, c.GetHeader("Origin")) {
+		s.Error(c, http.StatusForbidden, "Forbidden origin")
+		return
+	}
+
 	targetPort := s.cfg.HealthPort
 	targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", targetPort))
 
@@ -78,10 +84,8 @@ func (s *Server) proxyLobsterDashboard(c *gin.Context) {
 
 	// 修改响应头以允许嵌入
 	proxy.ModifyResponse = func(res *http.Response) error {
-		res.Header.Del("Content-Security-Policy")
+		// 不再无条件移除 CSP（风险较高），仅移除会强制禁止 iframe 的 XFO
 		res.Header.Del("X-Frame-Options")
-		// 允许跨域
-		res.Header.Set("Access-Control-Allow-Origin", "*")
 		return nil
 	}
 
@@ -2206,7 +2210,18 @@ func (s *Server) handleGetChatFile(c *gin.Context) {
 		return
 	}
 	cleanPath, err := filepath.Abs(filePath)
-	if err != nil || !strings.HasPrefix(cleanPath, absUploadDir) {
+	if err != nil {
+		c.Status(http.StatusForbidden)
+		return
+	}
+
+	// ⚠️ strings.HasPrefix("/a/b2", "/a/b") 会误判为 true，因此必须用 filepath.Rel 做边界判断
+	rel, err := filepath.Rel(absUploadDir, cleanPath)
+	if err != nil {
+		c.Status(http.StatusForbidden)
+		return
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 		c.Status(http.StatusForbidden)
 		return
 	}

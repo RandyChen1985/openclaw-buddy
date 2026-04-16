@@ -16,6 +16,7 @@ import (
 )
 
 func (s *Server) startPTY(c *gin.Context, command string, args ...string) {
+	upgrader := s.wsUpgrader()
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("PTY WebSocket upgrade failed: %v", err)

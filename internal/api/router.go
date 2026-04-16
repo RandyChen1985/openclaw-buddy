@@ -26,22 +26,39 @@ type Server struct {
 func NewServer(cfg *config.Config, g *guardian.Guardian) *Server {
 	engine := gin.Default()
 
-	// Configure CORS
-	engine.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
-
 	s := &Server{
 		cfg:      cfg,
 		engine:   engine,
 		tickets:  NewTicketStore(1 * time.Minute), // Ticket valid for 1 minute
 		guardian: g,
 	}
+
+	// Configure CORS (deny-by-default; allow same-host/localhost + explicit allowlist)
+	engine.Use(cors.New(cors.Config{
+		AllowOriginFunc: func(origin string) bool {
+			// gin-contrib/cors only sees the Origin value; we still enforce request-based checks
+			// for WS/proxy at handler level.
+			// Here we allow empty origin (non-browser) and explicit allowlist/local use-cases.
+			if strings.TrimSpace(origin) == "" {
+				return true
+			}
+			for _, allowed := range splitCSV(cfg.CORSAllowOrigins) {
+				if strings.EqualFold(allowed, origin) {
+					return true
+				}
+			}
+			// Local dev defaults (safe baseline)
+			return strings.HasPrefix(origin, fmt.Sprintf("http://localhost:%d", cfg.WebPort)) ||
+				strings.HasPrefix(origin, fmt.Sprintf("http://127.0.0.1:%d", cfg.WebPort)) ||
+				strings.HasPrefix(origin, fmt.Sprintf("https://localhost:%d", cfg.WebPort)) ||
+				strings.HasPrefix(origin, fmt.Sprintf("https://127.0.0.1:%d", cfg.WebPort))
+		},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	s.setupRoutes()
 	// 显式拉起全局任务调度器，确保串行队列就绪

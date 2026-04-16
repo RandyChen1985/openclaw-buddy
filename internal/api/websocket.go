@@ -25,19 +25,12 @@ var (
 	clientsMu sync.RWMutex // 使用读写锁提升性能
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		// 如果是同源请求（没有 Origin 头），直接允许
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			return true
-		}
-
-		// 否则，目前采取宽松策略允许所有 Origin，
-		// 但由于我们引入了一次性 Ticket 机制，即使 Origin 被伪造，
-		// 攻击者也无法通过 CSRF 获取有效 Ticket，从而保证了 WebSocket 的安全性。
-		return true
-	},
+func (s *Server) wsUpgrader() websocket.Upgrader {
+	return websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return s.isOriginAllowed(r, r.Header.Get("Origin"))
+		},
+	}
 }
 
 func (s *Server) StartWebSocketBroadcaster() {
@@ -69,6 +62,7 @@ func (s *Server) StartWebSocketBroadcaster() {
 }
 
 func (s *Server) streamLogs(c *gin.Context) {
+	upgrader := s.wsUpgrader()
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("❌ [WS] Upgrade failed: %v", err)
@@ -183,6 +177,7 @@ func (s *Server) streamLogs(c *gin.Context) {
 // 并集成了“静默授权”逻辑，自动批准来自 Buddy 控制台的设备连接。
 func (s *Server) handleGatewayProxy(c *gin.Context) {
 	// 1. 升级前端连接
+	upgrader := s.wsUpgrader()
 	clientConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("❌ [WS-Proxy] 升级前端连接失败: %v", err)
