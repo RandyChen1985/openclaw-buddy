@@ -351,7 +351,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           sessionLabel={sessionLabel}
           isSummarizing={isSummarizing}
           isUpdatingLabel={isUpdatingLabel}
-          messagesCount={messages.length}
           onAutoSummarize={async () => {
             // 手动触发应当“点击即有反馈”。当本地消息为空时，尝试先拉取历史再生成标题。
             if (!sessionKey) return;

@@ -23,7 +23,6 @@ export interface V3ChatHeaderProps {
   sessionLabel: string | null;
   isSummarizing: boolean;
   isUpdatingLabel: boolean;
-  messagesCount: number;
   onAutoSummarize: () => void;
   onUpdateLabel: (newLabel: string) => void;
   onCopy: (text: string) => void;
@@ -85,7 +84,6 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     sessionLabel,
     isSummarizing,
     isUpdatingLabel,
-    messagesCount,
     onAutoSummarize,
     onUpdateLabel,
     onCopy,
