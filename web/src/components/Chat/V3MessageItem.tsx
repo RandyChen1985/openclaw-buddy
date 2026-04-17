@@ -286,20 +286,36 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                         return <CollapsibleMeta title={t('chat.systemTool', { defaultValue: '系统工具' })} icon={Terminal} defaultExpanded={false}>{children}</CollapsibleMeta>;
                       }
                       if (fullText.includes(':::commandOutput')) {
+                        // 从 fullText 第一行的加粗标题提取命令摘要作为折叠头副标题，尽量简洁
+                        const titleMatch = fullText.match(/^\s*:::commandOutput\s*\n+\s*\*\*([^*\n]+)\*\*/);
+                        const subtitle = titleMatch ? titleMatch[1].trim() : '';
+                        const headerTitle = subtitle
+                          ? `Command Output · ${subtitle}`
+                          : 'Command Output';
                         return (
-                          <div style={{ margin: '8px 0', borderRadius: 8, overflow: 'hidden', border: '1px solid #1e293b' }}>
-                            <div style={{ background: '#1e293b', padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 6, color: '#94a3b8', fontSize: 11 }}>
-                              <Terminal size={12} />
-                              <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>Command Output</span>
-                            </div>
-                            <div style={{ 
-                              background: '#0f172a', color: '#f8fafc', padding: '10px', 
-                              fontFamily: 'monospace', fontSize: 12, lineHeight: 1.5,
-                              maxHeight: 300, overflowY: 'auto', whiteSpace: 'pre-wrap'
+                          <CollapsibleMeta
+                            title={headerTitle}
+                            icon={Terminal}
+                            defaultExpanded={true}
+                          >
+                            <div style={{
+                              margin: '4px 0',
+                              borderRadius: 8,
+                              overflow: 'hidden',
+                              border: '1px solid #1e293b',
+                              background: '#0f172a',
+                              color: '#f8fafc',
+                              padding: '10px 12px',
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                              lineHeight: 1.5,
+                              maxHeight: 300,
+                              overflowY: 'auto',
+                              whiteSpace: 'pre-wrap'
                             }}>
                               {children}
                             </div>
-                          </div>
+                          </CollapsibleMeta>
                         );
                       }
                       // 仅当「当前」blockquote 内含 :::approval 时才套审批卡片。

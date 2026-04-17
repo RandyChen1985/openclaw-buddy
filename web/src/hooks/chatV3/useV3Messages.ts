@@ -1217,13 +1217,57 @@ export function useV3Messages({
           clearStallTimer();
           setIsTyping(false);
           streamingAssistantIndexRef.current = null;
-          const errMsg = agentData?.error?.message || agentData?.message || 'Agent error';
+
+          // 扩大 error 字段兜底：很多后端把错因放在非标准字段，只看 .error.message / .message 会得到空串后落到"Agent error"硬编码
+          const extractErrMsg = (d: any): string => {
+            if (!d) return '';
+            if (typeof d === 'string') return d;
+            const candidates = [
+              d?.error?.message,
+              d?.error?.detail,
+              d?.error?.reason,
+              typeof d?.error === 'string' ? d.error : '',
+              d?.message,
+              d?.errorMessage,
+              d?.reason,
+              d?.detail,
+              d?.stopReason,
+              d?.errorKind,
+              d?.code,
+            ].filter(x => typeof x === 'string' && x.trim());
+            if (candidates.length > 0) return candidates.join(' | ');
+            // 最后兜底：把整个对象序列化并截断，避免只展示"Agent error"三字看不出根因
+            try {
+              const json = JSON.stringify(d);
+              if (json && json !== '{}') return json.length > 500 ? json.slice(0, 500) + '…' : json;
+            } catch {}
+            return '';
+          };
+          const errMsg = extractErrMsg(agentData) || 'Agent error';
+
           setMessages(prev => {
             const last = prev[prev.length - 1];
             if (!last || last.role !== 'assistant') return prev;
-            const content = (!last.content || last.content === t('chat.thinking') || last.content === t('chat.deepThinking', { defaultValue: '深度思考中...' }))
+
+            // 强制终结本条消息里所有"🔧 xxx 执行中…"的悬挂工具：替换为已中断，并移除 marker
+            const sealPending = (raw: string) => {
+              if (!raw) return raw;
+              return raw
+                .replace(
+                  /(?<=(?:^|\n)\s*(?:>\s*)?)🔧\s*(`[^`]+`)\s*执行中(?:…|\.\.\.)/g,
+                  '❌ $1 已中断',
+                )
+                .replace(/<!--\s*tool:[^>]*-->/g, '');
+            };
+            const sealed = sealPending(last.content || '');
+
+            const isPlaceholder =
+              !sealed ||
+              sealed === t('chat.thinking') ||
+              sealed === t('chat.deepThinking', { defaultValue: '深度思考中...' });
+            const content = isPlaceholder
               ? `> **⚠️ Agent 错误**\n> ${errMsg}`
-              : `${last.content}\n\n> **⚠️ Agent 错误**\n> ${errMsg}`;
+              : `${sealed}\n\n> **⚠️ Agent 错误**\n> ${errMsg}`;
             return [...prev.slice(0, -1), { ...last, content }];
           });
         }
