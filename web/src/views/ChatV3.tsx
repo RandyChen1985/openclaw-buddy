@@ -352,7 +352,36 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           isSummarizing={isSummarizing}
           isUpdatingLabel={isUpdatingLabel}
           messagesCount={messages.length}
-          onAutoSummarize={() => handleAutoSummarize(messages, false, undefined, true)}
+          onAutoSummarize={async () => {
+            // 手动触发应当“点击即有反馈”。当本地消息为空时，尝试先拉取历史再生成标题。
+            if (!sessionKey) return;
+            if (messages.length > 0) {
+              await handleAutoSummarize(messages, false, undefined, true);
+              return;
+            }
+
+            try {
+              const hRes = await sendRPC('chat.history', { sessionKey, limit: 10 });
+              if (!hRes.ok) {
+                message.warning(t('chat.noMessagesForTitle', { defaultValue: '暂无可用于生成标题的消息' }));
+                return;
+              }
+              const raw = hRes.payload?.messages || hRes.payload?.items || [];
+              if (!Array.isArray(raw) || raw.length === 0) {
+                message.warning(t('chat.noMessagesForTitle', { defaultValue: '暂无可用于生成标题的消息' }));
+                return;
+              }
+              const msgs = raw.map((m: any) => ({
+                id: m.id || `hist-${sessionKey}-${Math.random().toString(36).slice(2)}`,
+                role: (m.role === 'toolResult' ? 'assistant' : m.role) as any,
+                content: (typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '')).toString(),
+                timestamp: ''
+              })).filter((m: any) => (m.content || '').trim().length > 0);
+              await handleAutoSummarize(msgs, false, sessionKey, true);
+            } catch {
+              message.error(t('common.error', { defaultValue: '错误' }));
+            }
+          }}
           onUpdateLabel={handleUpdateLabel}
           onCopy={copyToClipboard}
           isEditingLabel={isEditingLabel}
