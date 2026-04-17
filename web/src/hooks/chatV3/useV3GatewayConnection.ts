@@ -5,6 +5,9 @@ import api, { getTicket } from '../../api';
 import { APP_VERSION } from '../../version';
 import * as nacl from 'tweetnacl';
 
+/** `openclaw.json` 里 `gateway.auth.token` 极少变；短时缓存减少握手阶段重复 HTTP */
+const GATEWAY_TOKEN_CACHE_MS = 120_000;
+
 export type V3WsStatus =
   | 'disconnected'
   | 'connecting'
@@ -95,6 +98,8 @@ export function useV3GatewayConnection({
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectInFlightRef = useRef(false);
   const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gatewayTokenCacheRef = useRef<{ token: string; at: number } | null>(null);
+  const gatewayTokenFetchRef = useRef<Promise<string> | null>(null);
 
   const [status, dispatch] = useReducer(wsStatusReducer, 'disconnected' as V3WsStatus);
   const [lastHealth, setLastHealth] = useState<{ ok: boolean; latency: number; ts: number } | null>(null);
@@ -109,6 +114,35 @@ export function useV3GatewayConnection({
     const resolvers = Array.from(pendingRequests.current.values());
     pendingRequests.current.clear();
     resolvers.forEach(resolve => resolve({ ok: false, error: { message: errorMessage } }));
+  }, []);
+
+  /**
+   * 获取 Buddy 转发的 `gateway.auth.token`（与 challenge 后行为一致），带内存缓存与并发去重。
+   * `connect()` 开头会 fire-and-forget 预取，与 getTicket / 建连并行，缩短 HANDSHAKING 窗口。
+   */
+  const ensureGatewayToken = useCallback(async (): Promise<string> => {
+    const now = Date.now();
+    const hit = gatewayTokenCacheRef.current;
+    if (hit?.token && now - hit.at < GATEWAY_TOKEN_CACHE_MS) {
+      return hit.token;
+    }
+    if (gatewayTokenFetchRef.current) {
+      return gatewayTokenFetchRef.current;
+    }
+    const p = (async () => {
+      const res = await api.get('/v1/openclaw/gateway-token');
+      const token = res.data?.token || '';
+      if (token) {
+        gatewayTokenCacheRef.current = { token, at: Date.now() };
+      }
+      return token;
+    })();
+    gatewayTokenFetchRef.current = p;
+    try {
+      return await p;
+    } finally {
+      gatewayTokenFetchRef.current = null;
+    }
   }, []);
 
   /**
@@ -153,12 +187,17 @@ export function useV3GatewayConnection({
 
     let gatewayToken = '';
     try {
-      const res = await api.get('/v1/openclaw/gateway-token');
-      gatewayToken = res.data?.token || '';
+      gatewayToken = await ensureGatewayToken();
     } catch (e) {
       // 保持原行为：仅记录错误并进入 error
       // eslint-disable-next-line no-console
       console.error('❌ [V3] 获取 Gateway Token 失败:', e);
+      dispatch({ type: 'AUTH_FAILED' });
+      return;
+    }
+    if (!gatewayToken) {
+      // eslint-disable-next-line no-console
+      console.error('❌ [V3] Gateway Token 为空（请检查 openclaw.json gateway.auth.token）');
       dispatch({ type: 'AUTH_FAILED' });
       return;
     }
@@ -226,7 +265,7 @@ export function useV3GatewayConnection({
       }
     });
     ws.send(JSON.stringify(req));
-  }, [keyPair, deviceId]);
+  }, [keyPair, deviceId, ensureGatewayToken]);
 
   /**
    * 建立连接：创建新 ws，替换旧 ws，并挂载 onopen/onmessage/onclose/onerror。
@@ -238,6 +277,8 @@ export function useV3GatewayConnection({
     connectInFlightRef.current = true;
 
     dispatch({ type: 'CONNECT_REQUEST' });
+    // 与 getTicket / WebSocket 建连并行预取 token，challenge 到达时多数已就绪
+    void ensureGatewayToken().catch(() => {});
 
     const oldWs = wsRef.current;
     wsRef.current = null;
@@ -318,6 +359,7 @@ export function useV3GatewayConnection({
       // 4001 = gateway auth rotated; reset reconnect counter for immediate retry
       if (ev.code === 4001) {
         reconnectCountRef.current = 0;
+        gatewayTokenCacheRef.current = null;
         // eslint-disable-next-line no-console
         console.warn('⚠️ [V3] 网关认证已轮换 (4001)，立即重连');
       }
@@ -333,7 +375,7 @@ export function useV3GatewayConnection({
       // 避免 error+close 连续触发导致重连计数被双倍消耗。
       rejectAllPendingRequests('WebSocket error');
     };
-  }, [keyPair, deviceId, handlers, handleChallenge, rejectAllPendingRequests]);
+  }, [keyPair, deviceId, ensureGatewayToken, handlers, handleChallenge, rejectAllPendingRequests]);
 
   /**
    * 重连调度：当进入 disconnected 且仍具备 keyPair 时，按退避策略尝试重连。

@@ -109,8 +109,8 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   const [approvalClicked, setApprovalClicked] = useState<Record<string, boolean>>({});
 
   const processedContent = useMemo(() => {
-    let content = msg.content;
-    
+    let content = (msg.content || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
     // 1. :::toolResult 物理隐藏
     content = content.replace(/> :::toolResult[\s\S]*?:::\n*/g, '');
 
@@ -136,14 +136,29 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
     );
 
     if (!showThinking) {
+      // 与 useV3Messages.handleSessionTool / isAssistantToolishForThinkingMerge 对齐：> 与图标之间可有空白，工具名至少 1 字符
+      const toolStatusLineRe =
+        /(?:^|\n)\s*>\s*[🔧✅❌]\s*`[^`]+`\s*(?:执行中(?:…|\.\.\.)|完成|失败)(?:\s*<!--[\s\S]*?-->)?/g;
       content = content
         .replace(/> :::thinking[\s\S]*?:::\n*/g, '')
         .replace(/> :::toolCall[\s\S]*?:::\n*/g, '')
-        // 与 useV3Messages 注入的「执行中」一致，并兼容 Unicode 省略号(…) 与三个英文点(...)
-        .replace(/\n*> [🔧✅❌] `[^`]*` (?:执行中(?:…|\.\.\.)|完成|失败)(?:<!--[^>]*-->)?/g, '')
+        .replace(toolStatusLineRe, '')
+        // 仅去掉 session.tool 注入的 marker，避免残留 HTML 注释单独成条
+        .replace(/<!--\s*tool:[^>]*-->/g, '')
+        .replace(/\n{3,}/g, '\n\n')
         .trim();
 
-      if (!content && (msg.content.includes(':::thinking') || msg.content.includes(':::toolCall') || msg.content.includes('🔧'))) return null;
+      if (
+        !content &&
+        (msg.content.includes(':::thinking') ||
+          msg.content.includes(':::toolCall') ||
+          msg.content.includes('🔧') ||
+          msg.content.includes('✅') ||
+          msg.content.includes('❌') ||
+          /<!--\s*tool:/.test(msg.content))
+      ) {
+        return null;
+      }
     }
 
     return content.trim();

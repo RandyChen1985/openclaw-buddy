@@ -115,6 +115,7 @@ export interface UseV3MessagesParams {
   virtuosoRef: React.RefObject<any>;
   scrollRef: React.RefObject<HTMLDivElement>;
   showScrollBtnRef: React.MutableRefObject<boolean>;
+  showThinkingRef: React.MutableRefObject<boolean>;
 }
 
 /**
@@ -133,7 +134,8 @@ export function useV3Messages({
   inputAreaRef,
   virtuosoRef,
   scrollRef,
-  showScrollBtnRef
+  showScrollBtnRef,
+  showThinkingRef
 }: UseV3MessagesParams) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -836,6 +838,7 @@ export function useV3Messages({
     const marker = toolId ? `tool:${toolId}` : `tool:${toolName}`;
 
     if (phase === 'start') {
+      if (!showThinkingRef.current) return;
       const block = `\n\n> 🔧 \`${toolName}\` 执行中…`;
       setMessages(prev => {
         const last = prev[prev.length - 1];
@@ -864,7 +867,7 @@ export function useV3Messages({
         return next;
       });
     }
-  }, [t]);
+  }, [showThinkingRef, t]);
 
   /**
    * 统一处理网关 event（除 health/connect.challenge/sessions.changed 外）。

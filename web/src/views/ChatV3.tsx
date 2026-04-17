@@ -68,7 +68,14 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
    */
   const getSourceMeta = useCallback((source: string) => {
     const s = source?.toLowerCase();
-    const cfg = (s && SourceConfig[s]) ? SourceConfig[s] : (s === 'api' ? SourceConfig['openai-user'] : SourceConfig['fallback']);
+    const cfg =
+      s && SourceConfig[s]
+        ? SourceConfig[s]
+        : s === 'api'
+          ? SourceConfig['openai-user']
+          : s === 'openclaw-weixin'
+            ? SourceConfig['weixin']
+            : SourceConfig['fallback'];
     return {
       icon: cfg.icon,
       color: cfg.color,
@@ -80,12 +87,15 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [selectedBot, setSelectedBot] = useState<string>('');
   const [keyPair, setKeyPair] = useState<nacl.BoxKeyPair | null>(null);
   const [deviceId, setDeviceId] = useState<string>('');
-  
+  const [showThinking, setShowThinking] = useState<boolean>(() => storage.getItem('v3_show_thinking') === 'true');
+  const showThinkingRef = useRef(showThinking);
+  showThinkingRef.current = showThinking;
+
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const inputAreaRef = useRef<InputAreaHandle>(null);
-  
+
   // Hook usage
   const {
     messages, setMessages,
@@ -133,7 +143,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     t,
     inputAreaRef,
     virtuosoRef,
-    scrollRef
+    scrollRef,
+    showThinkingRef
   });
 
   const handleApprovalResolve = useCallback(async (approvalId: string, decision: string) => {
@@ -146,7 +157,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   // Local UI States
   const [isEditingLabel, setIsEditingLabel] = useState(false);
   const [editingLabelText, setEditingLabelText] = useState('');
-  const [showThinking, setShowThinking] = useState<boolean>(() => storage.getItem('v3_show_thinking') === 'true');
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);
   const [showSider, setShowSider] = useState(!isMobile);
