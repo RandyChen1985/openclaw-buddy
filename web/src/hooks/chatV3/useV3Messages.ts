@@ -121,6 +121,102 @@ function upsertAgentBlock(
 }
 
 /**
+ * 在已有 agent block 的末尾追加内容（非替换），常用于 command_output 的 delta/chunk 累积。
+ * 若块不存在则回退到 upsertAgentBlock 新建。
+ */
+function appendToAgentBlock(
+  metadata: string,
+  segmentName: string,
+  itemId: string,
+  additionalBody: string,
+  title: string = '',
+): string {
+  if (!additionalBody) return metadata;
+  const marker = itemId ? `${AGENT_ITEM_MARKER_PREFIX}${segmentName}:${itemId}-->` : '';
+  if (marker && metadata.includes(marker)) {
+    const markerIdx = metadata.indexOf(marker);
+    const afterMarker = metadata.slice(markerIdx);
+    // 定位本 block 的关闭行 "> :::"
+    const closeRelMatch = afterMarker.match(/\n>\s*:::\s*(?=\n|$)/);
+    if (closeRelMatch && closeRelMatch.index !== undefined) {
+      const absCloseIdx = markerIdx + closeRelMatch.index;
+      const insertion = `\n${toBlockquoteLines(additionalBody)}`;
+      return metadata.slice(0, absCloseIdx) + insertion + metadata.slice(absCloseIdx);
+    }
+  }
+  // 块不存在：新建（把 additionalBody 当作初始 body）
+  return upsertAgentBlock(metadata, segmentName, itemId, title, additionalBody);
+}
+
+const META_MESSAGE_ID_PREFIX = 'meta-';
+
+/**
+ * 在消息列表里找/新建某个 run 的 "思考信息附录气泡"（_uiMetaOnly = true），
+ * 并用 updateFn 更新它的 content。meta 气泡独立于正文气泡存在，
+ * - 跟在同 runId 的正文气泡后面显示；
+ * - 不参与 session.message 的合并/去重（它是纯 UI、无持久化 id 的）；
+ * - showThinking 关闭时整体在渲染层过滤掉。
+ *
+ * 若新建时 updateFn 返回空串，直接返回原列表（避免建出空气泡）。
+ */
+function updateMetaMessage(
+  prev: Message[],
+  runId: string | undefined,
+  updateFn: (currentContent: string) => string,
+): Message[] {
+  const metaId = runId ? `${META_MESSAGE_ID_PREFIX}${runId}` : `${META_MESSAGE_ID_PREFIX}floating`;
+
+  let mainIdx = -1;
+  let metaIdx = -1;
+  for (let i = 0; i < prev.length; i++) {
+    const m = prev[i];
+    if (m._uiMetaOnly && m.id === metaId) {
+      metaIdx = i;
+    } else if (!m._uiMetaOnly && m.role === 'assistant' && runId && m.runId === runId && mainIdx === -1) {
+      mainIdx = i;
+    }
+  }
+
+  if (metaIdx !== -1) {
+    const meta = prev[metaIdx];
+    const newContent = updateFn(meta.content || '');
+    if (newContent === (meta.content || '')) return prev;
+    const next = [...prev];
+    next[metaIdx] = { ...meta, content: newContent };
+    return next;
+  }
+
+  // 兜底定位：没匹配到同 runId 主气泡时，取列表里最后一条非 meta 的 assistant
+  if (mainIdx === -1) {
+    for (let i = prev.length - 1; i >= 0; i--) {
+      const m = prev[i];
+      if (!m._uiMetaOnly && m.role === 'assistant') { mainIdx = i; break; }
+    }
+  }
+
+  const parentSortTs = mainIdx !== -1 ? (prev[mainIdx]._sortTs || Date.now()) : Date.now();
+  const newContent = updateFn('');
+  if (!newContent) return prev;
+
+  const newMeta: Message = {
+    id: metaId,
+    runId: runId,
+    role: 'assistant',
+    content: newContent,
+    timestamp: new Date(parentSortTs + 1).toLocaleTimeString(),
+    _sortTs: parentSortTs + 1,
+    _uiMetaOnly: true,
+  };
+
+  if (mainIdx !== -1) {
+    const next = [...prev];
+    next.splice(mainIdx + 1, 0, newMeta);
+    return next;
+  }
+  return [...prev, newMeta];
+}
+
+/**
  * 将 assistant 消息内容拆分为「元数据区」(metadata) 和「正文区」(transcript)。
  * 元数据区包括 :::thinking / :::plan / :::commandOutput / :::toolCall / :::toolResult / :::warning
  * 以及工具状态行（> 🔧/✅/❌/⚠️ …）、<!-- tool:xxx --> 标记、/approve 指令等。
@@ -667,41 +763,28 @@ export function useV3Messages({
           }
 
           setMessages(prev => {
+            // 主气泡只承载 transcript 正文；thinking/plan/toolCall/commandOutput 已分离到 _uiMetaOnly 气泡
+            const isMain = (m: Message) => !m._uiMetaOnly;
             const idx = streamingAssistantIndexRef.current;
-            if (idx === null || idx < 0 || idx >= prev.length) {
-              const runIdIndex = prev.findLastIndex(m => m.runId === payload.runId);
-              const fallbackIndex = runIdIndex !== -1 ? runIdIndex : prev.findLastIndex(m => m.role === 'assistant' && !m.runId);
-              if (fallbackIndex === -1) return prev;
-              const next = [...prev];
-              const current = next[fallbackIndex];
-              
-              const { metadata } = partitionAssistantContent(current.content || '');
-              const combinedContent = metadata ? `${metadata}\n\n${fullText}` : fullText;
-              
-              next[fallbackIndex] = {
-                ...current,
-                runId: payload.runId,
-                content: combinedContent,
-                metrics: { ...current.metrics, ttft, tps: currentTPS },
-                _sortTs: current._sortTs
-              };
-              streamingAssistantIndexRef.current = fallbackIndex;
-              return next;
+            let targetIdx = (idx !== null && idx >= 0 && idx < prev.length && isMain(prev[idx])) ? idx : -1;
+            if (targetIdx === -1) {
+              const runIdIdx = prev.findLastIndex(m => isMain(m) && m.runId === payload.runId);
+              targetIdx = runIdIdx !== -1
+                ? runIdIdx
+                : prev.findLastIndex(m => isMain(m) && m.role === 'assistant' && !m.runId);
             }
+            if (targetIdx === -1) return prev;
 
             const next = [...prev];
-            const current = next[idx];
-            
-            const { metadata } = partitionAssistantContent(current.content || '');
-            const combinedContent = metadata ? `${metadata}\n\n${fullText}` : fullText;
-            
-            next[idx] = {
+            const current = next[targetIdx];
+            next[targetIdx] = {
               ...current,
               runId: payload.runId,
-              content: combinedContent,
+              content: fullText,
               metrics: { ...current.metrics, ttft, tps: currentTPS },
-              _sortTs: current._sortTs
+              _sortTs: current._sortTs,
             };
+            streamingAssistantIndexRef.current = targetIdx;
             return next;
           });
 
@@ -762,39 +845,38 @@ export function useV3Messages({
 
         if (pSessionKey === sessionKeyRef.current) {
           setMessages(prev => {
+            // 主气泡只承载 transcript；metadata 由 _uiMetaOnly 气泡承载，不再在主气泡里做保留/合并
+            const isMain = (m: Message) => !m._uiMetaOnly;
             const idx = streamingAssistantIndexRef.current;
-            const runIdIndex = prev.findLastIndex(m => m.runId === payload.runId);
-            const targetIndex = (idx !== null && idx >= 0 && idx < prev.length) ? idx : (runIdIndex !== -1 ? runIdIndex : prev.findLastIndex(m => m.role === 'assistant' && !m.runId));
+            const mainMatches = (i: number) => i >= 0 && i < prev.length && isMain(prev[i]);
+            let targetIndex = (idx !== null && mainMatches(idx)) ? idx : -1;
+            if (targetIndex === -1) {
+              const runIdIdx = prev.findLastIndex(m => isMain(m) && m.runId === payload.runId);
+              targetIndex = runIdIdx !== -1
+                ? runIdIdx
+                : prev.findLastIndex(m => isMain(m) && m.role === 'assistant' && !m.runId);
+            }
             if (targetIndex === -1) return prev;
 
             const last = prev[targetIndex];
             if (!incomingContent && last.content && last.content !== t('chat.thinking')) return prev;
 
-            // 关键修复：final 阶段不能用网关 payload 直接覆盖 content，
-            // 否则会丢失流式阶段累积的 thinking/plan/commandOutput/tool 等元数据块。
-            // 做法：保留既有 metadata（由 agent/session.tool 流累积），只替换 transcript 正文部分。
-            const { metadata: existingMeta } = partitionAssistantContent(last.content || '');
-            const { metadata: incomingMeta, transcript: incomingTranscript } = partitionAssistantContent(incomingContent || '');
-            // 既有 metadata 通常比 incoming 更丰富（含实时 thinking/tool 细节）；若为空则回退到 incoming 的 metadata
-            const finalMeta = existingMeta || incomingMeta;
-            const transcriptBody = incomingTranscript || (incomingMeta ? '' : incomingContent);
-            const combinedContent = finalMeta
-              ? (transcriptBody ? `${finalMeta}\n\n${transcriptBody}` : finalMeta)
-              : transcriptBody;
-
-            // 记录 metadata 供切换会话/重新加载历史时恢复
+            // 记录同 runId 的 meta 气泡 content 到缓存（供切会话/重新加载历史时兜底恢复）
             const runIdForCache = payload.runId || (last as any).runId;
-            if (finalMeta && runIdForCache) {
-              rememberMetadataForRun(pSessionKey, runIdForCache, finalMeta);
+            if (runIdForCache) {
+              const metaMsg = prev.find(m => m._uiMetaOnly && m.runId === runIdForCache);
+              if (metaMsg?.content) {
+                rememberMetadataForRun(pSessionKey, runIdForCache, metaMsg.content);
+              }
             }
 
             const next = [...prev];
             next[targetIndex] = {
               ...last,
               runId: payload.runId,
-              content: combinedContent,
+              content: incomingContent || last.content,
               metrics: { ...last.metrics, ttft, duration, tps: finalTPS },
-              _sortTs: last._sortTs
+              _sortTs: last._sortTs,
             };
             return next;
           });
@@ -821,24 +903,22 @@ export function useV3Messages({
         if (!wasUserAbort) {
           const partialContent = payload.message ? formatMessageContent(payload.message) : cache.fullText;
           setMessages(prev => {
+            const isMain = (m: Message) => !m._uiMetaOnly;
             const idx = streamingAssistantIndexRef.current;
-            const targetIndex = (idx !== null && idx >= 0 && idx < prev.length) ? idx : prev.findLastIndex(m => m.role === 'assistant');
+            let targetIndex = (idx !== null && idx >= 0 && idx < prev.length && isMain(prev[idx])) ? idx : -1;
+            if (targetIndex === -1) targetIndex = prev.findLastIndex(m => isMain(m) && m.role === 'assistant');
             if (targetIndex === -1) return prev;
             const last = prev[targetIndex];
             const label = t('chat.manuallyStopped', { defaultValue: '已手动停止' });
 
-            // 保留流式阶段累积的 thinking/plan/tool 等元数据，只替换 transcript 正文
-            const { metadata: existingMeta } = partitionAssistantContent(last.content || '');
-            const { metadata: incomingMeta, transcript: incomingTranscript } = partitionAssistantContent(partialContent || '');
-            const finalMeta = existingMeta || incomingMeta;
-            const bodyText = incomingTranscript || (incomingMeta ? '' : partialContent);
-            const hasBody = bodyText && bodyText !== t('chat.thinking') && bodyText !== t('chat.deepThinking', { defaultValue: '深度思考中...' });
-            const transcriptWithLabel = hasBody ? `${bodyText} (${label})` : label;
-            const content = finalMeta ? `${finalMeta}\n\n${transcriptWithLabel}` : transcriptWithLabel;
+            const hasBody = partialContent && partialContent !== t('chat.thinking') && partialContent !== t('chat.deepThinking', { defaultValue: '深度思考中...' });
+            const content = hasBody ? `${partialContent} (${label})` : label;
 
+            // 记录同 runId 的 meta 气泡 content 到缓存，供切换/重载恢复
             const runIdForCache = payload.runId || (last as any).runId;
-            if (finalMeta && runIdForCache) {
-              rememberMetadataForRun(pSessionKey, runIdForCache, finalMeta);
+            if (runIdForCache) {
+              const metaMsg = prev.find(m => m._uiMetaOnly && m.runId === runIdForCache);
+              if (metaMsg?.content) rememberMetadataForRun(pSessionKey, runIdForCache, metaMsg.content);
             }
 
             const next = [...prev];
@@ -1058,17 +1138,38 @@ export function useV3Messages({
     setMessages(prev => {
       if (prev.some(m => m.id === msgId)) return prev;
 
-      // 针对 assistant 消息：如果 UI 已有同 runId 的消息，大概率这是延迟到达的 transcript 推送，
-      // 且 UI 那条内容更丰富（含 thinking/tool 等 metadata），此时直接跳过，避免 session.message
-      // 追加一条"裸正文"导致重复/覆盖 metadata。
-      if (msg.role === 'assistant' && msg.runId) {
-        const existingByRunId = prev.find(m => m.role === 'assistant' && m.runId === msg.runId);
-        if (existingByRunId) {
-          const { transcript: uiTranscript } = partitionAssistantContent(existingByRunId.content || '');
-          const incomingTrim = content.trim();
-          // UI 的 transcript 已经覆盖了这次推送的内容，则直接忽略
-          if (uiTranscript && (uiTranscript === incomingTrim || uiTranscript.includes(incomingTrim))) {
-            return prev;
+      // 网关持久化会把一次 run 拆成多条 assistant 消息（toolCall 骨架 + 正文等）。
+      // 本 UI 只用「主气泡(正文)」和「_uiMetaOnly 气泡(思考信息附录)」两条承载同一个 run：
+      // 1) role=assistant 且内容看起来是"只有 metadata、没有正文"的骨架消息 -> 直接丢弃；UI 已在 meta 气泡里展示更完整内容。
+      // 2) role=assistant 且 runId 匹配到主气泡 -> 合并 transcript 到主气泡，不新增气泡。
+      if (msg.role === 'assistant') {
+        const { metadata: incomingMeta, transcript: incomingTranscript } = partitionAssistantContent(content || '');
+        const isSkeleton = !!incomingMeta && !incomingTranscript.trim();
+        if (isSkeleton) return prev;
+
+        if (msg.runId) {
+          const existingIdx = prev.findIndex(
+            m => m.role === 'assistant' && !m._uiMetaOnly && m.runId === msg.runId,
+          );
+          if (existingIdx !== -1) {
+            const existing = prev[existingIdx];
+            const thinkingPlaceholder = t('chat.thinking');
+            const deepThinkingPlaceholder = t('chat.deepThinking', { defaultValue: '深度思考中...' });
+            const isValidBody = (s: string) =>
+              !!s && s !== thinkingPlaceholder && s !== deepThinkingPlaceholder;
+
+            const bodyText = incomingTranscript || content;
+            let mergedContent = existing.content;
+            if (isValidBody(bodyText)) {
+              if (!isValidBody(existing.content) || !existing.content.includes(bodyText.trim())) {
+                mergedContent = bodyText;
+              }
+            }
+
+            if (mergedContent === existing.content) return prev;
+            const next = [...prev];
+            next[existingIdx] = { ...existing, content: mergedContent };
+            return next;
           }
         }
       }
@@ -1107,41 +1208,78 @@ export function useV3Messages({
     if (!evtKey || evtKey !== sessionKeyRef.current) return;
     if (!toolData) return;
 
-    const phase = toolData.phase as string;
-    const toolName = toolData.toolName || toolData.name || 'tool';
-    const toolId = toolData.toolCallId || toolData.id || '';
-    const marker = toolId ? `tool:${toolId}` : `tool:${toolName}`;
+    const phase = (toolData.phase as string) || '';
+    const toolName = toolData.toolName || toolData.name || toolData.tool || 'tool';
+    const toolId = toolData.toolCallId || toolData.callId || toolData.id || `${toolName}-${Date.now()}`;
+    const marker = `tool:${toolId}`;
+    // 优先用 payload 自带 runId，其次用当前 streaming 主气泡的 runId 兜底
+    const runId = (toolData.runId as string | undefined) || (payload.runId as string | undefined);
 
-    if (phase === 'start') {
+    // 尽可能从 payload 里提取"参数/命令"与"结果/输出"。不同后端实现字段名不一致，做宽泛匹配：
+    const pickFirst = (obj: any, keys: string[]) => {
+      for (const k of keys) {
+        const v = obj?.[k];
+        if (v !== undefined && v !== null && v !== '') return v;
+      }
+      return undefined;
+    };
+    const argsRaw = pickFirst(toolData, ['arguments', 'args', 'input', 'params', 'command', 'cmd', 'request']);
+    const resultRaw = phase === 'end' || phase === 'error'
+      ? pickFirst(toolData, ['result', 'output', 'stdout', 'response', 'data', 'error'])
+      : undefined;
+
+    const formatAsCode = (v: any, lang = 'json') => {
+      if (v === undefined || v === null) return '';
+      if (typeof v === 'string') {
+        // 看起来是 json 字符串就当 json；否则按纯文本
+        const trimmed = v.trim();
+        const looksJson = (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
+        return `\`\`\`${looksJson ? 'json' : ''}\n${v}\n\`\`\``;
+      }
+      try { return `\`\`\`${lang}\n${JSON.stringify(v, null, 2)}\n\`\`\``; } catch { return `\`\`\`\n${String(v)}\n\`\`\``; }
+    };
+
+    const buildToolBody = (currentStatus: 'running' | 'done' | 'failed') => {
+      const statusLine =
+        currentStatus === 'running' ? `> 🔧 \`${toolName}\` 执行中…<!-- ${marker} -->` :
+        currentStatus === 'done' ? `> ✅ \`${toolName}\` 完成` :
+        `> ❌ \`${toolName}\` 失败`;
+      const parts: string[] = [statusLine];
+      if (argsRaw !== undefined) {
+        parts.push(`**参数:**\n${formatAsCode(argsRaw)}`);
+      }
+      if (resultRaw !== undefined) {
+        parts.push(`**结果:**\n${formatAsCode(resultRaw, '')}`);
+      }
+      return parts.join('\n\n');
+    };
+
+    if (phase === 'start' || phase === '') {
       if (!showThinkingRef.current) return;
-      const block = `> 🔧 \`${toolName}\` 执行中…`;
       setMessages(prev => {
-        const last = prev[prev.length - 1];
-        if (!last || last.role !== 'assistant') return prev;
-        if (last.content.includes(marker)) return prev;
-        
-        const { metadata: oldMetadata, transcript } = partitionAssistantContent(last.content || '');
-        const metadata = oldMetadata ? `${oldMetadata}\n\n${block}` : block;
-        const content = transcript ? `${metadata}\n\n${transcript}` : metadata;
-        
-        return [...prev.slice(0, -1), { ...last, content: `${content}<!-- ${marker} -->` }];
+        const mainMsg = prev.find(m => !m._uiMetaOnly && m.role === 'assistant' && m.runId === runId);
+        const effectiveRunId = runId || mainMsg?.runId
+          || prev.slice().reverse().find(m => !m._uiMetaOnly && m.role === 'assistant' && m.runId)?.runId;
+        const body = buildToolBody('running');
+        return updateMetaMessage(prev, effectiveRunId, (current) =>
+          upsertAgentBlock(current, 'toolCall', toolId, toolName, body),
+        );
       });
     } else if (phase === 'end' || phase === 'error') {
-      const statusIcon = phase === 'end' ? '✅' : '❌';
+      const status: 'done' | 'failed' = phase === 'end' ? 'done' : 'failed';
       setMessages(prev => {
-        const idx = prev.findLastIndex(m => m.role === 'assistant' && m.content.includes(marker));
-        if (idx === -1) return prev;
-        const msg = prev[idx];
-        const executingRe = new RegExp(
-          `> 🔧 \`${toolName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\` 执行中(?:…|\\.\\.\\.)`,
-          'g',
+        const metaMatchIdx = prev.findIndex(m =>
+          m._uiMetaOnly &&
+          (runId ? m.runId === runId : true) &&
+          m.content.includes(`toolCall:${toolId}`),
         );
-        const updated = msg.content
-          .replace(executingRe, `> ${statusIcon} \`${toolName}\` ${phase === 'end' ? '完成' : '失败'}`)
-          .replace(`<!-- ${marker} -->`, '');
-        const next = [...prev];
-        next[idx] = { ...msg, content: updated };
-        return next;
+        const effectiveRunId = runId
+          || (metaMatchIdx !== -1 ? prev[metaMatchIdx].runId : undefined)
+          || prev.slice().reverse().find(m => !m._uiMetaOnly && m.role === 'assistant' && m.runId)?.runId;
+        const body = buildToolBody(status);
+        return updateMetaMessage(prev, effectiveRunId, (current) =>
+          upsertAgentBlock(current, 'toolCall', toolId, toolName, body),
+        );
       });
     }
   }, [showThinkingRef, t]);
@@ -1246,10 +1384,20 @@ export function useV3Messages({
           const errMsg = extractErrMsg(agentData) || 'Agent error';
 
           setMessages(prev => {
-            const last = prev[prev.length - 1];
-            if (!last || last.role !== 'assistant') return prev;
+            // 1) 找到最近一条主气泡（非 meta），追加 Agent 错误 banner
+            const mainIdx = prev.findLastIndex(m => !m._uiMetaOnly && m.role === 'assistant');
+            if (mainIdx === -1) return prev;
+            const main = prev[mainIdx];
 
-            // 强制终结本条消息里所有"🔧 xxx 执行中…"的悬挂工具：替换为已中断，并移除 marker
+            const isPlaceholder =
+              !main.content ||
+              main.content === t('chat.thinking') ||
+              main.content === t('chat.deepThinking', { defaultValue: '深度思考中...' });
+            const mainNextContent = isPlaceholder
+              ? `> **⚠️ Agent 错误**\n> ${errMsg}`
+              : `${main.content}\n\n> **⚠️ Agent 错误**\n> ${errMsg}`;
+
+            // 2) 同 runId 的 meta 气泡：把所有 "🔧 xxx 执行中…" 封印为 "❌ xxx 已中断"
             const sealPending = (raw: string) => {
               if (!raw) return raw;
               return raw
@@ -1259,23 +1407,26 @@ export function useV3Messages({
                 )
                 .replace(/<!--\s*tool:[^>]*-->/g, '');
             };
-            const sealed = sealPending(last.content || '');
 
-            const isPlaceholder =
-              !sealed ||
-              sealed === t('chat.thinking') ||
-              sealed === t('chat.deepThinking', { defaultValue: '深度思考中...' });
-            const content = isPlaceholder
-              ? `> **⚠️ Agent 错误**\n> ${errMsg}`
-              : `${sealed}\n\n> **⚠️ Agent 错误**\n> ${errMsg}`;
-            return [...prev.slice(0, -1), { ...last, content }];
+            const next = prev.map((m, i) => {
+              if (i === mainIdx) return { ...m, content: mainNextContent };
+              if (m._uiMetaOnly && m.runId === main.runId) {
+                const sealed = sealPending(m.content || '');
+                if (sealed === m.content) return m;
+                return { ...m, content: sealed };
+              }
+              return m;
+            });
+            return next;
           });
         }
       }
 
       // 处理实时流：thinking / plan / command_output / tool
-      // 事件数据结构通常为 { itemId, phase: start|delta|end, title, toolCallId, name, output|content|delta|text, status }
-      // 同一个 itemId 在整个运行期间只对应一个折叠块（按 itemId 做 upsert）。
+      // 事件数据结构常见字段：{ itemId, phase: start|delta|end, title, toolCallId, name,
+      //   output|content|text|delta|chunk|stdout|stderr|reasoning|thinking,
+      //   arguments|args|input|params|command, result, status }
+      // 同一个 itemId 在整个运行期间只对应一个折叠块（按 itemId 做 upsert / append）。
       if (
         stream === 'thinking' ||
         stream === 'plan' ||
@@ -1284,42 +1435,108 @@ export function useV3Messages({
       ) {
         if (effectiveKey !== sessionKeyRef.current) return;
 
+        const pickFirst = (obj: any, keys: string[]) => {
+          for (const k of keys) {
+            const v = obj?.[k];
+            if (v !== undefined && v !== null && v !== '') return v;
+          }
+          return undefined;
+        };
+        const toText = (v: any): string => {
+          if (v === undefined || v === null) return '';
+          if (typeof v === 'string') return v;
+          try { return JSON.stringify(v, null, 2); } catch { return String(v); }
+        };
+        const formatAsCode = (v: any, lang = 'json'): string => {
+          if (v === undefined || v === null) return '';
+          if (typeof v === 'string') {
+            const trimmed = v.trim();
+            const looksJson = (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
+            return `\`\`\`${looksJson ? 'json' : ''}\n${v}\n\`\`\``;
+          }
+          try { return `\`\`\`${lang}\n${JSON.stringify(v, null, 2)}\n\`\`\``; } catch { return `\`\`\`\n${String(v)}\n\`\`\``; }
+        };
+
         let itemId = '';
         let title = '';
-        let body: any = '';
+        let body = '';
+        let deltaOnly = false;
+        const phase = (agentData?.phase as string) || '';
 
         if (typeof agentData === 'string') {
           body = agentData;
         } else if (agentData && typeof agentData === 'object') {
-          itemId = agentData.itemId || agentData.toolCallId || agentData.id || '';
-          title = agentData.title || agentData.name || '';
-          // command_output 典型字段是 output（全量累积）
-          body = agentData.output
-            ?? agentData.content
-            ?? agentData.text
-            ?? agentData.delta
-            ?? agentData.reasoning
-            ?? agentData.thinking
-            ?? '';
+          itemId = agentData.itemId || agentData.toolCallId || agentData.callId || agentData.id || '';
+          title = agentData.title || agentData.name || agentData.tool || '';
 
-          // tool 流通常带 arguments/result 结构
           if (stream === 'tool') {
-            const args = agentData.arguments ?? agentData.args;
-            const result = agentData.result ?? agentData.output;
-            const parts: string[] = [];
-            if (args) {
-              const a = typeof args === 'string' ? args : JSON.stringify(args, null, 2);
-              parts.push(`**参数:**\n\`\`\`json\n${a}\n\`\`\``);
+            // tool 流：尽可能同时展示"参数"和"结果"
+            const argsRaw = pickFirst(agentData, ['arguments', 'args', 'input', 'params', 'command', 'cmd', 'request']);
+            const resultRaw = pickFirst(agentData, ['result', 'output', 'stdout', 'response', 'data']);
+            const errorRaw = pickFirst(agentData, ['error', 'stderr']);
+            const status = (agentData.status as string) || (phase === 'end' ? 'done' : phase === 'error' ? 'failed' : 'running');
+            const statusLine =
+              status === 'done' ? `> ✅ \`${title || 'tool'}\` 完成` :
+              status === 'failed' ? `> ❌ \`${title || 'tool'}\` 失败` :
+              `> 🔧 \`${title || 'tool'}\` 执行中…<!-- tool:${itemId} -->`;
+            const parts: string[] = [statusLine];
+            if (argsRaw !== undefined) parts.push(`**参数:**\n${formatAsCode(argsRaw)}`);
+            if (resultRaw !== undefined) parts.push(`**结果:**\n${formatAsCode(resultRaw, '')}`);
+            if (errorRaw !== undefined) parts.push(`**错误:**\n${formatAsCode(errorRaw, '')}`);
+            body = parts.join('\n\n');
+          } else if (stream === 'command_output') {
+            // 优先取全量字段；只有增量字段时标记 deltaOnly 走 append 路径
+            const full = pickFirst(agentData, ['output', 'stdout', 'content', 'text', 'result']);
+            const err = pickFirst(agentData, ['stderr', 'error']);
+            const delta = pickFirst(agentData, ['delta', 'chunk']);
+            const cmd = pickFirst(agentData, ['command', 'cmd']);
+
+            if (full !== undefined || err !== undefined) {
+              // 全量：title 带命令摘要，body 是完整输出
+              const parts: string[] = [];
+              if (cmd) parts.push(`**command ${toText(cmd)}**`);
+              if (full !== undefined) parts.push(`\`\`\`\n${toText(full)}\n\`\`\``);
+              if (err !== undefined) parts.push(`**stderr:**\n\`\`\`\n${toText(err)}\n\`\`\``);
+              body = parts.join('\n\n');
+              if (!title && cmd) title = `command ${toText(cmd).slice(0, 80)}`;
+            } else if (delta !== undefined) {
+              deltaOnly = true;
+              body = toText(delta);
+            } else if (cmd) {
+              // start 阶段只有 command，body 暂时给个提示
+              body = `**command ${toText(cmd)}**\n\n_执行中…_`;
+              if (!title) title = `command ${toText(cmd).slice(0, 80)}`;
             }
-            if (result) {
-              const r = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-              parts.push(`**结果:**\n\`\`\`\n${r}\n\`\`\``);
+          } else {
+            // thinking / plan：主体为累积的文本
+            const full = pickFirst(agentData, ['content', 'text', 'reasoning', 'thinking', 'plan', 'output']);
+            const delta = pickFirst(agentData, ['delta', 'chunk']);
+            if (full !== undefined) body = toText(full);
+            else if (delta !== undefined) { deltaOnly = true; body = toText(delta); }
+          }
+
+          // 兜底：已知字段都没命中，但 payload 里确实携带数据，
+          // 把未识别字段全量 JSON 化，避免 UI 上只看到"执行中…"空壳而不知道为什么。
+          if (!body) {
+            const knownKeys = new Set([
+              'itemId', 'toolCallId', 'callId', 'id', 'title', 'name', 'tool',
+              'phase', 'status', 'seq', 'ts', 'runId', 'sessionKey',
+              // 上面各分支已识别的业务字段（不需要再回显）
+              'arguments', 'args', 'input', 'params', 'command', 'cmd', 'request',
+              'result', 'output', 'stdout', 'stderr', 'response', 'data',
+              'delta', 'chunk', 'content', 'text', 'reasoning', 'thinking', 'plan',
+              'error',
+            ]);
+            const rest: Record<string, any> = {};
+            for (const k of Object.keys(agentData || {})) {
+              if (!knownKeys.has(k)) rest[k] = agentData[k];
             }
-            if (parts.length > 0) body = parts.join('\n\n');
+            if (Object.keys(rest).length > 0) {
+              body = `_（未识别的事件字段，已原样展示以便排查）_\n\n\`\`\`json\n${JSON.stringify(rest, null, 2)}\n\`\`\``;
+            }
           }
         }
 
-        if (typeof body !== 'string') body = JSON.stringify(body);
         if (!body && !title) {
           // 没内容可展示（例如仅生命周期 ping），只刷新 stall 计时器
           lastStreamEventAtRef.current = Date.now();
@@ -1338,14 +1555,17 @@ export function useV3Messages({
 
         setMessages(prev => {
           const idx = streamingAssistantIndexRef.current;
-          if (idx === null || idx < 0 || idx >= prev.length) return prev;
-          const msg = prev[idx];
-          const { metadata: oldMetadata, transcript } = partitionAssistantContent(msg.content || '');
-          const newMetadata = upsertAgentBlock(oldMetadata || '', segmentName, itemId, title, body);
-          const combinedContent = transcript ? `${newMetadata}\n\n${transcript}` : newMetadata;
-          const next = [...prev];
-          next[idx] = { ...msg, content: combinedContent };
-          return next;
+          const mainMsg = (idx !== null && idx >= 0 && idx < prev.length) ? prev[idx] : undefined;
+          const runId = (agentData?.runId as string | undefined)
+            || (data.payload?.runId as string | undefined)
+            || mainMsg?.runId
+            || prev.slice().reverse().find(m => !m._uiMetaOnly && m.role === 'assistant' && m.runId)?.runId;
+
+          return updateMetaMessage(prev, runId, (current) =>
+            deltaOnly
+              ? appendToAgentBlock(current, segmentName, itemId, body, title)
+              : upsertAgentBlock(current, segmentName, itemId, title, body),
+          );
         });
       }
 
@@ -1455,8 +1675,8 @@ export function useV3Messages({
 
     // 还原缓存里保留的 thinking/plan/toolCall 等折叠块：
     // 这些 metadata 只在 WS 的 agent / session.tool 事件里出现，DB transcript 通常不持久化它们。
-    // 这里用 runId 匹配贴回，保证切换会话再回来时折叠块仍然可见。
-    // 注意：同一 runId 可能有多条 assistant 消息（思考/工具/正文被拆），metadata 只贴到最后一条，避免重复。
+    // 新架构下 metadata 不再贴到主消息 content，而是以独立的 _uiMetaOnly 气泡插入到对应主消息后面。
+    // 注意：同一 runId 可能有多条 assistant 消息（思考/工具/正文被拆），meta 气泡只插在最后一条后面，避免重复。
     if (cache?.metadataByRunId && cache.metadataByRunId.size > 0) {
       const lastIdxByRunId = new Map<string, number>();
       for (let i = 0; i < history.length; i++) {
@@ -1465,14 +1685,28 @@ export function useV3Messages({
         if (!cache.metadataByRunId.has(row.runId)) continue;
         lastIdxByRunId.set(row.runId, i);
       }
-      lastIdxByRunId.forEach((idx, runId) => {
+      // 倒序插入以免影响前面 index
+      const ordered = Array.from(lastIdxByRunId.entries()).sort((a, b) => b[1] - a[1]);
+      for (const [runId, idx] of ordered) {
         const row: any = history[idx];
         const saved = cache.metadataByRunId.get(runId);
-        if (!saved) return;
-        const { metadata: already, transcript } = partitionAssistantContent(row.content || '');
-        if (already) return;
-        row.content = transcript ? `${saved}\n\n${transcript}` : saved;
-      });
+        if (!saved) continue;
+        // 已存在同 runId 的 meta 气泡则跳过
+        const alreadyHasMeta = history.some((m: any) => m._uiMetaOnly && m.runId === runId);
+        if (alreadyHasMeta) continue;
+
+        const parentSortTs = (row as any)._sortTs || Date.now();
+        const metaMsg: Message = {
+          id: `${META_MESSAGE_ID_PREFIX}${runId}`,
+          runId,
+          role: 'assistant',
+          content: saved,
+          timestamp: new Date(parentSortTs + 1).toLocaleTimeString(),
+          _sortTs: parentSortTs + 1,
+          _uiMetaOnly: true,
+        };
+        history.splice(idx + 1, 0, metaMsg as any);
+      }
     }
 
     if (cache) {
@@ -1810,13 +2044,29 @@ export function useV3Messages({
     streamEndGraceRef.current = { key: sessionKey, until: Date.now() + 3000 };
 
     setMessages(prev => {
-      const last = prev[prev.length - 1];
-      if (last?.role === 'assistant') {
-        const label = t('chat.manuallyStopped', { defaultValue: '已手动停止' });
-        const content = (last.content === t('chat.thinking') || !last.content) ? label : last.content + ` (${label})`;
-        return [...prev.slice(0, -1), { ...last, content }];
-      }
-      return prev;
+      // 1) 找最近主气泡（跳过 meta 附录），追加「(已手动停止)」标签
+      const mainIdx = prev.findLastIndex(m => !m._uiMetaOnly && m.role === 'assistant');
+      if (mainIdx === -1) return prev;
+      const main = prev[mainIdx];
+      const label = t('chat.manuallyStopped', { defaultValue: '已手动停止' });
+      const mainContent = (main.content === t('chat.thinking') || !main.content) ? label : main.content + ` (${label})`;
+
+      // 2) 同 runId 的 meta 气泡：把所有"执行中"封印为"已中断"
+      const sealPending = (raw: string) => raw
+        ? raw
+            .replace(/(?<=(?:^|\n)\s*(?:>\s*)?)🔧\s*(`[^`]+`)\s*执行中(?:…|\.\.\.)/g, '❌ $1 已中断')
+            .replace(/<!--\s*tool:[^>]*-->/g, '')
+        : raw;
+
+      return prev.map((m, i) => {
+        if (i === mainIdx) return { ...m, content: mainContent };
+        if (m._uiMetaOnly && m.runId === main.runId) {
+          const sealed = sealPending(m.content || '');
+          if (sealed === m.content) return m;
+          return { ...m, content: sealed };
+        }
+        return m;
+      });
     });
 
     const res = await sendRPC('chat.abort', { sessionKey });

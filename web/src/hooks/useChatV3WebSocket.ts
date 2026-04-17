@@ -25,6 +25,12 @@ export interface Message {
   content: string;
   timestamp: string;
   _sortTs?: number; // 💡 排序权重：毫秒级时间戳，用于消灭 UI 乱序
+  /**
+   * 纯前端展示用的"思考信息附录气泡"：只承载 agent/session.tool 事件产生的
+   * thinking/plan/toolCall/commandOutput 折叠块，跟在对应正文消息后面显示。
+   * 不对应任何持久化消息，不参与 session.message 的合并/去重，刷新页面后丢失。
+   */
+  _uiMetaOnly?: boolean;
   metrics?: {
     ttft?: number;
     duration?: number;

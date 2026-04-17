@@ -1,0 +1,40 @@
+---
+description: Git 提交说明须带 Conventional Commits 类型前缀（feat/fix/docs 等）
+alwaysApply: true
+---
+
+# Git 提交说明规范
+
+本仓库提交信息采用 **[Conventional Commits](https://www.conventionalcommits.org/)** 风格：**类型前缀 + 可选作用域 + 冒号 + 描述**。
+
+## 格式
+
+```
+<type>[(scope)]: <描述>
+```
+
+- **`type`（必填，小写）**：说明变更性质，常用取值：
+  - `feat`：新功能
+  - `fix`：缺陷修复
+  - `docs`：仅文档（注意用复数 `docs`，不是 `doc`）
+  - `refactor`：重构（不改变对外行为）
+  - `style`：格式、空白、分号等无逻辑影响的改动
+  - `perf`：性能优化
+  - `test`：测试相关
+  - `chore`：构建脚本、依赖、杂项等
+  - `ci`：CI 配置
+- **`(scope)`（可选）**：影响范围，小写，如 `(v3)`、`(web)`、`(api)`。
+- **`描述`**：简短说明改了什么；团队习惯以**中文**为主即可，可与英文混排。
+
+首行总长度建议不超过 72 字符；需要细节时用正文空行后补充。
+
+## 示例
+
+- `feat(v3): 推理与工具元数据嵌入主气泡底部`
+- `fix(v3): Command Output 区域对比度与终端深色样式`
+- `docs: 补充 WebSocket 事件说明`
+- `refactor(v3): 抽离 Markdown 渲染器配置`
+
+## 与工具链
+
+若环境向 `git commit` 注入不兼容的 `--trailer` 等参数，可用 `git commit-tree` 等方式创建提交；**提交说明正文仍须遵守本规范**。

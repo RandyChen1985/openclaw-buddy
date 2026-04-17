@@ -407,7 +407,18 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             setEditingMsgIndex(null);
           }}
           onCancelEdit={() => setEditingMsgIndex(null)}
-          onDelete={(idx) => setMessages((prev: any) => prev.filter((_: any, i: any) => i !== idx))}
+          onDelete={(idx) => setMessages((prev: any) => {
+            const target = prev[idx];
+            if (!target) return prev;
+            // 主气泡被删除时，同步清理同 runId 的思考信息附录气泡（_uiMetaOnly），避免孤儿
+            const runId = target.runId;
+            const isMainDeletion = !target._uiMetaOnly && !!runId;
+            return prev.filter((m: any, i: number) => {
+              if (i === idx) return false;
+              if (isMainDeletion && m._uiMetaOnly && m.runId === runId) return false;
+              return true;
+            });
+          })}
           onQuote={setQuotedMsg}
           onSend={handleWrappedSend}
           onApprovalResolve={handleApprovalResolve}

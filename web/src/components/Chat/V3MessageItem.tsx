@@ -1,8 +1,8 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Avatar, Tooltip, Button, Input, message } from 'antd';
 import { 
   User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, 
-  FileText, ChevronRight, ShieldAlert, ShieldCheck, ListTodo
+  FileText, ChevronRight, ChevronDown, ShieldAlert, ShieldCheck, ListTodo
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -51,6 +51,10 @@ interface V3MessageItemProps {
   isLast: boolean;
   isStalled?: boolean;
   tpsData?: number[];
+  /** 主气泡是否已开始吐出正文（用于自动折叠底部 meta 折叠区） */
+  mainHasTranscript?: boolean;
+  /** 主气泡底部要嵌入的「本次推理与工具调用」内容（来自同 runId 的 _uiMetaOnly 气泡） */
+  metaContent?: string;
   t: any;
 }
 
@@ -102,7 +106,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   msg, index, isMobile, showThinking,
   editingMsgIndex, editContent, setEditContent,
   onEdit, onSaveEdit, onCancelEdit, onQuote, onSend, onApprovalResolve, onRegenerate,
-  copyToClipboard, isTyping, isLast, isStalled, tpsData, t
+  copyToClipboard, isTyping, isLast, isStalled, tpsData, mainHasTranscript, metaContent, t
 }) => {
   const [thinkingSeconds, setThinkingSeconds] = useState(0);
   // 防止审批按钮重复点击：记录每个 approvalId 是否已点击过“通过”
@@ -172,7 +176,36 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   }, [msg.content, showThinking]);
 
   const isUser = msg.role === 'user';
+  const isMetaOnly = !!(msg as any)._uiMetaOnly;
   const hasApproval = msg.content.includes(':::approval');
+
+  // metaContent 只做轻量预处理：清掉内部 upsert 用的 itemId 注释即可，
+  // 保留所有 :::thinking / :::plan / :::toolCall / :::commandOutput 块供 blockquote 渲染器展开为 CollapsibleMeta
+  const processedMetaContent = useMemo(() => {
+    if (!metaContent) return '';
+    return metaContent.replace(/(?:^|\n)\s*>\s*<!--agentItem:[^>]*-->\s*/g, '\n').trim();
+  }, [metaContent]);
+
+  const hasEmbeddedMeta = !isMetaOnly && !isUser && !!processedMetaContent;
+
+  // 思考信息折叠区的折叠策略（同时覆盖两种形态：独立 meta 气泡 & 嵌入主气泡底部的 meta 区）：
+  // - AI 还没开始吐字（只在 thinking / 调工具阶段）时展开，方便实时观察进度
+  // - 一旦主气泡开始吐出正文（mainHasTranscript），立刻自动折叠为紧凑标题栏，避免干扰阅读
+  // - 一旦用户手动点过（metaUserToggledRef.current=true），后续不再自动切换，尊重用户选择
+  const metaSectionActive = isMetaOnly || hasEmbeddedMeta;
+  const metaStreamingLive = metaSectionActive && !mainHasTranscript;
+  const [metaExpanded, setMetaExpanded] = useState<boolean>(metaSectionActive ? metaStreamingLive : true);
+  const metaUserToggledRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (!metaSectionActive || metaUserToggledRef.current) return;
+    setMetaExpanded(metaStreamingLive);
+  }, [metaSectionActive, metaStreamingLive]);
+
+  const toggleMetaExpanded = () => {
+    metaUserToggledRef.current = true;
+    setMetaExpanded((v) => !v);
+  };
 
   // 从原始消息提取完整 approvalId（UUID），供审批按钮 RPC 使用
   const approvalMeta = useMemo(() => {
@@ -200,7 +233,138 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
     return () => clearInterval(interval);
   }, [isThinkingState]);
 
-  if (!processedContent && !(isTyping && isLast && !isUser) && !hasApproval) return null;
+  if (!processedContent && !(isTyping && isLast && !isUser) && !hasApproval && !hasEmbeddedMeta) return null;
+
+  // ReactMarkdown 的 components 配置，抽出来是为了在主气泡和嵌入式 meta 折叠区里复用同一套渲染器。
+  const markdownComponents = {
+    p: ({children}: any) => <p style={{margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere'}}>{children}</p>,
+    img: ({ node, ...props }: any) => (
+      <img
+        {...props}
+        style={{ maxWidth: '100%', borderRadius: 8, marginTop: 8, cursor: 'zoom-in', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+        onClick={() => window.open(props.title || props.src, '_blank')}
+      />
+    ),
+    pre: ({children}: any) => <pre style={{ overflowX: 'auto', maxWidth: '100%', margin: '8px 0', padding: '10px', background: '#f8fafc', borderRadius: 8 }}>{children}</pre>,
+    blockquote: ({ children }: any) => {
+      const extractText = (node: any): string => {
+        if (typeof node === 'string') return node;
+        if (Array.isArray(node)) return node.map(extractText).join('');
+        if (node?.props?.children) return extractText(node.props.children);
+        return '';
+      };
+      const fullText = extractText(children);
+      if (fullText.includes(':::thinking')) {
+        return <CollapsibleMeta title={t('chat.thinkingProcess', { defaultValue: '思考过程' })} icon={Cpu} defaultExpanded={false}>{children}</CollapsibleMeta>;
+      }
+      if (fullText.includes(':::plan')) {
+        return <CollapsibleMeta title={t('chat.executionPlan', { defaultValue: '执行计划' })} icon={ListTodo} defaultExpanded={true}>{children}</CollapsibleMeta>;
+      }
+      if (fullText.includes(':::toolCall')) {
+        return <CollapsibleMeta title={t('chat.systemTool', { defaultValue: '系统工具' })} icon={Terminal} defaultExpanded={false}>{children}</CollapsibleMeta>;
+      }
+      if (fullText.includes(':::commandOutput')) {
+        const titleMatch = fullText.match(/^\s*:::commandOutput\s*\n+\s*\*\*([^*\n]+)\*\*/);
+        const subtitle = titleMatch ? titleMatch[1].trim() : '';
+        const headerTitle = subtitle ? `Command Output · ${subtitle}` : 'Command Output';
+        return (
+          <CollapsibleMeta title={headerTitle} icon={Terminal} defaultExpanded={true}>
+            <div
+              className="v3-command-output-shell"
+              style={{
+                margin: '4px 0', borderRadius: 8, overflow: 'hidden',
+                border: '1px solid #1e293b', background: '#030712', color: '#e2e8f0',
+                padding: '10px 12px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12, lineHeight: 1.5,
+                maxHeight: 360, overflowY: 'auto', whiteSpace: 'pre-wrap'
+              }}
+            >
+              {children}
+            </div>
+          </CollapsibleMeta>
+        );
+      }
+      if (fullText.includes(':::approval')) {
+        const approvalIdForRPC = approvalMeta.approvalId;
+        const slug = approvalMeta.slug;
+        const rawContent = msg.content;
+        const alreadyResolved =
+          rawContent.includes('— ✅') || rawContent.includes('— ❌') ||
+          rawContent.includes('— ⏱️') || rawContent.includes('已超时');
+        const approvalClickKey = approvalIdForRPC || slug;
+        const isClicked = approvalClickKey ? !!approvalClicked[approvalClickKey] : false;
+        const isDisabled = alreadyResolved || isClicked;
+        return (
+          <div style={{
+            margin: '12px 0', padding: '16px', background: '#fef2f2',
+            border: '1px solid #fee2e2', borderRadius: 12,
+            boxShadow: '0 2px 8px rgba(239, 68, 68, 0.05)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: '#ef4444' }}>
+              <ShieldAlert size={18} />
+              <span style={{ fontWeight: 600, fontSize: 14 }}>{t('chat.approvalRequired')}</span>
+            </div>
+            <div style={{ marginBottom: 12, opacity: 0.9 }}>{children}</div>
+            <Button
+              type="primary" danger block icon={<ShieldCheck size={16} />}
+              disabled={isDisabled}
+              onClick={() => {
+                if (!approvalIdForRPC || isDisabled) return;
+                setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true }));
+                if (onApprovalResolve) {
+                  const maybePromise = (onApprovalResolve as any)(approvalIdForRPC, 'allow-once');
+                  Promise.resolve(maybePromise).catch(() => {
+                    setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: false }));
+                  });
+                } else {
+                  onSend(`/approve ${approvalIdForRPC} allow-once`);
+                }
+                message.success(t('chat.approvalSent', { defaultValue: '已提交审批指令' }));
+              }}
+              style={{ borderRadius: 8, fontWeight: 600, height: 36 }}
+            >
+              {t('chat.approveNow')}
+            </Button>
+          </div>
+        );
+      }
+      if (fullText.includes(':::warning')) {
+        return (
+          <div style={{
+            margin: '12px 0', padding: '12px', background: '#fffbeb',
+            border: '1px solid #fef3c7', borderRadius: 8, fontSize: 12
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: '#d97706' }}>
+              <ShieldAlert size={14} />
+              <span style={{ fontWeight: 600 }}>{fullText.split('\n')[0].replace('> :::warning ', '')}</span>
+            </div>
+            {children}
+          </div>
+        );
+      }
+      return (
+        <blockquote
+          className="v3-quote"
+          style={{
+            borderLeft: `4px solid ${isUser ? 'var(--v3-user-border, rgba(255,255,255,0.7))' : 'var(--v3-border, #e2e8f0)'}`,
+            padding: '8px 10px', paddingLeft: 12,
+            color: isUser ? 'var(--v3-user-text, rgba(255,255,255,0.92))' : 'var(--v3-text-muted, #64748b)',
+            background: isUser ? 'var(--v3-user-surface, rgba(255,255,255,0.12))' : 'rgba(241, 245, 249, 0.6)',
+            borderRadius: 10, margin: '8px 0', fontStyle: 'normal'
+          }}
+        >
+          {children}
+        </blockquote>
+      );
+    },
+    code: ({ inline, className, children, ...props }: any) => {
+      const match = /language-(\w+)/.exec(className || '');
+      const language = match ? match[1] : '';
+      if (!inline && language === 'mermaid') return <Mermaid chart={String(children).replace(/\n$/, '')} />;
+      if (!inline && language === 'echarts') return <ECharts optionStr={String(children).replace(/\n$/, '')} isTyping={isLast && isTyping} />;
+      if (!inline && language) return <CodeBlock language={language} value={String(children).replace(/\n$/, '')} isMobile={isMobile} {...props} />;
+      return <code {...props} style={{ padding: '0.2em 0.4em', backgroundColor: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(175, 184, 193, 0.2)', borderRadius: '6px', fontSize: '85%' }}>{children}</code>;
+    }
+  };
 
   return (
     <div 
@@ -212,6 +376,9 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
     >
       {isUser ? (
         <Avatar icon={<User size={18} />} style={{ background: '#1e293b', flexShrink: 0, marginTop: 4, visibility: 'visible' }} />
+      ) : isMetaOnly ? (
+        // 思考信息附录气泡：不占头像位，保留尺寸以与主气泡对齐
+        <div style={{ flexShrink: 0, marginTop: 4, width: isMobile ? 32 : 36, height: isMobile ? 32 : 36 }} />
       ) : (
         <div style={{ flexShrink: 0, marginTop: 4, visibility: 'visible' }}>
           <div style={{ width: isMobile ? 32 : 36, height: isMobile ? 32 : 36, borderRadius: '50%', background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #c7d2fe' }}>
@@ -221,12 +388,52 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       )}
       
       <div style={{ 
-        maxWidth: isMobile ? '92%' : '85%', padding: isMobile ? '10px 14px' : '12px 18px', borderRadius: isUser ? '18px 18px 4px 18px' : '4px 18px 18px 18px', 
-        background: isUser ? 'var(--v3-user-bubble, #4b5bdc)' : 'var(--v3-surface, #fff)', color: isUser ? 'var(--v3-user-text, #fff)' : 'var(--v3-text, #1e293b)',
-        boxShadow: isUser ? '0 4px 15px var(--v3-user-bubble-shadow, rgba(79, 70, 229, 0.15))' : '0 4px 12px rgba(0,0,0,0.03)',
-        border: !isUser ? '1px solid var(--v3-border, #e8eff6)' : 'none',
+        maxWidth: isMobile ? '92%' : '85%',
+        padding: isMetaOnly ? (isMobile ? '8px 12px' : '10px 14px') : (isMobile ? '10px 14px' : '12px 18px'),
+        borderRadius: isUser ? '18px 18px 4px 18px' : (isMetaOnly ? 12 : '4px 18px 18px 18px'),
+        background: isUser
+          ? 'var(--v3-user-bubble, #4b5bdc)'
+          : (isMetaOnly ? '#f8fafc' : 'var(--v3-surface, #fff)'),
+        color: isUser ? 'var(--v3-user-text, #fff)' : 'var(--v3-text, #1e293b)',
+        boxShadow: isUser ? '0 4px 15px var(--v3-user-bubble-shadow, rgba(79, 70, 229, 0.15))' : (isMetaOnly ? 'none' : '0 4px 12px rgba(0,0,0,0.03)'),
+        border: !isUser ? `1px ${isMetaOnly ? 'dashed #cbd5e1' : 'solid var(--v3-border, #e8eff6)'}` : 'none',
         position: 'relative', wordBreak: 'break-word', overflowWrap: 'anywhere', minWidth: 0,
       }}>
+        {isMetaOnly && (() => {
+          const metaLabel = metaStreamingLive ? 'AI 正在思考与调用工具…' : '本次推理与工具调用';
+          const metaColor = metaStreamingLive ? '#4f46e5' : '#64748b';
+          return (
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label={metaLabel}
+              aria-expanded={metaExpanded}
+              onClick={toggleMetaExpanded}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleMetaExpanded();
+                }
+              }}
+              title={metaExpanded ? '点击折叠' : '点击展开'}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none',
+                marginBottom: metaExpanded ? 8 : 0,
+                paddingBottom: metaExpanded ? 6 : 0,
+                borderBottom: metaExpanded ? '1px dashed #e2e8f0' : 'none',
+                fontSize: 11, color: metaColor, letterSpacing: 0.3,
+                fontWeight: metaStreamingLive ? 500 : 400,
+              }}
+            >
+              <span style={{ flex: 1, height: 1, background: 'linear-gradient(to right, transparent, #cbd5e1)' }} />
+              <span style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                {metaExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                {metaLabel}
+              </span>
+              <span style={{ flex: 1, height: 1, background: 'linear-gradient(to left, transparent, #cbd5e1)' }} />
+            </div>
+          );
+        })()}
         {editingMsgIndex === index ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: isMobile ? 220 : 400 }}>
             <Input.TextArea
@@ -240,7 +447,9 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
             </div>
           </div>
         ) : (
-          isThinkingState ? (
+          // 主气泡还没吐字但已有 meta 流（thinking/tool/plan/commandOutput）时：
+          // 不显示 "Thinking..." 动画，直接进入嵌入式 meta 区，让用户实时看到推理与工具调用过程。
+          isThinkingState && !hasEmbeddedMeta ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 13, color: isDeepThinking ? '#7c3aed' : '#64748b', fontWeight: isDeepThinking ? 600 : 400 }}>
                 {isDeepThinking ? t('chat.deepThinking', { defaultValue: '深度思考中...' }) : t('chat.thinking')}
@@ -254,7 +463,11 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
             </div>
           ) : (
             <>
-              <div className="markdown-body-v3" id={`msg-content-v3-${index}`}>
+              <div
+                className="markdown-body-v3"
+                id={`msg-content-v3-${index}`}
+                style={isMetaOnly && !metaExpanded ? { display: 'none' } : undefined}
+              >
                 <ReactMarkdown 
                   remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
                   rehypePlugins={[rehypeKatex, [rehypeSanitize, katexSanitizeSchema]]}
@@ -298,21 +511,24 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                             icon={Terminal}
                             defaultExpanded={true}
                           >
-                            <div style={{
-                              margin: '4px 0',
-                              borderRadius: 8,
-                              overflow: 'hidden',
-                              border: '1px solid #1e293b',
-                              background: '#0f172a',
-                              color: '#f8fafc',
-                              padding: '10px 12px',
-                              fontFamily: 'monospace',
-                              fontSize: 12,
-                              lineHeight: 1.5,
-                              maxHeight: 300,
-                              overflowY: 'auto',
-                              whiteSpace: 'pre-wrap'
-                            }}>
+                            <div
+                              className="v3-command-output-shell"
+                              style={{
+                                margin: '4px 0',
+                                borderRadius: 8,
+                                overflow: 'hidden',
+                                border: '1px solid #1e293b',
+                                background: '#030712',
+                                color: '#e2e8f0',
+                                padding: '10px 12px',
+                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                                fontSize: 12,
+                                lineHeight: 1.5,
+                                maxHeight: 360,
+                                overflowY: 'auto',
+                                whiteSpace: 'pre-wrap'
+                              }}
+                            >
                               {children}
                             </div>
                           </CollapsibleMeta>
@@ -424,13 +640,74 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                 </ReactMarkdown>
               </div>
 
-              {isStalled && isTyping && isLast && msg.role === 'assistant' && (
+              {hasEmbeddedMeta && (() => {
+                // 嵌入式「本次推理与工具调用」折叠区：挂在主气泡正文最底部，
+                // 沿用 markdownComponents 把 :::thinking/:::plan/:::toolCall/:::commandOutput 展开成 CollapsibleMeta 卡片
+                const embedLabel = metaStreamingLive ? 'AI 正在思考与调用工具…' : '本次推理与工具调用';
+                const embedColor = metaStreamingLive ? '#4f46e5' : '#64748b';
+                return (
+                  <div style={{ marginTop: 10 }}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-label={embedLabel}
+                      aria-expanded={metaExpanded}
+                      onClick={toggleMetaExpanded}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleMetaExpanded();
+                        }
+                      }}
+                      title={metaExpanded ? '点击折叠' : '点击展开'}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        cursor: 'pointer', userSelect: 'none',
+                        paddingBottom: metaExpanded ? 6 : 0,
+                        marginBottom: metaExpanded ? 6 : 0,
+                        borderBottom: metaExpanded ? '1px dashed #e2e8f0' : 'none',
+                        fontSize: 11, color: embedColor, letterSpacing: 0.3,
+                        fontWeight: metaStreamingLive ? 500 : 400,
+                      }}
+                    >
+                      <span style={{ flex: 1, height: 1, background: 'linear-gradient(to right, transparent, #cbd5e1)' }} />
+                      <span style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        {metaExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                        {embedLabel}
+                      </span>
+                      <span style={{ flex: 1, height: 1, background: 'linear-gradient(to left, transparent, #cbd5e1)' }} />
+                    </div>
+                    {metaExpanded && (
+                      <div
+                        className="markdown-body-v3 v3-meta-embedded"
+                        style={{
+                          background: '#f8fafc',
+                          border: '1px dashed #cbd5e1',
+                          borderRadius: 10,
+                          padding: '8px 12px',
+                        }}
+                      >
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
+                          rehypePlugins={[rehypeKatex, [rehypeSanitize, katexSanitizeSchema]]}
+                          components={markdownComponents as any}
+                        >
+                          {processedMetaContent}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {!isMetaOnly && isStalled && isTyping && isLast && msg.role === 'assistant' && (
                 <div style={{ marginTop: 8, padding: '4px 10px', background: '#f8fafc', borderRadius: 8, border: '1px dashed #e2e8f0', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <div className="typing-dot" style={{ width: 4, height: 4, background: '#94a3b8' }}></div>
                   <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>AI 正在深度思考中...</span>
                 </div>
               )}
 
+              {!isMetaOnly && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: isUser ? 'flex-end' : 'flex-start', gap: 6, marginTop: 6, fontSize: 10, color: isUser ? 'rgba(255,255,255,0.7)' : '#94a3b8' }} className="msg-footer">
                 {!(isTyping && isLast) && (
                   <div style={{ display: 'flex', gap: 2 }}>
@@ -479,6 +756,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                   </div>
                 )}
               </div>
+              )}
             </>
           )
         )}
