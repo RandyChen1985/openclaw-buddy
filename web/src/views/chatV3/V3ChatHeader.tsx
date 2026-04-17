@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Badge, Button, Dropdown, Input, Modal, Radio, Select, Switch, Tooltip } from 'antd';
+import { Badge, Button, Dropdown, Input, Modal, Radio, Select, Switch } from 'antd';
 import { LayoutPanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2 } from 'lucide-react';
 import type { V3ThemeMode, V3ThemePresetId, V3ThemeTokens } from '../../hooks/chatV3/useV3Theme';
 
@@ -430,40 +430,32 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                   </span>
                   {!sessionMeta.isMain && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Tooltip
-                        title={
-                          isSummarizing
-                            ? t('chat.summarizingTitle', { defaultValue: '正在生成标题...' })
-                            : t('chat.autoSummarize', { defaultValue: 'AI 自动总结标题' })
-                        }
+                      {/* 禁用态明确的 not-allowed 光标与变灰效果（无需额外 tooltip，避免与 toast 重复） */}
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          cursor: isSummarizing ? 'not-allowed' : 'pointer',
+                          opacity: isSummarizing ? 0.55 : 1
+                        }}
                       >
-                        {/* antd disabled button 不触发 hover：用 span 包一层以显示 tooltip/cursor */}
-                        <span
+                        <Button
+                          size="small"
+                          type="text"
+                          icon={isSummarizing ? <RefreshCw size={10} className="animate-spin" /> : <Wand2 size={10} />}
+                          onClick={onAutoSummarize}
+                          // 手动触发应可点击；即便本地消息为空也可由上层兜底拉历史。
+                          disabled={isSummarizing}
                           style={{
-                            display: 'inline-flex',
-                            cursor: isSummarizing ? 'not-allowed' : 'pointer',
-                            opacity: isSummarizing ? 0.55 : 1
+                            padding: 0,
+                            height: 16,
+                            width: 16,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: isSummarizing ? '#94a3b8' : '#6366f1'
                           }}
-                        >
-                          <Button
-                            size="small"
-                            type="text"
-                            icon={isSummarizing ? <RefreshCw size={10} className="animate-spin" /> : <Wand2 size={10} />}
-                            onClick={onAutoSummarize}
-                            // 手动触发应可点击；即便本地消息为空也可由上层兜底拉历史。
-                            disabled={isSummarizing}
-                            style={{
-                              padding: 0,
-                              height: 16,
-                              width: 16,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: isSummarizing ? '#94a3b8' : '#6366f1'
-                            }}
-                          />
-                        </span>
-                      </Tooltip>
+                        />
+                      </span>
                       <Button
                         size="small"
                         type="text"
