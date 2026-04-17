@@ -68,7 +68,14 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
    */
   const getSourceMeta = useCallback((source: string) => {
     const s = source?.toLowerCase();
-    const cfg = (s && SourceConfig[s]) ? SourceConfig[s] : (s === 'api' ? SourceConfig['openai-user'] : SourceConfig['fallback']);
+    const cfg =
+      s && SourceConfig[s]
+        ? SourceConfig[s]
+        : s === 'api'
+          ? SourceConfig['openai-user']
+          : s === 'openclaw-weixin'
+            ? SourceConfig['weixin']
+            : SourceConfig['fallback'];
     return {
       icon: cfg.icon,
       color: cfg.color,
@@ -80,12 +87,15 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [selectedBot, setSelectedBot] = useState<string>('');
   const [keyPair, setKeyPair] = useState<nacl.BoxKeyPair | null>(null);
   const [deviceId, setDeviceId] = useState<string>('');
-  
+  const [showThinking, setShowThinking] = useState<boolean>(() => storage.getItem('v3_show_thinking') === 'true');
+  const showThinkingRef = useRef(showThinking);
+  showThinkingRef.current = showThinking;
+
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const inputAreaRef = useRef<InputAreaHandle>(null);
-  
+
   // Hook usage
   const {
     messages, setMessages,
@@ -121,6 +131,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     handleAutoSummarize,
     handleModelChange,
     handleThinkingLevelChange,
+    sendRPC,
     connect,
     showScrollBtnRef
   } = useChatV3WebSocket({
@@ -132,14 +143,20 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     t,
     inputAreaRef,
     virtuosoRef,
-    scrollRef
+    scrollRef,
+    showThinkingRef
   });
 
+  const handleApprovalResolve = useCallback(async (approvalId: string, decision: string) => {
+    const res = await sendRPC('exec.approval.resolve', { id: approvalId, decision });
+    if (!res.ok) {
+      message.error(t('chat.approvalFailed', { defaultValue: `审批失败: ${res.error?.message || res.error || '未知错误'}` }));
+    }
+  }, [sendRPC, t]);
 
   // Local UI States
   const [isEditingLabel, setIsEditingLabel] = useState(false);
   const [editingLabelText, setEditingLabelText] = useState('');
-  const [showThinking, setShowThinking] = useState<boolean>(() => storage.getItem('v3_show_thinking') === 'true');
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);
   const [showSider, setShowSider] = useState(!isMobile);
@@ -181,7 +198,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   }, [botsModels, selectedBot]);
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => { message.success(t('chat.copySuccess')); });
+    navigator.clipboard.writeText(text)
+      .then(() => { message.success(t('chat.copySuccess')); })
+      .catch(() => { message.error(t('chat.copyFailed', { defaultValue: '复制失败，请手动复制' })); });
   };
 
   useEffect(() => {
@@ -383,13 +402,26 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
             setEditContent(content);
           }}
           onSaveEdit={() => {
-            handleSaveEdit(editingMsgIndex!, editContent);
+            if (editingMsgIndex === null) return;
+            handleSaveEdit(editingMsgIndex, editContent);
             setEditingMsgIndex(null);
           }}
           onCancelEdit={() => setEditingMsgIndex(null)}
-          onDelete={(idx) => setMessages((prev: any) => prev.filter((_: any, i: any) => i !== idx))}
+          onDelete={(idx) => setMessages((prev: any) => {
+            const target = prev[idx];
+            if (!target) return prev;
+            // 主气泡被删除时，同步清理同 runId 的思考信息附录气泡（_uiMetaOnly），避免孤儿
+            const runId = target.runId;
+            const isMainDeletion = !target._uiMetaOnly && !!runId;
+            return prev.filter((m: any, i: number) => {
+              if (i === idx) return false;
+              if (isMainDeletion && m._uiMetaOnly && m.runId === runId) return false;
+              return true;
+            });
+          })}
           onQuote={setQuotedMsg}
           onSend={handleWrappedSend}
+          onApprovalResolve={handleApprovalResolve}
           onRegenerate={handleRegenerate}
           copyToClipboard={copyToClipboard}
         />

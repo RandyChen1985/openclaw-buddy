@@ -46,6 +46,8 @@ const getSourceMeta = (source: string) => {
   if (SourceConfig[s]) return SourceConfig[s];
   // 兼容逻辑：api -> openai-user
   if (s === 'api') return SourceConfig['openai-user'];
+  // OpenClaw 网关会话 key 第三段常见为 openclaw-weixin，与微信同源展示
+  if (s === 'openclaw-weixin') return SourceConfig['weixin'];
   return SourceConfig['fallback'];
 };
 

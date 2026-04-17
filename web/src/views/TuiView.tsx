@@ -137,7 +137,7 @@ const TuiView: React.FC<TuiViewProps> = () => {
       };
 
       socket.onclose = () => {
-        term.write('\r\n\x1b[31m[Connection Closed]\x1b[0m\r\n');
+        term.write(`\r\n\x1b[31m[${t('common.connectionClosed')}]\x1b[0m\r\n`);
       };
 
       term.onData((data) => {

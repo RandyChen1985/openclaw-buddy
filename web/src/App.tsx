@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
   Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone, Rocket,
-  ShieldCheck
+  ShieldCheck, Clock
 } from 'lucide-react';
 import api from './api';
 import storage from './utils/storage';
@@ -25,6 +25,7 @@ import SkillManagement from './views/SkillManagement';
 import ExpertMarket from './views/ExpertMarket';
 import PluginManagement from './views/PluginManagement';
 import SecurityManager from './views/SecurityManager';
+import CronJobsView from './views/CronJobsView';
 import TuiView from './views/TuiView';
 import ShellView from './views/ShellView';
 import CrayfishLoading from './components/common/CrayfishLoading';
@@ -887,6 +888,7 @@ const Dashboard = () => {
         },
         { key: 'shell', label: t('common.shell'), icon: <Terminal size={14} /> },
         { key: 'security', label: t('security.title'), icon: <ShieldCheck size={14} /> },
+        { key: 'cron', label: t('common.cron'), icon: <Clock size={14} /> },
       ]
     },
     {
@@ -1082,7 +1084,8 @@ const Dashboard = () => {
             window.location.hash = 'actions';
           }}
         />
-      )
+      ),
+      'cron': <CronJobsView />
     };
 
     return (

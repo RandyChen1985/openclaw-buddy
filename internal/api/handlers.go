@@ -71,6 +71,12 @@ func (s *Server) getDashboardURL(c *gin.Context) {
 }
 
 func (s *Server) proxyLobsterDashboard(c *gin.Context) {
+	// 额外防线：即使已鉴权，也禁止跨站 Origin 直接调用代理（防止被第三方站点利用）
+	if !s.isOriginAllowed(c.Request, c.GetHeader("Origin")) {
+		s.Error(c, http.StatusForbidden, "Forbidden origin")
+		return
+	}
+
 	targetPort := s.cfg.HealthPort
 	targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", targetPort))
 
@@ -78,10 +84,8 @@ func (s *Server) proxyLobsterDashboard(c *gin.Context) {
 
 	// 修改响应头以允许嵌入
 	proxy.ModifyResponse = func(res *http.Response) error {
-		res.Header.Del("Content-Security-Policy")
+		// 不再无条件移除 CSP（风险较高），仅移除会强制禁止 iframe 的 XFO
 		res.Header.Del("X-Frame-Options")
-		// 允许跨域
-		res.Header.Set("Access-Control-Allow-Origin", "*")
 		return nil
 	}
 
@@ -1648,6 +1652,107 @@ func (s *Server) getOpenClawPlugins(c *gin.Context) {
 	})
 }
 
+func (s *Server) getOpenClawCronJobs(c *gin.Context) {
+	refresh := c.Query("refresh") == "true"
+	if refresh {
+		if err := process.SyncKeySingle("cron_jobs", s.cfg.OpenClawConfigDir); err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+
+	data, updatedAt, err := process.GetCachedData("cron_jobs")
+	if err != nil {
+		// 如果缓存没有，尝试同步一次
+		if err := process.SyncKeySingle("cron_jobs", s.cfg.OpenClawConfigDir); err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		data, updatedAt, _ = process.GetCachedData("cron_jobs")
+	}
+
+	s.Success(c, gin.H{
+		"data":       data,
+		"updated_at": updatedAt,
+	})
+}
+
+func (s *Server) enableCronJob(c *gin.Context) {
+	var req struct {
+		ID string `json:"id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "cron job id is required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【启用定时任务】 (ID: %s)", req.ID)
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   "tasks.enable_cron_job:" + req.ID,
+		Module: "cron",
+		Action: "enable",
+		Target: req.ID,
+	}
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.EnableOpenClawCronJob(req.ID); err != nil {
+			return "", err
+		}
+		_ = process.SyncKeySingle("cron_jobs", s.cfg.OpenClawConfigDir)
+		return "tasks.results.enabled", nil
+	})
+}
+
+func (s *Server) disableCronJob(c *gin.Context) {
+	var req struct {
+		ID string `json:"id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "cron job id is required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【禁用定时任务】 (ID: %s)", req.ID)
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   "tasks.disable_cron_job:" + req.ID,
+		Module: "cron",
+		Action: "disable",
+		Target: req.ID,
+	}
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.DisableOpenClawCronJob(req.ID); err != nil {
+			return "", err
+		}
+		_ = process.SyncKeySingle("cron_jobs", s.cfg.OpenClawConfigDir)
+		return "tasks.results.disabled", nil
+	})
+}
+
+func (s *Server) removeCronJob(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		s.Error(c, http.StatusBadRequest, "cron job id is required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【删除定时任务】 (ID: %s)", id)
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   "tasks.remove_cron_job:" + id,
+		Module: "cron",
+		Action: "remove",
+		Target: id,
+	}
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.RemoveOpenClawCronJob(id); err != nil {
+			return "", err
+		}
+		_ = process.SyncKeySingle("cron_jobs", s.cfg.OpenClawConfigDir)
+		return "tasks.results.removed", nil
+	})
+}
+
 func (s *Server) reloadPlugins(c *gin.Context) {
 	log.Printf("🎮 [控制] 用户请求: 【热重载插件引擎】")
 	err := process.ReloadOpenClawPlugins()
@@ -2206,7 +2311,18 @@ func (s *Server) handleGetChatFile(c *gin.Context) {
 		return
 	}
 	cleanPath, err := filepath.Abs(filePath)
-	if err != nil || !strings.HasPrefix(cleanPath, absUploadDir) {
+	if err != nil {
+		c.Status(http.StatusForbidden)
+		return
+	}
+
+	// ⚠️ strings.HasPrefix("/a/b2", "/a/b") 会误判为 true，因此必须用 filepath.Rel 做边界判断
+	rel, err := filepath.Rel(absUploadDir, cleanPath)
+	if err != nil {
+		c.Status(http.StatusForbidden)
+		return
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 		c.Status(http.StatusForbidden)
 		return
 	}

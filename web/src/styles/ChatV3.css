@@ -442,6 +442,71 @@ button.v3-settings-reasoning-btn:active {
 .markdown-body-v3 th { background: #f8fafc; font-weight: 700; }
 .markdown-body-v3 blockquote:not([class]) { border-left: 4px solid #cbd5e1; padding-left: 12px; color: #64748b; margin: 10px 0; font-style: italic; }
 
+/* Command Output：终端深色区，覆盖 .markdown-body-v3 下 strong/table/pre 等浅色主题，避免浅底浅字 */
+.markdown-body-v3 .v3-command-output-shell,
+.v3-meta-content .v3-command-output-shell {
+  background: #030712 !important;
+  color: #e2e8f0 !important;
+}
+.markdown-body-v3 .v3-command-output-shell strong,
+.markdown-body-v3 .v3-command-output-shell b,
+.v3-meta-content .v3-command-output-shell strong,
+.v3-meta-content .v3-command-output-shell b {
+  color: #f8fafc !important;
+  font-weight: 700;
+}
+.markdown-body-v3 .v3-command-output-shell p,
+.markdown-body-v3 .v3-command-output-shell li,
+.markdown-body-v3 .v3-command-output-shell h1,
+.markdown-body-v3 .v3-command-output-shell h2,
+.markdown-body-v3 .v3-command-output-shell h3,
+.v3-meta-content .v3-command-output-shell p,
+.v3-meta-content .v3-command-output-shell li,
+.v3-meta-content .v3-command-output-shell h1,
+.v3-meta-content .v3-command-output-shell h2,
+.v3-meta-content .v3-command-output-shell h3 {
+  color: #e2e8f0 !important;
+}
+.markdown-body-v3 .v3-command-output-shell hr,
+.v3-meta-content .v3-command-output-shell hr {
+  background: #334155 !important;
+  border: none;
+}
+.markdown-body-v3 .v3-command-output-shell a,
+.v3-meta-content .v3-command-output-shell a {
+  color: #93c5fd !important;
+}
+.markdown-body-v3 .v3-command-output-shell pre,
+.v3-meta-content .v3-command-output-shell pre {
+  margin: 8px 0 !important;
+  padding: 10px !important;
+  background: #020617 !important;
+  color: #e2e8f0 !important;
+  border: 1px solid #1e293b !important;
+  border-radius: 8px;
+}
+.markdown-body-v3 .v3-command-output-shell code,
+.v3-meta-content .v3-command-output-shell code {
+  background: rgba(15, 23, 42, 0.95) !important;
+  color: #e2e8f0 !important;
+}
+.markdown-body-v3 .v3-command-output-shell table,
+.v3-meta-content .v3-command-output-shell table {
+  color: #e2e8f0 !important;
+}
+.markdown-body-v3 .v3-command-output-shell th,
+.markdown-body-v3 .v3-command-output-shell td,
+.v3-meta-content .v3-command-output-shell th,
+.v3-meta-content .v3-command-output-shell td {
+  background: #020617 !important;
+  color: #e2e8f0 !important;
+  border-color: #334155 !important;
+}
+.markdown-body-v3 .v3-command-output-shell th,
+.v3-meta-content .v3-command-output-shell th {
+  background: #0f172a !important;
+}
+
 /* 用户消息中的 Markdown 颜色适配 (基于 row-reverse 判定) */
 .v3-message-user .markdown-body-v3 strong,
 .v3-message-user .markdown-body-v3 h1,

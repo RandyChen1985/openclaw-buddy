@@ -44,6 +44,7 @@ export interface V3MessagePaneProps {
   onDelete: (idx: number) => void;
   onQuote: (content: string) => void;
   onSend: (text: string, files?: any[]) => void;
+  onApprovalResolve?: (approvalId: string, decision: string) => void;
   onRegenerate: () => void;
   copyToClipboard: (text: string) => void;
 }
@@ -79,11 +80,50 @@ export function V3MessagePane({
   onDelete,
   onQuote,
   onSend,
+  onApprovalResolve,
   onRegenerate,
   copyToClipboard
 }: V3MessagePaneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
+
+  // _uiMetaOnly 气泡不再作为独立消息渲染，改为嵌入到同 runId 主气泡的底部。
+  // 这里统一过滤掉，主气泡通过 metaContentByRunId 拿到它的 content。
+  const visibleMessages = useMemo(
+    () => messages.filter(m => !(m as any)._uiMetaOnly),
+    [messages],
+  );
+
+  // 按 runId 聚合 meta 气泡 content（showThinking 关闭时不传，实现整体隐藏）
+  const metaContentByRunId = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!showThinking) return map;
+    for (const m of messages) {
+      if (!(m as any)._uiMetaOnly) continue;
+      if (!m.runId || !m.content) continue;
+      map.set(m.runId, m.content);
+    }
+    return map;
+  }, [messages, showThinking]);
+
+  // 主气泡"已开始吐字正文"的 runId 集合：meta 折叠区据此自动折叠。
+  // 判定：同 runId 的主气泡 content 非空、非思考占位、非纯手动停止标签。
+  const thinkingLabel = t('chat.thinking');
+  const deepThinkingLabel = t('chat.deepThinking', { defaultValue: '深度思考中...' });
+  const stoppedLabel = t('chat.manuallyStopped', { defaultValue: '已手动停止' });
+  const runIdsWithTranscript = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of messages) {
+      if ((m as any)._uiMetaOnly) continue;
+      if (m.role !== 'assistant' || !m.runId) continue;
+      const c = (m.content || '').trim();
+      if (!c) continue;
+      if (c === thinkingLabel || c === deepThinkingLabel) continue;
+      if (c === stoppedLabel || c === `(${stoppedLabel})`) continue;
+      set.add(m.runId);
+    }
+    return set;
+  }, [messages, thinkingLabel, deepThinkingLabel, stoppedLabel]);
 
   const virtuosoComponents = useMemo(() => ({
     Scroller: React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>((props, ref) => (
@@ -197,12 +237,12 @@ export function V3MessagePane({
         </div>
       )}
 
-      {messages.length === 0 && !isLoadingHistory ? (
+      {visibleMessages.length === 0 && !isLoadingHistory ? (
         emptyState
       ) : !isLoadingHistory ? (
         <Virtuoso
           ref={virtuosoRef as any}
-          data={messages}
+          data={visibleMessages}
           overscan={200}
           followOutput={(isAtBottom) => isAtBottom ? (isTyping ? 'auto' : 'smooth') : false}
           atBottomStateChange={(atBottom) => {
@@ -235,34 +275,47 @@ export function V3MessagePane({
           }}
           style={{ flex: 1, width: '100%' }}
           components={virtuosoComponents}
-          itemContent={(index, msg) => (
-            <div style={{ padding: isMobile ? '0 12px' : '0 24px', paddingTop: index === 0 ? (isMobile ? 12 : 24) : 0, paddingBottom: 20 }}>
-              <V3MessageItem
-                key={(msg as any).id || index}
-                msg={msg as any}
-                index={index}
-                isMobile={!!isMobile}
-                showThinking={showThinking}
-                selectedBot={selectedBot}
-                editingMsgIndex={editingMsgIndex}
-                editContent={editContent}
-                setEditContent={setEditContent}
-                onEdit={(idx, content) => onEdit(idx, content)}
-                onSaveEdit={onSaveEdit}
-                onCancelEdit={onCancelEdit}
-                onDelete={(idx) => onDelete(idx)}
-                onQuote={onQuote}
-                onSend={onSend}
-                onRegenerate={onRegenerate}
-                copyToClipboard={copyToClipboard}
-                isTyping={isTyping}
-                isLast={index === messages.length - 1}
-                isStalled={isStalled}
-                tpsData={tpsData}
-                t={t}
-              />
-            </div>
-          )}
+          itemContent={(index, msg) => {
+            // visibleMessages 可能是 messages 的过滤子集，映射回原索引以便 onDelete/onEdit 正确定位
+            const realIndex = messages.indexOf(msg);
+            const isMetaMsg = !!(msg as any)._uiMetaOnly;
+            const mainHasTranscript = isMetaMsg
+              ? !!msg.runId && runIdsWithTranscript.has(msg.runId)
+              : !!msg.runId && runIdsWithTranscript.has(msg.runId);
+            // 本气泡是主气泡时，把同 runId 的 meta 内容"借"过来，渲染在正文最底部
+            const metaContent = !isMetaMsg && msg.runId ? metaContentByRunId.get(msg.runId) : undefined;
+            return (
+              <div style={{ padding: isMobile ? '0 12px' : '0 24px', paddingTop: index === 0 ? (isMobile ? 12 : 24) : 0, paddingBottom: 20 }}>
+                <V3MessageItem
+                  key={(msg as any).id || realIndex}
+                  msg={msg as any}
+                  index={realIndex !== -1 ? realIndex : index}
+                  isMobile={!!isMobile}
+                  showThinking={showThinking}
+                  selectedBot={selectedBot}
+                  editingMsgIndex={editingMsgIndex}
+                  editContent={editContent}
+                  setEditContent={setEditContent}
+                  onEdit={(idx, content) => onEdit(idx, content)}
+                  onSaveEdit={onSaveEdit}
+                  onCancelEdit={onCancelEdit}
+                  onDelete={(idx) => onDelete(idx)}
+                  onQuote={onQuote}
+                  onSend={onSend}
+                  onApprovalResolve={onApprovalResolve}
+                  onRegenerate={onRegenerate}
+                  copyToClipboard={copyToClipboard}
+                  isTyping={isTyping}
+                  isLast={index === visibleMessages.length - 1}
+                  isStalled={isStalled}
+                  tpsData={tpsData}
+                  mainHasTranscript={mainHasTranscript}
+                  metaContent={metaContent}
+                  t={t}
+                />
+              </div>
+            );
+          }}
         />
       ) : null}
     </div>

@@ -35,6 +35,7 @@ type Config struct {
 	Token                string
 	WebPort              int
 	WebRoot              string
+	CORSAllowOrigins     string
 	ExternalDashboardURL string
 	GUIDisableFeatures   string
 	ShowExternalTools    bool
@@ -90,6 +91,7 @@ func LoadConfig() (*Config, error) {
 		Token:                strings.TrimSpace(getEnv("BUDDY_TOKEN", "sk-replace-me-on-first-run")),
 		WebPort:              webPort,
 		WebRoot:              webRoot,
+		CORSAllowOrigins:     strings.TrimSpace(getEnv("CORS_ALLOW_ORIGINS", "https://yovole.com")),
 		ExternalDashboardURL: getEnv("EXTERNAL_DASHBOARD_URL", ""),
 		GUIDisableFeatures:   getEnv("GUI_DISABLE_FEATURES", ""),
 		ShowExternalTools:    showExternalTools,
@@ -124,6 +126,11 @@ WEB_PORT=3000
 WEB_ROOT="/"
 # 访问面板所需的认证令牌 (已自动生成)
 BUDDY_TOKEN="%s"
+
+# [网络与安全]
+# 允许跨域访问的 Origin 白名单（逗号分隔）。留空则默认仅允许同源/本机访问。
+# 例：CORS_ALLOW_ORIGINS="https://console.example.com,http://localhost:5173"
+CORS_ALLOW_ORIGINS="https://yovole.com"
 
 # [存储与目录]
 DB_FILE="./data/guardian.db"

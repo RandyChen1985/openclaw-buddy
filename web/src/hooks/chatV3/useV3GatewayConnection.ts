@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import storage from '../../utils/storage';
 import { getWsUrl } from '../../utils/url';
-import { getTicket } from '../../api';
+import api, { getTicket } from '../../api';
 import { APP_VERSION } from '../../version';
 import * as nacl from 'tweetnacl';
+
+/** `openclaw.json` 里 `gateway.auth.token` 极少变；短时缓存减少握手阶段重复 HTTP */
+const GATEWAY_TOKEN_CACHE_MS = 120_000;
 
 export type V3WsStatus =
   | 'disconnected'
@@ -95,6 +98,8 @@ export function useV3GatewayConnection({
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectInFlightRef = useRef(false);
   const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gatewayTokenCacheRef = useRef<{ token: string; at: number } | null>(null);
+  const gatewayTokenFetchRef = useRef<Promise<string> | null>(null);
 
   const [status, dispatch] = useReducer(wsStatusReducer, 'disconnected' as V3WsStatus);
   const [lastHealth, setLastHealth] = useState<{ ok: boolean; latency: number; ts: number } | null>(null);
@@ -112,6 +117,35 @@ export function useV3GatewayConnection({
   }, []);
 
   /**
+   * 获取 Buddy 转发的 `gateway.auth.token`（与 challenge 后行为一致），带内存缓存与并发去重。
+   * `connect()` 开头会 fire-and-forget 预取，与 getTicket / 建连并行，缩短 HANDSHAKING 窗口。
+   */
+  const ensureGatewayToken = useCallback(async (): Promise<string> => {
+    const now = Date.now();
+    const hit = gatewayTokenCacheRef.current;
+    if (hit?.token && now - hit.at < GATEWAY_TOKEN_CACHE_MS) {
+      return hit.token;
+    }
+    if (gatewayTokenFetchRef.current) {
+      return gatewayTokenFetchRef.current;
+    }
+    const p = (async () => {
+      const res = await api.get('/v1/openclaw/gateway-token');
+      const token = res.data?.token || '';
+      if (token) {
+        gatewayTokenCacheRef.current = { token, at: Date.now() };
+      }
+      return token;
+    })();
+    gatewayTokenFetchRef.current = p;
+    try {
+      return await p;
+    } finally {
+      gatewayTokenFetchRef.current = null;
+    }
+  }, []);
+
+  /**
    * 发送网关 RPC 请求（req/res）。当 ws 未连接时返回 ok=false。
    */
   const sendRPC = useCallback((method: string, params: any): Promise<SendRpcResult> => {
@@ -123,7 +157,13 @@ export function useV3GatewayConnection({
       const id = `${method}-${requestIdRef.current++}`;
       const req = { type: 'req', id, method, params };
 
-      const timeoutValue = method === 'sessions.delete' ? 180000 : 30000;
+      const timeoutMap: Record<string, number> = {
+        'sessions.delete': 180000,
+        'chat.send': 120000,
+        'chat.history': 60000,
+        'chat.abort': 15000,
+      };
+      const timeoutValue = timeoutMap[method] || 30000;
       const timer = setTimeout(() => {
         if (pendingRequests.current.has(id)) {
           pendingRequests.current.delete(id);
@@ -147,13 +187,17 @@ export function useV3GatewayConnection({
 
     let gatewayToken = '';
     try {
-      const api = await import('../../api').then(m => m.default);
-      const res = await api.get('/v1/openclaw/gateway-token');
-      gatewayToken = res.data?.token || '';
+      gatewayToken = await ensureGatewayToken();
     } catch (e) {
       // 保持原行为：仅记录错误并进入 error
       // eslint-disable-next-line no-console
       console.error('❌ [V3] 获取 Gateway Token 失败:', e);
+      dispatch({ type: 'AUTH_FAILED' });
+      return;
+    }
+    if (!gatewayToken) {
+      // eslint-disable-next-line no-console
+      console.error('❌ [V3] Gateway Token 为空（请检查 openclaw.json gateway.auth.token）');
       dispatch({ type: 'AUTH_FAILED' });
       return;
     }
@@ -221,7 +265,7 @@ export function useV3GatewayConnection({
       }
     });
     ws.send(JSON.stringify(req));
-  }, [keyPair, deviceId]);
+  }, [keyPair, deviceId, ensureGatewayToken]);
 
   /**
    * 建立连接：创建新 ws，替换旧 ws，并挂载 onopen/onmessage/onclose/onerror。
@@ -233,18 +277,35 @@ export function useV3GatewayConnection({
     connectInFlightRef.current = true;
 
     dispatch({ type: 'CONNECT_REQUEST' });
+    // 与 getTicket / WebSocket 建连并行预取 token，challenge 到达时多数已就绪
+    void ensureGatewayToken().catch(() => {});
 
     const oldWs = wsRef.current;
     wsRef.current = null;
     if (oldWs) oldWs.close();
 
-    const ticket = await getTicket();
+    let ticket: string | null = null;
+    try {
+      ticket = await getTicket();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('❌ [V3] getTicket 失败，回退到 token 认证:', e);
+    }
     const token = storage.getItem('guardian_token');
     const wsUrl = ticket
       ? getWsUrl(`/v1/ws/gateway?ticket=${ticket}`)
       : getWsUrl(`/v1/ws/gateway?token=${token}`);
 
-    const ws = new WebSocket(wsUrl);
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('❌ [V3] WebSocket 构造失败:', e);
+      connectInFlightRef.current = false;
+      dispatch({ type: 'WS_ERROR' });
+      return;
+    }
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -291,10 +352,17 @@ export function useV3GatewayConnection({
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       if (ws !== wsRef.current) return;
       wsRef.current = null;
       connectInFlightRef.current = false;
+      // 4001 = gateway auth rotated; reset reconnect counter for immediate retry
+      if (ev.code === 4001) {
+        reconnectCountRef.current = 0;
+        gatewayTokenCacheRef.current = null;
+        // eslint-disable-next-line no-console
+        console.warn('⚠️ [V3] 网关认证已轮换 (4001)，立即重连');
+      }
       dispatch({ type: 'WS_CLOSE' });
       rejectAllPendingRequests('WebSocket closed');
     };
@@ -302,17 +370,20 @@ export function useV3GatewayConnection({
     ws.onerror = () => {
       if (ws !== wsRef.current) return;
       connectInFlightRef.current = false;
-      dispatch({ type: 'WS_ERROR' });
+      // 浏览器中 onerror 总会紧跟 onclose；这里只 reject 挂起请求，
+      // 不再 dispatch WS_ERROR，由后续 onclose -> WS_CLOSE 统一触发重连，
+      // 避免 error+close 连续触发导致重连计数被双倍消耗。
       rejectAllPendingRequests('WebSocket error');
     };
-  }, [keyPair, deviceId, handlers, handleChallenge, rejectAllPendingRequests]);
+  }, [keyPair, deviceId, ensureGatewayToken, handlers, handleChallenge, rejectAllPendingRequests]);
 
   /**
    * 重连调度：当进入 disconnected 且仍具备 keyPair 时，按退避策略尝试重连。
+   * 只监听 disconnected（onerror 不再直接触发 error 状态，而是由 onclose 统一收归为 disconnected）。
    */
   useEffect(() => {
     if (!keyPair) return;
-    if (status !== 'disconnected' && status !== 'error') return;
+    if (status !== 'disconnected') return;
     if (reconnectCountRef.current >= maxReconnects) {
       dispatch({ type: 'AUTH_FAILED' });
       return;
