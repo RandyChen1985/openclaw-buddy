@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Badge, Button, Dropdown, Input, Modal, Radio, Select, Switch } from 'antd';
+import { Badge, Button, Dropdown, Input, Modal, Radio, Select, Switch, Tooltip } from 'antd';
 import { LayoutPanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2 } from 'lucide-react';
 import type { V3ThemeMode, V3ThemePresetId, V3ThemeTokens } from '../../hooks/chatV3/useV3Theme';
 
