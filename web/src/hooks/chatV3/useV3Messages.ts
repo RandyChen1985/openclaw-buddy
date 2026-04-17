@@ -15,7 +15,16 @@ type SessionStreamCache = {
   tpsData: number[];
   lastUserMsg?: Message;
   lastTouched: number;
+  /**
+   * 按 runId 记录流式阶段累积的「元数据块」(thinking/plan/commandOutput/toolCall/工具状态行等)。
+   * 这些元数据只来自 WS 的 agent / session.tool 事件，网关 transcript 通常不持久化它们。
+   * 存下来以便切回该会话重新加载历史时能把折叠卡片贴回对应的 assistant 消息。
+   */
+  metadataByRunId: Map<string, string>;
 };
+
+const MAX_METADATA_ENTRIES_PER_SESSION = 20;
+const MAX_METADATA_BYTES_PER_ENTRY = 64 * 1024; // 单条 64KB 上限，防止极长 thinking 占爆内存
 
 /**
  * 网关 transcript 可能把「工具/审批」与「:::thinking」拆成两条相邻 assistant。
@@ -23,17 +32,26 @@ type SessionStreamCache = {
  */
 function isAssistantThinkingOnlyContent(content: string): boolean {
   const t = (content || '').trim();
-  if (!t || !t.includes(':::thinking')) return false;
-  const rest = t.replace(/> :::thinking[\s\S]*?:::\s*/g, '').trim();
+  if (!t) return false;
+  // 支持多种元数据块：思考、计划、命令输出、工具调用标记
+  const hasMetadata = t.includes(':::thinking') || t.includes(':::plan') || t.includes(':::commandOutput') || t.includes(':::toolCall') || t.includes('🔧') || t.includes('✅') || t.includes('❌');
+  if (!hasMetadata) return false;
+  
+  const rest = t
+    .replace(/> :::thinking[\s\S]*?:::\s*/g, '')
+    .replace(/> :::plan[\s\S]*?:::\s*/g, '')
+    .replace(/> :::commandOutput[\s\S]*?:::\n*/g, '')
+    .replace(/> :::toolCall[\s\S]*?:::\n*/g, '')
+    .replace(/>\s*[🔧✅❌]\s*`[^`]+`\s*(?:执行中(?:…|\.{3})|完成|失败)(?:\s*<!--[\s\S]*?-->)?/g, '')
+    .replace(/<!--\s*tool:[^>]*-->/g, '')
+    .trim();
   return rest.length === 0;
 }
 
-function isAssistantToolishForThinkingMerge(content: string): boolean {
+function isAssistantMergableTarget(content: string): boolean {
   if (!content) return false;
-  if (content.includes(':::toolCall') || content.includes(':::approval')) return true;
-  if (/\n?>\s*🔧\s*`[^`]+`\s*执行中(?:…|\.{3})/.test(content)) return true;
-  if (/\n?>\s*[✅❌]\s*`[^`]+`\s*(?:完成|失败)/.test(content)) return true;
-  return false;
+  // 任何 assistant 消息都是合法的合并目标（包括正式回复）
+  return true;
 }
 
 function canMergeAssistantRunId(a?: string, b?: string): boolean {
@@ -41,15 +59,175 @@ function canMergeAssistantRunId(a?: string, b?: string): boolean {
   return true;
 }
 
+const AGENT_ITEM_MARKER_PREFIX = '<!--agentItem:';
+
+/**
+ * 把一行文本转成 blockquote 行：前置 `> `，多行原样保留并逐行前置。
+ */
+function toBlockquoteLines(text: string): string {
+  return text
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map(line => `> ${line}`)
+    .join('\n');
+}
+
+/**
+ * 在 metadata 中按 `itemId` 查找对应的 fenced 块并整块替换；若不存在则追加到末尾。
+ * 用于 agent 事件流（thinking/plan/commandOutput/toolCall），保证同一个 itemId 的多次 delta
+ * 只对应一个折叠块，而不是每个 delta 开一张新卡片。
+ */
+function upsertAgentBlock(
+  metadata: string,
+  segmentName: string,
+  itemId: string,
+  title: string,
+  body: string,
+): string {
+  const marker = itemId ? `${AGENT_ITEM_MARKER_PREFIX}${segmentName}:${itemId}-->` : '';
+  const lines: string[] = [`> :::${segmentName}`];
+  if (marker) lines.push(`> ${marker}`);
+  if (title) lines.push(`> **${title}**`);
+  if (body) lines.push(toBlockquoteLines(body));
+  lines.push(`> :::`);
+  const newBlock = lines.join('\n');
+
+  if (marker && metadata.includes(marker)) {
+    // 用按行扫描定位 marker 所属的 fenced 块并整块替换
+    const arr = metadata.split('\n');
+    const markerLineIdx = arr.findIndex(l => l.includes(marker));
+    if (markerLineIdx !== -1) {
+      let startIdx = -1;
+      for (let i = markerLineIdx; i >= 0; i--) {
+        if (/^\s*>\s*:::\w+/.test(arr[i])) { startIdx = i; break; }
+      }
+      let endIdx = -1;
+      for (let i = markerLineIdx + 1; i < arr.length; i++) {
+        if (/^\s*>\s*:::\s*$/.test(arr[i])) { endIdx = i; break; }
+      }
+      if (startIdx !== -1 && endIdx !== -1) {
+        const before = arr.slice(0, startIdx).join('\n').replace(/\s+$/, '');
+        const after = arr.slice(endIdx + 1).join('\n').replace(/^\s+/, '');
+        const sepBefore = before ? '\n\n' : '';
+        const sepAfter = after ? '\n\n' : '';
+        return `${before}${sepBefore}${newBlock}${sepAfter}${after}`;
+      }
+    }
+  }
+
+  if (!metadata) return newBlock;
+  const sep = metadata.endsWith('\n\n') ? '' : (metadata.endsWith('\n') ? '\n' : '\n\n');
+  return metadata + sep + newBlock;
+}
+
+/**
+ * 将 assistant 消息内容拆分为「元数据区」(metadata) 和「正文区」(transcript)。
+ * 元数据区包括 :::thinking / :::plan / :::commandOutput / :::toolCall / :::toolResult / :::warning
+ * 以及工具状态行（> 🔧/✅/❌/⚠️ …）、<!-- tool:xxx --> 标记、/approve 指令等。
+ *
+ * 实现采用按行状态机解析，避免正则 `[\s\S]*?(?::::|$)` 在流式未闭合块时
+ * 把后续正文全部吞进 metadata 的越界问题。
+ */
+function partitionAssistantContent(content: string): { metadata: string, transcript: string } {
+  if (!content) return { metadata: '', transcript: '' };
+
+  const fencedOpenRe = /^\s*(?:>\s*)?:::(?:thinking|toolCall|plan|commandOutput|toolResult|warning)\b/;
+  const fencedCloseRe = /^\s*(?:>\s*)?:::\s*$/;
+  const toolStatusRe = /^\s*(?:>\s*)?[🔧✅❌⚠️]\s*`[^`]+`\s*(?:执行中(?:…|\.{3})|完成|失败|错误)(?:\s*<!--[\s\S]*?-->)?\s*$/;
+  const toolMarkerRe = /^\s*<!--\s*tool:[^>]*-->\s*$/;
+  const approveCmdRe = /^\s*(?:>\s*)?\/approve\s+[a-f0-9]{8,}\s+allow-once\s*$/i;
+  const approveConfirmRe = /^\s*(?:>\s*)?Approval\s+\S+\s+submitted\s+for\s+[a-f0-9]{8,}/i;
+  const blockquoteLineRe = /^\s*>/;
+
+  const lines = content.split('\n');
+  const metadataLines: string[] = [];
+  const transcriptLines: string[] = [];
+
+  let inFenced = false;
+  // 标记紧跟在一个 metadata 块后面：用来吸收块与块之间的一个空行，
+  // 避免重新拼接时多个 fenced 块塌成一个 blockquote（否则 markdown 会把连续 `>` 行合并成单块，
+  // 导致 V3MessageItem 的 blockquote 渲染器只按第一个命中的 `:::xxx` 类型来渲染整坨，后面的块被吞掉）。
+  let justClosedBlock = false;
+
+  const closeBlock = () => {
+    // 在每个 metadata 块之间插入一个空行，让 markdown 渲染时能把它们视为不同的 blockquote
+    metadataLines.push('');
+    justClosedBlock = false;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (inFenced) {
+      if (fencedCloseRe.test(line)) {
+        metadataLines.push(line);
+        inFenced = false;
+        justClosedBlock = true;
+        continue;
+      }
+      // 块内预期应为 `> ...`（blockquote）或空行；若出现非 blockquote 非空行，
+      // 认为前一个块实际已经没闭合（流式异常/未闭合），提前退出，避免把正文吞进元数据。
+      if (line.trim() !== '' && !blockquoteLineRe.test(line)) {
+        inFenced = false;
+        transcriptLines.push(line);
+        continue;
+      }
+      metadataLines.push(line);
+      continue;
+    }
+
+    // 块外的空行：若刚关闭一个块，则吸收一个空行用作块间分隔；否则进入 transcript
+    if (line.trim() === '') {
+      if (justClosedBlock) {
+        closeBlock();
+        continue;
+      }
+      transcriptLines.push(line);
+      continue;
+    }
+
+    if (fencedOpenRe.test(line)) {
+      if (justClosedBlock) closeBlock();
+      metadataLines.push(line);
+      if (!fencedCloseRe.test(line)) inFenced = true;
+      continue;
+    }
+
+    if (
+      toolStatusRe.test(line) ||
+      toolMarkerRe.test(line) ||
+      approveCmdRe.test(line) ||
+      approveConfirmRe.test(line)
+    ) {
+      if (justClosedBlock) closeBlock();
+      metadataLines.push(line);
+      continue;
+    }
+
+    justClosedBlock = false;
+    transcriptLines.push(line);
+  }
+
+  const metadata = metadataLines.join('\n').replace(/\n{4,}/g, '\n\n\n').replace(/^\s+|\s+$/g, '');
+  const transcript = transcriptLines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
+  return { metadata, transcript };
+}
+
 function mergeTrailingThinkingIntoPreviousAssistant(prev: Message[], incoming: Message): Message[] | null {
   if (incoming.role !== 'assistant' || !isAssistantThinkingOnlyContent(incoming.content)) return null;
   const last = prev[prev.length - 1];
   if (!last || last.role !== 'assistant') return null;
-  if (!isAssistantToolishForThinkingMerge(last.content)) return null;
+  if (!isAssistantMergableTarget(last.content)) return null;
   if (!canMergeAssistantRunId(last.runId, incoming.runId)) return null;
-  if (/^\s*> :::thinking/m.test((last.content || '').trim())) return null;
+  
   const head = (incoming.content || '').trim();
-  if ((last.content || '').trim().startsWith(head)) return null;
+  const lastContentRaw = (last.content || '').trim();
+  
+  // 避免过度合并相同内容
+  if (lastContentRaw.includes(head)) return null;
+  
+  // 始终将“思考/工具元数据”追加在“正式回复”之前（如果是同一个 Run ID）
+  // 如果 last 已经是正式回复，则 head 放在最上面
   return [...prev.slice(0, -1), { ...last, content: `${head}\n\n${last.content}` }];
 }
 
@@ -59,11 +237,11 @@ function compactAssistantThinkingAfterToolInPlace(rows: Message[]): void {
     const prev = rows[i - 1];
     if (!cur || !prev || cur.role !== 'assistant' || prev.role !== 'assistant') continue;
     if (!isAssistantThinkingOnlyContent(cur.content || '')) continue;
-    if (!isAssistantToolishForThinkingMerge(prev.content || '')) continue;
+    if (!isAssistantMergableTarget(prev.content || '')) continue;
     if (!canMergeAssistantRunId(prev.runId, cur.runId)) continue;
-    if (/^\s*> :::thinking/m.test((prev.content || '').trim())) continue;
+    
     const head = (cur.content || '').trim();
-    if ((prev.content || '').trim().startsWith(head)) {
+    if ((prev.content || '').trim().includes(head)) {
       rows.splice(i, 1);
       i--;
       continue;
@@ -237,10 +415,33 @@ export function useV3Messages({
       ttftRecorded: false,
       tokenCount: 0,
       tpsData: [],
-      lastTouched: Date.now()
+      lastTouched: Date.now(),
+      metadataByRunId: new Map<string, string>()
     };
     touchAndPruneSessionCache(key, created);
     return created;
+  }, [touchAndPruneSessionCache]);
+
+  /**
+   * 按 runId 记录某条 assistant 消息的「metadata 折叠块」，供会话切换/历史加载时恢复使用。
+   * 包含简单的条数 + 单条字节上限，避免 thinking 超长占爆内存。
+   */
+  const rememberMetadataForRun = useCallback((sessionKeyStr: string, runId: string | undefined, metadata: string) => {
+    if (!sessionKeyStr || !runId || !metadata) return;
+    const cache = sessionCacheRef.current.get(sessionKeyStr);
+    if (!cache) return;
+    if (!cache.metadataByRunId) cache.metadataByRunId = new Map();
+    const clipped = metadata.length > MAX_METADATA_BYTES_PER_ENTRY
+      ? metadata.slice(0, MAX_METADATA_BYTES_PER_ENTRY) + '\n\n> _[metadata 已截断]_\n'
+      : metadata;
+    cache.metadataByRunId.set(runId, clipped);
+    if (cache.metadataByRunId.size > MAX_METADATA_ENTRIES_PER_SESSION) {
+      // LRU：删除最早插入的若干条
+      const keys = Array.from(cache.metadataByRunId.keys());
+      const victims = keys.slice(0, cache.metadataByRunId.size - MAX_METADATA_ENTRIES_PER_SESSION);
+      victims.forEach(k => cache.metadataByRunId.delete(k));
+    }
+    touchAndPruneSessionCache(sessionKeyStr, cache);
   }, [touchAndPruneSessionCache]);
 
   /**
@@ -304,6 +505,20 @@ export function useV3Messages({
           matched = true;
         }
 
+        let planPart = '';
+        if (c.type === 'plan' || c.plan) {
+          const plan = c.plan || c.content || '';
+          planPart = `> :::plan\n> ${String(plan).replace(/\n/g, '\n> ')}\n> :::\n\n`;
+          matched = true;
+        }
+
+        let commandOutputPart = '';
+        if (c.type === 'command_output' || c.command_output || c.commandOutput) {
+          const output = c.command_output || c.commandOutput || c.content || '';
+          commandOutputPart = `> :::commandOutput\n> ${String(output).replace(/\n/g, '\n> ')}\n> :::\n\n`;
+          matched = true;
+        }
+
         let toolCallPart = '';
         if (c.type === 'toolCall' || c.toolCall || c.tool_call) {
           const tc = c.toolCall || c.tool_call || c;
@@ -330,7 +545,7 @@ export function useV3Messages({
           fallbackPart = `\n> :::warning 未知消息块 (${c.type || 'unknown'})\n> \`\`\`json\n> ${JSON.stringify(c, null, 2).split('\n').join('\n> ')}\n> \`\`\`\n> :::\n\n`;
         }
 
-        return thinkingPart + toolCallPart + toolResultPart + fallbackPart + textPart;
+        return thinkingPart + planPart + commandOutputPart + toolCallPart + toolResultPart + fallbackPart + textPart;
       }).join('');
     } else if (typeof content === 'object' && content !== null) {
       body = formatMessageContent([content], _depth + 1);
@@ -459,10 +674,14 @@ export function useV3Messages({
               if (fallbackIndex === -1) return prev;
               const next = [...prev];
               const current = next[fallbackIndex];
+              
+              const { metadata } = partitionAssistantContent(current.content || '');
+              const combinedContent = metadata ? `${metadata}\n\n${fullText}` : fullText;
+              
               next[fallbackIndex] = {
                 ...current,
                 runId: payload.runId,
-                content: fullText,
+                content: combinedContent,
                 metrics: { ...current.metrics, ttft, tps: currentTPS },
                 _sortTs: current._sortTs
               };
@@ -472,10 +691,14 @@ export function useV3Messages({
 
             const next = [...prev];
             const current = next[idx];
+            
+            const { metadata } = partitionAssistantContent(current.content || '');
+            const combinedContent = metadata ? `${metadata}\n\n${fullText}` : fullText;
+            
             next[idx] = {
               ...current,
               runId: payload.runId,
-              content: fullText,
+              content: combinedContent,
               metrics: { ...current.metrics, ttft, tps: currentTPS },
               _sortTs: current._sortTs
             };
@@ -547,11 +770,29 @@ export function useV3Messages({
             const last = prev[targetIndex];
             if (!incomingContent && last.content && last.content !== t('chat.thinking')) return prev;
 
+            // 关键修复：final 阶段不能用网关 payload 直接覆盖 content，
+            // 否则会丢失流式阶段累积的 thinking/plan/commandOutput/tool 等元数据块。
+            // 做法：保留既有 metadata（由 agent/session.tool 流累积），只替换 transcript 正文部分。
+            const { metadata: existingMeta } = partitionAssistantContent(last.content || '');
+            const { metadata: incomingMeta, transcript: incomingTranscript } = partitionAssistantContent(incomingContent || '');
+            // 既有 metadata 通常比 incoming 更丰富（含实时 thinking/tool 细节）；若为空则回退到 incoming 的 metadata
+            const finalMeta = existingMeta || incomingMeta;
+            const transcriptBody = incomingTranscript || (incomingMeta ? '' : incomingContent);
+            const combinedContent = finalMeta
+              ? (transcriptBody ? `${finalMeta}\n\n${transcriptBody}` : finalMeta)
+              : transcriptBody;
+
+            // 记录 metadata 供切换会话/重新加载历史时恢复
+            const runIdForCache = payload.runId || (last as any).runId;
+            if (finalMeta && runIdForCache) {
+              rememberMetadataForRun(pSessionKey, runIdForCache, finalMeta);
+            }
+
             const next = [...prev];
             next[targetIndex] = {
               ...last,
               runId: payload.runId,
-              content: incomingContent,
+              content: combinedContent,
               metrics: { ...last.metrics, ttft, duration, tps: finalTPS },
               _sortTs: last._sortTs
             };
@@ -585,9 +826,21 @@ export function useV3Messages({
             if (targetIndex === -1) return prev;
             const last = prev[targetIndex];
             const label = t('chat.manuallyStopped', { defaultValue: '已手动停止' });
-            const content = partialContent && partialContent !== t('chat.thinking') && partialContent !== t('chat.deepThinking', { defaultValue: '深度思考中...' })
-              ? `${partialContent} (${label})`
-              : label;
+
+            // 保留流式阶段累积的 thinking/plan/tool 等元数据，只替换 transcript 正文
+            const { metadata: existingMeta } = partitionAssistantContent(last.content || '');
+            const { metadata: incomingMeta, transcript: incomingTranscript } = partitionAssistantContent(partialContent || '');
+            const finalMeta = existingMeta || incomingMeta;
+            const bodyText = incomingTranscript || (incomingMeta ? '' : partialContent);
+            const hasBody = bodyText && bodyText !== t('chat.thinking') && bodyText !== t('chat.deepThinking', { defaultValue: '深度思考中...' });
+            const transcriptWithLabel = hasBody ? `${bodyText} (${label})` : label;
+            const content = finalMeta ? `${finalMeta}\n\n${transcriptWithLabel}` : transcriptWithLabel;
+
+            const runIdForCache = payload.runId || (last as any).runId;
+            if (finalMeta && runIdForCache) {
+              rememberMetadataForRun(pSessionKey, runIdForCache, finalMeta);
+            }
+
             const next = [...prev];
             next[targetIndex] = { ...last, content };
             return next;
@@ -638,7 +891,7 @@ export function useV3Messages({
         setTimeout(() => inputAreaRef.current?.focus(), 100);
       }
     }
-  }, [clearStallTimer, fetchSessions, formatMessageContent, getOrCreateSessionCache, inputAreaRef, markSessionTyping, resetStallTimer, scrollRef, showScrollBtnRef, t, touchAndPruneSessionCache, virtuosoRef]);
+  }, [clearStallTimer, fetchSessions, formatMessageContent, getOrCreateSessionCache, inputAreaRef, markSessionTyping, rememberMetadataForRun, resetStallTimer, scrollRef, showScrollBtnRef, t, touchAndPruneSessionCache, virtuosoRef]);
 
   /**
    * 处理审批请求事件：将审批卡片以 Markdown block 注入到消息流中，确保 UI 一定可见。
@@ -804,9 +1057,31 @@ export function useV3Messages({
 
     setMessages(prev => {
       if (prev.some(m => m.id === msgId)) return prev;
-      // 内容级去重：如果最近 3 条已有完全相同内容，跳过
+
+      // 针对 assistant 消息：如果 UI 已有同 runId 的消息，大概率这是延迟到达的 transcript 推送，
+      // 且 UI 那条内容更丰富（含 thinking/tool 等 metadata），此时直接跳过，避免 session.message
+      // 追加一条"裸正文"导致重复/覆盖 metadata。
+      if (msg.role === 'assistant' && msg.runId) {
+        const existingByRunId = prev.find(m => m.role === 'assistant' && m.runId === msg.runId);
+        if (existingByRunId) {
+          const { transcript: uiTranscript } = partitionAssistantContent(existingByRunId.content || '');
+          const incomingTrim = content.trim();
+          // UI 的 transcript 已经覆盖了这次推送的内容，则直接忽略
+          if (uiTranscript && (uiTranscript === incomingTrim || uiTranscript.includes(incomingTrim))) {
+            return prev;
+          }
+        }
+      }
+
+      // 内容级去重（metadata 感知）：比较 transcript 部分而非全内容，避免"UI 是 metadata+正文，推送只有正文"被误认为不同
       const tail = prev.slice(-3);
-      if (tail.some(m => m.content === content)) return prev;
+      const incomingTrim = content.trim();
+      if (tail.some(m => {
+        if (m.content === content) return true;
+        const { transcript: mTranscript } = partitionAssistantContent(m.content || '');
+        return mTranscript && mTranscript === incomingTrim;
+      })) return prev;
+
       const rawTs = new Date(msg.createdAt || msg.timestamp || Date.now()).getTime();
       const newMsg = {
         id: msgId,
@@ -839,15 +1114,17 @@ export function useV3Messages({
 
     if (phase === 'start') {
       if (!showThinkingRef.current) return;
-      const block = `\n\n> 🔧 \`${toolName}\` 执行中…`;
+      const block = `> 🔧 \`${toolName}\` 执行中…`;
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (!last || last.role !== 'assistant') return prev;
         if (last.content.includes(marker)) return prev;
-        const newContent = (last.content === t('chat.thinking') || last.content === t('chat.deepThinking', { defaultValue: '深度思考中...' }) || !last.content)
-          ? block
-          : `${last.content}${block}`;
-        return [...prev.slice(0, -1), { ...last, content: `${newContent}<!-- ${marker} -->` }];
+        
+        const { metadata: oldMetadata, transcript } = partitionAssistantContent(last.content || '');
+        const metadata = oldMetadata ? `${oldMetadata}\n\n${block}` : block;
+        const content = transcript ? `${metadata}\n\n${transcript}` : metadata;
+        
+        return [...prev.slice(0, -1), { ...last, content: `${content}<!-- ${marker} -->` }];
       });
     } else if (phase === 'end' || phase === 'error') {
       const statusIcon = phase === 'end' ? '✅' : '❌';
@@ -914,7 +1191,7 @@ export function useV3Messages({
         streamingAssistantIndexRef.current = null;
       }
 
-      if (stream === 'lifecycle.start') {
+      if (stream === 'lifecycle.start' || (stream === 'lifecycle' && agentData?.phase === 'start')) {
         lastStreamEventAtRef.current = Date.now();
         if (effectiveKey) markSessionTyping(effectiveKey, true);
         if (effectiveKey === sessionKeyRef.current) {
@@ -923,7 +1200,7 @@ export function useV3Messages({
         }
       }
 
-      if (stream === 'lifecycle.end') {
+      if (stream === 'lifecycle.end' || (stream === 'lifecycle' && agentData?.phase === 'end')) {
         lastStreamEventAtRef.current = Date.now();
         if (effectiveKey) markSessionTyping(effectiveKey, false);
         if (effectiveKey === sessionKeyRef.current) {
@@ -933,7 +1210,7 @@ export function useV3Messages({
         }
       }
 
-      if (stream === 'lifecycle.error') {
+      if (stream === 'lifecycle.error' || (stream === 'lifecycle' && agentData?.phase === 'error')) {
         lastStreamEventAtRef.current = Date.now();
         if (effectiveKey) markSessionTyping(effectiveKey, false);
         if (effectiveKey === sessionKeyRef.current) {
@@ -952,10 +1229,80 @@ export function useV3Messages({
         }
       }
 
-      if (stream === 'tool') {
-        if (effectiveKey === sessionKeyRef.current) {
-          resetStallTimer();
+      // 处理实时流：thinking / plan / command_output / tool
+      // 事件数据结构通常为 { itemId, phase: start|delta|end, title, toolCallId, name, output|content|delta|text, status }
+      // 同一个 itemId 在整个运行期间只对应一个折叠块（按 itemId 做 upsert）。
+      if (
+        stream === 'thinking' ||
+        stream === 'plan' ||
+        stream === 'command_output' ||
+        stream === 'tool'
+      ) {
+        if (effectiveKey !== sessionKeyRef.current) return;
+
+        let itemId = '';
+        let title = '';
+        let body: any = '';
+
+        if (typeof agentData === 'string') {
+          body = agentData;
+        } else if (agentData && typeof agentData === 'object') {
+          itemId = agentData.itemId || agentData.toolCallId || agentData.id || '';
+          title = agentData.title || agentData.name || '';
+          // command_output 典型字段是 output（全量累积）
+          body = agentData.output
+            ?? agentData.content
+            ?? agentData.text
+            ?? agentData.delta
+            ?? agentData.reasoning
+            ?? agentData.thinking
+            ?? '';
+
+          // tool 流通常带 arguments/result 结构
+          if (stream === 'tool') {
+            const args = agentData.arguments ?? agentData.args;
+            const result = agentData.result ?? agentData.output;
+            const parts: string[] = [];
+            if (args) {
+              const a = typeof args === 'string' ? args : JSON.stringify(args, null, 2);
+              parts.push(`**参数:**\n\`\`\`json\n${a}\n\`\`\``);
+            }
+            if (result) {
+              const r = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+              parts.push(`**结果:**\n\`\`\`\n${r}\n\`\`\``);
+            }
+            if (parts.length > 0) body = parts.join('\n\n');
+          }
         }
+
+        if (typeof body !== 'string') body = JSON.stringify(body);
+        if (!body && !title) {
+          // 没内容可展示（例如仅生命周期 ping），只刷新 stall 计时器
+          lastStreamEventAtRef.current = Date.now();
+          resetStallTimer();
+          return;
+        }
+
+        const segmentName =
+          stream === 'command_output' ? 'commandOutput' :
+          stream === 'tool' ? 'toolCall' :
+          stream; // thinking | plan
+
+        lastStreamEventAtRef.current = Date.now();
+        resetStallTimer();
+        setIsTyping(true);
+
+        setMessages(prev => {
+          const idx = streamingAssistantIndexRef.current;
+          if (idx === null || idx < 0 || idx >= prev.length) return prev;
+          const msg = prev[idx];
+          const { metadata: oldMetadata, transcript } = partitionAssistantContent(msg.content || '');
+          const newMetadata = upsertAgentBlock(oldMetadata || '', segmentName, itemId, title, body);
+          const combinedContent = transcript ? `${newMetadata}\n\n${transcript}` : newMetadata;
+          const next = [...prev];
+          next[idx] = { ...msg, content: combinedContent };
+          return next;
+        });
       }
 
       return;
@@ -1061,6 +1408,29 @@ export function useV3Messages({
 
     let shouldKeepTyping = false;
     const cache = sessionCacheRef.current.get(key);
+
+    // 还原缓存里保留的 thinking/plan/toolCall 等折叠块：
+    // 这些 metadata 只在 WS 的 agent / session.tool 事件里出现，DB transcript 通常不持久化它们。
+    // 这里用 runId 匹配贴回，保证切换会话再回来时折叠块仍然可见。
+    // 注意：同一 runId 可能有多条 assistant 消息（思考/工具/正文被拆），metadata 只贴到最后一条，避免重复。
+    if (cache?.metadataByRunId && cache.metadataByRunId.size > 0) {
+      const lastIdxByRunId = new Map<string, number>();
+      for (let i = 0; i < history.length; i++) {
+        const row: any = history[i];
+        if (row.role !== 'assistant' || !row.runId) continue;
+        if (!cache.metadataByRunId.has(row.runId)) continue;
+        lastIdxByRunId.set(row.runId, i);
+      }
+      lastIdxByRunId.forEach((idx, runId) => {
+        const row: any = history[idx];
+        const saved = cache.metadataByRunId.get(runId);
+        if (!saved) return;
+        const { metadata: already, transcript } = partitionAssistantContent(row.content || '');
+        if (already) return;
+        row.content = transcript ? `${saved}\n\n${transcript}` : saved;
+      });
+    }
+
     if (cache) {
       touchAndPruneSessionCache(key, cache);
       let userMsgSortTs = cache.lastUserMsg?._sortTs || Date.now();
@@ -1208,6 +1578,7 @@ export function useV3Messages({
       _sortTs: aiSortTs
     };
 
+    const prevCacheForSession = sessionCacheRef.current.get(currentKey);
     const nextCache: SessionStreamCache = {
       fullText: '',
       isTyping: true,
@@ -1217,7 +1588,8 @@ export function useV3Messages({
       tokenCount: 0,
       tpsData: [],
       lastUserMsg: newUserMsg,
-      lastTouched: Date.now()
+      lastTouched: Date.now(),
+      metadataByRunId: prevCacheForSession?.metadataByRunId || new Map()
     };
     touchAndPruneSessionCache(currentKey, nextCache);
 
@@ -1311,6 +1683,7 @@ export function useV3Messages({
       _sortTs: baseSortTs + 1
     };
 
+    const prevCacheForSession = sessionCacheRef.current.get(sessionKey);
     const nextCache: SessionStreamCache = {
       fullText: '',
       isTyping: true,
@@ -1320,7 +1693,8 @@ export function useV3Messages({
       tokenCount: 0,
       tpsData: [],
       lastUserMsg: userMsg,
-      lastTouched: Date.now()
+      lastTouched: Date.now(),
+      metadataByRunId: prevCacheForSession?.metadataByRunId || new Map()
     };
     touchAndPruneSessionCache(sessionKey, nextCache);
 
@@ -1470,6 +1844,7 @@ export function useV3Messages({
         timestamp: new Date().toLocaleTimeString(),
         _sortTs: baseSortTs + 1
       };
+      const prevCacheForSession = sessionCacheRef.current.get(currentKey);
       const nextCache: SessionStreamCache = {
         fullText: '',
         isTyping: true,
@@ -1479,7 +1854,8 @@ export function useV3Messages({
         tokenCount: 0,
         tpsData: [],
         lastUserMsg: updatedUser,
-        lastTouched: Date.now()
+        lastTouched: Date.now(),
+        metadataByRunId: prevCacheForSession?.metadataByRunId || new Map()
       };
       touchAndPruneSessionCache(currentKey, nextCache);
       setMessages(prev => {

@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Avatar, Tooltip, Button, Input, message } from 'antd';
 import { 
   User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, 
-  FileText, ChevronRight, ShieldAlert, ShieldCheck 
+  FileText, ChevronRight, ShieldAlert, ShieldCheck, ListTodo
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -111,6 +111,9 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   const processedContent = useMemo(() => {
     let content = (msg.content || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
+    // 0. 清掉 agent 流写入的 itemId HTML 注释（仅用于内部 upsert 定位，不应展示）
+    content = content.replace(/(?:^|\n)\s*>\s*<!--agentItem:[^>]*-->\s*/g, '\n');
+
     // 1. :::toolResult 物理隐藏
     content = content.replace(/> :::toolResult[\s\S]*?:::\n*/g, '');
 
@@ -136,12 +139,14 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
     );
 
     if (!showThinking) {
-      // 与 useV3Messages.handleSessionTool / isAssistantToolishForThinkingMerge 对齐：> 与图标之间可有空白，工具名至少 1 字符
+      // 与 useV3Messages.handleSessionTool / isAssistantToolishForThinkingMerge 对齐：可有可选的 > 符号，工具名至少 1 字符
       const toolStatusLineRe =
-        /(?:^|\n)\s*>\s*[🔧✅❌]\s*`[^`]+`\s*(?:执行中(?:…|\.\.\.)|完成|失败)(?:\s*<!--[\s\S]*?-->)?/g;
+        /(?:^|\n)\s*(?:>\s*)?[🔧✅❌]\s*`[^`]+`\s*(?:执行中(?:…|\.\.\.)|完成|失败)(?:\s*<!--[\s\S]*?-->)?/g;
       content = content
-        .replace(/> :::thinking[\s\S]*?:::\n*/g, '')
-        .replace(/> :::toolCall[\s\S]*?:::\n*/g, '')
+        .replace(/(?:>\s*)?:::thinking[\s\S]*?(?::::|$)\n*/g, '')
+        .replace(/(?:>\s*)?:::toolCall[\s\S]*?(?::::|$)\n*/g, '')
+        .replace(/(?:>\s*)?:::plan[\s\S]*?(?::::|$)\n*/g, '')
+        .replace(/(?:>\s*)?:::commandOutput[\s\S]*?(?::::|$)\n*/g, '')
         .replace(toolStatusLineRe, '')
         // 仅去掉 session.tool 注入的 marker，避免残留 HTML 注释单独成条
         .replace(/<!--\s*tool:[^>]*-->/g, '')
@@ -152,6 +157,8 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         !content &&
         (msg.content.includes(':::thinking') ||
           msg.content.includes(':::toolCall') ||
+          msg.content.includes(':::plan') ||
+          msg.content.includes(':::commandOutput') ||
           msg.content.includes('🔧') ||
           msg.content.includes('✅') ||
           msg.content.includes('❌') ||
@@ -270,10 +277,30 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                       };
                       const fullText = extractText(children);
                       if (fullText.includes(':::thinking')) {
-                        return <CollapsibleMeta title={t('chat.thinkingProcess', { defaultValue: 'Thinking Process' })} icon={Cpu} defaultExpanded={false}>{children}</CollapsibleMeta>;
+                        return <CollapsibleMeta title={t('chat.thinkingProcess', { defaultValue: '思考过程' })} icon={Cpu} defaultExpanded={false}>{children}</CollapsibleMeta>;
+                      }
+                      if (fullText.includes(':::plan')) {
+                        return <CollapsibleMeta title={t('chat.executionPlan', { defaultValue: '执行计划' })} icon={ListTodo} defaultExpanded={true}>{children}</CollapsibleMeta>;
                       }
                       if (fullText.includes(':::toolCall')) {
-                        return <CollapsibleMeta title={t('chat.systemTool', { defaultValue: 'System Tool' })} icon={Terminal} defaultExpanded={false}>{children}</CollapsibleMeta>;
+                        return <CollapsibleMeta title={t('chat.systemTool', { defaultValue: '系统工具' })} icon={Terminal} defaultExpanded={false}>{children}</CollapsibleMeta>;
+                      }
+                      if (fullText.includes(':::commandOutput')) {
+                        return (
+                          <div style={{ margin: '8px 0', borderRadius: 8, overflow: 'hidden', border: '1px solid #1e293b' }}>
+                            <div style={{ background: '#1e293b', padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 6, color: '#94a3b8', fontSize: 11 }}>
+                              <Terminal size={12} />
+                              <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>Command Output</span>
+                            </div>
+                            <div style={{ 
+                              background: '#0f172a', color: '#f8fafc', padding: '10px', 
+                              fontFamily: 'monospace', fontSize: 12, lineHeight: 1.5,
+                              maxHeight: 300, overflowY: 'auto', whiteSpace: 'pre-wrap'
+                            }}>
+                              {children}
+                            </div>
+                          </div>
+                        );
                       }
                       // 仅当「当前」blockquote 内含 :::approval 时才套审批卡片。
                       // 不能用 hasApproval（整条消息级）：否则同条消息里 session.tool 追加的
