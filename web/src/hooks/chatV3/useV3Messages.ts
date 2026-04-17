@@ -17,6 +17,90 @@ type SessionStreamCache = {
   lastTouched: number;
 };
 
+/**
+ * 网关 transcript 可能把「工具/审批」与「:::thinking」拆成两条相邻 assistant。
+ * 后一条若仅有思考块，合并进上一条开头，避免 UI 上思考跑到工具下面。
+ */
+function isAssistantThinkingOnlyContent(content: string): boolean {
+  const t = (content || '').trim();
+  if (!t || !t.includes(':::thinking')) return false;
+  const rest = t.replace(/> :::thinking[\s\S]*?:::\s*/g, '').trim();
+  return rest.length === 0;
+}
+
+function isAssistantToolishForThinkingMerge(content: string): boolean {
+  if (!content) return false;
+  if (content.includes(':::toolCall') || content.includes(':::approval')) return true;
+  if (/\n?>\s*🔧\s*`[^`]+`\s*执行中(?:…|\.{3})/.test(content)) return true;
+  if (/\n?>\s*[✅❌]\s*`[^`]+`\s*(?:完成|失败)/.test(content)) return true;
+  return false;
+}
+
+function canMergeAssistantRunId(a?: string, b?: string): boolean {
+  if (a && b) return a === b;
+  return true;
+}
+
+function mergeTrailingThinkingIntoPreviousAssistant(prev: Message[], incoming: Message): Message[] | null {
+  if (incoming.role !== 'assistant' || !isAssistantThinkingOnlyContent(incoming.content)) return null;
+  const last = prev[prev.length - 1];
+  if (!last || last.role !== 'assistant') return null;
+  if (!isAssistantToolishForThinkingMerge(last.content)) return null;
+  if (!canMergeAssistantRunId(last.runId, incoming.runId)) return null;
+  if (/^\s*> :::thinking/m.test((last.content || '').trim())) return null;
+  const head = (incoming.content || '').trim();
+  if ((last.content || '').trim().startsWith(head)) return null;
+  return [...prev.slice(0, -1), { ...last, content: `${head}\n\n${last.content}` }];
+}
+
+function compactAssistantThinkingAfterToolInPlace(rows: Message[]): void {
+  for (let i = 1; i < rows.length; i++) {
+    const cur = rows[i];
+    const prev = rows[i - 1];
+    if (!cur || !prev || cur.role !== 'assistant' || prev.role !== 'assistant') continue;
+    if (!isAssistantThinkingOnlyContent(cur.content || '')) continue;
+    if (!isAssistantToolishForThinkingMerge(prev.content || '')) continue;
+    if (!canMergeAssistantRunId(prev.runId, cur.runId)) continue;
+    if (/^\s*> :::thinking/m.test((prev.content || '').trim())) continue;
+    const head = (cur.content || '').trim();
+    if ((prev.content || '').trim().startsWith(head)) {
+      rows.splice(i, 1);
+      i--;
+      continue;
+    }
+    prev.content = `${head}\n\n${prev.content || ''}`;
+    rows.splice(i, 1);
+    i--;
+  }
+}
+
+/** UI 占位「正在思考」被误写入 transcript 时，会紧跟在已有回复后多一条 assistant —— 直接丢弃 */
+function isAssistantUiThinkingPlaceholder(content: string, thinkingLabel: string, deepLabel: string): boolean {
+  const x = (content || '').trim();
+  if (x === thinkingLabel.trim() || x === deepLabel.trim() || x === '思考中...') return true;
+  // 英文/轻微变体：短句 + Lobster + thinking
+  if (/^Lobster\s+/i.test(x) && x.length < 140 && /thinking|思考/i.test(x)) return true;
+  return false;
+}
+
+function assistantMessageLooksSubstantial(content: string, thinkingLabel: string, deepLabel: string): boolean {
+  const x = (content || '').trim();
+  if (x.length < 32) return false;
+  return !isAssistantUiThinkingPlaceholder(x, thinkingLabel, deepLabel);
+}
+
+function stripTrailingUiThinkingPlaceholderAfterAssistantReply(rows: Message[], thinkingLabel: string, deepLabel: string): void {
+  for (let i = rows.length - 1; i >= 1; i--) {
+    const cur = rows[i];
+    const prev = rows[i - 1];
+    if (!cur || !prev || cur.role !== 'assistant' || prev.role !== 'assistant') continue;
+    if (!isAssistantUiThinkingPlaceholder(cur.content || '', thinkingLabel, deepLabel)) continue;
+    if (!assistantMessageLooksSubstantial(prev.content || '', thinkingLabel, deepLabel)) continue;
+    rows.splice(i, 1);
+    i--;
+  }
+}
+
 export interface UseV3MessagesParams {
   t: any;
   status: 'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error';
@@ -668,6 +752,16 @@ export function useV3Messages({
     let content = formatMessageContent(msg.content);
     if (!content || !content.trim()) return;
 
+    const thinkingLabel = t('chat.thinking');
+    const deepThinkingLabel = t('chat.deepThinking', { defaultValue: '深度思考中...' });
+    // 网关偶发把「正在思考」占位文案当作一条 assistant transcript 追加在正式回复之后
+    if (msg.role === 'assistant' && isAssistantUiThinkingPlaceholder(content, thinkingLabel, deepThinkingLabel)) {
+      const tail = messagesRef.current[messagesRef.current.length - 1];
+      if (tail?.role === 'assistant' && assistantMessageLooksSubstantial(tail.content || '', thinkingLabel, deepThinkingLabel)) {
+        return;
+      }
+    }
+
     // 如果是审批提示语且审批卡片已存在，则忽略（避免重复提示）
     if (isApprovalHintText(content)) {
       const slug = extractApprovalSlugFromHint(content);
@@ -712,16 +806,19 @@ export function useV3Messages({
       const tail = prev.slice(-3);
       if (tail.some(m => m.content === content)) return prev;
       const rawTs = new Date(msg.createdAt || msg.timestamp || Date.now()).getTime();
-      return [...prev, {
+      const newMsg = {
         id: msgId,
         runId: msg.runId,
         role: (msg.role === 'toolResult' || isExecCompletionTemplate || isSenderMetadataTemplate || isApprovalConfirm || isApproveCommand) ? 'assistant' : msg.role,
         content,
         timestamp: new Date(rawTs).toLocaleTimeString(),
         _sortTs: rawTs
-      } as Message];
+      } as Message;
+      const merged = mergeTrailingThinkingIntoPreviousAssistant(prev, newMsg);
+      if (merged) return merged;
+      return [...prev, newMsg];
     });
-  }, [clearStallTimer, extractApprovalSlugFromHint, formatMessageContent, hasApprovalCardForSlug, isApprovalHintText]);
+  }, [clearStallTimer, extractApprovalSlugFromHint, formatMessageContent, hasApprovalCardForSlug, isApprovalHintText, t]);
 
   /**
    * 处理 session.tool 事件：展示工具调用进度。
@@ -755,8 +852,12 @@ export function useV3Messages({
         const idx = prev.findLastIndex(m => m.role === 'assistant' && m.content.includes(marker));
         if (idx === -1) return prev;
         const msg = prev[idx];
+        const executingRe = new RegExp(
+          `> 🔧 \`${toolName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\` 执行中(?:…|\\.\\.\\.)`,
+          'g',
+        );
         const updated = msg.content
-          .replace(`> 🔧 \`${toolName}\` 执行中…`, `> ${statusIcon} \`${toolName}\` ${phase === 'end' ? '完成' : '失败'}`)
+          .replace(executingRe, `> ${statusIcon} \`${toolName}\` ${phase === 'end' ? '完成' : '失败'}`)
           .replace(`<!-- ${marker} -->`, '');
         const next = [...prev];
         next[idx] = { ...msg, content: updated };
@@ -953,6 +1054,7 @@ export function useV3Messages({
         _sortTs: rawTs
       } as Message;
     }).filter((msg: any) => msg.content && msg.content.trim() !== '');
+    compactAssistantThinkingAfterToolInPlace(history);
 
     let shouldKeepTyping = false;
     const cache = sessionCacheRef.current.get(key);
@@ -972,13 +1074,26 @@ export function useV3Messages({
         if (existingIndex !== -1) {
           (history[existingIndex] as any).content = cache.fullText;
         } else {
-          history.push({
-            id: `msg-ai-recovered-${Date.now()}`,
-            role: 'assistant' as const,
-            content: cache.fullText,
-            timestamp: new Date().toLocaleTimeString(),
-            _sortTs: userMsgSortTs + 1
-          } as Message);
+          const lastAsst = [...history].reverse().find((m: any) => m.role === 'assistant');
+          const cacheText = (cache.fullText || '').trim();
+          const lastText = ((lastAsst as any)?.content || '').trim();
+          // 历史里已有较长助手回复且与缓存流内容高度重合时，不再追加一条 recovered，避免「上面已回复、下面又多一条」
+          if (
+            lastAsst &&
+            lastText.length >= 40 &&
+            cacheText.length > 0 &&
+            (lastText === cacheText || lastText.includes(cacheText.slice(0, Math.min(120, cacheText.length))))
+          ) {
+            /* skip duplicate recovered row */
+          } else {
+            history.push({
+              id: `msg-ai-recovered-${Date.now()}`,
+              role: 'assistant' as const,
+              content: cache.fullText,
+              timestamp: new Date().toLocaleTimeString(),
+              _sortTs: userMsgSortTs + 1
+            } as Message);
+          }
         }
         shouldKeepTyping = true;
       }
@@ -990,6 +1105,11 @@ export function useV3Messages({
       if (diff !== 0) return diff;
       return (roleOrder[a.role] || 0) - (roleOrder[b.role] || 0);
     });
+    stripTrailingUiThinkingPlaceholderAfterAssistantReply(
+      finalMessages,
+      t('chat.thinking'),
+      t('chat.deepThinking', { defaultValue: '深度思考中...' }),
+    );
 
     if (!isActiveRequest()) {
       if (latestHistoryRequestRef.current === requestId) setIsLoadingHistory(false);
@@ -1012,7 +1132,7 @@ export function useV3Messages({
       }, 50);
     }
     setIsLoadingHistory(false);
-  }, [clearStallTimer, extractApprovalSlugFromHint, formatMessageContent, isApprovalHintText, resetStallTimer, sendRPC, touchAndPruneSessionCache, virtuosoRef]);
+  }, [clearStallTimer, extractApprovalSlugFromHint, formatMessageContent, isApprovalHintText, resetStallTimer, sendRPC, t, touchAndPruneSessionCache, virtuosoRef]);
 
   /**
    * 发送消息：必要时创建会话并写入初始占位消息，然后向网关发起 chat.send。

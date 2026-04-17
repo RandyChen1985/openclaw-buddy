@@ -139,7 +139,8 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       content = content
         .replace(/> :::thinking[\s\S]*?:::\n*/g, '')
         .replace(/> :::toolCall[\s\S]*?:::\n*/g, '')
-        .replace(/\n*> [🔧✅❌] `[^`]*` (?:执行中…|完成|失败)(?:<!--[^>]*-->)?/g, '')
+        // 与 useV3Messages 注入的「执行中」一致，并兼容 Unicode 省略号(…) 与三个英文点(...)
+        .replace(/\n*> [🔧✅❌] `[^`]*` (?:执行中(?:…|\.\.\.)|完成|失败)(?:<!--[^>]*-->)?/g, '')
         .trim();
 
       if (!content && (msg.content.includes(':::thinking') || msg.content.includes(':::toolCall') || msg.content.includes('🔧'))) return null;
@@ -259,7 +260,10 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                       if (fullText.includes(':::toolCall')) {
                         return <CollapsibleMeta title={t('chat.systemTool', { defaultValue: 'System Tool' })} icon={Terminal} defaultExpanded={false}>{children}</CollapsibleMeta>;
                       }
-                      if (fullText.includes(':::approval') || hasApproval) {
+                      // 仅当「当前」blockquote 内含 :::approval 时才套审批卡片。
+                      // 不能用 hasApproval（整条消息级）：否则同条消息里 session.tool 追加的
+                      // `> 🔧 \`exec\` 执行中…` 等普通引用块也会被误判成审批 UI，出现两个红框。
+                      if (fullText.includes(':::approval')) {
                         const approvalIdForRPC = approvalMeta.approvalId;
                         const slug = approvalMeta.slug;
 
