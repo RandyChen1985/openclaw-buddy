@@ -441,6 +441,7 @@
     "newMessages": "有新消息",
     "noQuickCommandsAdd": "暂无快捷指令，点击",
     "source": {
+      "buddy": "buddy平台",
       "dashboard": "管理后台",
       "weixin": "微信",
       "feishu": "飞书",

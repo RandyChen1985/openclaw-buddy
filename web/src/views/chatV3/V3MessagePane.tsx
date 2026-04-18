@@ -5,10 +5,13 @@ import type { VirtuosoHandle } from 'react-virtuoso';
 import { Plus } from 'lucide-react';
 import type { Message } from '../../hooks/useChatV3WebSocket';
 import V3MessageItem from '../../components/Chat/V3MessageItem';
+import { isBuddyDirectSessionKey } from '../../utils/buddySessionKey';
 
 export interface V3MessagePaneProps {
   t: any;
   isMobile: boolean;
+  /** 当前会话 key；用于 Buddy 直连会话的用户消息头像等 */
+  sessionKey: string | null;
   messages: Message[];
   isTyping: boolean;
   showThinking: boolean;
@@ -59,6 +62,7 @@ export interface V3MessagePaneProps {
 export function V3MessagePane({
   t,
   isMobile,
+  sessionKey,
   messages,
   isTyping,
   showThinking,
@@ -86,6 +90,7 @@ export function V3MessagePane({
 }: V3MessagePaneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
+  const isBuddySession = isBuddyDirectSessionKey(sessionKey);
 
   // _uiMetaOnly 气泡不再作为独立消息渲染，改为嵌入到同 runId 主气泡的底部。
   // 这里统一过滤掉，主气泡通过 metaContentByRunId 拿到它的 content。
@@ -292,6 +297,7 @@ export function V3MessagePane({
                   index={realIndex !== -1 ? realIndex : index}
                   isMobile={!!isMobile}
                   showThinking={showThinking}
+                  isBuddySession={isBuddySession}
                   selectedBot={selectedBot}
                   editingMsgIndex={editingMsgIndex}
                   editContent={editContent}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { message as antdMessage } from 'antd';
 import type { FileInfo, Message } from '../useChatV3WebSocket';
+import { buildBuddyDirectSessionKey } from '../../utils/buddySessionKey';
 
 const MAX_SESSION_CACHE_ENTRIES = 30;
 
@@ -1801,7 +1802,10 @@ export function useV3Messages({
 
     let currentKey = sessionKey;
     if (!currentKey) {
-      const res = await sendRPC('sessions.create', { agentId: selectedBot.replace('openclaw:', '') });
+      const agentId = selectedBot.replace('openclaw:', '');
+      const key = buildBuddyDirectSessionKey(agentId);
+      // 不传 label，保持空标题，便于后续「无标题时自动总结」逻辑触发
+      const res = await sendRPC('sessions.create', { agentId, key });
       if (res.ok) {
         currentKey = res.payload.key;
         setSessionKey(currentKey);

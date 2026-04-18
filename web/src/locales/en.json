@@ -433,6 +433,7 @@
     "newMessages": "New messages",
     "noQuickCommandsAdd": "No quick commands, click",
     "source": {
+      "buddy": "Buddy Platform",
       "dashboard": "Dashboard",
       "weixin": "WeChat",
       "feishu": "Feishu",

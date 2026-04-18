@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Avatar, Tooltip, Button, Input, message } from 'antd';
 import { 
   User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, 
-  FileText, ChevronRight, ChevronDown, ShieldAlert, ShieldCheck, ListTodo
+  FileText, ChevronRight, ChevronDown, ShieldAlert, ShieldCheck, ListTodo, Sparkles
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -34,6 +34,8 @@ interface V3MessageItemProps {
   index: number;
   isMobile: boolean;
   showThinking: boolean;
+  /** Buddy 管理后台直连会话：用户消息使用独立头像 */
+  isBuddySession?: boolean;
   selectedBot: string;
   editingMsgIndex: number | null;
   editContent: string;
@@ -103,7 +105,7 @@ const CollapsibleMeta = ({ title, icon: Icon, children, defaultExpanded = true }
 };
 
 const V3MessageItem: React.FC<V3MessageItemProps> = ({ 
-  msg, index, isMobile, showThinking,
+  msg, index, isMobile, showThinking, isBuddySession,
   editingMsgIndex, editContent, setEditContent,
   onEdit, onSaveEdit, onCancelEdit, onQuote, onSend, onApprovalResolve, onRegenerate,
   copyToClipboard, isTyping, isLast, isStalled, tpsData, mainHasTranscript, metaContent, t
@@ -375,7 +377,14 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       }}
     >
       {isUser ? (
-        <Avatar icon={<User size={18} />} style={{ background: '#1e293b', flexShrink: 0, marginTop: 4, visibility: 'visible' }} />
+        isBuddySession ? (
+          <Avatar
+            icon={<Sparkles size={18} />}
+            style={{ background: 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)', flexShrink: 0, marginTop: 4, visibility: 'visible' }}
+          />
+        ) : (
+          <Avatar icon={<User size={18} />} style={{ background: '#1e293b', flexShrink: 0, marginTop: 4, visibility: 'visible' }} />
+        )
       ) : isMetaOnly ? (
         // 思考信息附录气泡：不占头像位，保留尺寸以与主气泡对齐
         <div style={{ flexShrink: 0, marginTop: 4, width: isMobile ? 32 : 36, height: isMobile ? 32 : 36 }} />
@@ -772,6 +781,7 @@ export default React.memo(V3MessageItem, (prev, next) => {
   const nextMetrics = next.msg.metrics || {};
 
   return prev.isMobile === next.isMobile &&
+         prev.isBuddySession === next.isBuddySession &&
          prev.index === next.index &&
          prev.editContent === next.editContent && 
          prev.editingMsgIndex === next.editingMsgIndex &&
