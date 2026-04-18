@@ -406,7 +406,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         <V3MessagePane
           t={t}
           isMobile={!!isMobile}
-          sessionKey={sessionKey}
           messages={messages}
           isTyping={isTyping}
           showThinking={showThinking}

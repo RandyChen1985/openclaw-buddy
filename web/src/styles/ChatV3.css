@@ -336,6 +336,16 @@ button.v3-settings-reasoning-btn:active {
   40% { transform: translateY(-4px); opacity: 1; }
 }
 
+/* 思考占位文案后的转圈指示（V3MessageItem Loader2） */
+@keyframes v3-thinking-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.v3-thinking-spinner {
+  animation: v3-thinking-spin 0.85s linear infinite;
+}
+
 .message-in { 
   animation: message-in 0.3s ease; 
 }
@@ -373,27 +383,128 @@ button.v3-settings-reasoning-btn:active {
 
 /* --- 3. 结构化块样式 (Thinking/Tools/Collapsible) --- */
 .v3-meta-collapsible {
-  margin: 10px 0;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  border-radius: 10px;
-  background: rgba(248, 250, 252, 0.5);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin: 12px 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
   overflow: hidden;
 }
 
 .v3-meta-collapsible:hover {
-  background: rgba(241, 245, 249, 0.8);
-  border-color: rgba(37, 99, 235, 0.1);
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
 }
 
 .v3-meta-header {
-  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
   user-select: none;
-  transition: background 0.2s;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border-bottom: 1px solid #e2e8f0;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.v3-meta-collapsible.collapsed .v3-meta-header {
+  border-bottom-color: transparent;
+}
+
+.v3-meta-collapsible.expanded .v3-meta-header {
+  border-bottom-color: #e2e8f0;
 }
 
 .v3-meta-header:hover {
-  background: rgba(37, 99, 235, 0.04);
+  background: linear-gradient(180deg, #eef2ff 0%, #e2e8f0 100%);
+  color: #1e293b;
+}
+
+/* 主气泡底部 / meta 附录：折叠条（整块可点、更醒目） */
+.v3-meta-fold-chip {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  cursor: pointer;
+  user-select: none;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  color: #475569;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+}
+
+.v3-meta-fold-chip:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.07);
+  background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
+}
+
+.v3-meta-fold-chip:focus-visible {
+  outline: 2px solid #818cf8;
+  outline-offset: 2px;
+}
+
+.v3-meta-fold-chip--live {
+  border-color: #c7d2fe;
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 50%, #eef2ff 100%);
+  color: #4338ca;
+}
+
+.v3-meta-fold-chip--live:hover {
+  border-color: #a5b4fc;
+  box-shadow: 0 2px 12px rgba(79, 70, 229, 0.18);
+  background: linear-gradient(135deg, #e0e7ff 0%, #ddd6fe 55%, #e0e7ff 100%);
+}
+
+.v3-meta-fold-chip--expanded {
+  margin-bottom: 8px;
+  border-radius: 10px 10px 8px 8px;
+  border-bottom: 1px dashed #cbd5e1;
+}
+
+/* 流式短暂无更新（isStalled）：与折叠条体量接近，左侧色条提示「仍在等」而非报错 */
+.v3-stream-stall-hint {
+  margin-top: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px dashed #cbd5e1;
+  border-left: 3px solid #a5b4fc;
+  background: linear-gradient(180deg, #fafafa 0%, #f1f5f9 100%);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.v3-stream-stall-hint .v3-thinking-spinner {
+  flex-shrink: 0;
+  color: #818cf8 !important;
+  margin-top: 2px;
+}
+
+.v3-stream-stall-hint-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 500;
+  color: #475569;
 }
 
 .v3-meta-content {
