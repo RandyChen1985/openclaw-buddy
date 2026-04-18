@@ -187,7 +187,8 @@ export const useChatV3WebSocket = ({
     virtuosoRef,
     scrollRef,
     showScrollBtnRef,
-    showThinkingRef
+    showThinkingRef,
+    sessionComposeBlocked: isCreatingNewSession
   });
 
   useEffect(() => {

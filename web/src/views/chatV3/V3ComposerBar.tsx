@@ -10,6 +10,8 @@ export interface V3ComposerBarProps {
   isMobile: boolean;
   status: 'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error';
   isTyping: boolean;
+  /** 新建会话创建中等：锁输入，但不视为「生成中」（不显示停止按钮） */
+  sessionComposeBlocked?: boolean;
   loadingBots: boolean;
 
   selectedBot: string;
@@ -40,6 +42,7 @@ export function V3ComposerBar({
   isMobile,
   status,
   isTyping,
+  sessionComposeBlocked = false,
   loadingBots,
   selectedBot,
   setSelectedBot,
@@ -115,7 +118,7 @@ export function V3ComposerBar({
             value={selectedBot}
             onChange={setSelectedBot}
             loading={loadingBots}
-            disabled={isTyping}
+            disabled={isTyping || sessionComposeBlocked}
             variant="borderless"
             dropdownStyle={{ borderRadius: 10, minWidth: 240 }}
             dropdownMatchSelectWidth={false}
@@ -146,7 +149,7 @@ export function V3ComposerBar({
             value={sessionModel}
             onChange={onSessionModelChange}
             loading={loadingBots}
-            disabled={isTyping}
+            disabled={isTyping || sessionComposeBlocked}
             variant="borderless"
             dropdownStyle={{ borderRadius: 10, minWidth: 200 }}
             dropdownMatchSelectWidth={false}
@@ -206,6 +209,7 @@ export function V3ComposerBar({
         status={status}
         isMobile={!!isMobile}
         isTyping={isTyping}
+        sessionComposeBlocked={sessionComposeBlocked}
         onSend={onSend}
         onStop={onStop}
         t={t}

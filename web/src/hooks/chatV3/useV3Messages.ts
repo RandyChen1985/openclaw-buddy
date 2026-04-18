@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { message as antdMessage } from 'antd';
 import type { FileInfo, Message } from '../useChatV3WebSocket';
 import { buildBuddyDirectSessionKey } from '../../utils/buddySessionKey';
@@ -394,6 +394,8 @@ export interface UseV3MessagesParams {
   scrollRef: React.RefObject<HTMLDivElement>;
   showScrollBtnRef: React.MutableRefObject<boolean>;
   showThinkingRef: React.MutableRefObject<boolean>;
+  /** 为 true 时禁止发送（例如正在 sessions.create 新会话，此时 sessionKey 状态仍是旧会话） */
+  sessionComposeBlocked?: boolean;
 }
 
 /**
@@ -413,7 +415,8 @@ export function useV3Messages({
   virtuosoRef,
   scrollRef,
   showScrollBtnRef,
-  showThinkingRef
+  showThinkingRef,
+  sessionComposeBlocked = false
 }: UseV3MessagesParams) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -444,7 +447,10 @@ export function useV3Messages({
   }, []);
 
   const sessionKeyRef = useRef<string | null>(null);
-  useEffect(() => { sessionKeyRef.current = sessionKey; }, [sessionKey]);
+  // 与流式事件过滤共用：必须在 paint 前与 sessionKey 对齐，避免「新会话已显示但 ref 仍指向旧会话」导致串会话
+  useLayoutEffect(() => {
+    sessionKeyRef.current = sessionKey;
+  }, [sessionKey]);
 
   const messagesRef = useRef<Message[]>(messages);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
@@ -466,15 +472,21 @@ export function useV3Messages({
   const sessionCacheRef = useRef<Map<string, SessionStreamCache>>(new Map());
   // 流结束后的冷却窗口：防止 session.message 事件在流刚结束时追加重复消息
   const streamEndGraceRef = useRef<{ key: string; until: number } | null>(null);
-  /** final 后延迟释放 UI；若尾包 delta 到达则清除本定时器 */
-  const finalUiReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 按 sessionKey 记录 final 后的延时释放任务，避免多会话并发时产生清理冲突 */
+  const finalUiReleaseTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   // 已请求停止：从点击"停止"到收到 aborted/final 之间，屏蔽后续 delta 写入
   const abortRequestedRef = useRef<{ key: string; ts: number } | null>(null);
 
-  const cancelPendingFinalUiRelease = useCallback(() => {
-    if (finalUiReleaseTimerRef.current) {
-      clearTimeout(finalUiReleaseTimerRef.current);
-      finalUiReleaseTimerRef.current = null;
+  const cancelPendingFinalUiRelease = useCallback((key?: string) => {
+    if (key) {
+      const timer = finalUiReleaseTimersRef.current.get(key);
+      if (timer) {
+        clearTimeout(timer);
+        finalUiReleaseTimersRef.current.delete(key);
+      }
+    } else {
+      finalUiReleaseTimersRef.current.forEach(timer => clearTimeout(timer));
+      finalUiReleaseTimersRef.current.clear();
     }
   }, []);
 
@@ -567,17 +579,19 @@ export function useV3Messages({
   }, []);
 
   /**
-   * 新建/切换会话时解除「生成中」锁：否则 isTyping 仍为 true，输入框会一直 disabled。
+   * 新建/切换会话时解除「当前消息区」的生成中锁：否则 isTyping 仍为 true，输入框会一直 disabled。
    * 由会话层通过 messageOpsRef 调用（不代替 chat.abort，仅清本地 UI 状态）。
+   *
+   * 注意：不清空 `typingSessionKeys` / `typingSessionsRef`。侧边栏「笔」表示**各会话**是否在流式生成；
+   * 切换走后上一会话可能仍在生成，若此处清空且随后收不到 delta（如已 unsubscribe），笔会误消失。
    */
   const resetTypingState = useCallback(() => {
-    cancelPendingFinalUiRelease();
+    const current = sessionKeyRef.current;
+    if (current) cancelPendingFinalUiRelease(current);
     abortRequestedRef.current = null;
     clearStallTimer();
     setIsTyping(false);
     streamingAssistantIndexRef.current = null;
-    typingSessionsRef.current.clear();
-    setTypingSessionKeys([]);
   }, [cancelPendingFinalUiRelease, clearStallTimer]);
 
   /**
@@ -720,7 +734,7 @@ export function useV3Messages({
     if (payload.state === 'thought' || payload.state === 'thinking') {
       const abortReq = abortRequestedRef.current;
       if (abortReq && abortReq.key === pSessionKey) return;
-      cancelPendingFinalUiRelease();
+      cancelPendingFinalUiRelease(pSessionKey);
       markSessionTyping(pSessionKey, true);
       if (pSessionKey === sessionKeyRef.current) {
         resetStallTimer();
@@ -745,7 +759,7 @@ export function useV3Messages({
       const abortReq = abortRequestedRef.current;
       if (abortReq && abortReq.key === pSessionKey) return;
 
-      cancelPendingFinalUiRelease();
+      cancelPendingFinalUiRelease(pSessionKey);
       markSessionTyping(pSessionKey, true);
       if (pSessionKey === sessionKeyRef.current) {
         resetStallTimer();
@@ -843,9 +857,9 @@ export function useV3Messages({
       streamEndGraceRef.current = { key: pSessionKey, until: Date.now() + 3000 };
       if (pSessionKey === sessionKeyRef.current) clearStallTimer();
 
-      // 用户已主动停止且 UI 已标记"已手动停止"，不再用服务端 final 覆盖
+      // 用户已主动停止且 UI 已标记"已手动停止"，不再用服务端 final覆盖
       if (wasUserAbort) {
-        cancelPendingFinalUiRelease();
+        cancelPendingFinalUiRelease(pSessionKey);
         markSessionTyping(pSessionKey, false);
         if (pSessionKey === sessionKeyRef.current) {
           setIsTyping(false);
@@ -867,7 +881,7 @@ export function useV3Messages({
           const slug = extractApprovalSlugFromHint(incomingContent);
           if (slug && hasApprovalCardForSlug(slug)) {
             // final 若只是重复提示语，则不覆盖现有 assistant 内容
-            cancelPendingFinalUiRelease();
+            cancelPendingFinalUiRelease(pSessionKey);
             markSessionTyping(pSessionKey, false);
             setIsTyping(false);
             streamingAssistantIndexRef.current = null;
@@ -915,9 +929,11 @@ export function useV3Messages({
             return next;
           });
 
-          cancelPendingFinalUiRelease();
-          finalUiReleaseTimerRef.current = setTimeout(() => {
-            finalUiReleaseTimerRef.current = null;
+          cancelPendingFinalUiRelease(pSessionKey);
+          const timer = setTimeout(() => {
+            if (finalUiReleaseTimersRef.current.get(pSessionKey) === timer) {
+              finalUiReleaseTimersRef.current.delete(pSessionKey);
+            }
             markSessionTyping(pSessionKey, false);
             if (pSessionKey === sessionKeyRef.current) {
               setIsTyping(false);
@@ -928,18 +944,22 @@ export function useV3Messages({
               fetchSessions(true);
             }
           }, FINAL_UI_SETTLE_MS);
+          finalUiReleaseTimersRef.current.set(pSessionKey, timer);
         } else {
-          cancelPendingFinalUiRelease();
-          finalUiReleaseTimerRef.current = setTimeout(() => {
-            finalUiReleaseTimerRef.current = null;
+          cancelPendingFinalUiRelease(pSessionKey);
+          const timer = setTimeout(() => {
+            if (finalUiReleaseTimersRef.current.get(pSessionKey) === timer) {
+              finalUiReleaseTimersRef.current.delete(pSessionKey);
+            }
             markSessionTyping(pSessionKey, false);
             fetchSessions(true);
           }, FINAL_UI_SETTLE_MS);
+          finalUiReleaseTimersRef.current.set(pSessionKey, timer);
         }
       }
     } else if (payload.state === 'aborted') {
       lastStreamEventAtRef.current = Date.now();
-      cancelPendingFinalUiRelease();
+      cancelPendingFinalUiRelease(pSessionKey);
       // 判断是否由 handleStopGeneration 发起的 abort（已在 UI 侧处理过消息标记）
       const wasUserAbort = abortRequestedRef.current?.key === pSessionKey;
       abortRequestedRef.current = null;
@@ -982,7 +1002,7 @@ export function useV3Messages({
       }
     } else if (payload.state === 'error' || payload.state === 'failed') {
       lastStreamEventAtRef.current = Date.now();
-      cancelPendingFinalUiRelease();
+      cancelPendingFinalUiRelease(pSessionKey);
       const wasUserAbort = abortRequestedRef.current?.key === pSessionKey;
       abortRequestedRef.current = null;
       cache.isTyping = false;
@@ -1841,6 +1861,7 @@ export function useV3Messages({
   const handleSend = useCallback(async (content?: any, attachedFiles?: FileInfo[]) => {
     const text = (typeof content === 'string' ? content : '').trim();
     if (isTyping) return;
+    if (sessionComposeBlocked) return;
     if ((!text && (!attachedFiles || attachedFiles.length === 0)) || status !== 'authenticated') return;
 
     cancelPendingFinalUiRelease();
@@ -1850,7 +1871,7 @@ export function useV3Messages({
     chatEventSeenSinceSendRef.current = false;
     hadTypingSinceSendRef.current = true;
 
-    let currentKey = sessionKey;
+    let currentKey = sessionKeyRef.current ?? sessionKey;
     if (!currentKey) {
       const agentId = selectedBot.replace('openclaw:', '');
       const key = buildBuddyDirectSessionKey(agentId);
@@ -1992,7 +2013,7 @@ export function useV3Messages({
       }
       markSessionTyping(currentKey, false);
     }
-  }, [cancelPendingFinalUiRelease, clearStallTimer, fetchSessions, inputAreaRef, isTyping, markSessionTyping, resetStallTimer, scrollRef, selectedBot, sendRPC, sessionKey, sessionModel, setSessionKey, status, t, thinkingLevel, touchAndPruneSessionCache, virtuosoRef]);
+  }, [cancelPendingFinalUiRelease, clearStallTimer, fetchSessions, inputAreaRef, isTyping, markSessionTyping, resetStallTimer, scrollRef, selectedBot, sendRPC, sessionComposeBlocked, sessionKey, sessionModel, setSessionKey, status, t, thinkingLevel, touchAndPruneSessionCache, virtuosoRef]);
 
   /**
    * 重试/再生成：复用既有的 User 消息，不额外创建新的 User 消息。
@@ -2001,6 +2022,7 @@ export function useV3Messages({
     if (!sessionKey) return;
     if (status !== 'authenticated') return;
     if (isTyping) return;
+    if (sessionComposeBlocked) return;
 
     cancelPendingFinalUiRelease();
     const finalContent = (userMsg.content || '').trim();
@@ -2089,7 +2111,7 @@ export function useV3Messages({
       }
       markSessionTyping(sessionKey, false);
     }
-  }, [cancelPendingFinalUiRelease, clearStallTimer, isTyping, markSessionTyping, resetStallTimer, sendRPC, sessionKey, status, t, touchAndPruneSessionCache, virtuosoRef]);
+  }, [cancelPendingFinalUiRelease, clearStallTimer, isTyping, markSessionTyping, resetStallTimer, sendRPC, sessionComposeBlocked, sessionKey, status, t, touchAndPruneSessionCache, virtuosoRef]);
 
   /**
    * 停止生成：更新 UI 并通过 chat.abort 中止 Agent 运行，不污染对话历史。
@@ -2172,6 +2194,7 @@ export function useV3Messages({
       antdMessage.warning(t('chat.waitUntilFinishWarning'));
       return;
     }
+    if (sessionComposeBlocked) return;
     const newText = (editContent || '').trim();
     if (!newText) return;
 
@@ -2251,7 +2274,7 @@ export function useV3Messages({
     setMessages(prev => prev.slice(0, editingMsgIndex));
     streamingAssistantIndexRef.current = null;
     handleSend(newText);
-  }, [clearStallTimer, handleSend, isTyping, markSessionTyping, resetStallTimer, sendRPC, status, t, touchAndPruneSessionCache]);
+  }, [clearStallTimer, handleSend, isTyping, markSessionTyping, resetStallTimer, sendRPC, sessionComposeBlocked, status, t, touchAndPruneSessionCache]);
 
   /**
    * 当连接断开/错误时统一清理消息侧状态。

@@ -248,9 +248,10 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         message.info(t('chat.reasoningWaitReply', { defaultValue: '请等待当前回复结束后再切换思考模式' }));
         return;
       }
+      if (isCreatingNewSession) return;
       void handleSend(text);
     },
-    [status, isTyping, handleSend, t]
+    [status, isTyping, isCreatingNewSession, handleSend, t]
   );
 
   return (
@@ -482,6 +483,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
              status={status}
              onSend={handleWrappedSend}
              isMobile={!!isMobile}
+             sendBlocked={isCreatingNewSession}
            />
 
             <V3ComposerBar
@@ -489,6 +491,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               isMobile={!!isMobile}
               status={status}
               isTyping={isTyping}
+              sessionComposeBlocked={isCreatingNewSession}
               loadingBots={loadingBots}
               selectedBot={selectedBot}
               setSelectedBot={setSelectedBot}

@@ -7,6 +7,8 @@ export interface V3QuickCommandsProps {
   status: 'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error';
   onSend: (text: string) => void;
   isMobile: boolean;
+  /** 与新建会话等互斥：为 true 时禁用快捷指令发送 */
+  sendBlocked?: boolean;
 }
 
 /**
@@ -16,13 +18,13 @@ export interface V3QuickCommandsProps {
  * - 保持原有接口：仍调用 `/v1/openclaw/chat/quick-commands` 的 get/post/delete
  * - 外部通过 `onSend` 决定发送行为（是否带引用/附件等）
  */
-export function V3QuickCommands({ t, status, onSend, isMobile }: V3QuickCommandsProps) {
+export function V3QuickCommands({ t, status, onSend, isMobile, sendBlocked = false }: V3QuickCommandsProps) {
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
   const [showQuickActions, setShowQuickActions] = useState<boolean>(() => localStorage.getItem('v3_show_quick_actions') !== 'false');
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [form] = Form.useForm();
 
-  const canSend = status === 'authenticated';
+  const canSend = status === 'authenticated' && !sendBlocked;
 
   /**
    * 拉取快捷指令列表。
