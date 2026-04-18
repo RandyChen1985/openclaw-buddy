@@ -11,6 +11,8 @@ export interface V3SessionListProps {
   setSessionSearch: (val: string) => void;
   onSelectSession: (key: string) => void;
   onNewSession: () => void;
+  /** 正在创建新会话时禁用按钮，避免连点产生大量空会话 */
+  newSessionBusy?: boolean;
   onDeleteSession: (e: any, key: string) => void;
   onDeleteGroup: (label: string, keys: string[]) => void;
   onClearAll: () => void;
@@ -76,7 +78,8 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
   sessions, sessionKey, loadingSessions, sessionSearch, setSessionSearch,
   onSelectSession, onNewSession, onDeleteSession, onDeleteGroup, onClearAll, fetchSessions,
   isMobile, setShowSider, copyToClipboard, t,
-  typingSessionKeys = []
+  typingSessionKeys = [],
+  newSessionBusy = false
 }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--v3-surface, #fff)' }}>
@@ -157,7 +160,10 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
             type="primary" 
             icon={<Plus size={16} />} 
             style={{ flex: 1, borderRadius: 8, height: 38, background: 'var(--v3-primary, #4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            loading={newSessionBusy}
+            disabled={newSessionBusy}
             onClick={() => {
+              if (newSessionBusy) return;
               onNewSession();
               if (isMobile) setShowSider(false);
             }}

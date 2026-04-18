@@ -108,6 +108,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     thinkingLevel,
     sessions,
     loadingSessions,
+    isCreatingNewSession,
     isLoadingHistory,
     isTyping,
     isStalled,
@@ -306,6 +307,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               setSessionSearch={setSessionSearch}
               onSelectSession={handleSelectSession}
               onNewSession={startNewSession}
+              newSessionBusy={isCreatingNewSession}
               onDeleteSession={handleDeleteSession}
               onDeleteGroup={handleDeleteGroup}
               onClearAll={handleClearAllHistory}

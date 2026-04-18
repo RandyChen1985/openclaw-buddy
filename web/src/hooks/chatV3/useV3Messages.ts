@@ -567,6 +567,20 @@ export function useV3Messages({
   }, []);
 
   /**
+   * 新建/切换会话时解除「生成中」锁：否则 isTyping 仍为 true，输入框会一直 disabled。
+   * 由会话层通过 messageOpsRef 调用（不代替 chat.abort，仅清本地 UI 状态）。
+   */
+  const resetTypingState = useCallback(() => {
+    cancelPendingFinalUiRelease();
+    abortRequestedRef.current = null;
+    clearStallTimer();
+    setIsTyping(false);
+    streamingAssistantIndexRef.current = null;
+    typingSessionsRef.current.clear();
+    setTypingSessionKeys([]);
+  }, [cancelPendingFinalUiRelease, clearStallTimer]);
+
+  /**
    * 重置 stall 计时器：若在指定时间内未收到流式更新，则将 UI 标记为 stalled。
    */
   const resetStallTimer = useCallback(() => {
@@ -1847,8 +1861,12 @@ export function useV3Messages({
         setSessionKey(currentKey);
         // 兼容：部分网关版本只认 key 字段
         sendRPC('sessions.messages.subscribe', { key: currentKey, sessionKey: currentKey }).catch(() => {});
-        await sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel });
-        fetchSessions();
+        // 不在此处 await patch：否则会拖住首条消息的 setMessages，会话区体感「卡住」。
+        void sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel }).catch(() => {});
+        // 静默刷新列表，避免 setLoadingSessions(true) + 300ms 最短 loading 与首屏消息抢同一帧
+        queueMicrotask(() => {
+          fetchSessions(true);
+        });
       } else {
         antdMessage.error(t('chat.failedToCreateSession') || 'Failed to create session: ' + (res.error?.message || 'Unknown'));
         setIsTyping(false);
@@ -2324,8 +2342,9 @@ export function useV3Messages({
       handleInjectMessage,
       showScrollBtnRef,
       messagesCountRef,
-      getMessagesCount: () => messagesCountRef.current
+      getMessagesCount: () => messagesCountRef.current,
+      resetTypingState,
     };
-  }, [handleApprovalRequested, handleChatDelta, handleGatewayEvent, handleInjectMessage, handleRegenerate, handleSaveEdit, handleSend, handleStopGeneration, hasNewMessages, isLoadingHistory, isStalled, isTyping, messages, setMessages, tpsData, typingSessionKeys, showScrollBtnRef]);
+  }, [handleApprovalRequested, handleChatDelta, handleGatewayEvent, handleInjectMessage, handleRegenerate, handleSaveEdit, handleSend, handleStopGeneration, hasNewMessages, isLoadingHistory, isStalled, isTyping, messages, resetTypingState, setMessages, tpsData, typingSessionKeys, showScrollBtnRef]);
 }
 
