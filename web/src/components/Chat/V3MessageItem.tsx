@@ -199,25 +199,30 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   // - 默认折叠，避免流式阶段工具/Command Output 展开导致整屏高度跳动
   // - 用户点击标题栏可展开查看；手动展开/折叠后不再自动改（metaUserToggledRef）
   const metaSectionActive = isMetaOnly || hasEmbeddedMeta;
-  /** 主气泡已开始吐字或会话已结束生成时，不再用「进行中」类折叠条文案（避免 runId/正文判定漏网） */
-  const metaStreamingLive = metaSectionActive && !mainHasTranscript && !!(isTyping && isLast);
-  /** 与 session.tool / meta 块里的「🔧 … 执行中」对齐，用于折叠条流式文案 */
+  /**
+   * 折叠条「生成中」动效与 live 样式：整条助手回复在生成时（isTyping）即展示，不能绑在 !mainHasTranscript 上，
+   * 否则主气泡一旦吐字「仅无正文」条件恒为 false，转圈/思考中前缀永远不会出现。
+   */
+  const metaFoldGenerationUi =
+    metaSectionActive && msg.role === 'assistant' && !!(isTyping && isLast);
+  /** 与 session.tool / meta 块里的「🔧 … 执行中」对齐，用于折叠条副文案 */
   const rawMetaForFoldHint = useMemo(() => {
     if (isMetaOnly) return String(msg.content || '').replace(/\r\n/g, '\n');
     return String(metaContent || '').replace(/\r\n/g, '\n');
   }, [isMetaOnly, msg.content, metaContent]);
   const metaFoldIsToolCallGenerating = useMemo(() => {
-    if (!metaStreamingLive || !rawMetaForFoldHint) return false;
+    if (!metaFoldGenerationUi || !rawMetaForFoldHint) return false;
     const s = rawMetaForFoldHint;
     return /执行中/.test(s) && (/🔧/.test(s) || /:::toolCall/i.test(s));
-  }, [metaStreamingLive, rawMetaForFoldHint]);
+  }, [metaFoldGenerationUi, rawMetaForFoldHint]);
   const [metaExpanded, setMetaExpanded] = useState(false);
   const metaUserToggledRef = useRef<boolean>(false);
 
+  /** 主气泡开始吐字后自动收起 meta，避免正文与附录同时抢高度（用户已手动展开/折叠则尊重） */
   useEffect(() => {
     if (!metaSectionActive || metaUserToggledRef.current) return;
-    setMetaExpanded(false);
-  }, [metaSectionActive, metaStreamingLive]);
+    if (mainHasTranscript) setMetaExpanded(false);
+  }, [metaSectionActive, mainHasTranscript]);
 
   const toggleMetaExpanded = () => {
     metaUserToggledRef.current = true;
@@ -420,13 +425,13 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
           const thinkingShort = t('chat.metaFoldThinkingShort', { defaultValue: '思考中…' });
           const suffixLabel = metaExpanded
             ? t('chat.metaFoldCollapse', { defaultValue: '点击折叠本次思考或工具调用' })
-            : metaStreamingLive
+            : metaFoldGenerationUi
               ? (metaFoldIsToolCallGenerating
                 ? t('chat.metaFoldExpandLiveTool', { defaultValue: '工具调用生成中' })
                 : t('chat.metaFoldExpandLive', { defaultValue: '点击展开查看思考或工具调用' }))
               : t('chat.metaFoldExpand', { defaultValue: '点击展开本次思考或工具调用' });
           const metaLabel =
-            !metaExpanded && metaStreamingLive ? `${thinkingShort} · ${suffixLabel}` : suffixLabel;
+            !metaExpanded && metaFoldGenerationUi ? `${thinkingShort} · ${suffixLabel}` : suffixLabel;
           return (
             <div
               role="button"
@@ -441,9 +446,9 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                 }
               }}
               title={metaLabel}
-              className={`v3-meta-fold-chip${metaStreamingLive ? ' v3-meta-fold-chip--live' : ''}${metaExpanded ? ' v3-meta-fold-chip--expanded' : ''}`}
+              className={`v3-meta-fold-chip${metaFoldGenerationUi ? ' v3-meta-fold-chip--live' : ''}${metaExpanded ? ' v3-meta-fold-chip--expanded' : ''}`}
             >
-              {!metaExpanded && metaStreamingLive && (
+              {!metaExpanded && metaFoldGenerationUi && (
                 <>
                   <Loader2 size={14} strokeWidth={2} className="v3-thinking-spinner v3-meta-fold-chip-spinner" aria-hidden />
                   <span className="v3-meta-fold-chip-thinking">{thinkingShort}</span>
@@ -667,13 +672,13 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                 const thinkingShort = t('chat.metaFoldThinkingShort', { defaultValue: '思考中…' });
                 const suffixLabel = metaExpanded
                   ? t('chat.metaFoldCollapse', { defaultValue: '点击折叠本次思考或工具调用' })
-                  : metaStreamingLive
+                  : metaFoldGenerationUi
                     ? (metaFoldIsToolCallGenerating
                       ? t('chat.metaFoldExpandLiveTool', { defaultValue: '工具调用生成中' })
                       : t('chat.metaFoldExpandLive', { defaultValue: '点击展开查看思考或工具调用' }))
                     : t('chat.metaFoldExpand', { defaultValue: '点击展开本次思考或工具调用' });
                 const embedLabel =
-                  !metaExpanded && metaStreamingLive ? `${thinkingShort} · ${suffixLabel}` : suffixLabel;
+                  !metaExpanded && metaFoldGenerationUi ? `${thinkingShort} · ${suffixLabel}` : suffixLabel;
                 return (
                   <div style={{ marginTop: 10 }}>
                     <div
@@ -689,9 +694,9 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                         }
                       }}
                       title={embedLabel}
-                      className={`v3-meta-fold-chip${metaStreamingLive ? ' v3-meta-fold-chip--live' : ''}${metaExpanded ? ' v3-meta-fold-chip--expanded' : ''}`}
+                      className={`v3-meta-fold-chip${metaFoldGenerationUi ? ' v3-meta-fold-chip--live' : ''}${metaExpanded ? ' v3-meta-fold-chip--expanded' : ''}`}
                     >
-                      {!metaExpanded && metaStreamingLive && (
+                      {!metaExpanded && metaFoldGenerationUi && (
                         <>
                           <Loader2 size={14} strokeWidth={2} className="v3-thinking-spinner v3-meta-fold-chip-spinner" aria-hidden />
                           <span className="v3-meta-fold-chip-thinking">{thinkingShort}</span>

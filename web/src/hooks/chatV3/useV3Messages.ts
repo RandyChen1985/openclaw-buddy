@@ -573,7 +573,7 @@ export function useV3Messages({
     clearStallTimer();
     stallTimerRef.current = setTimeout(() => {
       setIsStalled(true);
-    }, 3500);
+    }, 2000);
   }, [clearStallTimer]);
 
   /**
