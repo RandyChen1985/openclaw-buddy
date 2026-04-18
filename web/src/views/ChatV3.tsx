@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { VirtuosoHandle } from 'react-virtuoso';
 import { message } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Monitor, MessageCircle, Send, Globe, Clock, Zap, Sparkles } from 'lucide-react';
+import { Monitor, MessageCircle, Send, Globe, Clock, Zap, Sparkles, Settings } from 'lucide-react';
 import 'katex/dist/katex.min.css';
 import * as nacl from 'tweetnacl';
 import { sha256 } from 'js-sha256';
@@ -33,6 +33,7 @@ const parseSessionKey = (key: string) => {
 
 const SourceConfig: Record<string, { icon: any; color: string; labelKey: string; defaultLabel: string }> = {
   'buddy': { icon: <Sparkles size={12} />, color: '#0ea5e9', labelKey: 'chat.source.buddy', defaultLabel: 'buddy平台' },
+  'main': { icon: <Settings size={12} />, color: '#475569', labelKey: 'chat.source.system', defaultLabel: '系统渠道' },
   'dashboard': { icon: <Monitor size={12} />, color: '#6366f1', labelKey: 'chat.source.dashboard', defaultLabel: '管理后台' },
   'weixin': { icon: <MessageCircle size={12} />, color: '#07c160', labelKey: 'chat.source.weixin', defaultLabel: '微信' },
   'feishu': { icon: <Send size={12} />, color: '#3370ff', labelKey: 'chat.source.feishu', defaultLabel: '飞书' },

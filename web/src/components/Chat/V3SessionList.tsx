@@ -1,6 +1,6 @@
 import React from 'react';
 import { Input, Button, Spin, Tooltip, Avatar, Badge as AntBadge } from 'antd';
-import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe, Clock, PenLine, Sparkles } from 'lucide-react';
+import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe, Clock, PenLine, Sparkles, Settings } from 'lucide-react';
 
 export interface V3SessionListProps {
   sessions: any[];
@@ -33,6 +33,8 @@ const parseSessionKey = (key: string) => {
 
 const SourceConfig: Record<string, { icon: any, color: string, labelKey: string, defaultLabel: string }> = {
   'buddy': { icon: <Sparkles size={14} />, color: '#0ea5e9', labelKey: 'chat.source.buddy', defaultLabel: 'buddy平台' },
+  /** 会话 key 第三段为 main：系统内置渠道（如 agent:main:main） */
+  'main': { icon: <Settings size={14} />, color: '#475569', labelKey: 'chat.source.system', defaultLabel: '系统渠道' },
   'dashboard': { icon: <Monitor size={14} />, color: 'var(--v3-primary, #6366f1)', labelKey: 'chat.source.dashboard', defaultLabel: '管理后台' },
   'weixin': { icon: <MessageCircle size={14} />, color: '#07c160', labelKey: 'chat.source.weixin', defaultLabel: '微信' },
   'feishu': { icon: <Send size={14} />, color: '#3370ff', labelKey: 'chat.source.feishu', defaultLabel: '飞书' },

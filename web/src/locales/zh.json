@@ -442,6 +442,7 @@
     "noQuickCommandsAdd": "暂无快捷指令，点击",
     "source": {
       "buddy": "buddy平台",
+      "system": "系统渠道",
       "dashboard": "管理后台",
       "weixin": "微信",
       "feishu": "飞书",

@@ -434,6 +434,7 @@
     "noQuickCommandsAdd": "No quick commands, click",
     "source": {
       "buddy": "Buddy Platform",
+      "system": "System channel",
       "dashboard": "Dashboard",
       "weixin": "WeChat",
       "feishu": "Feishu",
