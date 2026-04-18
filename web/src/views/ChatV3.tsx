@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { VirtuosoHandle } from 'react-virtuoso';
 import { message } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Monitor, MessageCircle, Send, Globe, Clock, Zap } from 'lucide-react';
+import { Monitor, MessageCircle, Send, Globe, Clock, Zap, Sparkles, Settings } from 'lucide-react';
 import 'katex/dist/katex.min.css';
 import * as nacl from 'tweetnacl';
 import { sha256 } from 'js-sha256';
@@ -32,6 +32,8 @@ const parseSessionKey = (key: string) => {
 };
 
 const SourceConfig: Record<string, { icon: any; color: string; labelKey: string; defaultLabel: string }> = {
+  'buddy': { icon: <Sparkles size={12} />, color: '#0ea5e9', labelKey: 'chat.source.buddy', defaultLabel: 'buddy平台' },
+  'main': { icon: <Settings size={12} />, color: '#475569', labelKey: 'chat.source.system', defaultLabel: '系统渠道' },
   'dashboard': { icon: <Monitor size={12} />, color: '#6366f1', labelKey: 'chat.source.dashboard', defaultLabel: '管理后台' },
   'weixin': { icon: <MessageCircle size={12} />, color: '#07c160', labelKey: 'chat.source.weixin', defaultLabel: '微信' },
   'feishu': { icon: <Send size={12} />, color: '#3370ff', labelKey: 'chat.source.feishu', defaultLabel: '飞书' },
@@ -106,6 +108,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     thinkingLevel,
     sessions,
     loadingSessions,
+    isCreatingNewSession,
     isLoadingHistory,
     isTyping,
     isStalled,
@@ -245,9 +248,10 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
         message.info(t('chat.reasoningWaitReply', { defaultValue: '请等待当前回复结束后再切换思考模式' }));
         return;
       }
+      if (isCreatingNewSession) return;
       void handleSend(text);
     },
-    [status, isTyping, handleSend, t]
+    [status, isTyping, isCreatingNewSession, handleSend, t]
   );
 
   return (
@@ -304,6 +308,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               setSessionSearch={setSessionSearch}
               onSelectSession={handleSelectSession}
               onNewSession={startNewSession}
+              newSessionBusy={isCreatingNewSession}
               onDeleteSession={handleDeleteSession}
               onDeleteGroup={handleDeleteGroup}
               onClearAll={handleClearAllHistory}
@@ -351,8 +356,36 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           sessionLabel={sessionLabel}
           isSummarizing={isSummarizing}
           isUpdatingLabel={isUpdatingLabel}
-          messagesCount={messages.length}
-          onAutoSummarize={() => handleAutoSummarize(messages, false, undefined, true)}
+          onAutoSummarize={async () => {
+            // 手动触发应当“点击即有反馈”。当本地消息为空时，尝试先拉取历史再生成标题。
+            if (!sessionKey) return;
+            if (messages.length > 0) {
+              await handleAutoSummarize(messages, false, undefined, true);
+              return;
+            }
+
+            try {
+              const hRes = await sendRPC('chat.history', { sessionKey, limit: 10 });
+              if (!hRes.ok) {
+                message.warning(t('chat.noMessagesForTitle', { defaultValue: '暂无可用于生成标题的消息' }));
+                return;
+              }
+              const raw = hRes.payload?.messages || hRes.payload?.items || [];
+              if (!Array.isArray(raw) || raw.length === 0) {
+                message.warning(t('chat.noMessagesForTitle', { defaultValue: '暂无可用于生成标题的消息' }));
+                return;
+              }
+              const msgs = raw.map((m: any) => ({
+                id: m.id || `hist-${sessionKey}-${Math.random().toString(36).slice(2)}`,
+                role: (m.role === 'toolResult' ? 'assistant' : m.role) as any,
+                content: (typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '')).toString(),
+                timestamp: ''
+              })).filter((m: any) => (m.content || '').trim().length > 0);
+              await handleAutoSummarize(msgs, false, sessionKey, true);
+            } catch {
+              message.error(t('common.error', { defaultValue: '错误' }));
+            }
+          }}
           onUpdateLabel={handleUpdateLabel}
           onCopy={copyToClipboard}
           isEditingLabel={isEditingLabel}
@@ -450,6 +483,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
              status={status}
              onSend={handleWrappedSend}
              isMobile={!!isMobile}
+             sendBlocked={isCreatingNewSession}
            />
 
             <V3ComposerBar
@@ -457,6 +491,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               isMobile={!!isMobile}
               status={status}
               isTyping={isTyping}
+              sessionComposeBlocked={isCreatingNewSession}
               loadingBots={loadingBots}
               selectedBot={selectedBot}
               setSelectedBot={setSelectedBot}

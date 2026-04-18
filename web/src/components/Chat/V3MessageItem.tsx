@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Avatar, Tooltip, Button, Input, message } from 'antd';
 import { 
   User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, 
-  FileText, ChevronRight, ChevronDown, ShieldAlert, ShieldCheck, ListTodo
+  FileText, ChevronRight, ChevronDown, ShieldAlert, ShieldCheck, ListTodo, Loader2, Layers
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -73,7 +73,7 @@ const Sparkline = ({ data }: { data: number[] }) => {
   );
 };
 
-const CollapsibleMeta = ({ title, icon: Icon, children, defaultExpanded = true }: any) => {
+const CollapsibleMeta = ({ title, icon: Icon, children, defaultExpanded = false }: any) => {
   const [isExpanded, setIsExpanded] = React.useState(defaultExpanded);
 
   React.useEffect(() => {
@@ -85,13 +85,20 @@ const CollapsibleMeta = ({ title, icon: Icon, children, defaultExpanded = true }
       <div 
         className="v3-meta-header" 
         onClick={() => setIsExpanded(!isExpanded)}
-        style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: 0.8, fontSize: 12, padding: '4px 0' }}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setIsExpanded(!isExpanded);
+          }
+        }}
       >
-        <div style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center' }}>
-          <ChevronRight size={12} />
+        <div style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+          <ChevronRight size={14} strokeWidth={2} />
         </div>
-        <Icon size={12} />
-        <span style={{ fontWeight: 500 }}>{title}</span>
+        <Icon size={14} strokeWidth={2} style={{ flexShrink: 0 }} />
+        <span style={{ flex: 1, minWidth: 0, lineHeight: 1.4 }}>{title}</span>
       </div>
       {isExpanded && (
         <div className="v3-meta-content" style={{ animation: 'v3-fade-in 0.3s' }}>
@@ -188,19 +195,34 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
 
   const hasEmbeddedMeta = !isMetaOnly && !isUser && !!processedMetaContent;
 
-  // 思考信息折叠区的折叠策略（同时覆盖两种形态：独立 meta 气泡 & 嵌入主气泡底部的 meta 区）：
-  // - AI 还没开始吐字（只在 thinking / 调工具阶段）时展开，方便实时观察进度
-  // - 一旦主气泡开始吐出正文（mainHasTranscript），立刻自动折叠为紧凑标题栏，避免干扰阅读
-  // - 一旦用户手动点过（metaUserToggledRef.current=true），后续不再自动切换，尊重用户选择
+  // 思考信息折叠区的折叠策略（独立 meta 气泡 & 嵌入主气泡底部 meta 区）：
+  // - 默认折叠，避免流式阶段工具/Command Output 展开导致整屏高度跳动
+  // - 用户点击标题栏可展开查看；手动展开/折叠后不再自动改（metaUserToggledRef）
   const metaSectionActive = isMetaOnly || hasEmbeddedMeta;
-  const metaStreamingLive = metaSectionActive && !mainHasTranscript;
-  const [metaExpanded, setMetaExpanded] = useState<boolean>(metaSectionActive ? metaStreamingLive : true);
+  /**
+   * 折叠条「生成中」动效与 live 样式：整条助手回复在生成时（isTyping）即展示，不能绑在 !mainHasTranscript 上，
+   * 否则主气泡一旦吐字「仅无正文」条件恒为 false，转圈/思考中前缀永远不会出现。
+   */
+  const metaFoldGenerationUi =
+    metaSectionActive && msg.role === 'assistant' && !!(isTyping && isLast);
+  /** 与 session.tool / meta 块里的「🔧 … 执行中」对齐，用于折叠条副文案 */
+  const rawMetaForFoldHint = useMemo(() => {
+    if (isMetaOnly) return String(msg.content || '').replace(/\r\n/g, '\n');
+    return String(metaContent || '').replace(/\r\n/g, '\n');
+  }, [isMetaOnly, msg.content, metaContent]);
+  const metaFoldIsToolCallGenerating = useMemo(() => {
+    if (!metaFoldGenerationUi || !rawMetaForFoldHint) return false;
+    const s = rawMetaForFoldHint;
+    return /执行中/.test(s) && (/🔧/.test(s) || /:::toolCall/i.test(s));
+  }, [metaFoldGenerationUi, rawMetaForFoldHint]);
+  const [metaExpanded, setMetaExpanded] = useState(false);
   const metaUserToggledRef = useRef<boolean>(false);
 
+  /** 主气泡开始吐字后自动收起 meta，避免正文与附录同时抢高度（用户已手动展开/折叠则尊重） */
   useEffect(() => {
     if (!metaSectionActive || metaUserToggledRef.current) return;
-    setMetaExpanded(metaStreamingLive);
-  }, [metaSectionActive, metaStreamingLive]);
+    if (mainHasTranscript) setMetaExpanded(false);
+  }, [metaSectionActive, mainHasTranscript]);
 
   const toggleMetaExpanded = () => {
     metaUserToggledRef.current = true;
@@ -258,7 +280,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         return <CollapsibleMeta title={t('chat.thinkingProcess', { defaultValue: '思考过程' })} icon={Cpu} defaultExpanded={false}>{children}</CollapsibleMeta>;
       }
       if (fullText.includes(':::plan')) {
-        return <CollapsibleMeta title={t('chat.executionPlan', { defaultValue: '执行计划' })} icon={ListTodo} defaultExpanded={true}>{children}</CollapsibleMeta>;
+        return <CollapsibleMeta title={t('chat.executionPlan', { defaultValue: '执行计划' })} icon={ListTodo} defaultExpanded={false}>{children}</CollapsibleMeta>;
       }
       if (fullText.includes(':::toolCall')) {
         return <CollapsibleMeta title={t('chat.systemTool', { defaultValue: '系统工具' })} icon={Terminal} defaultExpanded={false}>{children}</CollapsibleMeta>;
@@ -268,7 +290,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         const subtitle = titleMatch ? titleMatch[1].trim() : '';
         const headerTitle = subtitle ? `Command Output · ${subtitle}` : 'Command Output';
         return (
-          <CollapsibleMeta title={headerTitle} icon={Terminal} defaultExpanded={true}>
+          <CollapsibleMeta title={headerTitle} icon={Terminal} defaultExpanded={false}>
             <div
               className="v3-command-output-shell"
               style={{
@@ -400,8 +422,16 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         position: 'relative', wordBreak: 'break-word', overflowWrap: 'anywhere', minWidth: 0,
       }}>
         {isMetaOnly && (() => {
-          const metaLabel = metaStreamingLive ? 'AI 正在思考与调用工具…' : '本次推理与工具调用';
-          const metaColor = metaStreamingLive ? '#4f46e5' : '#64748b';
+          const thinkingShort = t('chat.metaFoldThinkingShort', { defaultValue: '思考中…' });
+          const suffixLabel = metaExpanded
+            ? t('chat.metaFoldCollapse', { defaultValue: '点击折叠本次思考或工具调用' })
+            : metaFoldGenerationUi
+              ? (metaFoldIsToolCallGenerating
+                ? t('chat.metaFoldExpandLiveTool', { defaultValue: '工具调用生成中' })
+                : t('chat.metaFoldExpandLive', { defaultValue: '点击展开查看思考或工具调用' }))
+              : t('chat.metaFoldExpand', { defaultValue: '点击展开本次思考或工具调用' });
+          const metaLabel =
+            !metaExpanded && metaFoldGenerationUi ? `${thinkingShort} · ${suffixLabel}` : suffixLabel;
           return (
             <div
               role="button"
@@ -415,22 +445,19 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                   toggleMetaExpanded();
                 }
               }}
-              title={metaExpanded ? '点击折叠' : '点击展开'}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none',
-                marginBottom: metaExpanded ? 8 : 0,
-                paddingBottom: metaExpanded ? 6 : 0,
-                borderBottom: metaExpanded ? '1px dashed #e2e8f0' : 'none',
-                fontSize: 11, color: metaColor, letterSpacing: 0.3,
-                fontWeight: metaStreamingLive ? 500 : 400,
-              }}
+              title={metaLabel}
+              className={`v3-meta-fold-chip${metaFoldGenerationUi ? ' v3-meta-fold-chip--live' : ''}${metaExpanded ? ' v3-meta-fold-chip--expanded' : ''}`}
             >
-              <span style={{ flex: 1, height: 1, background: 'linear-gradient(to right, transparent, #cbd5e1)' }} />
-              <span style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                {metaExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                {metaLabel}
-              </span>
-              <span style={{ flex: 1, height: 1, background: 'linear-gradient(to left, transparent, #cbd5e1)' }} />
+              {!metaExpanded && metaFoldGenerationUi && (
+                <>
+                  <Loader2 size={14} strokeWidth={2} className="v3-thinking-spinner v3-meta-fold-chip-spinner" aria-hidden />
+                  <span className="v3-meta-fold-chip-thinking">{thinkingShort}</span>
+                  <span className="v3-meta-fold-chip-sep" aria-hidden>·</span>
+                </>
+              )}
+              {metaExpanded ? <ChevronDown size={14} strokeWidth={2} style={{ flexShrink: 0 }} /> : <ChevronRight size={14} strokeWidth={2} style={{ flexShrink: 0 }} />}
+              <Layers size={15} strokeWidth={2} aria-hidden style={{ flexShrink: 0, opacity: 0.92 }} />
+              <span style={{ flex: 1, minWidth: 0 }}>{suffixLabel}</span>
             </div>
           );
         })()}
@@ -447,19 +474,19 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
             </div>
           </div>
         ) : (
-          // 主气泡还没吐字但已有 meta 流（thinking/tool/plan/commandOutput）时：
-          // 不显示 "Thinking..." 动画，直接进入嵌入式 meta 区，让用户实时看到推理与工具调用过程。
+          // 主气泡尚无嵌入 meta、且仍处于思考占位时：显示思考文案 + 转圈；已有嵌入 meta 时走正文与底部折叠区（默认折叠）。
           isThinkingState && !hasEmbeddedMeta ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 13, color: isDeepThinking ? '#7c3aed' : '#64748b', fontWeight: isDeepThinking ? 600 : 400 }}>
                 {isDeepThinking ? t('chat.deepThinking', { defaultValue: '深度思考中...' }) : t('chat.thinking')}
                 {thinkingSeconds > 0 ? ` (${thinkingSeconds}s)` : ''}
               </span>
-              <div className="typing-indicator" style={{ display: 'flex', gap: 4 }}>
-                <div className="typing-dot" style={{ width: 4, height: 4, background: isDeepThinking ? '#7c3aed' : '#2563eb', borderRadius: '50%' }}></div>
-                <div className="typing-dot" style={{ width: 4, height: 4, background: isDeepThinking ? '#7c3aed' : '#2563eb', borderRadius: '50%' }}></div>
-                <div className="typing-dot" style={{ width: 4, height: 4, background: isDeepThinking ? '#7c3aed' : '#2563eb', borderRadius: '50%' }}></div>
-              </div>
+              <Loader2
+                size={17}
+                className="v3-thinking-spinner"
+                aria-hidden
+                style={{ color: isDeepThinking ? '#7c3aed' : '#2563eb', flexShrink: 0 }}
+              />
             </div>
           ) : (
             <>
@@ -493,7 +520,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                         return <CollapsibleMeta title={t('chat.thinkingProcess', { defaultValue: '思考过程' })} icon={Cpu} defaultExpanded={false}>{children}</CollapsibleMeta>;
                       }
                       if (fullText.includes(':::plan')) {
-                        return <CollapsibleMeta title={t('chat.executionPlan', { defaultValue: '执行计划' })} icon={ListTodo} defaultExpanded={true}>{children}</CollapsibleMeta>;
+                        return <CollapsibleMeta title={t('chat.executionPlan', { defaultValue: '执行计划' })} icon={ListTodo} defaultExpanded={false}>{children}</CollapsibleMeta>;
                       }
                       if (fullText.includes(':::toolCall')) {
                         return <CollapsibleMeta title={t('chat.systemTool', { defaultValue: '系统工具' })} icon={Terminal} defaultExpanded={false}>{children}</CollapsibleMeta>;
@@ -509,7 +536,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                           <CollapsibleMeta
                             title={headerTitle}
                             icon={Terminal}
-                            defaultExpanded={true}
+                            defaultExpanded={false}
                           >
                             <div
                               className="v3-command-output-shell"
@@ -641,10 +668,17 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
               </div>
 
               {hasEmbeddedMeta && (() => {
-                // 嵌入式「本次推理与工具调用」折叠区：挂在主气泡正文最底部，
-                // 沿用 markdownComponents 把 :::thinking/:::plan/:::toolCall/:::commandOutput 展开成 CollapsibleMeta 卡片
-                const embedLabel = metaStreamingLive ? 'AI 正在思考与调用工具…' : '本次推理与工具调用';
-                const embedColor = metaStreamingLive ? '#4f46e5' : '#64748b';
+                // 嵌入式折叠区：挂在主气泡正文最底部
+                const thinkingShort = t('chat.metaFoldThinkingShort', { defaultValue: '思考中…' });
+                const suffixLabel = metaExpanded
+                  ? t('chat.metaFoldCollapse', { defaultValue: '点击折叠本次思考或工具调用' })
+                  : metaFoldGenerationUi
+                    ? (metaFoldIsToolCallGenerating
+                      ? t('chat.metaFoldExpandLiveTool', { defaultValue: '工具调用生成中' })
+                      : t('chat.metaFoldExpandLive', { defaultValue: '点击展开查看思考或工具调用' }))
+                    : t('chat.metaFoldExpand', { defaultValue: '点击展开本次思考或工具调用' });
+                const embedLabel =
+                  !metaExpanded && metaFoldGenerationUi ? `${thinkingShort} · ${suffixLabel}` : suffixLabel;
                 return (
                   <div style={{ marginTop: 10 }}>
                     <div
@@ -659,23 +693,19 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                           toggleMetaExpanded();
                         }
                       }}
-                      title={metaExpanded ? '点击折叠' : '点击展开'}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        cursor: 'pointer', userSelect: 'none',
-                        paddingBottom: metaExpanded ? 6 : 0,
-                        marginBottom: metaExpanded ? 6 : 0,
-                        borderBottom: metaExpanded ? '1px dashed #e2e8f0' : 'none',
-                        fontSize: 11, color: embedColor, letterSpacing: 0.3,
-                        fontWeight: metaStreamingLive ? 500 : 400,
-                      }}
+                      title={embedLabel}
+                      className={`v3-meta-fold-chip${metaFoldGenerationUi ? ' v3-meta-fold-chip--live' : ''}${metaExpanded ? ' v3-meta-fold-chip--expanded' : ''}`}
                     >
-                      <span style={{ flex: 1, height: 1, background: 'linear-gradient(to right, transparent, #cbd5e1)' }} />
-                      <span style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        {metaExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                        {embedLabel}
-                      </span>
-                      <span style={{ flex: 1, height: 1, background: 'linear-gradient(to left, transparent, #cbd5e1)' }} />
+                      {!metaExpanded && metaFoldGenerationUi && (
+                        <>
+                          <Loader2 size={14} strokeWidth={2} className="v3-thinking-spinner v3-meta-fold-chip-spinner" aria-hidden />
+                          <span className="v3-meta-fold-chip-thinking">{thinkingShort}</span>
+                          <span className="v3-meta-fold-chip-sep" aria-hidden>·</span>
+                        </>
+                      )}
+                      {metaExpanded ? <ChevronDown size={14} strokeWidth={2} style={{ flexShrink: 0 }} /> : <ChevronRight size={14} strokeWidth={2} style={{ flexShrink: 0 }} />}
+                      <Layers size={15} strokeWidth={2} aria-hidden style={{ flexShrink: 0, opacity: 0.92 }} />
+                      <span style={{ flex: 1, minWidth: 0 }}>{suffixLabel}</span>
                     </div>
                     {metaExpanded && (
                       <div
@@ -701,9 +731,16 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
               })()}
 
               {!isMetaOnly && isStalled && isTyping && isLast && msg.role === 'assistant' && (
-                <div style={{ marginTop: 8, padding: '4px 10px', background: '#f8fafc', borderRadius: 8, border: '1px dashed #e2e8f0', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div className="typing-dot" style={{ width: 4, height: 4, background: '#94a3b8' }}></div>
-                  <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>AI 正在深度思考中...</span>
+                <div
+                  className="v3-stream-stall-hint"
+                  role="status"
+                  aria-live="polite"
+                  aria-relevant="additions text"
+                >
+                  <Loader2 size={16} className="v3-thinking-spinner" aria-hidden />
+                  <span className="v3-stream-stall-hint-text">
+                    {t('chat.streamStalledHint', { defaultValue: 'AI 还在思考中，请稍等一下...' })}
+                  </span>
                 </div>
               )}
 
@@ -776,6 +813,9 @@ export default React.memo(V3MessageItem, (prev, next) => {
          prev.editContent === next.editContent && 
          prev.editingMsgIndex === next.editingMsgIndex &&
          prev.msg.content === next.msg.content &&
+         (prev.metaContent || '') === (next.metaContent || '') &&
+         prev.mainHasTranscript === next.mainHasTranscript &&
+         !!(prev.msg as any)._uiMetaOnly === !!(next.msg as any)._uiMetaOnly &&
          prev.msg.runId === next.msg.runId &&
          prev.msg.timestamp === next.msg.timestamp &&
          prevMetrics.ttft === nextMetrics.ttft &&

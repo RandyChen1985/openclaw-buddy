@@ -92,6 +92,7 @@ export const useChatV3WebSocket = ({
     loadSessionHistory?: (key: string) => Promise<void> | void;
     setHasNewMessages?: (val: boolean) => void;
     getMessagesCount?: () => number;
+    resetTypingState?: () => void;
   }>({});
 
   /**
@@ -120,6 +121,7 @@ export const useChatV3WebSocket = ({
     sessions,
     setSessions,
     loadingSessions,
+    isCreatingNewSession,
     isUpdatingLabel,
     fetchSessions,
     handleGatewayEvent: handleSessionsGatewayEvent,
@@ -143,6 +145,9 @@ export const useChatV3WebSocket = ({
     setSessionModel,
     setThinkingLevel,
     setSelectedBot,
+    selectedBot,
+    sessionModel,
+    thinkingLevel,
     messageOpsRef: sessionMessageOpsRef,
     inputAreaRef
   });
@@ -166,7 +171,8 @@ export const useChatV3WebSocket = ({
     handleInjectMessage,
     handleApprovalRequested,
     handleGatewayEvent,
-    getMessagesCount
+    getMessagesCount,
+    resetTypingState
   } = useV3Messages({
     t,
     status,
@@ -181,7 +187,8 @@ export const useChatV3WebSocket = ({
     virtuosoRef,
     scrollRef,
     showScrollBtnRef,
-    showThinkingRef
+    showThinkingRef,
+    sessionComposeBlocked: isCreatingNewSession
   });
 
   useEffect(() => {
@@ -189,9 +196,10 @@ export const useChatV3WebSocket = ({
       setMessages: setV3Messages,
       loadSessionHistory,
       setHasNewMessages,
-      getMessagesCount
+      getMessagesCount,
+      resetTypingState
     };
-  }, [getMessagesCount, loadSessionHistory, setHasNewMessages, setV3Messages]);
+  }, [getMessagesCount, loadSessionHistory, resetTypingState, setHasNewMessages, setV3Messages]);
 
   // 与网关事件路由兼容：将 chat delta 处理函数注入 ref
   useEffect(() => {
@@ -269,6 +277,7 @@ export const useChatV3WebSocket = ({
     thinkingLevel, setThinkingLevel,
     sessions,
     loadingSessions,
+    isCreatingNewSession,
     isLoadingHistory,
     isTyping,
     isStalled,

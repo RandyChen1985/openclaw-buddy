@@ -23,6 +23,8 @@ interface V3InputAreaProps {
   status: string;
   isMobile: boolean;
   isTyping: boolean;
+  /** 与 isTyping 类似锁定发送，但不切换为「停止」按钮（如新会话 sessions.create 进行中） */
+  sessionComposeBlocked?: boolean;
   onSend: (text: string, files?: FileInfo[]) => void;
   onStop: () => void;
   t: any;
@@ -34,8 +36,9 @@ interface V3InputAreaProps {
 }
 
 const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputAreaProps> = ({ 
-  status, isMobile, isTyping, onSend, onStop, t, isComposing, setIsComposing, isFocused, setIsFocused, selectedBot
+  status, isMobile, isTyping, sessionComposeBlocked = false, onSend, onStop, t, isComposing, setIsComposing, isFocused, setIsFocused, selectedBot
 }, ref) => {
+  const inputLocked = isTyping || sessionComposeBlocked;
   const [text, setText] = useState('');
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -84,7 +87,7 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
   }), [selectedBot]);
 
   const handleInnerSend = () => {
-    if ((!text.trim() && files.length === 0) || status !== 'authenticated' || isTyping || uploading) return;
+    if ((!text.trim() && files.length === 0) || status !== 'authenticated' || inputLocked || uploading) return;
     onSend(text, files);
     setText('');
     setFiles([]);
@@ -96,11 +99,11 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
 
   // 优化 2 & 3: 提取状态逻辑，减少渲染开销
   const canSend = useMemo(() => {
-    return status === 'authenticated' && (isTyping || text.trim().length > 0 || files.length > 0) && !uploading;
-  }, [status, isTyping, text, files, uploading]);
+    return status === 'authenticated' && (isTyping || text.trim().length > 0 || files.length > 0) && !uploading && !sessionComposeBlocked;
+  }, [status, isTyping, text, files, uploading, sessionComposeBlocked]);
 
   const buttonStyle = useMemo(() => {
-    const disabled = status !== 'authenticated' || (!isTyping && !text.trim() && files.length === 0) || uploading;
+    const disabled = status !== 'authenticated' || (!isTyping && !text.trim() && files.length === 0) || uploading || sessionComposeBlocked;
     if (disabled) {
       return {
         width: isMobile ? 36 : 40, height: isMobile ? 36 : 40, borderRadius: 12,
@@ -119,7 +122,7 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
       transition: 'all 0.2s',
       color: '#fff'
     };
-  }, [isTyping, text, status, isMobile, files, uploading]);
+  }, [isTyping, text, status, isMobile, files, uploading, sessionComposeBlocked]);
 
   return (
     <div className={`v3-input-wrapper ${isFocused ? 'focused' : ''}`} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 0, position: 'relative' }}>
@@ -197,7 +200,7 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
             name="file"
             multiple
             showUploadList={false}
-            disabled={uploading || isTyping}
+            disabled={uploading || inputLocked}
             beforeUpload={(file) => {
               uploadRawFiles([file]);
               return false;
@@ -206,13 +209,13 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
               <Button 
                 type="text" 
                 icon={<Paperclip size={18} />} 
-                disabled={uploading || isTyping}
+                disabled={uploading || inputLocked}
                 style={{ 
-                  color: (uploading || isTyping) ? '#cbd5e1' : '#94a3b8', 
+                  color: (uploading || inputLocked) ? '#cbd5e1' : '#94a3b8', 
                   borderRadius: 10, 
                   height: 36, width: 36, 
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  opacity: (uploading || isTyping) ? 0.5 : 1
+                  opacity: (uploading || inputLocked) ? 0.5 : 1
                 }} 
               />
           </Upload>
@@ -226,6 +229,7 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
             // 优化 4: 回归原生占位符，移除模拟光标和额外层
             placeholder={
               status !== 'authenticated' ? t('chat.v3Connecting') : 
+              sessionComposeBlocked ? t('chat.sessionPreparing', { defaultValue: '正在准备新会话…' }) :
               isTyping ? (t('chat.aiGeneratingPlaceholder') || t('chat.thinking')) : 
               uploading ? t('chat.fileUploadingPlaceholder') :
               t('chat.v3InputPlaceholder')
@@ -242,9 +246,9 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
                 handleInnerSend();
               }
             }}
-            disabled={status !== 'authenticated' || isTyping || uploading}
+            disabled={status !== 'authenticated' || inputLocked || uploading}
             variant="borderless"
-            style={{ padding: '4px 0', fontSize: 13, opacity: isTyping ? 0.6 : 1, minHeight: 32 }}
+            style={{ padding: '4px 0', fontSize: 13, opacity: inputLocked ? 0.6 : 1, minHeight: 32 }}
           />
         </div>
         <Button
@@ -264,6 +268,7 @@ const V3InputArea = React.memo(forwardRef(V3InputAreaInner), (prev, next) => {
   return prev.status === next.status &&
          prev.isMobile === next.isMobile &&
          prev.isTyping === next.isTyping &&
+         prev.sessionComposeBlocked === next.sessionComposeBlocked &&
          prev.isComposing === next.isComposing &&
          prev.isFocused === next.isFocused &&
          prev.selectedBot === next.selectedBot;

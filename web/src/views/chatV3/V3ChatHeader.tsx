@@ -23,7 +23,6 @@ export interface V3ChatHeaderProps {
   sessionLabel: string | null;
   isSummarizing: boolean;
   isUpdatingLabel: boolean;
-  messagesCount: number;
   onAutoSummarize: () => void;
   onUpdateLabel: (newLabel: string) => void;
   onCopy: (text: string) => void;
@@ -85,7 +84,6 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     sessionLabel,
     isSummarizing,
     isUpdatingLabel,
-    messagesCount,
     onAutoSummarize,
     onUpdateLabel,
     onCopy,
@@ -432,14 +430,32 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                   </span>
                   {!sessionMeta.isMain && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Button
-                        size="small"
-                        type="text"
-                        icon={isSummarizing ? <RefreshCw size={10} className="animate-spin" /> : <Wand2 size={10} />}
-                        onClick={onAutoSummarize}
-                        disabled={isSummarizing || messagesCount === 0}
-                        style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}
-                      />
+                      {/* 禁用态明确的 not-allowed 光标与变灰效果（无需额外 tooltip，避免与 toast 重复） */}
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          cursor: isSummarizing ? 'not-allowed' : 'pointer',
+                          opacity: isSummarizing ? 0.55 : 1
+                        }}
+                      >
+                        <Button
+                          size="small"
+                          type="text"
+                          icon={isSummarizing ? <RefreshCw size={10} className="animate-spin" /> : <Wand2 size={10} />}
+                          onClick={onAutoSummarize}
+                          // 手动触发应可点击；即便本地消息为空也可由上层兜底拉历史。
+                          disabled={isSummarizing}
+                          style={{
+                            padding: 0,
+                            height: 16,
+                            width: 16,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: isSummarizing ? '#94a3b8' : '#6366f1'
+                          }}
+                        />
+                      </span>
                       <Button
                         size="small"
                         type="text"

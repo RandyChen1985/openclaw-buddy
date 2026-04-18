@@ -1,6 +1,6 @@
 import React from 'react';
 import { Input, Button, Spin, Tooltip, Avatar, Badge as AntBadge } from 'antd';
-import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe, Clock, PenLine } from 'lucide-react';
+import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe, Clock, PenLine, Sparkles, Settings } from 'lucide-react';
 
 export interface V3SessionListProps {
   sessions: any[];
@@ -11,6 +11,8 @@ export interface V3SessionListProps {
   setSessionSearch: (val: string) => void;
   onSelectSession: (key: string) => void;
   onNewSession: () => void;
+  /** 正在创建新会话时禁用按钮，避免连点产生大量空会话 */
+  newSessionBusy?: boolean;
   onDeleteSession: (e: any, key: string) => void;
   onDeleteGroup: (label: string, keys: string[]) => void;
   onClearAll: () => void;
@@ -32,6 +34,9 @@ const parseSessionKey = (key: string) => {
 };
 
 const SourceConfig: Record<string, { icon: any, color: string, labelKey: string, defaultLabel: string }> = {
+  'buddy': { icon: <Sparkles size={14} />, color: '#0ea5e9', labelKey: 'chat.source.buddy', defaultLabel: 'buddy平台' },
+  /** 会话 key 第三段为 main：系统内置渠道（如 agent:main:main） */
+  'main': { icon: <Settings size={14} />, color: '#475569', labelKey: 'chat.source.system', defaultLabel: '系统渠道' },
   'dashboard': { icon: <Monitor size={14} />, color: 'var(--v3-primary, #6366f1)', labelKey: 'chat.source.dashboard', defaultLabel: '管理后台' },
   'weixin': { icon: <MessageCircle size={14} />, color: '#07c160', labelKey: 'chat.source.weixin', defaultLabel: '微信' },
   'feishu': { icon: <Send size={14} />, color: '#3370ff', labelKey: 'chat.source.feishu', defaultLabel: '飞书' },
@@ -73,7 +78,8 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
   sessions, sessionKey, loadingSessions, sessionSearch, setSessionSearch,
   onSelectSession, onNewSession, onDeleteSession, onDeleteGroup, onClearAll, fetchSessions,
   isMobile, setShowSider, copyToClipboard, t,
-  typingSessionKeys = []
+  typingSessionKeys = [],
+  newSessionBusy = false
 }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--v3-surface, #fff)' }}>
@@ -154,7 +160,10 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
             type="primary" 
             icon={<Plus size={16} />} 
             style={{ flex: 1, borderRadius: 8, height: 38, background: 'var(--v3-primary, #4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            loading={newSessionBusy}
+            disabled={newSessionBusy}
             onClick={() => {
+              if (newSessionBusy) return;
               onNewSession();
               if (isMobile) setShowSider(false);
             }}

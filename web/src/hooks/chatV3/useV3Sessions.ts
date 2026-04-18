@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { message as antdMessage, Modal } from 'antd';
 import storage from '../../utils/storage';
 import type { Message } from '../useChatV3WebSocket';
+import { buildBuddyDirectSessionKey } from '../../utils/buddySessionKey';
 import { isUntitledSessionLabel } from './labelUtils';
 
 export interface UseV3SessionsParams {
@@ -17,6 +18,9 @@ export interface UseV3SessionsParams {
   setThinkingLevel: (level: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh') => void;
 
   setSelectedBot: (bot: string) => void;
+  selectedBot: string;
+  sessionModel: string;
+  thinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
   /**
    * 消息层操作集合（通过 ref 注入），用于解耦会话层与消息层的互相依赖。
@@ -26,6 +30,8 @@ export interface UseV3SessionsParams {
     loadSessionHistory?: (key: string) => Promise<void> | void;
     setHasNewMessages?: (val: boolean) => void;
     getMessagesCount?: () => number;
+    /** 新建/切换会话时清掉上一会话的生成中状态，避免输入框被 isTyping 锁死 */
+    resetTypingState?: () => void;
   }>;
   inputAreaRef: React.RefObject<any>;
 }
@@ -46,6 +52,9 @@ export function useV3Sessions({
   setSessionModel,
   setThinkingLevel,
   setSelectedBot,
+  selectedBot,
+  sessionModel,
+  thinkingLevel,
   messageOpsRef,
   inputAreaRef
 }: UseV3SessionsParams) {
@@ -57,6 +66,9 @@ export function useV3Sessions({
   useEffect(() => { sessionKeyRef.current = sessionKey; }, [sessionKey]);
   const sessionLabelRef = useRef<string | null>(null);
   useEffect(() => { sessionLabelRef.current = sessionLabel; }, [sessionLabel]);
+  /** 防止「开启新会话」连点触发多次 sessions.create */
+  const creatingNewSessionRef = useRef(false);
+  const [isCreatingNewSession, setIsCreatingNewSession] = useState(false);
 
   /**
    * 将当前会话 key/label 原子化持久化，避免 UI 重挂载后丢失。
@@ -121,6 +133,8 @@ export function useV3Sessions({
   const handleSelectSession = useCallback((key: string) => {
     if (key === sessionKey) return;
 
+    messageOpsRef.current.resetTypingState?.();
+
     // 取消订阅旧会话的消息推送，订阅新会话
     if (sessionKey) {
       // 兼容：部分网关版本只认 key 字段
@@ -152,21 +166,77 @@ export function useV3Sessions({
   }, [messageOpsRef, sendRPC, sessionKey, sessions, setSelectedBot, setSessionKey, setSessionLabel, setSessionModel]);
 
   /**
-   * 开始新会话：清空当前会话状态并提示用户。
+   * 开始新会话：立即在网关创建空白会话并写入 sessionKey，顶部与会话列表立刻可显示；
+   * 消息区保持空，首条发送时不再走 sessions.create。
    */
   const startNewSession = useCallback(() => {
+    if (creatingNewSessionRef.current) return;
+    creatingNewSessionRef.current = true;
+    setIsCreatingNewSession(true);
+
+    messageOpsRef.current.resetTypingState?.();
     if (sessionKey) {
-      // 兼容：部分网关版本只认 key 字段
       sendRPC('sessions.messages.unsubscribe', { key: sessionKey, sessionKey }).catch(() => {});
     }
-    setSessionKey(null);
     messageOpsRef.current.setMessages?.([]);
     setSessionLabel(null);
     messageOpsRef.current.setHasNewMessages?.(false);
 
-    antdMessage.info({ content: t('chat.newSessionReady', { defaultValue: '新会话已就绪' }), key: 'newSessionReady' });
-    setTimeout(() => inputAreaRef.current?.focus(), 100);
-  }, [inputAreaRef, messageOpsRef, sendRPC, sessionKey, setSessionKey, setSessionLabel, t]);
+    const run = async () => {
+      try {
+        if (status !== 'authenticated') {
+          setSessionKey(null);
+          antdMessage.warning(t('chat.gatewayConnecting'));
+          return;
+        }
+        const agentId = (selectedBot || '').replace(/^openclaw:/, '').trim();
+        if (!agentId) {
+          setSessionKey(null);
+          antdMessage.warning(t('chat.selectBot'));
+          return;
+        }
+        const key = buildBuddyDirectSessionKey(agentId);
+        const res = await sendRPC('sessions.create', { agentId, key });
+        if (!res.ok) {
+          setSessionKey(null);
+          antdMessage.error(t('chat.failedToCreateSession') || `创建会话失败: ${res.error?.message || 'Unknown'}`);
+          return;
+        }
+        const currentKey = (res.payload?.key as string) || key;
+        setSessionKey(currentKey);
+        sendRPC('sessions.messages.subscribe', { key: currentKey, sessionKey: currentKey }).catch(() => {});
+        void sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel }).catch(() => {});
+        setSessions(prev => {
+          if (prev.some((s: any) => s.key === currentKey)) return prev;
+          return [{ key: currentKey, label: '' }, ...prev];
+        });
+        queueMicrotask(() => {
+          fetchSessions(true);
+        });
+        antdMessage.info({ content: t('chat.newSessionReady', { defaultValue: '新会话已就绪' }), key: 'newSessionReady' });
+        setTimeout(() => inputAreaRef.current?.focus(), 100);
+      } finally {
+        creatingNewSessionRef.current = false;
+        setIsCreatingNewSession(false);
+      }
+    };
+
+    void run();
+  }, [
+    fetchSessions,
+    inputAreaRef,
+    messageOpsRef,
+    selectedBot,
+    sendRPC,
+    sessionKey,
+    sessionModel,
+    setSessionKey,
+    setSessionLabel,
+    setSessions,
+    status,
+    t,
+    thinkingLevel
+  ]);
 
   /**
    * 更新会话标题（重命名）。
@@ -371,6 +441,7 @@ export function useV3Sessions({
       setSessions,
       loadingSessions,
       isUpdatingLabel,
+      isCreatingNewSession,
       fetchSessions,
       handleGatewayEvent,
       handleSelectSession,
@@ -394,6 +465,7 @@ export function useV3Sessions({
     handleSelectSession,
     handleThinkingLevelChange,
     handleUpdateLabel,
+    isCreatingNewSession,
     isUpdatingLabel,
     loadingSessions,
     sessions,
