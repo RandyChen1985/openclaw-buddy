@@ -476,6 +476,33 @@ button.v3-settings-reasoning-btn:active {
   border-bottom: 1px dashed #cbd5e1;
 }
 
+.v3-meta-fold-chip-spinner {
+  flex-shrink: 0;
+  color: #64748b;
+}
+
+.v3-meta-fold-chip--live .v3-meta-fold-chip-spinner {
+  color: #4f46e5;
+}
+
+.v3-meta-fold-chip-thinking {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: #475569;
+}
+
+.v3-meta-fold-chip--live .v3-meta-fold-chip-thinking {
+  color: #4338ca;
+}
+
+.v3-meta-fold-chip-sep {
+  flex-shrink: 0;
+  margin: 0 2px;
+  font-weight: 700;
+  opacity: 0.4;
+  user-select: none;
+}
+
 /* 流式短暂无更新（isStalled）：与折叠条体量接近，左侧色条提示「仍在等」而非报错 */
 .v3-stream-stall-hint {
   margin-top: 10px;

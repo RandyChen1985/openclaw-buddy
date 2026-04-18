@@ -417,13 +417,16 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         position: 'relative', wordBreak: 'break-word', overflowWrap: 'anywhere', minWidth: 0,
       }}>
         {isMetaOnly && (() => {
-          const metaLabel = metaExpanded
+          const thinkingShort = t('chat.metaFoldThinkingShort', { defaultValue: '思考中…' });
+          const suffixLabel = metaExpanded
             ? t('chat.metaFoldCollapse', { defaultValue: '点击折叠本次思考或工具调用' })
             : metaStreamingLive
               ? (metaFoldIsToolCallGenerating
                 ? t('chat.metaFoldExpandLiveTool', { defaultValue: '工具调用生成中' })
-                : t('chat.metaFoldExpandLive', { defaultValue: '进行中 · 点击展开查看思考或工具调用' }))
+                : t('chat.metaFoldExpandLive', { defaultValue: '点击展开查看思考或工具调用' }))
               : t('chat.metaFoldExpand', { defaultValue: '点击展开本次思考或工具调用' });
+          const metaLabel =
+            !metaExpanded && metaStreamingLive ? `${thinkingShort} · ${suffixLabel}` : suffixLabel;
           return (
             <div
               role="button"
@@ -440,9 +443,16 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
               title={metaLabel}
               className={`v3-meta-fold-chip${metaStreamingLive ? ' v3-meta-fold-chip--live' : ''}${metaExpanded ? ' v3-meta-fold-chip--expanded' : ''}`}
             >
+              {!metaExpanded && metaStreamingLive && (
+                <>
+                  <Loader2 size={14} strokeWidth={2} className="v3-thinking-spinner v3-meta-fold-chip-spinner" aria-hidden />
+                  <span className="v3-meta-fold-chip-thinking">{thinkingShort}</span>
+                  <span className="v3-meta-fold-chip-sep" aria-hidden>·</span>
+                </>
+              )}
               {metaExpanded ? <ChevronDown size={14} strokeWidth={2} style={{ flexShrink: 0 }} /> : <ChevronRight size={14} strokeWidth={2} style={{ flexShrink: 0 }} />}
               <Layers size={15} strokeWidth={2} aria-hidden style={{ flexShrink: 0, opacity: 0.92 }} />
-              <span style={{ flex: 1, minWidth: 0 }}>{metaLabel}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>{suffixLabel}</span>
             </div>
           );
         })()}
@@ -654,13 +664,16 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
 
               {hasEmbeddedMeta && (() => {
                 // 嵌入式折叠区：挂在主气泡正文最底部
-                const embedLabel = metaExpanded
+                const thinkingShort = t('chat.metaFoldThinkingShort', { defaultValue: '思考中…' });
+                const suffixLabel = metaExpanded
                   ? t('chat.metaFoldCollapse', { defaultValue: '点击折叠本次思考或工具调用' })
                   : metaStreamingLive
                     ? (metaFoldIsToolCallGenerating
                       ? t('chat.metaFoldExpandLiveTool', { defaultValue: '工具调用生成中' })
-                      : t('chat.metaFoldExpandLive', { defaultValue: '进行中 · 点击展开查看思考或工具调用' }))
+                      : t('chat.metaFoldExpandLive', { defaultValue: '点击展开查看思考或工具调用' }))
                     : t('chat.metaFoldExpand', { defaultValue: '点击展开本次思考或工具调用' });
+                const embedLabel =
+                  !metaExpanded && metaStreamingLive ? `${thinkingShort} · ${suffixLabel}` : suffixLabel;
                 return (
                   <div style={{ marginTop: 10 }}>
                     <div
@@ -678,9 +691,16 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                       title={embedLabel}
                       className={`v3-meta-fold-chip${metaStreamingLive ? ' v3-meta-fold-chip--live' : ''}${metaExpanded ? ' v3-meta-fold-chip--expanded' : ''}`}
                     >
+                      {!metaExpanded && metaStreamingLive && (
+                        <>
+                          <Loader2 size={14} strokeWidth={2} className="v3-thinking-spinner v3-meta-fold-chip-spinner" aria-hidden />
+                          <span className="v3-meta-fold-chip-thinking">{thinkingShort}</span>
+                          <span className="v3-meta-fold-chip-sep" aria-hidden>·</span>
+                        </>
+                      )}
                       {metaExpanded ? <ChevronDown size={14} strokeWidth={2} style={{ flexShrink: 0 }} /> : <ChevronRight size={14} strokeWidth={2} style={{ flexShrink: 0 }} />}
                       <Layers size={15} strokeWidth={2} aria-hidden style={{ flexShrink: 0, opacity: 0.92 }} />
-                      <span style={{ flex: 1, minWidth: 0 }}>{embedLabel}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>{suffixLabel}</span>
                     </div>
                     {metaExpanded && (
                       <div
