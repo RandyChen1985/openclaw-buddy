@@ -37,7 +37,7 @@
     | 方式 | 命令 | 说明 |
     |------|------|------|
     | **PowerShell（推荐）** | `powershell -NoProfile -ExecutionPolicy Bypass -File .\build_windows.ps1` | 默认 `npm` 使用 `--silent`，日志较干净。 |
-    | **批处理** | `.\build_windows.bat` 或在 CMD 中 `build_windows.bat` | 前端 `npm install` / `npm run build`**不**加 `--silent`，便于查看 Vite 完整输出。 |
+    | **批处理** | 在 **CMD** 中：`build_windows.bat` 或 `cmd /c build_windows.bat` | 前端 `npm install` / `npm run build`**不**加 `--silent`，便于查看 Vite 完整输出。**请勿在 Git Bash 下用 `./build_windows.bat`**：`::` 注释中的括号会被 MSYS/CMD 组合解析误伤，导致脚本错乱。 |
 
     **ZIP 失败**：若提示某 `.exe` 正被占用，请先**完全退出**已运行的 Buddy（含可能驻留的 `openclaw-buddy-debug.exe` 进程）后再执行脚本。
 

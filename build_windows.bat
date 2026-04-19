@@ -1,4 +1,5 @@
 @echo off
+:: 请用 CMD 运行：cmd /c build_windows.bat   （Git Bash 下 ./build_windows.bat 易误解析括号）
 setlocal enabledelayedexpansion
 
 echo ==========================================
@@ -41,8 +42,8 @@ if exist "web\public\openclaw2.png" (
     copy /Y "web\public\openclaw2.png" "internal\api\dist\" >nul
 )
 
-:: 4. Wails Build (production + debug, -skipbindings — same as build_windows.ps1)
-echo [4/5] Building Wails Binaries (Production ^& Debug)...
+:: 4. Wails: production + debug, -skipbindings, aligned with build_windows.ps1
+echo [4/5] Building Wails Binaries - Production and Debug...
 wails build -platform windows/amd64 -skipbindings -o openclaw-buddy.exe
 if errorlevel 1 (
     echo [FAILED] Wails production build failed.
