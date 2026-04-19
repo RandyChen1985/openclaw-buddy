@@ -486,6 +486,8 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
         message.error(t('common.error'));
       }
     } finally {
+      // 任意出口（含 try 内 return / 抛错）都必须结束，否则 rAF 在「流未标记结束且队列已空」时会空转占满 CPU
+      isStreamingFinished = true;
       setIsTyping(false);
       abortControllerRef.current = null;
     }

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+</head>
+<body style="background-color: #fafafa; color: #111; font-family: -apple-system-font, 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif; line-height: 1.5; margin: 0; padding: 60px 20px;">
+    <div style="max-width: 600px; margin: 0 auto; background-color: #fff; padding: 50px; border: 1px solid #f0f0f0; box-shadow: 0 40px 100px rgba(0,0,0,0.03); box-sizing: border-box;">
+        
+        <header style="text-align: left; margin-bottom: 100px;">
+            <p style="font-size: 11px; font-weight: bold; letter-spacing: 0.3em; text-transform: uppercase; color: #999; margin-bottom: 20px;">EXHIBITION // 04.19</p>
+            <h1 style="font-size: 44px; font-weight: 300; letter-spacing: -2px; margin: 0; line-height: 1; color: #111;">OpenClaw Buddy v1.0.8.</h1>
+            <p style="color: #999; font-size: 18px; font-weight: 300; margin-top: 20px;">灵动之脑，节律之美。</p>
+        </header>
+
+        <!-- [此处插入 v1.0.8 Banner 建议尺寸 16:9] -->
+        <section style="background-color: #f9f9f9; border: 1px solid #eee; height: 300px; display: flex; align-items: center; justify-content: center; margin-bottom: 100px;">
+            <div style="text-align: center; color: #ccc; font-size: 12px; font-weight: bold; letter-spacing: 2px;">🖼️ EXHIBIT: v1.0.8 MAIN BANNER</div>
+        </section>
+
+        <!-- Curator's Note -->
+        <section style="margin-bottom: 120px; text-align: left;">
+            <div style="border-left: 2px solid #111; padding-left: 30px;">
+                <p style="font-size: 18px; color: #333; line-height: 2; font-weight: 400; font-style: italic; margin-bottom: 25px;">
+                    “在智能的交响乐中，每一个字节都是跳动的音符。如果说 1.0.7 是在重塑骨骼，那么 1.0.8 则是在赋予 Buddy 更加灵动的‘思考’与‘节律’。”
+                </p>
+                <p style="font-size: 15px; color: #666; line-height: 1.8; margin-bottom: 20px;">
+                    本次版本，我用 Claude 模型对系统进行了深度重构。这不仅仅是代码的重写，更是一次灵魂的对齐。我们将 V3 聊天接口与 OpenClaw 源码进行了底层联调，让每一个审批、每一份回执都能精准触达；我们优化了 AI 的思考展示，让逻辑的流动清晰可见；我们新增了定时任务管理，让自动化的齿轮按照既定的节律完美运转。
+                </p>
+                <p style="font-size: 16px; color: #111; font-weight: bold; letter-spacing: 1px;">秩序与灵动，在此刻共鸣。</p>
+            </div>
+        </section>
+
+        <!-- Features Gallery -->
+        <section style="margin-bottom: 120px;">
+            <div style="font-size: 11px; font-weight: bold; letter-spacing: 0.3em; text-transform: uppercase; color: #999; margin-bottom: 60px; border-bottom: 1px solid #eee; padding-bottom: 10px;">New Exploration // 核心特性</div>
+
+            <!-- Item 1 -->
+            <div style="margin-bottom: 100px;">
+                <h2 style="font-size: 26px; font-weight: 600; margin-bottom: 15px; letter-spacing: -1px; color: #111;">Claude 深度重构</h2>
+                <p style="font-size: 16px; color: #555; margin-bottom: 15px; line-height: 1.8;">
+                    • <strong style="color: #4f46e5;">架构解耦</strong>: 进一步优化了内部逻辑层与表现层的分离，极大提升了系统的响应速度与可维护性。<br>
+                    • <strong style="color: #4f46e5;">代码健壮性</strong>: 在 Claude 的协助下，修复了多处潜在的边缘案例 Bug，系统运行更加稳如磐石。
+                </p>
+                <p style="font-size: 14px; color: #888; margin-bottom: 25px; padding: 15px; background: #fcfcfc; border: 1px solid #f0f0f0;">
+                    💡 大白话：我们花了大钱请 Claude 老师帮 Buddy 的家底彻底翻修了一遍。现在的 Buddy 不仅反应更快，而且底子更厚，不容易出莫名其妙的小脾气。
+                </p>
+                <!-- Placeholder 16:9 -->
+                <div style="background-color: #fafafa; border: 1px solid #eee; height: 260px; display: flex; align-items: center; justify-content: center; margin-bottom: 15px;">
+                     <div style="color: #ddd; font-size: 10px; letter-spacing: 1px;">IMAGE: CLAUDE_REFACTOR_LOGIC</div>
+                </div>
+                <div style="font-size: 12px; color: #bbb; text-transform: uppercase; letter-spacing: 2px;">// REFACTOR_OPTIMIZED</div>
+            </div>
+
+            <!-- Item 2 -->
+            <div style="margin-bottom: 100px;">
+                <h2 style="font-size: 26px; font-weight: 600; margin-bottom: 15px; letter-spacing: -1px; color: #111;">V3 协议完美对齐</h2>
+                <p style="font-size: 16px; color: #555; margin-bottom: 15px; line-height: 1.8;">
+                    • <strong style="color: #03a9f4;">全量事件支持</strong>: 不再局限于纯文本。现在 V3 接口完整支持包括 审批 (Approval)、回执 (Receipt) 等在内的各种复杂事件消息。<br>
+                    • <strong style="color: #03a9f4;">直连消息源驱动</strong>: 新增 Buddy 平台专属消息源标识，让消息的来源追溯更加精准。<br>
+                    • <strong style="color: #03a9f4;">网关 Token 预取</strong>: 针对网关 Token 预取逻辑进行优化，显著降低首条消息延迟。
+                </p>
+                <p style="font-size: 14px; color: #888; margin-bottom: 25px; padding: 15px; background: #fcfcfc; border: 1px solid #f0f0f0;">
+                    💡 大白话：现在 Buddy 说的话、办的事跟 OpenClaw 原版完全对齐了。不管你是要审批还是发回执，Buddy 都能听得懂、做得到，而且发消息比以前更快了。
+                </p>
+                <!-- Placeholder 16:9 -->
+                <div style="background-color: #fafafa; border: 1px solid #eee; height: 260px; display: flex; align-items: center; justify-content: center; margin-bottom: 15px;">
+                     <div style="color: #ddd; font-size: 10px; letter-spacing: 1px;">IMAGE: V3_PROTOCOL_ALIGNMENT</div>
+                </div>
+                <div style="font-size: 12px; color: #bbb; text-transform: uppercase; letter-spacing: 2px;">// PROTOCOL_SYNCED</div>
+            </div>
+
+            <!-- Item 3 -->
+            <div style="margin-bottom: 100px;">
+                <h2 style="font-size: 26px; font-weight: 600; margin-bottom: 15px; letter-spacing: -1px; color: #111;">思考展示 2.0</h2>
+                <p style="font-size: 16px; color: #555; margin-bottom: 15px; line-height: 1.8;">
+                    • <strong style="color: #4caf50;">增强型元数据折叠条</strong>: 更加雅致的 UI 设计，将思考过程、工具调用与命令输出完美融合在消息气泡中。<br>
+                    • <strong style="color: #4caf50;">流式停顿感知</strong>: 新增「思考中」动画与旋转图标。当 AI 在逻辑深处沉思时，界面会动态告知其状态，杜绝由于生成卡顿带来的误解。<br>
+                    • <strong style="color: #4caf50;">终端样式输出</strong>: AI 执行的系统命令现在以专业的终端样式呈现，支持即时折叠，还原真实的技术场景。
+                </p>
+                <p style="font-size: 14px; color: #888; margin-bottom: 25px; padding: 15px; background: #fcfcfc; border: 1px solid #f0f0f0;">
+                    💡 大白话：现在 AI 思考问题时会转圈圈提示你它在想，不会让你觉得界面卡住了。它的思考过程、调用的工具都藏在漂亮的小折叠条里，想看就点，不看就收起来，清爽干净。
+                </p>
+                <!-- Placeholder 16:9 -->
+                <div style="background-color: #fafafa; border: 1px solid #eee; height: 260px; display: flex; align-items: center; justify-content: center; margin-bottom: 15px;">
+                     <div style="color: #ddd; font-size: 10px; letter-spacing: 1px;">IMAGE: THINKING_PROCESS_UI</div>
+                </div>
+                <div style="font-size: 12px; color: #bbb; text-transform: uppercase; letter-spacing: 2px;">// LOGIC_VISIBLE</div>
+            </div>
+
+            <!-- Item 4 -->
+            <div style="margin-bottom: 100px;">
+                <h2 style="font-size: 26px; font-weight: 600; margin-bottom: 15px; letter-spacing: -1px; color: #111;">定时任务 (Cron) 管理</h2>
+                <p style="font-size: 16px; color: #555; margin-bottom: 15px; line-height: 1.8;">
+                    • <strong style="color: #9c27b0;">可视化调度中心</strong>: 新增独立的定时任务页面，支持一键查看、编辑与监控所有自动化任务的运行状态。<br>
+                    • <strong style="color: #9c27b0;">排版与可用性优化</strong>: 针对任务列表进行了深度排版优化，关键水位线与用量提示一目了然。
+                </p>
+                <p style="font-size: 14px; color: #888; margin-bottom: 25px; padding: 15px; background: #fcfcfc; border: 1px solid #f0f0f0;">
+                    💡 大白话：以后想看机器人什么时候干活、任务跑得怎么样，直接去新出的“定时任务”页面就行了。所有的计划都在你眼皮底下，想改就改。
+                </p>
+                <!-- Placeholder 16:9 -->
+                <div style="background-color: #fafafa; border: 1px solid #eee; height: 260px; display: flex; align-items: center; justify-content: center; margin-bottom: 15px;">
+                     <div style="color: #ddd; font-size: 10px; letter-spacing: 1px;">IMAGE: CRON_MANAGEMENT</div>
+                </div>
+                <div style="font-size: 12px; color: #bbb; text-transform: uppercase; letter-spacing: 2px;">// RHYTHM_CONTROLLED</div>
+            </div>
+        </section>
+
+        <!-- Stability Log -->
+        <section style="margin-bottom: 120px;">
+            <div style="font-size: 11px; font-weight: bold; letter-spacing: 0.3em; text-transform: uppercase; color: #999; margin-bottom: 40px; border-bottom: 1px solid #eee; padding-bottom: 10px;">Stability & Fixes // 稳定性</div>
+            <div style="font-size: 14px; color: #444; line-height: 2.2; font-weight: 300;">
+                <span style="font-weight: bold; color: #111;">[FIX]</span> CPU 占用优化: 修复了 Classic 聊天模式下，流式结束路径不闭合导致浏览器 rAF 持续空转、占满 CPU 的严重故障。<br>
+                <span style="font-weight: bold; color: #111;">[FIX]</span> UI 状态残留修复: 彻底解决了会话侧边栏「正在输入」图标在消息结束后仍不消失的问题，并优化了新会话创建时的输入锁定逻辑。<br>
+                <span style="font-weight: bold; color: #111;">[FIX]</span> 防连点与即时响应: 优化了首条消息发送逻辑，支持新会话即时创建，并增加了全局防连点机制。<br>
+                <span style="font-weight: bold; color: #111;">[FIX]</span> 消息时序加固: 持续优化 WS 协议下的消息排序，修复了由于极端网络抖动可能引起的重复气泡显示。<br>
+                <span style="font-weight: bold; color: #111;">[FIX]</span> JSON 提取增强: 进一步增强了插件输出中 JSON 内容的提取健壮性，即使内容中夹杂无关字符也能精准识别。
+            </div>
+        </section>
+
+        <!-- Release Info -->
+        <section style="margin-bottom: 100px; padding: 30px; border: 1px solid #eee; background: #fafafa; font-family: monospace; font-size: 13px; color: #777;">
+            <p style="margin-bottom: 10px;">📦 [Linux/amd64]: openclaw-buddy-linux-1.0.8.tar.gz</p>
+            <p>📦 [macOS/Universal]: openclaw-buddy-mac-1.0.8.tar.gz</p>
+            <p style="margin-top: 10px;">🔗 [GitHub Releases]: https://github.com/RandyChen1985/openclaw-buddy/releases/tag/1.0.8</p>
+        </section>
+
+        <footer style="text-align: left; border-top: 1px solid #eee; padding-top: 60px;">
+            <p style="font-size: 15px; color: #666; line-height: 1.8; margin-bottom: 30px;">
+                感谢 Claude 模型提供的卓越重构建议，以及所有在开发过程中提供反馈的贡献者。每一次“对齐”，都是为了更接近智能的真谛。
+            </p>
+            <p style="font-size: 14px; color: #222; font-weight: bold; font-style: italic; margin-bottom: 15px;">“在时间的脉动中，我们用代码刻画逻辑；在智能的节律里，我们与未来同频。”</p>
+            <p style="font-size: 11px; color: #ccc; text-transform: uppercase; letter-spacing: 0.2em;">RandyChen1985 / 2026 Crafted with Passion</p>
+            
+            <a href="https://github.com/RandyChen1985/openclaw-buddy/releases/tag/1.0.8" style="text-decoration: none; display: inline-block; margin-top: 40px; border-bottom: 1px solid #111; color: #111; font-weight: bold; font-size: 18px; padding-bottom: 5px;">
+                UPGRADE TO v1.0.8 →
+            </a>
+
+            <!-- [页脚占位] -->
+             <div style="background-color: #f9f9f9; border: 1px solid #eee; height: 180px; display: flex; align-items: center; justify-content: center; margin-top: 60px;">
+                <div style="text-align: center; color: #ccc; font-size: 10px; font-weight: bold; letter-spacing: 2px;">🖼️ EXHIBIT: v1.0.8 FOOTER BRANDING</div>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>
