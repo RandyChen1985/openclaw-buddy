@@ -2,8 +2,12 @@
  * 获取当前的命名空间前缀
  */
 const getPrefix = () => {
+  // 如果是 Wails 协议环境，强制使用固定前缀，确保持久化稳定性
+  if (window.location.protocol.includes('wails') || window.location.hostname === 'wails.localhost') {
+    return 'ocb_wails_';
+  }
+
   // 优先读取由 Go 后端在运行时注入的 __WEB_ROOT__ 全局变量 (用于多实例隔离)
-  // 备选使用 Vite 环境下的 BASE_URL
   const webRoot = (window as any).__WEB_ROOT__ || import.meta.env.BASE_URL || '/';
   
   // 处理格式: / -> "" ; /console/claw -> consoleclaw
@@ -11,6 +15,7 @@ const getPrefix = () => {
   
   return `ocb${namespace ? '_' + namespace : ''}_`;
 };
+
 
 /**
  * 带有命名空间的 LocalStorage 封装

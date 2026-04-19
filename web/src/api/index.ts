@@ -55,11 +55,22 @@ api.interceptors.response.use(
   (error) => {
     // 处理 HTTP 状态码层面的错误 (如 401 Unauthorized)
     if (error.response && error.response.status === 401) {
-      console.warn('🎫 [API] Unauthorized (Status 401). Clearing token and reloading...');
-      storage.removeItem('guardian_token');
-      window.location.reload();
+      // 关键：如果本身就是登录请求或者自动校验请求报 401，则不触发清理和刷新逻辑
+      // 否则会造成死循环，导致用户无法正常输入 Token
+      const isLoginRequest = error.config.url.endsWith('/login');
+      
+      if (!isLoginRequest) {
+        console.warn('🎫 [API] Unauthorized (Status 401). Clearing token and reloading...');
+        const hasToken = !!storage.getItem('guardian_token');
+        storage.removeItem('guardian_token');
+        // 只有之前有 Token 的情况下才执行刷新，避免初次登录即循环
+        if (hasToken) {
+          window.location.reload();
+        }
+      }
       return Promise.reject(error);
     }
+
 
     const msg = error.response?.data?.message || error.message;
     return Promise.reject(new Error(msg));

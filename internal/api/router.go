@@ -98,17 +98,28 @@ func (s *Server) setupRoutes() {
 			return
 		}
 
-		if strings.TrimSpace(req.Token) == s.cfg.Token {
+		inputToken := strings.TrimSpace(req.Token)
+		configToken := strings.TrimSpace(s.cfg.Token)
+
+		// 调试日志 (脱敏处理)
+		if inputToken != configToken {
+			log.Printf("🔐 [认证失败] 收到的 Token 长度: %d, 后端配置长度: %d", len(inputToken), len(configToken))
+			if len(inputToken) > 0 && len(configToken) > 0 {
+				log.Printf("🔐 [认证提示] 输入首尾: %c...%c, 预期首尾: %c...%c", 
+					inputToken[0], inputToken[len(inputToken)-1], 
+					configToken[0], configToken[len(configToken)-1])
+			}
+			s.Error(c, http.StatusUnauthorized, "验证令牌错误，请检查 env 文件中的 BUDDY_TOKEN")
+		} else {
 			// Set cookie path to WebRoot to prevent collisions
 			cookiePath := s.cfg.WebRoot
 			if cookiePath == "" {
 				cookiePath = "/"
 			}
-			c.SetCookie("guardian_token", req.Token, 3600*24*7, cookiePath, "", false, true)
+			c.SetCookie("guardian_token", inputToken, 3600*24*7, cookiePath, "", false, true)
 			s.Success(c, gin.H{"status": "success"})
-		} else {
-			s.Error(c, http.StatusUnauthorized, "Invalid token")
 		}
+
 	})
 
 	// V1 API Group

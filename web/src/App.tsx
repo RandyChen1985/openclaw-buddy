@@ -1460,22 +1460,9 @@ export default function App() {
   const [isValidating, setIsValidating] = useState(false);
 
   useEffect(() => {
-    const interceptor = api.interceptors.response.use(
-      (response) => response,
-      (error) => {
-        // 只有 HTTP 401 且之前有 token 时才触发清理（避免自动登录失败时的循环）
-        if (error.response?.status === 401) {
-          const hasToken = !!storage.getItem('guardian_token');
-          storage.removeItem('guardian_token');
-          setToken(null);
-          // 仅在之前是成功登录状态时显示过期提示
-          if (hasToken) message.error(t('common.sessionExpired'));
-        }
-        return Promise.reject(error);
-      }
-    );
-    return () => api.interceptors.response.eject(interceptor);
+    // 监听 token 全局状态的变化，确保组件层面的响应式
   }, [token, t]);
+
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

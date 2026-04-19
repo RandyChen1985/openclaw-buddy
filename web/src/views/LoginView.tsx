@@ -68,19 +68,28 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
   const onFinish = async (values: { token: string }) => {
     setLoading(true);
+    const apiBase = getBaseURL();
+    console.log(`🔐 [Auth] Attempting login. BaseURL: ${apiBase}, Token Length: ${values.token?.length}`);
+    
     try {
-      const res = await api.post('/login', { token: values.token });
+      const res = await api.post('/login', { token: (values.token || '').trim() });
       if (res.data.status === 'success') {
-        storage.setItem('guardian_token', values.token);
-        onLoginSuccess(values.token);
-        message.success(t('login.authSuccess'));
+        const trimmedToken = (values.token || '').trim();
+        storage.setItem('guardian_token', trimmedToken);
+        // 增加 100ms 延迟确保 storage 状态被 React 分发
+        setTimeout(() => {
+           onLoginSuccess(trimmedToken);
+           message.success(t('login.authSuccess'));
+        }, 100);
       }
     } catch (err: any) {
+      console.error('🔐 [Auth] Login failed:', err.response?.data || err.message);
       message.error(err.response?.data?.error || t('login.invalidCredentials'));
     } finally {
       setLoading(false);
     }
   };
+
 
   return (
     <div style={{

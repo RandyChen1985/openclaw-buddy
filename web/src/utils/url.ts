@@ -6,9 +6,13 @@ export const getBaseURL = () => {
   // 我们必须显式指向本地 Gin 服务器的地址，否则相对路径会发往 wails:// 导致 404。
   const isWails = window.location.protocol.includes('wails') || window.location.hostname === 'wails.localhost';
   if (isWails && !import.meta.env.DEV) {
-    // 生产环境下，Wails 客户端强制指向本地 3000 端口
-    return 'http://localhost:3000';
+    // 生产环境下，Wails 客户端强制指向本地 Gin 端口
+    // 同时必须考虑后端可能配置了 WebRoot
+    const webRoot = (window as any).__WEB_ROOT__ || '/';
+    const normalizedRoot = (webRoot === '/' || !webRoot) ? '' : (webRoot.startsWith('/') ? webRoot : '/' + webRoot);
+    return `http://localhost:3000${normalizedRoot}`;
   }
+
 
   // 2. 尝试从 Go 后端注入的全局变量读取 (适配子路径部署)
   let base = (window as any).__WEB_ROOT__ || import.meta.env.BASE_URL || '/';
