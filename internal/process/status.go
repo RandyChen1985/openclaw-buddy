@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
-	"sort"
 	"time"
 )
 
@@ -26,7 +28,7 @@ type OpenClawStatus struct {
 	Metrics     SystemMetrics   `json:"metrics"`
 	Plugins     []ServiceStatus `json:"plugins"`
 	Channels    []ServiceStatus `json:"channels"`
-	Agents      []ServiceStatus   `json:"agents"`
+	Agents      []ServiceStatus `json:"agents"`
 }
 
 type GatewayStatus struct {
@@ -36,17 +38,17 @@ type GatewayStatus struct {
 }
 
 type Device struct {
-	RequestId   string   `json:"requestId"` // 仅针对待处理设备
-	DeviceId    string   `json:"deviceId"`  // 仅针对已配对设备
-	DisplayName string   `json:"displayName"`
-	Platform    string   `json:"platform"`
-	ClientId    string   `json:"clientId"`
-	ClientMode  string   `json:"clientMode"`
-	Role        string   `json:"role"`
-	Scopes      []string `json:"scopes"`
-	Status      string   `json:"status"` // "pending" 或 "paired"
-	CreatedAtMs int64    `json:"createdAtMs"`
-	ApprovedAtMs int64   `json:"approvedAtMs"`
+	RequestId    string   `json:"requestId"` // 仅针对待处理设备
+	DeviceId     string   `json:"deviceId"`  // 仅针对已配对设备
+	DisplayName  string   `json:"displayName"`
+	Platform     string   `json:"platform"`
+	ClientId     string   `json:"clientId"`
+	ClientMode   string   `json:"clientMode"`
+	Role         string   `json:"role"`
+	Scopes       []string `json:"scopes"`
+	Status       string   `json:"status"` // "pending" 或 "paired"
+	CreatedAtMs  int64    `json:"createdAtMs"`
+	ApprovedAtMs int64    `json:"approvedAtMs"`
 }
 
 type BotRank struct {
@@ -73,7 +75,7 @@ func GetStructuredStatus(port int) (OpenClawStatus, error) {
 	defer cancel()
 
 	// 0. 获取版本号
-	verCmd := exec.CommandContext(ctx, "openclaw", "--version")
+	verCmd := exec.CommandContext(ctx, GetOpenClawBinary(), "--version")
 	PrepareSilentCommand(verCmd)
 	verOut, _ := verCmd.CombinedOutput()
 	status.Version = strings.TrimSpace(StripANSI(string(verOut)))
@@ -110,7 +112,7 @@ func GetProcessRuntime(pid int) string {
 	} else {
 		cmd = exec.CommandContext(ctx, "ps", "-o", "etime=", "-p", strconv.Itoa(pid))
 	}
-	
+
 	out, err := cmd.Output()
 	if err != nil {
 		return "Active (Port Monitored)"
@@ -120,6 +122,34 @@ func GetProcessRuntime(pid int) string {
 		return "Active (Port Monitored)"
 	}
 	return runtimeStr
+}
+
+func windowsSystemDriveLetter() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "C:"
+	}
+	v := filepath.VolumeName(wd)
+	if v == "" {
+		return "C:"
+	}
+	return strings.ToUpper(v)
+}
+
+func execPowerShellFloat(ctx context.Context, psScript string) float64 {
+	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NoLogo", "-Command", psScript)
+	PrepareSilentCommand(cmd)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0
+	}
+	s := strings.TrimSpace(string(out))
+	s = strings.ReplaceAll(s, ",", ".")
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0
+	}
+	return v
 }
 
 func GetSystemMetrics() SystemMetrics {
@@ -154,34 +184,15 @@ func GetSystemMetrics() SystemMetrics {
 			metrics.CPUUsage = 100.0 - idle
 		}
 	} else if runtime.GOOS == "windows" {
-		// Windows: 使用 wmic 获取 CPU 负载
-		cpuCmd := exec.CommandContext(ctx, "wmic", "cpu", "get", "loadpercentage")
-		PrepareSilentCommand(cpuCmd)
-		cpuOut, _ := cpuCmd.Output()
-		lines := strings.Split(strings.TrimSpace(string(cpuOut)), "\n")
-		if len(lines) > 1 {
-			val, _ := strconv.ParseFloat(strings.TrimSpace(lines[1]), 64)
-			metrics.CPUUsage = val
-		}
+		// Windows: CIM（替代已弃用的 wmic）
+		ps := "[math]::Round((Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average, 2)"
+		metrics.CPUUsage = execPowerShellFloat(ctx, ps)
 	}
 
 	// 2. Memory Usage
 	if runtime.GOOS == "windows" {
-		// Windows: 使用 wmic 获取空闲和总物理内存 (单位: KB)
-		memCmd := exec.CommandContext(ctx, "wmic", "OS", "get", "FreePhysicalMemory,TotalVisibleMemorySize")
-		PrepareSilentCommand(memCmd)
-		memOut, _ := memCmd.Output()
-		lines := strings.Split(strings.TrimSpace(string(memOut)), "\n")
-		if len(lines) > 1 {
-			fields := strings.Fields(lines[1])
-			if len(fields) >= 2 {
-				free, _ := strconv.ParseFloat(fields[0], 64)
-				total, _ := strconv.ParseFloat(fields[1], 64)
-				if total > 0 {
-					metrics.MemoryUsage = (1.0 - (free / total)) * 100.0
-				}
-			}
-		}
+		ps := "$o = Get-CimInstance Win32_OperatingSystem; if ($null -ne $o -and $o.TotalVisibleMemorySize -gt 0) { [math]::Round(100 * (1 - $o.FreePhysicalMemory / $o.TotalVisibleMemorySize), 2) } else { 0 }"
+		metrics.MemoryUsage = execPowerShellFloat(ctx, ps)
 	} else {
 		// Unix: Rough estimate using ps
 		memCmd := exec.CommandContext(ctx, "sh", "-c", "ps -A -o %mem | awk '{s+=$1} END {print s}'")
@@ -195,23 +206,11 @@ func GetSystemMetrics() SystemMetrics {
 		metrics.MemoryUsage = 95.5 // 封顶保护
 	}
 
-	// 3. Disk Usage (Root partition)
+	// 3. Disk Usage (Buddy 工作目录所在卷，替代固定 C:)
 	if runtime.GOOS == "windows" {
-		// Windows: 获取 C 盘占用率
-		diskCmd := exec.CommandContext(ctx, "wmic", "logicaldisk", "where", "DeviceID='C:'", "get", "size,freespace")
-		PrepareSilentCommand(diskCmd)
-		diskOut, _ := diskCmd.Output()
-		lines := strings.Split(strings.TrimSpace(string(diskOut)), "\n")
-		if len(lines) > 1 {
-			fields := strings.Fields(lines[1])
-			if len(fields) >= 2 {
-				free, _ := strconv.ParseFloat(fields[0], 64)
-				total, _ := strconv.ParseFloat(fields[1], 64)
-				if total > 0 {
-					metrics.DiskUsage = (1.0 - (free / total)) * 100.0
-				}
-			}
-		}
+		drive := windowsSystemDriveLetter()
+		ps := fmt.Sprintf("$d = Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='%s'\"; if ($null -ne $d -and $d.Size -gt 0) { [math]::Round(100 * (1 - $d.FreeSpace / $d.Size), 2) } else { 0 }", drive)
+		metrics.DiskUsage = execPowerShellFloat(ctx, ps)
 	} else {
 		diskCmd := exec.CommandContext(ctx, "sh", "-c", "df / | tail -1 | awk '{print $5}' | sed 's/%//'")
 		diskOut, _ := diskCmd.Output()
@@ -224,7 +223,6 @@ func GetSystemMetrics() SystemMetrics {
 	return metrics
 }
 
-
 func parseValue(input, pattern string) string {
 	re := regexp.MustCompile(pattern)
 	matches := re.FindStringSubmatch(input)
@@ -235,7 +233,7 @@ func parseValue(input, pattern string) string {
 }
 
 func GetOpenClawDevices() ([]Device, error) {
-	cmd := exec.Command("openclaw", "devices", "list", "--json")
+	cmd := exec.Command(GetOpenClawBinary(), "devices", "list", "--json")
 	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput() // 仅读取 stdout，通常能过滤掉输出到 stderr 的插件日志
 	if err != nil {
@@ -274,7 +272,7 @@ func GetOpenClawDevices() ([]Device, error) {
 }
 
 func ApproveDevice(requestId string) error {
-	cmd := exec.Command("openclaw", "devices", "approve", requestId)
+	cmd := exec.Command(GetOpenClawBinary(), "devices", "approve", requestId)
 	PrepareSilentCommand(cmd)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("批准设备失败: %s", string(out))

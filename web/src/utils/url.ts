@@ -6,11 +6,14 @@ export const getBaseURL = () => {
   // 我们必须显式指向本地 Gin 服务器的地址，否则相对路径会发往 wails:// 导致 404。
   const isWails = window.location.protocol.includes('wails') || window.location.hostname === 'wails.localhost';
   if (isWails && !import.meta.env.DEV) {
-    // 生产环境下，Wails 客户端强制指向本地 Gin 端口
-    // 同时必须考虑后端可能配置了 WebRoot
+    // 由 Gin 在 index.html 注入，含 WEB_PORT 与 WebRoot，避免写死端口
+    const injected = (window as any).__BUDDY_API_BASE__;
+    if (typeof injected === 'string' && injected.length > 0) {
+      return injected.replace(/\/$/, '');
+    }
     const webRoot = (window as any).__WEB_ROOT__ || '/';
     const normalizedRoot = (webRoot === '/' || !webRoot) ? '' : (webRoot.startsWith('/') ? webRoot : '/' + webRoot);
-    return `http://localhost:3000${normalizedRoot}`;
+    return `http://127.0.0.1:3000${normalizedRoot}`;
   }
 
 
@@ -28,16 +31,16 @@ export const getBaseURL = () => {
 // Get WebSocket URL with correct base path
 export const getWsUrl = (path: string) => {
   const isWails = window.location.protocol.includes('wails') || window.location.hostname === 'wails.localhost';
-  const base = getBaseURL(); // 在 Wails 下会返回 http://localhost:3000
-  
+  const base = getBaseURL(); // Wails 生产下为注入的 http(s)://127.0.0.1:PORT[+WebRoot]
+
   // path should start with /
   const normalizedPath = path.startsWith('/') ? path : '/' + path;
   const token = storage.getItem('guardian_token');
 
   let authUrl = '';
   if (isWails && !import.meta.env.DEV) {
-    // Wails 生产环境：直接构造指向 localhost:3000 的 ws 地址
-    authUrl = `ws://localhost:3000${normalizedPath}`;
+    const httpBase = typeof base === 'string' && base.startsWith('http') ? base : `http://127.0.0.1:3000${base}`;
+    authUrl = httpBase.replace(/^http/i, 'ws') + normalizedPath;
   } else if (import.meta.env.DEV && !(window as any).__WEB_ROOT__) {
     authUrl = `ws://localhost:3000${base}${normalizedPath}`;
   } else {

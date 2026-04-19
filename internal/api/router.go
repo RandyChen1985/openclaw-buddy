@@ -2,6 +2,7 @@ package api
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
@@ -105,8 +106,8 @@ func (s *Server) setupRoutes() {
 		if inputToken != configToken {
 			log.Printf("🔐 [认证失败] 收到的 Token 长度: %d, 后端配置长度: %d", len(inputToken), len(configToken))
 			if len(inputToken) > 0 && len(configToken) > 0 {
-				log.Printf("🔐 [认证提示] 输入首尾: %c...%c, 预期首尾: %c...%c", 
-					inputToken[0], inputToken[len(inputToken)-1], 
+				log.Printf("🔐 [认证提示] 输入首尾: %c...%c, 预期首尾: %c...%c",
+					inputToken[0], inputToken[len(inputToken)-1],
 					configToken[0], configToken[len(configToken)-1])
 			}
 			s.Error(c, http.StatusUnauthorized, "验证令牌错误，请检查 env 文件中的 BUDDY_TOKEN")
@@ -242,6 +243,26 @@ func GetStaticFiles() (fs.FS, error) {
 	return fs.Sub(staticFiles, "dist")
 }
 
+// buddyAPIBaseURL is the full HTTP origin + optional WebRoot path for the embedded Wails WebView
+// to reach the local Gin server (avoids hardcoding port in frontend).
+func buddyAPIBaseURL(cfg *config.Config) string {
+	port := cfg.WebPort
+	if port <= 0 {
+		port = 3000
+	}
+	root := strings.TrimSpace(cfg.WebRoot)
+	if root == "" || root == "/" {
+		return fmt.Sprintf("http://127.0.0.1:%d", port)
+	}
+	if !strings.HasPrefix(root, "/") {
+		root = "/" + root
+	}
+	if len(root) > 1 && strings.HasSuffix(root, "/") {
+		root = strings.TrimSuffix(root, "/")
+	}
+	return fmt.Sprintf("http://127.0.0.1:%d%s", port, root)
+}
+
 // renderIndexHTML handles the common logic for serving and injecting WebRoot into index.html
 func (s *Server) renderIndexHTML(c *gin.Context, distFS fs.FS) {
 	content, err := fs.ReadFile(distFS, "index.html")
@@ -252,8 +273,10 @@ func (s *Server) renderIndexHTML(c *gin.Context, distFS fs.FS) {
 
 	html := string(content)
 
-	// Inject window.__WEB_ROOT__ as early as possible
-	script := fmt.Sprintf("<script>window.__WEB_ROOT__='%s';</script>", s.cfg.WebRoot)
+	// Inject runtime globals for WebRoot and Wails → Gin API base (JSON-escaped for safety)
+	webRootJSON, _ := json.Marshal(s.cfg.WebRoot)
+	apiBaseJSON, _ := json.Marshal(buddyAPIBaseURL(s.cfg))
+	script := fmt.Sprintf("<script>window.__WEB_ROOT__=%s;window.__BUDDY_API_BASE__=%s;</script>", webRootJSON, apiBaseJSON)
 	html = strings.Replace(html, "<title>", script+"<title>", 1)
 
 	// Fix asset paths in HTML if WebRoot is not /

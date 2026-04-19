@@ -2,10 +2,10 @@ package api
 
 import (
 	"os"
-	"os/exec"
 	"runtime"
 
 	"github.com/gin-gonic/gin"
+	"openclaw-buddy/internal/process"
 )
 
 type TuiMessage struct {
@@ -15,13 +15,7 @@ type TuiMessage struct {
 }
 
 func (s *Server) handleTUI(c *gin.Context) {
-	// 动态查找 openclaw 命令路径
-	openclawPath, err := exec.LookPath("openclaw")
-	if err != nil {
-		openclawPath = "openclaw" // 兜底
-	}
-
-	s.startPTY(c, openclawPath, "tui")
+	s.startPTY(c, process.GetOpenClawBinary(), "tui")
 }
 
 func (s *Server) handleShell(c *gin.Context) {

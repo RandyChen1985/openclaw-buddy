@@ -384,7 +384,7 @@ func AddOpenClawBot(id, model, workspace string) error {
 	}
 
 	// 执行 openclaw agents add [id] --model [model] --workspace [workspace]
-	cmd := exec.Command("openclaw", "agents", "add", id, "--model", model, "--workspace", workspace)
+	cmd := exec.Command(GetOpenClawBinary(), "agents", "add", id, "--model", model, "--workspace", workspace)
 	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -395,7 +395,7 @@ func AddOpenClawBot(id, model, workspace string) error {
 
 func SetOpenClawBotIdentity(id, name string) error {
 	// 执行 openclaw agents set-identity --agent [id] --name "[name]"
-	cmd := exec.Command("openclaw", "agents", "set-identity", "--agent", id, "--name", name)
+	cmd := exec.Command(GetOpenClawBinary(), "agents", "set-identity", "--agent", id, "--name", name)
 	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -406,7 +406,7 @@ func SetOpenClawBotIdentity(id, name string) error {
 
 func DeleteOpenClawBot(id string) error {
 	// 执行 openclaw agents delete [id] --force
-	cmd := exec.Command("openclaw", "agents", "delete", id, "--force")
+	cmd := exec.Command(GetOpenClawBinary(), "agents", "delete", id, "--force")
 	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -416,7 +416,7 @@ func DeleteOpenClawBot(id string) error {
 }
 
 func SetOpenClawDefaultModel(modelID string) error {
-	cmd := exec.Command("openclaw", "models", "set", modelID)
+	cmd := exec.Command(GetOpenClawBinary(), "models", "set", modelID)
 	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -743,7 +743,7 @@ type OpenClawCronJobsResponse struct {
 }
 
 func GetOpenClawCronJobs() (any, error) {
-	cmd := exec.Command("openclaw", "cron", "list", "--all", "--json")
+	cmd := exec.Command(GetOpenClawBinary(), "cron", "list", "--all", "--json")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list cron jobs: %v. Output: %s", err, string(out))
@@ -770,7 +770,7 @@ func GetOpenClawCronJobs() (any, error) {
 }
 
 func EnableOpenClawCronJob(id string) error {
-	cmd := exec.Command("openclaw", "cron", "enable", id)
+	cmd := exec.Command(GetOpenClawBinary(), "cron", "enable", id)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to enable cron job %s: %v. Output: %s", id, err, string(out))
@@ -779,7 +779,7 @@ func EnableOpenClawCronJob(id string) error {
 }
 
 func DisableOpenClawCronJob(id string) error {
-	cmd := exec.Command("openclaw", "cron", "disable", id)
+	cmd := exec.Command(GetOpenClawBinary(), "cron", "disable", id)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to disable cron job %s: %v. Output: %s", id, err, string(out))
@@ -788,7 +788,7 @@ func DisableOpenClawCronJob(id string) error {
 }
 
 func RemoveOpenClawCronJob(id string) error {
-	cmd := exec.Command("openclaw", "cron", "rm", id)
+	cmd := exec.Command(GetOpenClawBinary(), "cron", "rm", id)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to remove cron job %s: %v. Output: %s", id, err, string(out))
@@ -797,7 +797,7 @@ func RemoveOpenClawCronJob(id string) error {
 }
 
 func GetOpenClawPlugins() (any, error) {
-	cmd := exec.Command("openclaw", "plugins", "list", "--json")
+	cmd := exec.Command(GetOpenClawBinary(), "plugins", "list", "--json")
 	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -833,25 +833,25 @@ func ReloadOpenClawPlugins() error {
 }
 
 func EnableOpenClawPlugin(id string) error {
-	cmd := exec.Command("openclaw", "plugins", "enable", id)
+	cmd := exec.Command(GetOpenClawBinary(), "plugins", "enable", id)
 	PrepareSilentCommand(cmd)
 	return cmd.Run()
 }
 
 func DisableOpenClawPlugin(id string) error {
-	cmd := exec.Command("openclaw", "plugins", "disable", id)
+	cmd := exec.Command(GetOpenClawBinary(), "plugins", "disable", id)
 	PrepareSilentCommand(cmd)
 	return cmd.Run()
 }
 
 func UninstallOpenClawPlugin(id string) error {
-	cmd := exec.Command("openclaw", "plugins", "uninstall", id)
+	cmd := exec.Command(GetOpenClawBinary(), "plugins", "uninstall", id)
 	PrepareSilentCommand(cmd)
 	return cmd.Run()
 }
 
 func UpdateOpenClawPlugins() error {
-	cmd := exec.Command("openclaw", "plugins", "update")
+	cmd := exec.Command(GetOpenClawBinary(), "plugins", "update")
 	PrepareSilentCommand(cmd)
 	return cmd.Run()
 }
@@ -877,7 +877,7 @@ func GetOpenClawSkills() (any, error) {
 }
 
 func UninstallOpenClawSkill(name string) error {
-	cmd := exec.Command("openclaw", "skills", "uninstall", name)
+	cmd := exec.Command(GetOpenClawBinary(), "skills", "uninstall", name)
 	PrepareSilentCommand(cmd)
 	return cmd.Run()
 }
@@ -1316,7 +1316,7 @@ func CreateBotFromExpert(expertID, newBotID, modelID, customSoul, customIdentity
 }
 
 func ExecPolicyShow() (*OpenClawExecPolicyResponse, error) {
-	cmd := exec.Command("openclaw", "exec-policy", "show", "--json")
+	cmd := exec.Command(GetOpenClawBinary(), "exec-policy", "show", "--json")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to show exec policy: %v. Output: %s", err, string(out))
@@ -1335,7 +1335,7 @@ func ExecPolicyShow() (*OpenClawExecPolicyResponse, error) {
 }
 
 func GetApprovalsSnapshot() (*OpenClawApprovalsSnapshot, error) {
-	cmd := exec.Command("openclaw", "approvals", "get", "--json")
+	cmd := exec.Command(GetOpenClawBinary(), "approvals", "get", "--json")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get approvals snapshot: %v. Output: %s", err, string(out))
@@ -1354,7 +1354,7 @@ func GetApprovalsSnapshot() (*OpenClawApprovalsSnapshot, error) {
 }
 
 func ApplyExecPreset(preset string) error {
-	cmd := exec.Command("openclaw", "exec-policy", "preset", preset)
+	cmd := exec.Command(GetOpenClawBinary(), "exec-policy", "preset", preset)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to apply preset %s: %v. Output: %s", preset, err, string(out))
@@ -1370,7 +1370,7 @@ func SetExecPolicy(ask, security string) error {
 	if security != "" {
 		args = append(args, "--security", security)
 	}
-	cmd := exec.Command("openclaw", args...)
+	cmd := exec.Command(GetOpenClawBinary(), args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to set exec policy: %v. Output: %s", err, string(out))
@@ -1386,7 +1386,7 @@ func AddAllowlistPattern(agentID, pattern string) error {
 		args = append(args, "--agent", "*")
 	}
 	args = append(args, pattern)
-	cmd := exec.Command("openclaw", args...)
+	cmd := exec.Command(GetOpenClawBinary(), args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to add allowlist pattern: %v. Output: %s", err, string(out))
@@ -1402,7 +1402,7 @@ func RemoveAllowlistPattern(agentID, pattern string) error {
 		args = append(args, "--agent", "*")
 	}
 	args = append(args, pattern)
-	cmd := exec.Command("openclaw", args...)
+	cmd := exec.Command(GetOpenClawBinary(), args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to remove allowlist pattern: %v. Output: %s", err, string(out))
@@ -1425,7 +1425,7 @@ func SetApprovals(content string) error {
 		return fmt.Errorf("failed to close temp file: %v", err)
 	}
 
-	cmd := exec.Command("openclaw", "approvals", "set", tmpFile.Name())
+	cmd := exec.Command(GetOpenClawBinary(), "approvals", "set", tmpFile.Name())
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to set approvals: %v. Output: %s", err, string(out))

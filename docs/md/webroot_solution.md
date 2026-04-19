@@ -18,7 +18,7 @@
     - **路由分组**: 使用 `engine.Group(config.WebRoot)` 将所有 API 接口（如 `/v1/...`）挂载到子路径下。
     - **动态注入 (renderIndexHTML)**: 
         - 统一拦截 `index.html` 的分发（包括根路径和 SPA 路由刷新时的 `NoRoute` 回退）。
-        - 在运行时向 HTML 注入 `<script>window.__WEB_ROOT__='/your-path';</script>`。
+        - 在运行时向 HTML 注入 `<script>`：对 `window.__WEB_ROOT__` 与（Wails 桌面端用的）`window.__BUDDY_API_BASE__` 赋值，二者均经 **JSON 编码** 写入，避免引号转义问题；`__BUDDY_API_BASE__` 含本机 `WEB_PORT` 与 `WEB_ROOT` 路径前缀（如 `http://127.0.0.1:3000/your-path`）。
         - **资源修复**: 自动扫描并替换 HTML 中的 `src="/`, `href="/`, `action="/`, `content="/` 前缀，确保即使构建时 `base` 为 `/`，运行时也能正确指向子目录。
 
 ---
@@ -27,7 +27,7 @@
 
 ### 3.1 运行时基准获取
 - **文件**: `web/src/utils/url.ts`
-- **逻辑**: `getBaseURL()` 优先读取 `window.__WEB_ROOT__`（后端注入），其次读取 `import.meta.env.BASE_URL`（构建残留），最后回退到 `/`。
+- **逻辑**: 浏览器下 `getBaseURL()` 优先读 `window.__WEB_ROOT__`（后端注入），其次 `import.meta.env.BASE_URL`，最后回退 `/`。**Wails 生产包**优先读 `window.__BUDDY_API_BASE__`（与 `WEB_PORT`/`WEB_ROOT` 一致），避免写死端口。
 
 ### 3.2 统一 API 请求 (Axios)
 - **文件**: `web/src/api/index.ts`

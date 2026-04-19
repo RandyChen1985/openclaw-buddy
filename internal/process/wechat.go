@@ -55,7 +55,7 @@ func GetWeChatQRCode(force bool) (*WeChatQRCode, error) {
 
 	// 我们需要手动管理进程以在获取到 URL 后立即杀死它，因为该命令会一直等待扫码结果
 	var args []string = []string{"channels", "login", "--channel", "openclaw-weixin"}
-	cmd := exec.CommandContext(ctx, "openclaw", args...)
+	cmd := exec.CommandContext(ctx, GetOpenClawBinary(), args...)
 	PrepareSilentCommand(cmd)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -151,7 +151,7 @@ func GetWeChatPluginStatus(force bool) (*WeChatPluginStatus, error) {
 
 	// 3. 执行物理检测: openclaw plugins list
 	log.Printf("🔍 Executing: openclaw plugins list (Detecting WeChat Plugin Status, Force: %v)", force)
-	res, _ := RunCommandWithTimeout(15*time.Second, "openclaw", "plugins", "list")
+	res, _ := RunCommandWithTimeout(15*time.Second, GetOpenClawBinary(), "plugins", "list")
 	
 	status := &WeChatPluginStatus{
 		Installed: false,
@@ -202,7 +202,7 @@ type ChatChannel struct {
 
 func GetChatChannels() ([]ChatChannel, error) {
 	log.Printf("🔍 Executing: openclaw channels list (Detecting Configured Channels)")
-	res, _ := RunCommandWithTimeout(20*time.Second, "openclaw", "channels", "list")
+	res, _ := RunCommandWithTimeout(20*time.Second, GetOpenClawBinary(), "channels", "list")
 
 	var channels []ChatChannel
 	lines := strings.Split(res.Output, "\n")
