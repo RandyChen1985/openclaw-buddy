@@ -1,28 +1,29 @@
 @echo off
-:: 请用 CMD 运行：cmd /c build_windows.bat   （Git Bash 下 ./build_windows.bat 易误解析括号）
-setlocal enabledelayedexpansion
+cd /d "%~dp0"
+REM Use CMD from repo root. Git Bash ./build_windows.bat is not supported.
+setlocal EnableDelayedExpansion
 
 echo ==========================================
 echo   OpenClaw Buddy - Windows Release Build
 echo ==========================================
 
-:: 1. Detect Version
+REM Step 1: read VERSION file
 if exist VERSION (
     for /f "usebackq delims=" %%V in ("VERSION") do set "VERSION=%%V"
 ) else (
     set VERSION=1.0.0
 )
-:: Trim spaces (same idea as PowerShell Trim)
+REM Trim leading or trailing spaces in VERSION
 for /f "tokens=* delims= " %%a in ("!VERSION!") do set "VERSION=%%a"
 echo [1/5] Version: %VERSION%
 
-:: 2. Cleanup and Sync (recursive, matches build_windows.ps1)
+REM Step 2: clean internal api dist and sync frontend
 echo [2/5] Cleaning up internal assets...
 if exist "internal\api\dist" rd /S /Q "internal\api\dist"
 mkdir "internal\api\dist"
 
-:: 3. Build Frontend
-echo [3/5] Building Frontend (React)...
+REM Step 3: npm build in web folder
+echo [3/5] Building Frontend - React...
 pushd web
 if not exist "node_modules" (
     echo [3.1] node_modules not found, installing...
@@ -42,7 +43,7 @@ if exist "web\public\openclaw2.png" (
     copy /Y "web\public\openclaw2.png" "internal\api\dist\" >nul
 )
 
-:: 4. Wails: production + debug, -skipbindings, aligned with build_windows.ps1
+REM Step 4: Wails production and debug builds with skipbindings
 echo [4/5] Building Wails Binaries - Production and Debug...
 wails build -platform windows/amd64 -skipbindings -o openclaw-buddy.exe
 if errorlevel 1 (
@@ -55,7 +56,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: 5. Organize Release Folder
+REM Step 5: release folder and zip
 echo [5/5] Organizing Release Folder...
 set "PKG_NAME=openclaw-buddy-windows-v%VERSION%"
 set "PKG_DIR=release\%PKG_NAME%"
@@ -77,8 +78,7 @@ if exist "README_windows.md" (
     copy /Y "README_windows.md" "%PKG_DIR%\README.md" >nul
 )
 
-:: env template: same keys/values as build_windows.ps1, UTF-8 (via temp + PS)
-:: Note: do not use unescaped "(" ")" inside a parenthesized block — it breaks the block.
+REM env file: same keys as build_windows.ps1, UTF-8 via PowerShell. No parens in echo block above.
 set "ENVTMP=%TEMP%\openclaw-buddy-env.%RANDOM%.tmp"
 (
 echo # OpenClaw Buddy - Windows Production
