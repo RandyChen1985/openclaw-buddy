@@ -1394,6 +1394,7 @@ export function useV3Messages({
 
       if (stream === 'item' && agentData?.status === 'blocked') {
         lastStreamEventAtRef.current = Date.now();
+        if (effectiveKey) cancelPendingFinalUiRelease(effectiveKey);
         setIsTyping(false);
         clearStallTimer();
         streamingAssistantIndexRef.current = null;
@@ -1401,7 +1402,10 @@ export function useV3Messages({
 
       if (stream === 'lifecycle.start' || (stream === 'lifecycle' && agentData?.phase === 'start')) {
         lastStreamEventAtRef.current = Date.now();
-        if (effectiveKey) markSessionTyping(effectiveKey, true);
+        if (effectiveKey) {
+          cancelPendingFinalUiRelease(effectiveKey);
+          markSessionTyping(effectiveKey, true);
+        }
         if (effectiveKey === sessionKeyRef.current) {
           setIsTyping(true);
           resetStallTimer();
@@ -1410,7 +1414,10 @@ export function useV3Messages({
 
       if (stream === 'lifecycle.end' || (stream === 'lifecycle' && agentData?.phase === 'end')) {
         lastStreamEventAtRef.current = Date.now();
-        if (effectiveKey) markSessionTyping(effectiveKey, false);
+        if (effectiveKey) {
+          cancelPendingFinalUiRelease(effectiveKey);
+          markSessionTyping(effectiveKey, false);
+        }
         if (effectiveKey === sessionKeyRef.current) {
           setIsTyping(false);
           clearStallTimer();
@@ -1420,7 +1427,10 @@ export function useV3Messages({
 
       if (stream === 'lifecycle.error' || (stream === 'lifecycle' && agentData?.phase === 'error')) {
         lastStreamEventAtRef.current = Date.now();
-        if (effectiveKey) markSessionTyping(effectiveKey, false);
+        if (effectiveKey) {
+          cancelPendingFinalUiRelease(effectiveKey);
+          markSessionTyping(effectiveKey, false);
+        }
         if (effectiveKey === sessionKeyRef.current) {
           clearStallTimer();
           setIsTyping(false);
@@ -1503,7 +1513,14 @@ export function useV3Messages({
         stream === 'command_output' ||
         stream === 'tool'
       ) {
-        if (effectiveKey !== sessionKeyRef.current) return;
+        if (!effectiveKey || effectiveKey !== sessionKeyRef.current) return;
+
+        // transcript 已 final 但 agent 侧仍在推 thinking/tool：撤掉 final 的延时解锁，并保持会话「生成中」
+        cancelPendingFinalUiRelease(effectiveKey);
+        markSessionTyping(effectiveKey, true);
+        lastStreamEventAtRef.current = Date.now();
+        resetStallTimer();
+        setIsTyping(true);
 
         const pickFirst = (obj: any, keys: string[]) => {
           for (const k of keys) {
@@ -1608,9 +1625,7 @@ export function useV3Messages({
         }
 
         if (!body && !title) {
-          // 没内容可展示（例如仅生命周期 ping），只刷新 stall 计时器
-          lastStreamEventAtRef.current = Date.now();
-          resetStallTimer();
+          // 已在上方锁定 UI；无 meta 可写则跳过 setMessages（避免空事件误刷列表）
           return;
         }
 
@@ -1618,10 +1633,6 @@ export function useV3Messages({
           stream === 'command_output' ? 'commandOutput' :
           stream === 'tool' ? 'toolCall' :
           stream; // thinking | plan
-
-        lastStreamEventAtRef.current = Date.now();
-        resetStallTimer();
-        setIsTyping(true);
 
         setMessages(prev => {
           const idx = streamingAssistantIndexRef.current;
@@ -1652,7 +1663,7 @@ export function useV3Messages({
       });
       return;
     }
-  }, [clearStallTimer, handleApprovalRequested, handleApprovalResolved, handleChatDelta, handleSessionMessage, handleSessionTool, markSessionTyping, resetStallTimer, t]);
+  }, [cancelPendingFinalUiRelease, clearStallTimer, handleApprovalRequested, handleApprovalResolved, handleChatDelta, handleSessionMessage, handleSessionTool, markSessionTyping, resetStallTimer, t]);
 
   /**
    * 加载会话历史并写入 messages；同时用 sessionCacheRef 缝合 DB 未落盘的临时消息。
