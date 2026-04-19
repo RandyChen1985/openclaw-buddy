@@ -4,8 +4,10 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
+	"time"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/menu"
@@ -76,6 +78,17 @@ func (s *Server) RunGUI() error {
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.startup,
 		OnDomReady:       app.domReady,
+		OnShutdown: func(ctx context.Context) {
+			log.Printf("🛑 [GUI] OnShutdown: 正在关闭 HTTP 并停止 Guardian 上下文...")
+			shutCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			if err := s.ShutdownHTTP(shutCtx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Printf("⚠️ [GUI] HTTP Shutdown: %v", err)
+			}
+			if s.shutdownHook != nil {
+				s.shutdownHook()
+			}
+		},
 		OnBeforeClose: func(ctx context.Context) (prevent bool) {
 			// Instead of closing, hide the window to tray
 			// Note: If no tray icon is available, this might make the app "hidden"

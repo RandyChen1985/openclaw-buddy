@@ -86,7 +86,8 @@ func main() {
 
 	// 8. Start Web Server
 	server := api.NewServer(cfg, g)
-	
+	server.SetShutdownHook(stop)
+
 	if runtime.GOOS == "windows" && os.Getenv("CLI_MODE") != "true" {
 		log.Printf("🚀 Starting GUI mode (Windows)...")
 		if err := server.RunGUI(); err != nil {

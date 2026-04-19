@@ -43,16 +43,11 @@ if exist "web\public\openclaw2.png" (
     copy /Y "web\public\openclaw2.png" "internal\api\dist\" >nul
 )
 
-REM Step 4: Wails production and debug builds with skipbindings
-echo [4/5] Building Wails Binaries - Production and Debug...
+REM Step 4: Wails production build with skipbindings
+echo [4/5] Building Wails Binary - Production...
 wails build -platform windows/amd64 -skipbindings -o openclaw-buddy.exe
 if errorlevel 1 (
     echo [FAILED] Wails production build failed.
-    exit /b 1
-)
-wails build -debug -platform windows/amd64 -skipbindings -o openclaw-buddy-debug.exe
-if errorlevel 1 (
-    echo [FAILED] Wails debug build failed.
     exit /b 1
 )
 
@@ -69,9 +64,6 @@ if exist "build\bin\openclaw-buddy.exe" (
 ) else (
     echo [FAILED] Binary not found: build\bin\openclaw-buddy.exe
     exit /b 1
-)
-if exist "build\bin\openclaw-buddy-debug.exe" (
-    copy /Y "build\bin\openclaw-buddy-debug.exe" "%PKG_DIR%\" >nul
 )
 
 if exist "README_windows.md" (
@@ -104,9 +96,21 @@ if errorlevel 1 (
 del "%ENVTMP%" >nul 2>&1
 
 echo [5.1] Creating ZIP archive...
-powershell -NoProfile -Command "Compress-Archive -Path '%PKG_DIR%\*' -DestinationPath 'release\%PKG_NAME%.zip' -Force"
-if errorlevel 1 (
-    echo [FAILED] ZIP step failed. Close any running openclaw-buddy.exe / openclaw-buddy-debug.exe and retry.
+REM 短暂等待，减少杀毒/索引短暂占用刚复制的 exe 导致打包失败
+ping -n 2 127.0.0.1 >nul
+if exist "release\%PKG_NAME%.zip" del /f /q "release\%PKG_NAME%.zip" >nul 2>&1
+set "ZIP_OK=0"
+where tar >nul 2>&1
+if not errorlevel 1 (
+    tar -a -c -f "release\%PKG_NAME%.zip" -C "%PKG_DIR%" .
+    if not errorlevel 1 if exist "release\%PKG_NAME%.zip" set "ZIP_OK=1"
+)
+if "!ZIP_OK!"=="0" (
+    powershell -NoProfile -Command "$ErrorActionPreference='Stop'; Compress-Archive -LiteralPath (Get-ChildItem -LiteralPath '%PKG_DIR%' | ForEach-Object { $_.FullName }) -DestinationPath 'release\%PKG_NAME%.zip' -Force"
+    if exist "release\%PKG_NAME%.zip" set "ZIP_OK=1"
+)
+if not "!ZIP_OK!"=="1" (
+    echo [FAILED] ZIP step failed. Close any running openclaw-buddy.exe, exit Explorer preview of that folder, then retry.
     exit /b 1
 )
 

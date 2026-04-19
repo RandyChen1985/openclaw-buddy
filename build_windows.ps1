@@ -36,10 +36,9 @@ if (Test-Path "web\public\openclaw2.png") {
     Copy-Item -Path "web\public\openclaw2.png" -Destination "internal\api\dist\" -Force
 }
 
-# 4. Build Wails Binaries
-Write-Host "[4/5] Building Wails Binaries (Production & Debug)..." -ForegroundColor Cyan
+# 4. Build Wails Binary (production only)
+Write-Host "[4/5] Building Wails Binary (Production)..." -ForegroundColor Cyan
 wails build -platform windows/amd64 -skipbindings -o openclaw-buddy.exe
-wails build -debug -platform windows/amd64 -skipbindings -o openclaw-buddy-debug.exe
 if ($LASTEXITCODE -ne 0) {
     Write-Error "[FAILED] Wails build failed with exit code $LASTEXITCODE"
     exit $LASTEXITCODE
@@ -56,12 +55,9 @@ if (Test-Path "release") {
 }
 New-Item -ItemType Directory -Force -Path "$PKG_DIR"
 
-# Copy Binaries (Both Production and Debug)
+# Copy binary
 if (Test-Path "build\bin\openclaw-buddy.exe") {
     Copy-Item -Path "build\bin\openclaw-buddy.exe" -Destination "$PKG_DIR\" -Force
-}
-if (Test-Path "build\bin\openclaw-buddy-debug.exe") {
-    Copy-Item -Path "build\bin\openclaw-buddy-debug.exe" -Destination "$PKG_DIR\" -Force
 }
 
 # Copy Docs

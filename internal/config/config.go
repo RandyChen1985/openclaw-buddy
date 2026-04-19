@@ -45,6 +45,13 @@ func LoadConfig() (*Config, error) {
 	_ = ensureEnvFile()
 	_ = godotenv.Load("env") // Load the file named "env" instead of ".env"
 
+	// BUDDY_TOKEN：强制以工作目录下 env 文件为准（若文件中存在非空值），
+	// 避免 Windows 系统/用户环境变量已设置时 godotenv.Load 无法覆盖导致的登录不一致。
+	buddyToken := strings.TrimSpace(getEnv("BUDDY_TOKEN", "sk-replace-me-on-first-run"))
+	if v, ok := buddyTokenFromEnvFile(); ok {
+		buddyToken = v
+	}
+
 	interval, _ := strconv.Atoi(getEnv("CHECK_INTERVAL_SECONDS", "60"))
 	maxRetries, _ := strconv.Atoi(getEnv("MAX_RETRIES", "3"))
 	healthPort, _ := strconv.Atoi(getEnv("HEALTH_PORT", "18789"))
@@ -88,7 +95,7 @@ func LoadConfig() (*Config, error) {
 		FeishuAppSecret:      getEnv("FEISHU_APP_SECRET", ""),
 		FeishuChatID:         getEnv("FEISHU_CHAT_ID", ""),
 		DBFile:               filepath.Clean(getEnv("DB_FILE", "./data/guardian.db")),
-		Token:                strings.TrimSpace(getEnv("BUDDY_TOKEN", "sk-replace-me-on-first-run")),
+		Token:                buddyToken,
 		WebPort:              webPort,
 		WebRoot:              webRoot,
 		CORSAllowOrigins:     strings.TrimSpace(getEnv("CORS_ALLOW_ORIGINS", "https://yovole.com")),
@@ -103,6 +110,24 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// buddyTokenFromEnvFile 仅解析磁盘上的 env（不写入 os.Environ）。
+// 返回值 ok 为 true 时表示文件中存在非空的 BUDDY_TOKEN，调用方应优先采用。
+func buddyTokenFromEnvFile() (string, bool) {
+	m, err := godotenv.Read("env")
+	if err != nil {
+		return "", false
+	}
+	v, ok := m["BUDDY_TOKEN"]
+	if !ok {
+		return "", false
+	}
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "", false
+	}
+	return v, true
 }
 
 

@@ -744,6 +744,7 @@ type OpenClawCronJobsResponse struct {
 
 func GetOpenClawCronJobs() (any, error) {
 	cmd := exec.Command(GetOpenClawBinary(), "cron", "list", "--all", "--json")
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list cron jobs: %v. Output: %s", err, string(out))
@@ -771,6 +772,7 @@ func GetOpenClawCronJobs() (any, error) {
 
 func EnableOpenClawCronJob(id string) error {
 	cmd := exec.Command(GetOpenClawBinary(), "cron", "enable", id)
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to enable cron job %s: %v. Output: %s", id, err, string(out))
@@ -780,6 +782,7 @@ func EnableOpenClawCronJob(id string) error {
 
 func DisableOpenClawCronJob(id string) error {
 	cmd := exec.Command(GetOpenClawBinary(), "cron", "disable", id)
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to disable cron job %s: %v. Output: %s", id, err, string(out))
@@ -789,6 +792,7 @@ func DisableOpenClawCronJob(id string) error {
 
 func RemoveOpenClawCronJob(id string) error {
 	cmd := exec.Command(GetOpenClawBinary(), "cron", "rm", id)
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to remove cron job %s: %v. Output: %s", id, err, string(out))
@@ -834,25 +838,25 @@ func ReloadOpenClawPlugins() error {
 
 func EnableOpenClawPlugin(id string) error {
 	cmd := exec.Command(GetOpenClawBinary(), "plugins", "enable", id)
-	PrepareSilentCommand(cmd)
+	PrepareSilentRun(cmd)
 	return cmd.Run()
 }
 
 func DisableOpenClawPlugin(id string) error {
 	cmd := exec.Command(GetOpenClawBinary(), "plugins", "disable", id)
-	PrepareSilentCommand(cmd)
+	PrepareSilentRun(cmd)
 	return cmd.Run()
 }
 
 func UninstallOpenClawPlugin(id string) error {
 	cmd := exec.Command(GetOpenClawBinary(), "plugins", "uninstall", id)
-	PrepareSilentCommand(cmd)
+	PrepareSilentRun(cmd)
 	return cmd.Run()
 }
 
 func UpdateOpenClawPlugins() error {
 	cmd := exec.Command(GetOpenClawBinary(), "plugins", "update")
-	PrepareSilentCommand(cmd)
+	PrepareSilentRun(cmd)
 	return cmd.Run()
 }
 
@@ -878,7 +882,7 @@ func GetOpenClawSkills() (any, error) {
 
 func UninstallOpenClawSkill(name string) error {
 	cmd := exec.Command(GetOpenClawBinary(), "skills", "uninstall", name)
-	PrepareSilentCommand(cmd)
+	PrepareSilentRun(cmd)
 	return cmd.Run()
 }
 
@@ -1317,6 +1321,7 @@ func CreateBotFromExpert(expertID, newBotID, modelID, customSoul, customIdentity
 
 func ExecPolicyShow() (*OpenClawExecPolicyResponse, error) {
 	cmd := exec.Command(GetOpenClawBinary(), "exec-policy", "show", "--json")
+	PrepareSilentCommand(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to show exec policy: %v. Output: %s", err, string(out))
@@ -1336,6 +1341,7 @@ func ExecPolicyShow() (*OpenClawExecPolicyResponse, error) {
 
 func GetApprovalsSnapshot() (*OpenClawApprovalsSnapshot, error) {
 	cmd := exec.Command(GetOpenClawBinary(), "approvals", "get", "--json")
+	PrepareSilentCommand(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get approvals snapshot: %v. Output: %s", err, string(out))
@@ -1355,6 +1361,7 @@ func GetApprovalsSnapshot() (*OpenClawApprovalsSnapshot, error) {
 
 func ApplyExecPreset(preset string) error {
 	cmd := exec.Command(GetOpenClawBinary(), "exec-policy", "preset", preset)
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to apply preset %s: %v. Output: %s", preset, err, string(out))
@@ -1371,6 +1378,7 @@ func SetExecPolicy(ask, security string) error {
 		args = append(args, "--security", security)
 	}
 	cmd := exec.Command(GetOpenClawBinary(), args...)
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to set exec policy: %v. Output: %s", err, string(out))
@@ -1387,6 +1395,7 @@ func AddAllowlistPattern(agentID, pattern string) error {
 	}
 	args = append(args, pattern)
 	cmd := exec.Command(GetOpenClawBinary(), args...)
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to add allowlist pattern: %v. Output: %s", err, string(out))
@@ -1403,6 +1412,7 @@ func RemoveAllowlistPattern(agentID, pattern string) error {
 	}
 	args = append(args, pattern)
 	cmd := exec.Command(GetOpenClawBinary(), args...)
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to remove allowlist pattern: %v. Output: %s", err, string(out))
@@ -1426,6 +1436,7 @@ func SetApprovals(content string) error {
 	}
 
 	cmd := exec.Command(GetOpenClawBinary(), "approvals", "set", tmpFile.Name())
+	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to set approvals: %v. Output: %s", err, string(out))

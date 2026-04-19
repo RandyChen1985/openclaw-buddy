@@ -32,18 +32,18 @@
     go install github.com/wailsapp/wails/v2/cmd/wails@latest
     ```
 3.  **一键编译（两种方式，任选其一）**  
-    在仓库根目录执行。两种脚本**流程已对齐**：清理并同步前端到 `internal/api/dist`、**生产 + Debug** 两次 Wails 构建（均带 `-skipbindings`）、整理 `release/openclaw-buddy-windows-vX.Y.Z/` 并打 ZIP。
+    在仓库根目录执行。两种脚本**流程已对齐**：清理并同步前端到 `internal/api/dist`、**生产** Wails 构建（`-skipbindings`）、整理 `release/openclaw-buddy-windows-vX.Y.Z/` 并打 ZIP。
 
     | 方式 | 命令 | 说明 |
     |------|------|------|
     | **PowerShell（推荐）** | `powershell -NoProfile -ExecutionPolicy Bypass -File .\build_windows.ps1` | 默认 `npm` 使用 `--silent`，日志较干净。 |
     | **批处理** | 在 **CMD** 中：`build_windows.bat` 或 `cmd /c build_windows.bat` | 前端 `npm install` / `npm run build`**不**加 `--silent`，便于查看 Vite 完整输出。**勿在 Git Bash 下用 `./build_windows.bat`**。另：CMD 解析时 **`::` 行里的 `)` 仍会参与括号配对**，易弄乱 `if (...)` 块；本仓库脚本已改为 **`REM`** 且避免注释/echo 里多余括号；脚本首行会 **`cd /d "%~dp0"`** 保证在仓库根目录执行。 |
 
-    **ZIP 失败**：若提示某 `.exe` 正被占用，请先**完全退出**已运行的 Buddy（含可能驻留的 `openclaw-buddy-debug.exe` 进程）后再执行脚本。
+    **ZIP 失败**：若提示某 `.exe` 正被占用，请先**完全退出**已运行的 Buddy 后再执行脚本。
 
 4.  **产物位置**:
-    - 中间产物：`build/bin/openclaw-buddy.exe`（生产）、`build/bin/openclaw-buddy-debug.exe`（调试）。
-    - 发布目录：`release/openclaw-buddy-windows-vX.Y.Z/`（上述两个 exe、示例 `env`、`README.md` 等）。
+    - 中间产物：`build/bin/openclaw-buddy.exe`（生产）。
+    - 发布目录：`release/openclaw-buddy-windows-vX.Y.Z/`（上述 exe、示例 `env`、`README.md` 等）。
     - 归档：`release/openclaw-buddy-windows-vX.Y.Z.zip`（压缩包根目录为文件夹内**文件列表**，与脚本一致）。
 
 ### 📄 典型编译日志参考 (Success Log)
@@ -55,9 +55,8 @@
 vite v5.x.x building for production...
 ✓ built in 24s
 [3.2] Syncing Frontend Build to Internal Assets...
-[4/5] Building Wails Binaries (Production & Debug)...
+[4/5] Building Wails Binary - Production...
 Built '...\build\bin\openclaw-buddy.exe' in ~1m.
-Built '...\build\bin\openclaw-buddy-debug.exe' in ~1m.
 [5/5] Organizing Release Folder...
 [5.1] Creating ZIP archive...
 ==========================================

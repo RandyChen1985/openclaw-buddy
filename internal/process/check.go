@@ -85,7 +85,7 @@ func IsPortListening(port int) bool {
 func CheckHealth() (time.Duration, error) {
 	start := time.Now()
 	cmd := exec.Command(GetOpenClawBinary(), "health")
-	PrepareSilentCommand(cmd)
+	PrepareSilentRun(cmd)
 	err := cmd.Run()
 	elapsed := time.Since(start)
 	if err != nil {
@@ -233,33 +233,49 @@ func GetDashboardURL(ctx context.Context, externalPrefix string) (string, error)
 	return "", fmt.Errorf("dashboard URL not found in command output")
 }
 
+func isWindowsNetstatListeningState(state string) bool {
+	u := strings.ToUpper(strings.TrimSpace(state))
+	return u == "LISTENING" || strings.TrimSpace(state) == "监听"
+}
+
+// windowsNetstatLocalAddrMatchesPort 匹配 TCP 本地地址列中的监听端口（避免 `cmd /c netstat|findstr` 每次拉一个 cmd.exe）。
+func windowsNetstatLocalAddrMatchesPort(localAddr string, port int) bool {
+	return strings.HasSuffix(localAddr, ":"+strconv.Itoa(port))
+}
+
 func GetPIDByPort(port int) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	if runtime.GOOS == "windows" {
-		// Windows: netstat -ano | findstr LISTENING
-		cmd := exec.CommandContext(ctx, "cmd", "/c", "netstat -ano | findstr LISTENING")
+		// 直接运行 netstat，在 Go 内过滤 LISTENING，避免 `cmd /c ... | findstr` 产生大量 cmd 窗口（状态轮询会高频调用）。
+		cmd := exec.CommandContext(ctx, "netstat", "-ano")
 		PrepareSilentCommand(cmd)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return 0, fmt.Errorf("failed to run netstat: %v", err)
 		}
 
-		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-		portPattern := fmt.Sprintf(":%d", port)
-
+		lines := strings.Split(string(out), "\n")
 		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
 			fields := strings.Fields(line)
-			if len(fields) >= 5 {
-				addr := fields[1]
-				// 确保端口完全匹配（如 :80 不匹配 :8080）
-				if strings.HasSuffix(addr, portPattern) {
-					pid, err := strconv.Atoi(fields[len(fields)-1])
-					if err == nil {
-						return pid, nil
-					}
-				}
+			if len(fields) < 5 || fields[0] != "TCP" {
+				continue
+			}
+			if !isWindowsNetstatListeningState(fields[3]) {
+				continue
+			}
+			localAddr := fields[1]
+			if !windowsNetstatLocalAddrMatchesPort(localAddr, port) {
+				continue
+			}
+			pid, err := strconv.Atoi(fields[len(fields)-1])
+			if err == nil {
+				return pid, nil
 			}
 		}
 		return 0, fmt.Errorf("no process found listening on port %d", port)
@@ -287,7 +303,8 @@ func GetPIDByPort(port int) (int, error) {
 // IsProcessRunning checks if a process with the given name is currently running.
 func IsProcessRunning(name string) bool {
 	if runtime.GOOS == "windows" {
-		cmd := exec.Command("cmd", "/c", "tasklist /FI \"IMAGENAME eq "+name+"\" /NH")
+		cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("IMAGENAME eq %s", name), "/NH")
+		PrepareSilentCommand(cmd)
 		out, _ := cmd.Output()
 		return strings.Contains(string(out), name)
 	}

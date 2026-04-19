@@ -19,6 +19,8 @@ var (
 const (
 	JobObjectExtendedLimitInformation = 9
 	JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+	// CREATE_NO_WINDOW: 子进程为控制台程序时也不分配可见控制台，避免从 GUI 主程序弹出 cmd 黑窗。
+	createNoWindow = 0x08000000
 )
 
 type JOBOBJECT_BASIC_LIMIT_INFORMATION struct {
@@ -78,6 +80,7 @@ func PrepareSilentCommand(cmd *exec.Cmd) {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
 	cmd.SysProcAttr.HideWindow = true
+	cmd.SysProcAttr.CreationFlags |= createNoWindow
 
 	// 如果 Job Object 已初始化，则确保子进程在创建后立即关联 (Windows Go 1.7+ 支持在 Cmd 启动后通过 Job 管理)
 	// 注意：在 Windows 上，AssignProcessToJobObject 通常在 Process 启动后调用。
@@ -92,4 +95,9 @@ func PrepareSilentCommand(cmd *exec.Cmd) {
 }
 
 var staticOnce sync.Once
+
+// PrepareSilentRun 与 PrepareSilentCommand 等价；保留别名便于语义区分（Run/Start 路径）。
+func PrepareSilentRun(cmd *exec.Cmd) {
+	PrepareSilentCommand(cmd)
+}
 

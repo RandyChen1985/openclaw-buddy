@@ -55,7 +55,7 @@ func (c *DefaultGatewayController) Restart(port int) error {
 func (c *DefaultGatewayController) Stop(port int) error {
 	// 1. 尝试标准停止命令
 	cmd := exec.Command(GetOpenClawBinary(), "gateway", "stop")
-	PrepareSilentCommand(cmd)
+	PrepareSilentRun(cmd)
 	_ = cmd.Run() // 忽略错误，因为可能是散装进程
 
 	// 2. 等待一小会儿让进程自行退出
@@ -74,7 +74,7 @@ func (c *DefaultGatewayController) Stop(port int) error {
 			var killCmd *exec.Cmd
 			if runtime.GOOS == "windows" {
 				killCmd = exec.Command("taskkill", "/F", "/PID", fmt.Sprintf("%d", pid))
-				PrepareSilentCommand(killCmd)
+				PrepareSilentRun(killCmd)
 			} else {
 				killCmd = exec.Command("kill", "-9", fmt.Sprintf("%d", pid))
 			}
@@ -91,7 +91,7 @@ func (c *DefaultGatewayController) Start() error {
 	// 因为 restart 会处理“已存在任务”的停止和清理，比 start 更稳健。
 	action := "restart"
 	cmd := exec.Command(GetOpenClawBinary(), "gateway", action)
-	PrepareSilentCommand(cmd)
+	PrepareSilentRun(cmd)
 
 	// 启动进程
 	if err := cmd.Start(); err != nil {
@@ -127,7 +127,7 @@ func RunDoctorFix() error {
 
 	// 2. OpenClaw 内部修复
 	cmd := exec.Command(GetOpenClawBinary(), "doctor", "--fix", "--yes")
-	PrepareSilentCommand(cmd)
+	PrepareSilentRun(cmd)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to run openclaw doctor --fix --yes: %v", err)
 	}
@@ -142,13 +142,13 @@ func InstallGatewayService() error {
 		// 这将弹出一个系统 UAC 对话框
 		psCmd := fmt.Sprintf("Start-Process '%s' -ArgumentList 'gateway','install' -Verb RunAs -Wait", bin)
 		cmd := exec.Command("powershell", "-Command", psCmd)
-		PrepareSilentCommand(cmd)
+		PrepareSilentRun(cmd)
 		return cmd.Run()
 	}
 
 	// Unix 系统直接运行
 	cmd := exec.Command(bin, "gateway", "install")
-	PrepareSilentCommand(cmd)
+	PrepareSilentRun(cmd)
 	return cmd.Run()
 }
 

@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -11,6 +13,7 @@ import (
 	"openclaw-buddy/internal/guardian"
 	"openclaw-buddy/internal/scheduler"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -22,6 +25,10 @@ type Server struct {
 	engine   *gin.Engine
 	tickets  *TicketStore
 	guardian *guardian.Guardian
+
+	httpMu       sync.Mutex
+	httpServer   *http.Server
+	shutdownHook func() // 可选：如 main 里 signal.NotifyContext 的 stop，用于 GUI 关闭时结束 Guardian
 }
 
 func NewServer(cfg *config.Config, g *guardian.Guardian) *Server {
@@ -78,6 +85,23 @@ func NewServer(cfg *config.Config, g *guardian.Guardian) *Server {
 	// 该功能已迁移至 v1 路由组下的 handleGetChatFile 动态处理
 
 	return s
+}
+
+// SetShutdownHook 注册进程级收尾回调（例如取消 Guardian 所用的 context）。
+// Windows Wails 在 OnShutdown 里会调用，避免仅关窗口时后台仍占端口或句柄未结束。
+func (s *Server) SetShutdownHook(fn func()) {
+	s.shutdownHook = fn
+}
+
+// ShutdownHTTP 优雅关闭 Gin 底层 HTTP 服务（若在监听）。
+func (s *Server) ShutdownHTTP(ctx context.Context) error {
+	s.httpMu.Lock()
+	srv := s.httpServer
+	s.httpMu.Unlock()
+	if srv == nil {
+		return nil
+	}
+	return srv.Shutdown(ctx)
 }
 
 func (s *Server) setupRoutes() {
@@ -365,24 +389,35 @@ func (s *Server) Run() error {
 	addr := fmt.Sprintf(":%d", s.cfg.WebPort)
 	log.Printf("🚀 Web Server starting on %s (WebRoot: %s)", addr, s.cfg.WebRoot)
 
-	// 为自重启场景增加重试逻辑 (最多等待 15 秒)
-	// 使用更宽松的错误判定，确保在任何端口冲突情况下都能坚持等待旧进程退出
-	var err error
+	// 使用显式 http.Server，便于 Wails 关闭窗口时 Shutdown，尽快释放端口与连接。
 	for i := 0; i < 30; i++ {
-		err = s.engine.Run(addr)
-		if err != nil {
-			errStr := strings.ToLower(err.Error())
-			if strings.Contains(errStr, "address already in use") ||
-				strings.Contains(errStr, "bind") ||
-				strings.Contains(errStr, "permission denied") {
-				log.Printf("⚠️ [API] 端口 %s 暂时无法绑定，可能旧进程正在退出，200ms 后重试 (%d/30)...", addr, i+1)
-				time.Sleep(200 * time.Millisecond)
-				continue
-			}
+		s.httpMu.Lock()
+		s.httpServer = &http.Server{Addr: addr, Handler: s.engine}
+		srv := s.httpServer
+		s.httpMu.Unlock()
+
+		err := srv.ListenAndServe()
+
+		s.httpMu.Lock()
+		if s.httpServer == srv {
+			s.httpServer = nil
 		}
-		break
+		s.httpMu.Unlock()
+
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		errStr := strings.ToLower(err.Error())
+		if strings.Contains(errStr, "address already in use") ||
+			strings.Contains(errStr, "bind") ||
+			strings.Contains(errStr, "permission denied") {
+			log.Printf("⚠️ [API] 端口 %s 暂时无法绑定，可能旧进程正在退出，200ms 后重试 (%d/30)...", addr, i+1)
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+		return err
 	}
-	return err
+	return fmt.Errorf("failed to bind %s after retries", addr)
 }
 
 func (s *Server) GetEngine() *gin.Engine {

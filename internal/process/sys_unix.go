@@ -16,3 +16,8 @@ func InitJobObject() {
 	// No job object needed on Unix
 }
 
+// PrepareSilentRun is PrepareSilentCommand on Unix (no console to hide).
+func PrepareSilentRun(cmd *exec.Cmd) {
+	PrepareSilentCommand(cmd)
+}
+
