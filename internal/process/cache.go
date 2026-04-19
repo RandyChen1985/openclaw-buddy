@@ -3,52 +3,45 @@ package process
 import (
 	"encoding/json"
 	"log"
+	"sync"
 	"time"
 	"openclaw-buddy/internal/utils"
 )
 
-// SyncAll 刷所有缓存
+// SyncAll 刷所有缓存 (并发模式)
 func SyncAll(configDir string) {
-	log.Println("🔄 [Cache] 开始全量同步业务数据...")
+	log.Println("🔄 [Cache] 开始全量并发同步业务数据...")
 	
 	start := time.Now()
+	var wg sync.WaitGroup
 
-	// 1. Bots & Models
-	syncKey("bots_models", func() (any, error) {
-		return GetOpenClawBotsModels(configDir)
-	})
+	// 定义并发任务列表
+	tasks := []struct {
+		key string
+		fn  func() (any, error)
+	}{
+		{"bots_models", func() (any, error) { return GetOpenClawBotsModels(configDir) }},
+		{"chat_channels", func() (any, error) { return GetChatChannels() }},
+		{"devices", func() (any, error) { return GetOpenClawDevices() }},
+		{"skills", func() (any, error) { return GetOpenClawSkills() }},
+		{"plugins", func() (any, error) { return GetOpenClawPlugins() }},
+		{"cron_jobs", func() (any, error) { return GetOpenClawCronJobs() }},
+		{"sessions", func() (any, error) { return GetOpenClawSessions() }},
+		{"ranking", func() (any, error) { return GetBotRanking(configDir) }},
+		{"security_status", func() (any, error) { return GetSecurityStatusData() }},
+	}
 
-	// 2. Chat Channels
-	syncKey("chat_channels", func() (any, error) {
-		return GetChatChannels()
-	})
+	wg.Add(len(tasks))
+	for _, t := range tasks {
+		go func(key string, fetcher func() (any, error)) {
+			defer wg.Done()
+			syncKey(key, fetcher)
+		}(t.key, t.fn)
+	}
 
-	// 3. Devices
-	syncKey("devices", func() (any, error) {
-		return GetOpenClawDevices()
-	})
-
-	// 4. Skills
-	syncKey("skills", func() (any, error) {
-		return GetOpenClawSkills()
-	})
-
-	// 5. Plugins
-	syncKey("plugins", func() (any, error) {
-		return GetOpenClawPlugins()
-	})
-	
-	// 6. Sessions
-	syncKey("sessions", func() (any, error) {
-		return GetOpenClawSessions()
-	})
-	
-	// 7. Bot Ranking (机器人活跃榜)
-	syncKey("ranking", func() (any, error) {
-		return GetBotRanking(configDir)
-	})
-
-	log.Printf("✅ [Cache] 全量同步完成，耗时 %v。", time.Since(start))
+	// 等待所有同步协程完成
+	wg.Wait()
+	log.Printf("✅ [Cache] 全量并发同步完成，总耗时 %v。", time.Since(start))
 }
 
 // SyncKeySingle 同步单个 Key
@@ -65,10 +58,14 @@ func SyncKeySingle(key string, configDir string) error {
 		fetcher = func() (any, error) { return GetOpenClawSkills() }
 	case "plugins":
 		fetcher = func() (any, error) { return GetOpenClawPlugins() }
+	case "cron_jobs":
+		fetcher = func() (any, error) { return GetOpenClawCronJobs() }
 	case "sessions":
 		fetcher = func() (any, error) { return GetOpenClawSessions() }
 	case "ranking":
 		fetcher = func() (any, error) { return GetBotRanking(configDir) }
+	case "security_status":
+		fetcher = func() (any, error) { return GetSecurityStatusData() }
 	default:
 		return nil
 	}

@@ -26,6 +26,7 @@ release: build
 	@mkdir -p $(PKG_DIR)/lib
 	@mkdir -p $(PKG_DIR)/logs
 	@mkdir -p $(PKG_DIR)/reports
+	@mkdir -p $(PKG_DIR)/pid
 	@cp $(BINARY_NAME) $(PKG_DIR)/lib/
 	@# 创建带有详细说明的 env 文件
 	@echo '# 🦞 OpenClaw Buddy 配置文件' > $(PKG_DIR)/env
@@ -66,11 +67,10 @@ release: build
 	@echo '# 故障诊断报表（Markdown 格式）的存放目录' >> $(PKG_DIR)/env
 	@echo 'REPORT_DIR="./reports"' >> $(PKG_DIR)/env
 	@# 创建运行脚本（支持后台运行与自检）
-	@printf '#!/bin/bash\ncd "$$(dirname "$$0")"\n# 1. 环境预检查\nif ! command -v openclaw &> /dev/null; then\n  echo "❌ Error: openclaw command not found."\n  echo "💡 Current PATH: $$PATH"\n  exit 1\nfi\n# 2. 状态预检查\nif ! openclaw status &> /dev/null; then\n  echo "⚠️ Warning: OpenClaw is not running. Service will attempt to start it if needed."\nfi\n
-PID_FILE="/tmp/openclaw-buddy.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  if ps -p $$PID > /dev/null; then\n    echo "❌ OpenClaw Buddy 已经运行中 (PID: $$PID)."\n    exit 1\n  fi\n  rm -f "$$PID_FILE"\nfi\necho "🚀 正在后台启动 OpenClaw Buddy..."\nnohup ./lib/$(BINARY_NAME) >> ./logs/guardian.log 2>&1 &\nPID=$$!\necho "✅ OpenClaw Buddy 启动成功，PID: $$PID"\necho "📋 正在自动追踪启动日志 (按 Ctrl+C 停止追踪，服务将继续后台运行)..."\nsleep 1\ntail -n 20 -f ./logs/guardian.log\n' > $(PKG_DIR)/start.sh
+	@printf '#!/bin/bash\ncd "$$(dirname "$$0")"\n# 1. 环境预检查\nif ! command -v openclaw &> /dev/null; then\n  echo "❌ Error: openclaw command not found."\n  echo "💡 Current PATH: $$PATH"\n  exit 1\nfi\n# 2. 状态预检查\nif ! openclaw status &> /dev/null; then\n  echo "⚠️ Warning: OpenClaw is not running. Service will attempt to start it if needed."\nfi\nPID_FILE="./pid/openclaw-buddy.pid"\nmkdir -p "$$(dirname "$$PID_FILE")"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  if ps -p $$PID > /dev/null; then\n    echo "❌ OpenClaw Buddy 已经运行中 (PID: $$PID)."\n    exit 1\n  fi\n  rm -f "$$PID_FILE"\nfi\necho "🚀 正在后台启动 OpenClaw Buddy..."\nexport PID_FILE="$$PID_FILE"\nnohup ./lib/$(BINARY_NAME) >> ./logs/guardian.log 2>&1 &\nPID=$$!\necho $$PID > "$$PID_FILE"\necho "✅ OpenClaw Buddy 启动成功，PID: $$PID"\necho "📋 正在自动追踪启动日志 (按 Ctrl+C 停止追踪，服务将继续后台运行)..."\nsleep 1\ntail -n 20 -f ./logs/guardian.log\n' > $(PKG_DIR)/start.sh
 	@chmod +x $(PKG_DIR)/start.sh
 	@# 创建停止脚本
-	@printf '#!/bin/bash\nPID_FILE="/tmp/openclaw-buddy.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  kill $$PID && echo "Stopped Service (PID: $$PID)"\n  rm -f "$$PID_FILE"\nelse\n  echo "服务未在运行 (PID 文件不存在)。"\nfi\n' > $(PKG_DIR)/stop.sh
+	@printf '#!/bin/bash\nPID_FILE="./pid/openclaw-buddy.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "$$PID_FILE")\n  if ps -p $$PID > /dev/null; then\n    kill $$PID && echo "Stopped Service (PID: $$PID)"\n  fi\n  rm -f "$$PID_FILE"\nelse\n  echo "服务未在运行 (PID 文件不存在)。"\nfi\n' > $(PKG_DIR)/stop.sh
 	@chmod +x $(PKG_DIR)/stop.sh
 	@# 生成 README.md
 	@echo "# 🦞 OpenClaw Buddy" > $(PKG_DIR)/README.md
@@ -87,7 +87,7 @@ PID_FILE="/tmp/openclaw-buddy.pid"\nif [ -f "$$PID_FILE" ]; then\n  PID=$$(cat "
 	@echo "## 🚀 快速开始" >> $(PKG_DIR)/README.md
 	@echo "### 前提条件" >> $(PKG_DIR)/README.md
 	@echo "- 启动本程序前，请确保 **OpenClaw 已经正常运行**。" >> $(PKG_DIR)/README.md
-	@echo "- 本程序采用单例模式运行，PID 锁文件位于 \`/tmp/openclaw-buddy.pid\`。" >> $(PKG_DIR)/README.md
+	@echo "- 本程序采用单例模式运行，PID 锁文件位于 \`./pid/openclaw-buddy.pid\`。" >> $(PKG_DIR)/README.md
 	@echo "" >> $(PKG_DIR)/README.md
 	@echo "### 运行与停止" >> $(PKG_DIR)/README.md
 	@echo "\`\`\`bash" >> $(PKG_DIR)/README.md

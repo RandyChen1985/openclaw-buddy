@@ -5,10 +5,12 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"openclaw-buddy/internal/utils"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 //go:embed experts
@@ -47,9 +49,9 @@ type OpenClawSession struct {
 }
 
 type OpenClawBotsModelsResponse struct {
-	Bots     []OpenClawBot     `json:"bots"`
-	Models   []OpenClawModel   `json:"models"`
-	UpdateAt string            `json:"updated_at"`
+	Bots     []OpenClawBot   `json:"bots"`
+	Models   []OpenClawModel `json:"models"`
+	UpdateAt string          `json:"updated_at"`
 }
 
 type OpenClawGatewayConfig struct {
@@ -68,15 +70,15 @@ type OpenClawGatewayConfig struct {
 }
 
 type Expert struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	NameEn        string   `json:"name_en"`
-	Description   string   `json:"description"`
-	DescriptionEn string   `json:"description_en"`
-	Emoji         string   `json:"emoji"`
-	Category      string   `json:"category"`
-	CategoryZh    string   `json:"category_zh"`
-	Soul          string   `json:"soul"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	NameEn        string `json:"name_en"`
+	Description   string `json:"description"`
+	DescriptionEn string `json:"description_en"`
+	Emoji         string `json:"emoji"`
+	Category      string `json:"category"`
+	CategoryZh    string `json:"category_zh"`
+	Soul          string `json:"soul"`
 	Identity      struct {
 		Name string `json:"name"`
 		Bio  string `json:"bio"`
@@ -85,126 +87,289 @@ type Expert struct {
 	Skills     []string `json:"skills"`
 }
 
+type OpenClawPolicyValue struct {
+	Requested       string `json:"requested"`
+	RequestedSource string `json:"requestedSource"`
+	Host            string `json:"host,omitempty"`
+	HostSource      string `json:"hostSource,omitempty"`
+	Effective       string `json:"effective"`
+	Note            string `json:"note,omitempty"`
+}
+
+type OpenClawPolicyScope struct {
+	ScopeLabel    string               `json:"scopeLabel"`
+	ConfigPath    string               `json:"configPath"`
+	AgentID       string               `json:"agentId,omitempty"`
+	Security      OpenClawPolicyValue  `json:"security"`
+	Ask           OpenClawPolicyValue  `json:"ask"`
+	AskFallback   *OpenClawPolicyValue `json:"askFallback,omitempty"`
+	RuntimeSource string               `json:"runtimeApprovalsSource,omitempty"`
+}
+
+type OpenClawExecPolicyResponse struct {
+	ConfigPath      string `json:"configPath"`
+	ApprovalsPath   string `json:"approvalsPath"`
+	ApprovalsExists bool   `json:"approvalsExists"`
+	EffectivePolicy struct {
+		Note   string                `json:"note"`
+		Scopes []OpenClawPolicyScope `json:"scopes"`
+	} `json:"effectivePolicy"`
+}
+
+type OpenClawApprovalsSnapshot struct {
+	Path            string `json:"path"`
+	Exists          bool   `json:"exists"`
+	EffectivePolicy struct {
+		Scopes []OpenClawPolicyScope `json:"scopes"`
+	} `json:"effectivePolicy"`
+	File struct {
+		Version int `json:"version"`
+		Agents  map[string]struct {
+			Allowlist []struct {
+				Pattern    string `json:"pattern"`
+				LastUsedAt int64  `json:"lastUsedAt"`
+				ID         string `json:"id"`
+			} `json:"allowlist"`
+		} `json:"agents"`
+	} `json:"file"`
+}
+
+type SecurityStatusData struct {
+	Policy        *OpenClawExecPolicyResponse `json:"policy"`
+	Snapshot      *OpenClawApprovalsSnapshot  `json:"snapshot"`
+	VersionTooLow bool                        `json:"versionTooLow"`
+}
+
+type cliBot struct {
+	ID            string   `json:"id"`
+	IdentityName  string   `json:"identityName"`
+	IdentityEmoji string   `json:"identityEmoji"`
+	Workspace     string   `json:"workspace"`
+	AgentDir      string   `json:"agentDir"`
+	Model         string   `json:"model"`
+	Bindings      int      `json:"bindings"`
+	Routes        []string `json:"routes"`
+}
+
+type cliModel struct {
+	Key       string   `json:"key"`
+	Name      string   `json:"name"`
+	Tags      []string `json:"tags"`
+	Provider  string   `json:"provider"` // 某些版本可能有，没有就从 Key 截取
+	IsDefault bool     `json:"isDefault"`
+}
+
 func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error) {
 	res := &OpenClawBotsModelsResponse{
 		Bots:   []OpenClawBot{},
 		Models: []OpenClawModel{},
 	}
 
-	// 1. 解析 Bots: openclaw agents list
-	cmdBots := exec.Command("openclaw", "agents", "list")
-	PrepareSilentCommand(cmdBots)
-	outBots, _ := cmdBots.CombinedOutput()
+	var wg sync.WaitGroup
+	var botsOut, modelsOut []byte
+	var botsErr, modelsErr error
 
-	var currentBot *OpenClawBot
-	scannerBots := bufio.NewScanner(strings.NewReader(string(outBots)))
-	for scannerBots.Scan() {
-		line := scannerBots.Text()
-		if IsLogLine(line) {
-			continue
-		}
-		trimmedLine := strings.TrimSpace(StripANSI(line))
+	wg.Add(2)
 
-		// 匹配 Agent ID: "- main (default)"
-		if strings.HasPrefix(trimmedLine, "- ") {
-			if currentBot != nil {
-				res.Bots = append(res.Bots, *currentBot)
-			}
-			id := strings.TrimPrefix(trimmedLine, "- ")
-			id = strings.Split(id, " ")[0]
-			currentBot = &OpenClawBot{ID: id}
-		} else if currentBot != nil {
-			if strings.Contains(line, "Identity:") {
-				// 格式示例 1: Identity: 🤖 云枢智维 (IDENTITY.md)
-				// 格式示例 2: Identity: 测试 002 号 (config)
-				lineContent := strings.Split(line, "Identity:")[1]
-				lineContent = strings.TrimSpace(lineContent)
+	// --- 并发执行命令 ---
+	go func() {
+		defer wg.Done()
+		cmd := exec.Command(GetOpenClawBinary(), "agents", "list", "--json")
+		PrepareSilentCommand(cmd)
+		botsOut, botsErr = cmd.Output()
+	}()
 
-				// 1. 去掉末尾的 (xxx) 标识
-				lastIdx := strings.LastIndex(lineContent, "(")
-				namePart := lineContent
-				if lastIdx > 0 {
-					namePart = strings.TrimSpace(lineContent[:lastIdx])
+	go func() {
+		defer wg.Done()
+		cmd := exec.Command(GetOpenClawBinary(), "models", "list", "--json")
+		PrepareSilentCommand(cmd)
+		modelsOut, modelsErr = cmd.Output()
+	}()
+
+	wg.Wait()
+
+	// --- 1. 解析 Bots ---
+	usedJSON := false
+	if botsErr == nil {
+		cleanOut := StripANSI(string(botsOut))
+		jsonStr := ExtractJSON(cleanOut)
+		var cliBots []cliBot
+		if jsonErr := json.Unmarshal([]byte(jsonStr), &cliBots); jsonErr == nil {
+			for _, b := range cliBots {
+				name := b.IdentityName
+				if name == "" {
+					name = b.ID
 				}
+				emoji := b.IdentityEmoji
+				if emoji == "" {
+					emoji = "🤖"
+				}
+				if b.Workspace == "" {
+					continue
+				}
+				res.Bots = append(res.Bots, OpenClawBot{
+					ID:           b.ID,
+					Name:         name,
+					Emoji:        emoji,
+					Model:        b.Model,
+					Workspace:    b.Workspace,
+					AgentDir:     b.AgentDir,
+					RoutingRules: fmt.Sprintf("%d", b.Bindings),
+					Routing:      strings.Join(b.Routes, ", "),
+				})
+			}
+			usedJSON = true
+		}
+	}
 
-				// 2. 尝试提取 Emoji (这里采用简单策略：如果有空格且第一部分长度较短，认为是 Emoji)
-				parts := strings.SplitN(namePart, " ", 2)
-				if len(parts) == 2 {
-					// 常见的 Emoji 或者是图标，长度通常在 1-4 字节(UTF-8)
-					// 如果第一部分包含非 ASCII 字符或长度极短，我们把它当 Emoji
-					first := parts[0]
-					isEmoji := false
-					for _, r := range first {
-						if r > 127 { // 包含非 ASCII，大概率是 Emoji 或中文
-							// 如果长度很短(1个字符)，认为是 Emoji
-							if len([]rune(first)) == 1 {
-								isEmoji = true
-							}
-							break
-						}
+	if !usedJSON {
+		var currentBot *OpenClawBot
+		isAgentsSection := false
+		var scannerBots *bufio.Scanner
+
+		// 如果 JSON 模式失败，重新获取纯文本输出（为了保持原始逻辑的健壮性）
+		cmdBotsPlain := exec.Command(GetOpenClawBinary(), "agents", "list")
+		PrepareSilentCommand(cmdBotsPlain)
+		outBotsPlain, _ := cmdBotsPlain.CombinedOutput()
+		scannerBots = bufio.NewScanner(strings.NewReader(string(outBotsPlain)))
+
+		for scannerBots.Scan() {
+			line := scannerBots.Text()
+			if IsLogLine(line) {
+				continue
+			}
+			rawLine := StripANSI(line)
+			trimmedLine := strings.TrimSpace(rawLine)
+
+			if strings.HasPrefix(trimmedLine, "Agents:") {
+				isAgentsSection = true
+				continue
+			}
+			if !isAgentsSection {
+				continue
+			}
+
+			if strings.HasPrefix(rawLine, "- ") {
+				if currentBot != nil && currentBot.Workspace != "" {
+					res.Bots = append(res.Bots, *currentBot)
+				}
+				id := strings.TrimPrefix(trimmedLine, "- ")
+				id = strings.Split(id, " ")[0]
+				currentBot = &OpenClawBot{ID: id, Emoji: "🤖"}
+			} else if currentBot != nil {
+				if strings.Contains(line, "Identity:") {
+					lineContent := strings.Split(line, "Identity:")[1]
+					lineContent = strings.TrimSpace(lineContent)
+					lastIdx := strings.LastIndex(lineContent, "(")
+					namePart := lineContent
+					if lastIdx > 0 {
+						namePart = strings.TrimSpace(lineContent[:lastIdx])
 					}
-					if isEmoji {
-						currentBot.Emoji = first
+					parts := strings.SplitN(namePart, " ", 2)
+					if len(parts) == 2 && len([]rune(parts[0])) == 1 && []rune(parts[0])[0] > 127 {
+						currentBot.Emoji = parts[0]
 						currentBot.Name = strings.TrimSpace(parts[1])
 					} else {
 						currentBot.Name = namePart
 					}
-				} else {
-					currentBot.Name = namePart
+				} else if strings.Contains(line, "Workspace:") {
+					currentBot.Workspace = strings.TrimSpace(strings.Split(line, "Workspace:")[1])
+				} else if strings.Contains(line, "Agent dir:") {
+					currentBot.AgentDir = strings.TrimSpace(strings.Split(line, "Agent dir:")[1])
+				} else if strings.Contains(line, "Model:") {
+					currentBot.Model = strings.TrimSpace(strings.Split(line, "Model:")[1])
+				} else if strings.Contains(line, "Routing rules:") {
+					currentBot.RoutingRules = strings.TrimSpace(strings.Split(line, "Routing rules:")[1])
+				} else if strings.Contains(line, "Routing:") {
+					currentBot.Routing = strings.TrimSpace(strings.Split(line, "Routing:")[1])
 				}
-			} else if strings.Contains(line, "Workspace:") {
-				currentBot.Workspace = strings.TrimSpace(strings.Split(line, "Workspace:")[1])
-			} else if strings.Contains(line, "Agent dir:") {
-				currentBot.AgentDir = strings.TrimSpace(strings.Split(line, "Agent dir:")[1])
-			} else if strings.Contains(line, "Model:") {
-				currentBot.Model = strings.TrimSpace(strings.Split(line, "Model:")[1])
-			} else if strings.Contains(line, "Routing rules:") {
-				currentBot.RoutingRules = strings.TrimSpace(strings.Split(line, "Routing rules:")[1])
-			} else if strings.Contains(line, "Routing:") {
-				currentBot.Routing = strings.TrimSpace(strings.Split(line, "Routing:")[1])
 			}
 		}
-	}
-	if currentBot != nil {
-		res.Bots = append(res.Bots, *currentBot)
-	}
-
-	// 2. 解析 Models: openclaw models list
-	cmdModels := exec.Command("openclaw", "models", "list")
-	PrepareSilentCommand(cmdModels)
-	outModels, _ := cmdModels.CombinedOutput()
-
-	scannerModels := bufio.NewScanner(strings.NewReader(string(outModels)))
-	isTableStarted := false
-	for scannerModels.Scan() {
-		line := scannerModels.Text()
-		if IsLogLine(line) {
-			continue
+		if currentBot != nil && currentBot.Workspace != "" {
+			res.Bots = append(res.Bots, *currentBot)
 		}
-		trimmedLine := strings.TrimSpace(StripANSI(line))
+	}
 
-		// 识别表头
-		if strings.HasPrefix(trimmedLine, "Model") && strings.Contains(trimmedLine, "Ctx") {
-			isTableStarted = true
-			continue
+	// --- 2. 解析 Models ---
+	usedModelsJSON := false
+	if modelsErr == nil {
+		cleanOut := StripANSI(string(modelsOut))
+		jsonStr := ExtractJSON(cleanOut)
+		var cliModels []cliModel
+
+		// 增强解析：兼容对象包装和直接数组
+		var wrapper struct {
+			Models []cliModel `json:"models"`
+		}
+		if jsonErr := json.Unmarshal([]byte(jsonStr), &wrapper); jsonErr == nil && len(wrapper.Models) > 0 {
+			cliModels = wrapper.Models
+		} else {
+			_ = json.Unmarshal([]byte(jsonStr), &cliModels)
 		}
 
-		if isTableStarted && trimmedLine != "" && !strings.Contains(trimmedLine, "OpenClaw") {
-			fields := strings.Fields(trimmedLine)
-			// 模型列表至少应包含 Model, Input, Ctx 3个核心字段
-			if len(fields) >= 3 {
-				modelID := fields[0]
-				isDefault := strings.Contains(strings.ToLower(line), "default")
-				tags := ""
-				if len(fields) >= 5 {
-					tags = fields[len(fields)-1]
+		if len(cliModels) > 0 {
+			for _, m := range cliModels {
+				isDefault := m.IsDefault
+				if !isDefault {
+					for _, t := range m.Tags {
+						if t == "default" {
+							isDefault = true
+							break
+						}
+					}
 				}
+				id := m.Key
+				if id == "" {
+					id = m.Name
+				}
+				provider := m.Provider
+				if provider == "" && strings.Contains(id, "/") {
+					provider = strings.Split(id, "/")[0]
+				}
+
 				res.Models = append(res.Models, OpenClawModel{
-					ID:        modelID,
-					Name:      modelID,
-					Provider:  tags,
+					ID:        id,
+					Name:      id,
+					Provider:  provider,
 					IsDefault: isDefault,
 				})
+			}
+			usedModelsJSON = true
+		}
+	}
+
+	if !usedModelsJSON {
+		cmdModelsPlain := exec.Command(GetOpenClawBinary(), "models", "list")
+		PrepareSilentCommand(cmdModelsPlain)
+		outModelsPlain, _ := cmdModelsPlain.CombinedOutput()
+		scannerModels := bufio.NewScanner(strings.NewReader(string(outModelsPlain)))
+		isTableStarted := false
+		for scannerModels.Scan() {
+			line := scannerModels.Text()
+			if IsLogLine(line) {
+				continue
+			}
+			trimmedLine := strings.TrimSpace(StripANSI(line))
+			if strings.HasPrefix(trimmedLine, "Model") && strings.Contains(trimmedLine, "Ctx") {
+				isTableStarted = true
+				continue
+			}
+			if isTableStarted && trimmedLine != "" && !strings.Contains(trimmedLine, "OpenClaw") {
+				fields := strings.Fields(trimmedLine)
+				if len(fields) >= 3 {
+					modelID := fields[0]
+					isDefault := strings.Contains(strings.ToLower(line), "default")
+					tags := ""
+					if len(fields) >= 5 {
+						tags = fields[len(fields)-1]
+					}
+					res.Models = append(res.Models, OpenClawModel{
+						ID:        modelID,
+						Name:      modelID,
+						Provider:  tags,
+						IsDefault: isDefault,
+					})
+				}
 			}
 		}
 	}
@@ -282,14 +447,7 @@ func GetOpenClawBotFileContent(configDir, id, fileType, workspace string) (strin
 		return "", fmt.Errorf("bot %s not found and no workspace provided", id)
 	}
 
-	if strings.HasPrefix(botWorkspace, "~") {
-		home, _ := os.UserHomeDir()
-		if botWorkspace == "~" {
-			botWorkspace = home
-		} else if strings.HasPrefix(botWorkspace, "~/") {
-			botWorkspace = filepath.Join(home, botWorkspace[2:])
-		}
-	}
+	botWorkspace = utils.ExpandPath(botWorkspace)
 
 	fileName := ""
 	switch strings.ToLower(fileType) {
@@ -347,14 +505,7 @@ func SaveOpenClawBotFileContent(configDir, id, fileType, content, workspace stri
 		return fmt.Errorf("bot %s not found and no workspace provided", id)
 	}
 
-	if strings.HasPrefix(botWorkspace, "~") {
-		home, _ := os.UserHomeDir()
-		if botWorkspace == "~" {
-			botWorkspace = home
-		} else if strings.HasPrefix(botWorkspace, "~/") {
-			botWorkspace = filepath.Join(home, botWorkspace[2:])
-		}
-	}
+	botWorkspace = utils.ExpandPath(botWorkspace)
 
 	fileName := ""
 	switch strings.ToLower(fileType) {
@@ -475,7 +626,7 @@ func GetOpenClawGatewayConfig(configDir string) (*OpenClawGatewayConfig, error) 
 }
 
 func EnableChatCompletions(configDir string) error {
-    // ... (unchanged content if any, but I'll replace the end)
+	// ... (unchanged content if any, but I'll replace the end)
 	configPath := filepath.Join(configDir, "openclaw.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -537,6 +688,114 @@ type OpenClawPlugin struct {
 	ProviderIds []string `json:"providerIds"`
 }
 
+type OpenClawCronSchedule struct {
+	Expr string `json:"expr"`
+	Kind string `json:"kind"`
+	TZ   string `json:"tz"`
+}
+
+type OpenClawCronPayload struct {
+	Kind    string `json:"kind"`
+	Message string `json:"message"`
+	Model   string `json:"model"`
+}
+
+type OpenClawCronDelivery struct {
+	Mode    string `json:"mode"`
+	To      string `json:"to"`
+	Channel string `json:"channel"`
+}
+
+type OpenClawCronState struct {
+	NextRunAtMs        int64  `json:"nextRunAtMs"`
+	LastRunAtMs        int64  `json:"lastRunAtMs"`
+	LastRunStatus      string `json:"lastRunStatus"`
+	LastStatus         string `json:"lastStatus"`
+	LastDurationMs     int64  `json:"lastDurationMs"`
+	LastDelivered      bool   `json:"lastDelivered"`
+	LastDeliveryStatus string `json:"lastDeliveryStatus"`
+	ConsecutiveErrors  int    `json:"consecutiveErrors"`
+}
+
+type OpenClawCronJob struct {
+	ID            string               `json:"id"`
+	AgentID       string               `json:"agentId"`
+	SessionKey    string               `json:"sessionKey"`
+	Name          string               `json:"name"`
+	Enabled       bool                 `json:"enabled"`
+	CreatedAtMs   int64                `json:"createdAtMs"`
+	UpdatedAtMs   int64                `json:"updatedAtMs"`
+	Schedule      OpenClawCronSchedule `json:"schedule"`
+	SessionTarget string               `json:"sessionTarget"`
+	WakeMode      string               `json:"wakeMode"`
+	Payload       OpenClawCronPayload  `json:"payload"`
+	Delivery      OpenClawCronDelivery `json:"delivery"`
+	State         OpenClawCronState    `json:"state"`
+}
+
+type OpenClawCronJobsResponse struct {
+	Jobs       []OpenClawCronJob `json:"jobs"`
+	Total      int               `json:"total"`
+	Offset     int               `json:"offset"`
+	Limit      int               `json:"limit"`
+	HasMore    bool              `json:"hasMore"`
+	NextOffset *int              `json:"nextOffset"`
+}
+
+func GetOpenClawCronJobs() (any, error) {
+	cmd := exec.Command("openclaw", "cron", "list", "--all", "--json")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list cron jobs: %v. Output: %s", err, string(out))
+	}
+
+	cleanOut := StripANSI(string(out))
+	if jsonStr, ok := ExtractFirstJSONValue(cleanOut); ok {
+		cleanOut = jsonStr
+	} else {
+		cleanOut = ExtractJSON(cleanOut) // legacy fallback
+	}
+
+	var data OpenClawCronJobsResponse
+	decoder := json.NewDecoder(strings.NewReader(cleanOut))
+	if err := decoder.Decode(&data); err != nil {
+		preview := cleanOut
+		if len(preview) > 400 {
+			preview = preview[:400] + "...(truncated)"
+		}
+		return nil, fmt.Errorf("failed to parse cron jobs json: %v. Output: %s", err, preview)
+	}
+
+	return data, nil
+}
+
+func EnableOpenClawCronJob(id string) error {
+	cmd := exec.Command("openclaw", "cron", "enable", id)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to enable cron job %s: %v. Output: %s", id, err, string(out))
+	}
+	return nil
+}
+
+func DisableOpenClawCronJob(id string) error {
+	cmd := exec.Command("openclaw", "cron", "disable", id)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to disable cron job %s: %v. Output: %s", id, err, string(out))
+	}
+	return nil
+}
+
+func RemoveOpenClawCronJob(id string) error {
+	cmd := exec.Command("openclaw", "cron", "rm", id)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to remove cron job %s: %v. Output: %s", id, err, string(out))
+	}
+	return nil
+}
+
 func GetOpenClawPlugins() (any, error) {
 	cmd := exec.Command("openclaw", "plugins", "list", "--json")
 	PrepareSilentCommand(cmd)
@@ -547,20 +806,22 @@ func GetOpenClawPlugins() (any, error) {
 
 	// 清理 ANSI 颜色代码
 	cleanOut := StripANSI(string(out))
-
-	// 找到第一个 '{'，跳过前面的日志行
-	index := strings.Index(cleanOut, "{")
-	if index == -1 {
-		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
+	if jsonStr, ok := ExtractFirstJSONValue(cleanOut); ok {
+		cleanOut = jsonStr
+	} else {
+		cleanOut = ExtractJSON(cleanOut) // legacy fallback
 	}
-	cleanOut = cleanOut[index:]
 
 	var data struct {
 		Plugins []OpenClawPlugin `json:"plugins"`
 	}
 	decoder := json.NewDecoder(strings.NewReader(cleanOut))
 	if err := decoder.Decode(&data); err != nil {
-		return nil, fmt.Errorf("failed to parse plugins json: %v", err)
+		preview := cleanOut
+		if len(preview) > 400 {
+			preview = preview[:400] + "...(truncated)"
+		}
+		return nil, fmt.Errorf("failed to parse plugins json: %v. Output: %s", err, preview)
 	}
 	return data.Plugins, nil
 }
@@ -596,22 +857,16 @@ func UpdateOpenClawPlugins() error {
 }
 
 func GetOpenClawSkills() (any, error) {
-	cmd := exec.Command("openclaw", "skills", "list", "--json")
+	cmd := exec.Command(GetOpenClawBinary(), "skills", "list", "--json")
 	PrepareSilentCommand(cmd)
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list skills: %v. Output: %s", err, string(out))
 	}
 
 	// 清理 ANSI 颜色代码，防止 JSON 解析失败
 	cleanOut := StripANSI(string(out))
-
-	// 找到第一个 '{'，跳过前面的日志行 (例如: 16:15:18+08:00 [plugins] ...)
-	index := strings.Index(cleanOut, "{")
-	if index == -1 {
-		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
-	}
-	cleanOut = cleanOut[index:]
+	cleanOut = ExtractJSON(cleanOut)
 
 	var skills interface{}
 	decoder := json.NewDecoder(strings.NewReader(cleanOut))
@@ -634,7 +889,7 @@ func ReloadOpenClawSkills() error {
 }
 
 func GetOpenClawSessions() ([]OpenClawSession, error) {
-	cmd := exec.Command("openclaw", "sessions", "--all-agent", "--json")
+	cmd := exec.Command(GetOpenClawBinary(), "sessions", "--all-agents", "--json")
 	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -643,13 +898,7 @@ func GetOpenClawSessions() ([]OpenClawSession, error) {
 
 	// 清理 ANSI 颜色代码，防止 JSON 解析失败
 	cleanOut := StripANSI(string(out))
-
-	// 找到第一个 '{'，跳过前面的日志行
-	index := strings.Index(cleanOut, "{")
-	if index == -1 {
-		return nil, fmt.Errorf("failed to find JSON start in output: %s", cleanOut)
-	}
-	cleanOut = cleanOut[index:]
+	cleanOut = ExtractJSON(cleanOut)
 
 	var data struct {
 		Sessions []OpenClawSession `json:"sessions"`
@@ -973,7 +1222,7 @@ func GetOpenClawExperts() ([]Expert, error) {
 func CreateBotFromExpert(expertID, newBotID, modelID, customSoul, customIdentityMD string) error {
 	// [Hardening] 预检 BotID 是否已占用，防止覆盖 SOUL.md 和误操作
 	// 这里通过尝试列出机器人来实现，如果 GetOpenClawBotsModels 返回了该 ID，则拦截
-	currentBots, err := GetOpenClawBotsModels("") 
+	currentBots, err := GetOpenClawBotsModels("")
 	if err == nil {
 		for _, b := range currentBots.Bots {
 			if b.ID == newBotID {
@@ -1064,4 +1313,151 @@ func CreateBotFromExpert(expertID, newBotID, modelID, customSoul, customIdentity
 	fmt.Printf("✅ [Expert] Successfully wrote IDENTITY.md (Rich Content: %v)\n", targetExpert.IdentityMD != "")
 
 	return nil
+}
+
+func ExecPolicyShow() (*OpenClawExecPolicyResponse, error) {
+	cmd := exec.Command("openclaw", "exec-policy", "show", "--json")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to show exec policy: %v. Output: %s", err, string(out))
+	}
+
+	cleanOut := StripANSI(string(out))
+	cleanOut = ExtractJSON(cleanOut)
+
+	var res OpenClawExecPolicyResponse
+	decoder := json.NewDecoder(strings.NewReader(cleanOut))
+	if err := decoder.Decode(&res); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal exec policy: %v", err)
+	}
+
+	return &res, nil
+}
+
+func GetApprovalsSnapshot() (*OpenClawApprovalsSnapshot, error) {
+	cmd := exec.Command("openclaw", "approvals", "get", "--json")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get approvals snapshot: %v. Output: %s", err, string(out))
+	}
+
+	cleanOut := StripANSI(string(out))
+	cleanOut = ExtractJSON(cleanOut)
+
+	var res OpenClawApprovalsSnapshot
+	decoder := json.NewDecoder(strings.NewReader(cleanOut))
+	if err := decoder.Decode(&res); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal approvals snapshot: %v", err)
+	}
+
+	return &res, nil
+}
+
+func ApplyExecPreset(preset string) error {
+	cmd := exec.Command("openclaw", "exec-policy", "preset", preset)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to apply preset %s: %v. Output: %s", preset, err, string(out))
+	}
+	return nil
+}
+
+func SetExecPolicy(ask, security string) error {
+	args := []string{"exec-policy", "set"}
+	if ask != "" {
+		args = append(args, "--ask", ask)
+	}
+	if security != "" {
+		args = append(args, "--security", security)
+	}
+	cmd := exec.Command("openclaw", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to set exec policy: %v. Output: %s", err, string(out))
+	}
+	return nil
+}
+
+func AddAllowlistPattern(agentID, pattern string) error {
+	args := []string{"approvals", "allowlist", "add"}
+	if agentID != "" && agentID != "*" {
+		args = append(args, "--agent", agentID)
+	} else if agentID == "*" {
+		args = append(args, "--agent", "*")
+	}
+	args = append(args, pattern)
+	cmd := exec.Command("openclaw", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to add allowlist pattern: %v. Output: %s", err, string(out))
+	}
+	return nil
+}
+
+func RemoveAllowlistPattern(agentID, pattern string) error {
+	args := []string{"approvals", "allowlist", "remove"}
+	if agentID != "" && agentID != "*" {
+		args = append(args, "--agent", agentID)
+	} else if agentID == "*" {
+		args = append(args, "--agent", "*")
+	}
+	args = append(args, pattern)
+	cmd := exec.Command("openclaw", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to remove allowlist pattern: %v. Output: %s", err, string(out))
+	}
+	return nil
+}
+
+func SetApprovals(content string) error {
+	// Create a temporary file to hold the JSON content
+	tmpFile, err := os.CreateTemp("", "exec-approvals-*.json")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(content); err != nil {
+		return fmt.Errorf("failed to write to temp file: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp file: %v", err)
+	}
+
+	cmd := exec.Command("openclaw", "approvals", "set", tmpFile.Name())
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to set approvals: %v. Output: %s", err, string(out))
+	}
+	return nil
+}
+
+func GetSecurityStatusData() (*SecurityStatusData, error) {
+	policy, err := ExecPolicyShow()
+	if err != nil {
+		// 容错设计：如果 openclaw 版本过低，不支持 exec-policy 命令，则返回特定标志
+		if strings.Contains(err.Error(), "unknown command") {
+			return &SecurityStatusData{
+				Policy:        nil,
+				Snapshot:      nil,
+				VersionTooLow: true,
+			}, nil
+		}
+		return nil, err
+	}
+
+	snapshot, err := GetApprovalsSnapshot()
+	if err != nil {
+		// 如果获取快照失败（例如 approvals 文件不存在），依然返回 policy
+		return &SecurityStatusData{
+			Policy:   policy,
+			Snapshot: nil,
+		}, nil
+	}
+
+	return &SecurityStatusData{
+		Policy:   policy,
+		Snapshot: snapshot,
+	}, nil
 }

@@ -6,32 +6,61 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"openclaw-buddy/internal/config"
+	"openclaw-buddy/internal/guardian"
+	"openclaw-buddy/internal/scheduler"
 	"strings"
 	"time"
-	"openclaw-buddy/internal/config"
-	"openclaw-buddy/internal/scheduler"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 type Server struct {
-	cfg     *config.Config
-	engine  *gin.Engine
-	tickets *TicketStore
+	cfg      *config.Config
+	engine   *gin.Engine
+	tickets  *TicketStore
+	guardian *guardian.Guardian
 }
 
-func NewServer(cfg *config.Config) *Server {
-	engine := gin.Default()
+func NewServer(cfg *config.Config, g *guardian.Guardian) *Server {
+	gin.DisableConsoleColor()
+	engine := gin.New()
 
-	// Configure CORS
+	s := &Server{
+		cfg:      cfg,
+		engine:   engine,
+		tickets:  NewTicketStore(1 * time.Minute), // Ticket valid for 1 minute
+		guardian: g,
+	}
+
+	// Recovery must be first
+	engine.Use(gin.Recovery())
+	// Reduce noise: only log slow/error requests via standard logger
+	engine.Use(s.accessLogMiddleware())
+
+	// Configure CORS (deny-by-default; allow same-host/localhost + explicit allowlist)
 	engine.Use(cors.New(cors.Config{
 		AllowOriginFunc: func(origin string) bool {
-			// 允许本地开发环境、本地生产服务器以及 Wails 客户端域
-			return strings.HasPrefix(origin, "http://localhost") ||
-				strings.HasPrefix(origin, "https://localhost") ||
-				strings.HasPrefix(origin, "wails://") ||
-				strings.Contains(origin, "wails.localhost")
+			// gin-contrib/cors only sees the Origin value; WS/proxy still use isOriginAllowed.
+			if strings.TrimSpace(origin) == "" {
+				return true
+			}
+			for _, allowed := range splitCSV(cfg.CORSAllowOrigins) {
+				if strings.EqualFold(allowed, origin) {
+					return true
+				}
+			}
+			// Wails 桌面客户端
+			ol := strings.ToLower(origin)
+			if strings.HasPrefix(ol, "wails://") || strings.Contains(ol, "wails.localhost") {
+				return true
+			}
+			// Local dev defaults (safe baseline)
+			return strings.HasPrefix(origin, fmt.Sprintf("http://localhost:%d", cfg.WebPort)) ||
+				strings.HasPrefix(origin, fmt.Sprintf("http://127.0.0.1:%d", cfg.WebPort)) ||
+				strings.HasPrefix(origin, fmt.Sprintf("https://localhost:%d", cfg.WebPort)) ||
+				strings.HasPrefix(origin, fmt.Sprintf("https://127.0.0.1:%d", cfg.WebPort))
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
@@ -40,16 +69,13 @@ func NewServer(cfg *config.Config) *Server {
 		MaxAge:           12 * time.Hour,
 	}))
 
-
-	s := &Server{
-		cfg:     cfg,
-		engine:  engine,
-		tickets: NewTicketStore(1 * time.Minute), // Ticket valid for 1 minute
-	}
-
 	s.setupRoutes()
 	// 显式拉起全局任务调度器，确保串行队列就绪
 	_ = scheduler.GetScheduler()
+
+	// 移除 s.engine.Static("/v1/openclaw/chat/files", "./data/uploads")
+	// 该功能已迁移至 v1 路由组下的 handleGetChatFile 动态处理
+
 	return s
 }
 
@@ -118,8 +144,11 @@ func (s *Server) setupRoutes() {
 			oc.DELETE("/models/provider/:provider/model/:id", s.deleteOpenClawModelFromProvider)
 			oc.DELETE("/models/provider/model", s.deleteOpenClawModelFromProvider)
 			oc.POST("/chat/completions", s.chatProxy)
+			oc.POST("/chat/summarize", s.summarizeSession)
 			oc.GET("/chat/status", s.getChatStatus)
 			oc.POST("/chat/enable", s.enableChat)
+			oc.POST("/chat/upload", s.handleChatUpload)
+			oc.GET("/chat/files/:botId/:filename", s.handleGetChatFile)
 			oc.GET("/chat/quick-commands", s.getQuickCommands)
 			oc.POST("/chat/quick-commands", s.addQuickCommand)
 			oc.DELETE("/chat/quick-commands/:id", s.deleteQuickCommand)
@@ -132,9 +161,21 @@ func (s *Server) setupRoutes() {
 			oc.POST("/plugins/disable", s.disablePlugin)
 			oc.DELETE("/plugins/:id", s.uninstallPlugin)
 			oc.POST("/plugins/update", s.updatePlugins)
+			oc.GET("/cron-jobs", s.getOpenClawCronJobs)
+			oc.POST("/cron-jobs/enable", s.enableCronJob)
+			oc.POST("/cron-jobs/disable", s.disableCronJob)
+			oc.DELETE("/cron-jobs/:id", s.removeCronJob)
 			oc.GET("/experts", s.getOpenClawExperts)
 			oc.POST("/bots/template", s.createBotFromExpert)
 			oc.GET("/sessions", s.getSessions)
+			// Configuration & Maintenance
+			oc.GET("/config", s.handleGetConfig)
+			oc.POST("/config", s.handleUpdateConfig)
+			oc.POST("/config/validate", s.handleValidateConfig)
+			oc.POST("/doctor", s.handleRunDoctor)
+			// Security related
+			oc.GET("/security/status", s.getSecurityStatus)
+			oc.POST("/security/task", s.triggerSecurityTask)
 		}
 
 		gateway := v1.Group("/gateway")
@@ -143,6 +184,7 @@ func (s *Server) setupRoutes() {
 			gateway.POST("/stop", s.stopGateway)
 			gateway.POST("/restart", s.restartGateway)
 			gateway.POST("/install", s.installGatewayService)
+			gateway.GET("/usage-cost", s.getUsageCost)
 		}
 
 		v1.GET("/stats/health", s.getHealthStats)
@@ -285,10 +327,10 @@ func (s *Server) setupStaticFiles() {
 
 func (s *Server) Run() error {
 	go s.StartWebSocketBroadcaster()
-	
+
 	addr := fmt.Sprintf(":%d", s.cfg.WebPort)
 	log.Printf("🚀 Web Server starting on %s (WebRoot: %s)", addr, s.cfg.WebRoot)
-	
+
 	// 为自重启场景增加重试逻辑 (最多等待 15 秒)
 	// 使用更宽松的错误判定，确保在任何端口冲突情况下都能坚持等待旧进程退出
 	var err error
@@ -296,9 +338,9 @@ func (s *Server) Run() error {
 		err = s.engine.Run(addr)
 		if err != nil {
 			errStr := strings.ToLower(err.Error())
-			if strings.Contains(errStr, "address already in use") || 
-			   strings.Contains(errStr, "bind") || 
-			   strings.Contains(errStr, "permission denied") {
+			if strings.Contains(errStr, "address already in use") ||
+				strings.Contains(errStr, "bind") ||
+				strings.Contains(errStr, "permission denied") {
 				log.Printf("⚠️ [API] 端口 %s 暂时无法绑定，可能旧进程正在退出，200ms 后重试 (%d/30)...", addr, i+1)
 				time.Sleep(200 * time.Millisecond)
 				continue

@@ -119,7 +119,6 @@ func StopGateway(port int) error {
 func ForceStartGateway() error {
 	return DefaultController.Start()
 }
-
 func RunDoctorFix() error {
 	// 1. 系统级修复：尝试重新安装网关服务（解决 schtasks 缺失问题）
 	if runtime.GOOS == "windows" {
@@ -127,10 +126,10 @@ func RunDoctorFix() error {
 	}
 
 	// 2. OpenClaw 内部修复
-	cmd := exec.Command(GetOpenClawBinary(), "doctor", "--fix")
+	cmd := exec.Command(GetOpenClawBinary(), "doctor", "--fix", "--yes")
 	PrepareSilentCommand(cmd)
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to run openclaw doctor --fix: %v", err)
+		return fmt.Errorf("failed to run openclaw doctor --fix --yes: %v", err)
 	}
 	return nil
 }
@@ -146,8 +145,16 @@ func InstallGatewayService() error {
 		PrepareSilentCommand(cmd)
 		return cmd.Run()
 	}
-	
+
 	// Unix 系统直接运行
 	cmd := exec.Command(bin, "gateway", "install")
+	PrepareSilentCommand(cmd)
 	return cmd.Run()
+}
+
+func RunDoctorFixWithOutput() (string, error) {
+	cmd := exec.Command(GetOpenClawBinary(), "doctor", "--fix", "--yes")
+	PrepareSilentCommand(cmd)
+	output, err := cmd.CombinedOutput()
+	return string(output), err
 }

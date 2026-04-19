@@ -22,6 +22,17 @@ func SelfRestart() error {
 		return err
 	}
 
+	// 核心修复：处理升级场景下的路径偏移
+	// 如果当前正在运行的是 .old 备份文件，说明我们刚完成物理替换
+	// 重启时应该拉起那个“去掉 .old 后缀”的新二进制文件
+	if strings.HasSuffix(execPath, ".old") {
+		newPath := strings.TrimSuffix(execPath, ".old")
+		if _, err := os.Stat(newPath); err == nil {
+			log.Printf("🚀 [System] 检测到升级备份模式运行，正在切换到新版本二进制: %s", newPath)
+			execPath = newPath
+		}
+	}
+
 	// 准备启动新进程的参数和环境变量
 	args := os.Args
 	cmd := exec.Command(execPath, args[1:]...)

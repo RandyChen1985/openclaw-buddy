@@ -8,11 +8,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"openclaw-buddy/internal/utils"
 
 	"github.com/joho/godotenv"
 )
 
-var Version = "1.0.4"
+var Version = "1.0.6"
 
 type Config struct {
 	OpenClawConfigDir    string
@@ -34,6 +35,7 @@ type Config struct {
 	Token                string
 	WebPort              int
 	WebRoot              string
+	CORSAllowOrigins     string
 	ExternalDashboardURL string
 	GUIDisableFeatures   string
 	ShowExternalTools    bool
@@ -70,11 +72,11 @@ func LoadConfig() (*Config, error) {
 	compress, _ := strconv.ParseBool(getEnv("LOG_COMPRESS", "true"))
 
 	return &Config{
-		OpenClawConfigDir:    filepath.Clean(expandPath(getEnv("OPENCLAW_CONFIG_DIR", "~/.openclaw"))),
+		OpenClawConfigDir:    filepath.Clean(utils.ExpandPath(getEnv("OPENCLAW_CONFIG_DIR", "~/.openclaw"))),
 		BackupDir:            filepath.Clean(getEnv("BACKUP_DIR", "./backups")),
 		CheckIntervalSeconds: interval,
 		MaxRetries:           maxRetries,
-		LogFile:              filepath.Clean(filepath.FromSlash(expandPath(getEnv("LOG_FILE", "./logs/guardian.log")))),
+		LogFile:              filepath.Clean(filepath.FromSlash(utils.ExpandPath(getEnv("LOG_FILE", "./logs/guardian.log")))),
 		LogMaxSize:           maxSize,
 		LogMaxBackups:        maxBackups,
 		LogMaxAge:            maxAge,
@@ -89,6 +91,7 @@ func LoadConfig() (*Config, error) {
 		Token:                strings.TrimSpace(getEnv("BUDDY_TOKEN", "sk-replace-me-on-first-run")),
 		WebPort:              webPort,
 		WebRoot:              webRoot,
+		CORSAllowOrigins:     strings.TrimSpace(getEnv("CORS_ALLOW_ORIGINS", "https://yovole.com")),
 		ExternalDashboardURL: getEnv("EXTERNAL_DASHBOARD_URL", ""),
 		GUIDisableFeatures:   getEnv("GUI_DISABLE_FEATURES", ""),
 		ShowExternalTools:    showExternalTools,
@@ -102,18 +105,6 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-// expandPath 将路径中的 ~ 展开为当前用户的主目录
-func expandPath(path string) string {
-	if len(path) > 0 && path[0] == '~' {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return path
-		}
-		// 使用 filepath.Join 确保跨平台路径分隔符正确
-		return filepath.Join(home, path[1:])
-	}
-	return path
-}
 
 func ensureEnvFile() error {
 	for _, dir := range []string{"data", "pid", "logs"} {
@@ -136,6 +127,11 @@ WEB_PORT=3000
 WEB_ROOT="/"
 # 访问面板所需的认证令牌 (已自动生成)
 BUDDY_TOKEN="%s"
+
+# [网络与安全]
+# 允许跨域访问的 Origin 白名单（逗号分隔）。留空则默认仅允许同源/本机访问。
+# 例：CORS_ALLOW_ORIGINS="https://console.example.com,http://localhost:5173"
+CORS_ALLOW_ORIGINS="https://yovole.com"
 
 # [存储与目录]
 DB_FILE="./data/guardian.db"

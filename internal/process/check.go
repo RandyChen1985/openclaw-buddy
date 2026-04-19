@@ -21,7 +21,7 @@ func GetOpenClawBinary() string {
 	if runtime.GOOS == "windows" {
 		exeName = "openclaw.exe"
 	}
-	
+
 	if _, err := os.Stat(exeName); err == nil {
 		absPath, _ := filepath.Abs(exeName)
 		return absPath
@@ -43,7 +43,6 @@ func GetOpenClawBinary() string {
 	}
 	return "openclaw"
 }
-
 
 func CheckBinaryInPath(name string) (string, error) {
 	path, err := exec.LookPath(name)
@@ -95,42 +94,94 @@ func CheckHealth() (time.Duration, error) {
 	return elapsed, nil
 }
 
-// CheckConfig 执行 openclaw health 并检查配置内容是否有效
-func CheckConfig() (bool, string, error) {
-	cmd := exec.Command(GetOpenClawBinary(), "health")
+// CheckConfig 执行 openclaw config validate 并检查配置内容是否有效
+func CheckConfig(configDir string) (bool, string, error) {
+	bin := GetOpenClawBinary()
+
+	// 1. 优先尝试专有的 config validate 命令 (2024.Q4+ 版本支持)
+	cmd := exec.Command(bin, "config", "validate")
+
+	// 2. 注入环境变量
+	// 继承当前进程环境，并注入/覆盖关键变量
+	env := os.Environ()
+
+	// 补丁：确保 MacOS 下能找到 /opt/homebrew/bin/node 或 /usr/local/bin/node
+	if runtime.GOOS == "darwin" {
+		extraPath := "/opt/homebrew/bin:/usr/local/bin"
+		foundPath := false
+		for i, e := range env {
+			if strings.HasPrefix(e, "PATH=") {
+				env[i] = "PATH=" + extraPath + ":" + strings.TrimPrefix(e, "PATH=")
+				foundPath = true
+				break
+			}
+		}
+		if !foundPath {
+			env = append(env, "PATH="+extraPath)
+		}
+	}
+
+	// 注入配置目录
+	if configDir != "" {
+		absConfigDir, _ := filepath.Abs(configDir)
+		env = append(env, "OPENCLAW_CONFIG_DIR="+absConfigDir)
+		env = append(env, "OPENCLAW_STATE_DIR="+absConfigDir)
+	}
+	cmd.Env = env
 	PrepareSilentCommand(cmd)
+
 	out, err := cmd.CombinedOutput()
 	output := string(out)
 
-	// 如果输出包含 "Problem:" 或 "Config invalid"，则认为配置无效
-	if strings.Contains(output, "Problem:") || strings.Contains(output, "Config invalid") {
-		// 提取 Problem 之后的内容
-		lines := strings.Split(output, "\n")
-		var problemDetails []string
-		foundProblem := false
-		for _, line := range lines {
-			trimmedLine := strings.TrimSpace(line)
-			if trimmedLine == "" {
-				continue
-			}
-			if strings.Contains(line, "Problem:") {
-				foundProblem = true
-			}
-			if foundProblem {
-				problemDetails = append(problemDetails, trimmedLine)
-			}
-		}
-
-		detail := "配置校验失败"
-		if len(problemDetails) > 0 {
-			detail = strings.Join(problemDetails, " | ")
-		}
-		return false, detail, nil
+	// 如果输出包含 "Config valid"，则认为校验通过 (config validate 模式)
+	if strings.Contains(output, "Config valid") {
+		return true, "", nil
 	}
 
-	// 如果有错误但没捕获到 Problem，可能是命令本身执行失败
-	if err != nil {
-		return false, fmt.Sprintf("命令执行异常: %v", err), nil
+	// 如果命令不存在或不支持 validate 子命令，回退到 health 模式
+	if err != nil && (strings.Contains(output, "unknown command") || strings.Contains(output, "Display help")) {
+		cmdHealth := exec.Command(bin, "health")
+		cmdHealth.Env = env
+		PrepareSilentCommand(cmdHealth)
+		outHealth, errHealth := cmdHealth.CombinedOutput()
+		output = string(outHealth)
+		err = errHealth
+	}
+
+	// 解析错误详情
+	if err != nil || strings.Contains(output, "Problem:") || strings.Contains(output, "Config invalid") {
+		// 提取关键错误行
+		lines := strings.Split(output, "\n")
+		var problemDetails []string
+		foundIntro := false
+
+		for _, line := range lines {
+			trimmedLine := strings.TrimSpace(line)
+			if trimmedLine == "" || strings.Contains(line, "OpenClaw") {
+				continue
+			}
+			// 匹配 Problem: 之后的内容或核心错误信息
+			if strings.Contains(line, "Problem:") || strings.Contains(line, "Error:") || strings.Contains(line, "invalid") {
+				foundIntro = true
+			}
+			if foundIntro {
+				// 过滤 ANSI 转义字符
+				cleanLine := StripANSI(trimmedLine)
+				if cleanLine != "" {
+					problemDetails = append(problemDetails, cleanLine)
+				}
+			}
+		}
+
+		if len(problemDetails) > 0 {
+			return false, strings.Join(problemDetails, " | "), nil
+		}
+
+		// 兜底：如果没有匹配到特征行，则返回全部输出 (限制长度)
+		if len(output) > 500 {
+			output = output[:500] + "..."
+		}
+		return false, fmt.Sprintf("校验失败 (Exit %v): %s", err, strings.TrimSpace(output)), nil
 	}
 
 	return true, "", nil
@@ -147,7 +198,7 @@ func GetDashboardURL(ctx context.Context, externalPrefix string) (string, error)
 	PrepareSilentCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	output := string(out)
-	
+
 	if err != nil {
 		log.Printf("[Dashboard] 命令执行失败: %v, 输出: %s", err, output)
 		return "", fmt.Errorf("failed to execute dashboard command: %v", err)
@@ -161,7 +212,7 @@ func GetDashboardURL(ctx context.Context, externalPrefix string) (string, error)
 	if len(matches) > 1 {
 		rawURL := strings.TrimSpace(matches[1])
 		log.Printf("[Dashboard] 匹配到原始 URL: %s", rawURL)
-		
+
 		// 如果配置了外部前缀，执行替换
 		if externalPrefix != "" {
 			// 找到 # 符号的位置（Token 的起点）
@@ -174,7 +225,7 @@ func GetDashboardURL(ctx context.Context, externalPrefix string) (string, error)
 				return finalURL, nil
 			}
 		}
-		
+
 		return rawURL, nil
 	}
 
@@ -194,10 +245,10 @@ func GetPIDByPort(port int) (int, error) {
 		if err != nil {
 			return 0, fmt.Errorf("failed to run netstat: %v", err)
 		}
-		
+
 		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 		portPattern := fmt.Sprintf(":%d", port)
-		
+
 		for _, line := range lines {
 			fields := strings.Fields(line)
 			if len(fields) >= 5 {
@@ -231,4 +282,19 @@ func GetPIDByPort(port int) (int, error) {
 		return 0, fmt.Errorf("invalid PID format: %s", firstPid)
 	}
 	return pid, nil
+}
+
+// IsProcessRunning checks if a process with the given name is currently running.
+func IsProcessRunning(name string) bool {
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("cmd", "/c", "tasklist /FI \"IMAGENAME eq "+name+"\" /NH")
+		out, _ := cmd.Output()
+		return strings.Contains(string(out), name)
+	}
+
+	// Linux/Mac: ps -ef | grep [name] (avoiding grep itself)
+	// We use a simple pgrep if available, or ps with grep
+	cmd := exec.Command("sh", "-c", "ps -ef | grep \""+name+"\" | grep -v grep")
+	err := cmd.Run()
+	return err == nil
 }

@@ -4,7 +4,6 @@ import { Card, Table, Tag, Button, Input, message, Tooltip, Segmented, Modal, St
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import api from '../api';
-import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 interface Skill {
   name: string;
@@ -34,7 +33,7 @@ interface SkillManagementProps {
 
 const SkillManagement: React.FC<SkillManagementProps> = ({ 
   isMobile, onRefresh, loading: globalLoading, skills: globalSkills, 
-  activeTasks = [], isRunning, onNavigateToDashboard 
+  activeTasks = []
 }) => {
   const { t } = useTranslation();
   const [localSkills, setLocalSkills] = useState<Skill[]>([]);
@@ -157,7 +156,8 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
         try {
           // 物理接入异步任务机制
           const res = await api.delete(`/v1/openclaw/skills/${name}`);
-          if (res.data.taskId) {
+          const tid = res.data?.taskID ?? res.data?.taskId;
+          if (tid) {
             message.info(t('chat.waitingGatewaySync'));
           } else {
             message.success(t('skills.uninstallSuccess', { name }));
@@ -253,7 +253,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
 
   return (
     <div style={{ height: '100%', minHeight: 'calc(100vh - 100px)', width: '100%', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
+      {/* 允许在网关停止时同步与管理 Skills */}
       <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0' : '8px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <Card 
         title={

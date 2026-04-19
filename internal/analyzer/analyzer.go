@@ -63,5 +63,12 @@ func GetDiff(fileA, fileB string) (string, error) {
 		Context:  3,
 	}
 
-	return difflib.GetUnifiedDiffString(diff)
+	out, err := difflib.GetUnifiedDiffString(diff)
+	if err != nil {
+		return "", err
+	}
+	if out == "" {
+		return "无差异", nil
+	}
+	return out, nil
 }

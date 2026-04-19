@@ -18,6 +18,7 @@ import (
 	"sort"
 	"net/http"
 	"strings"
+	"math/rand"
 )
 
 type Guardian struct {
@@ -58,7 +59,7 @@ func (g *Guardian) Run(ctx context.Context) {
 		}
 		process.CleanupOrphanedTasks()
 		process.SyncAll(g.config.OpenClawConfigDir)
-		g.checkVersionUpdate()
+		g.CheckVersionUpdate()
 	}()
 
 	// 启动飞书 WebSocket 长链接
@@ -98,7 +99,7 @@ func (g *Guardian) Run(ctx context.Context) {
 			process.SyncAll(g.config.OpenClawConfigDir)
 		case <-versionTicker.C:
 			log.Printf("🌐 [Update] 执行定时版本更新检查...")
-			g.checkVersionUpdate()
+			g.CheckVersionUpdate()
 		case <-ctx.Done():
 			hostname, _ := os.Hostname()
 			g.notifyFeishu(context.Background(), "👋 OpenClaw Buddy 监控服务已停止", fmt.Sprintf("节点: %s\n状态: ⏹️ 服务已正常退出", hostname))
@@ -146,10 +147,20 @@ func (g *Guardian) check() {
 		}
 
 		if i < g.config.MaxRetries {
-			log.Printf("⚠️ Check failed (attempt %d/%d): %v. Retrying in 2 seconds...", i, g.config.MaxRetries, lastErr)
+			// [优化] 阶梯式递增重试: 1st: 3s, 2nd: 10s, 3rd: 30s
+			waits := []int{3, 10, 30}
+			waitSec := 2 // 默认兜底
+			if i-1 < len(waits) {
+				waitSec = waits[i-1]
+			}
+			// 引入 0-2000ms 的随机抖动 (Jitter)，防止惊群效应
+			jitter := time.Duration(rand.Intn(2001)) * time.Millisecond
+			totalWait := time.Duration(waitSec)*time.Second + jitter
+
+			log.Printf("⚠️ Check failed (attempt %d/%d): %v. Retrying in %v...", i, g.config.MaxRetries, lastErr, totalWait)
 			metrics := process.GetSystemMetrics()
 			g.recordHealthCheck("Degraded", 0, metrics.CPUUsage, metrics.MemoryUsage, lastErr.Error())
-			time.Sleep(2 * time.Second)
+			time.Sleep(totalWait)
 		}
 	}
 
@@ -164,6 +175,13 @@ func (g *Guardian) check() {
 		if scheduler.GetScheduler().IsModuleBusy("gateway") {
 			log.Printf("⚠️  [自愈服务] 检测到用户队列中有活跃或排队中的网关控制任务，系统将彻底跳过自愈，由用户手动完成恢复。")
 			utils.RecordSystemEvent("WARN", "检测到用户网关操作排队中，自愈逻辑已主动跳过")
+			return
+		}
+
+		// [加固] 升级任务避让：如果发现 openclaw-update 进程正在运行，说明服务正在升级，跳过自愈
+		if process.IsProcessRunning("openclaw-update") {
+			log.Printf("⚠️  [自愈服务] 检测到系统升级进程 (openclaw-update) 正在运行，为避免损坏安装文件，自愈逻辑已主动跳过。")
+			utils.RecordSystemEvent("WARN", "检测到系统正在升级中，自愈逻辑已主动跳过")
 			return
 		}
 
@@ -191,7 +209,7 @@ func (g *Guardian) backupConfig() {
 	configPath := filepath.Join(g.config.OpenClawConfigDir, "openclaw.json")
 
 	// 1. 在备份前执行深层配置校验 (Prevent backing up broken config)
-	isValid, problem, _ := process.CheckConfig()
+	isValid, problem, _ := process.CheckConfig(g.config.OpenClawConfigDir)
 	if !isValid {
 		log.Printf("⚠️  配置深度校验未通过，跳过备份以防污染。原因: %s", problem)
 		return
@@ -319,29 +337,61 @@ func (g *Guardian) heal(reason string) {
 
 	// 4. Restart
 	_ = process.ForceStartGateway()
-	time.Sleep(3 * time.Second)
-	statusAfter := process.GetGatewayStatus()
+	// 闭环验收：等待网关起来并通过健康检查后才视为 Success
+	ok := false
+	var lastHealthErr error
+	backoffs := []time.Duration{1 * time.Second, 2 * time.Second, 3 * time.Second, 5 * time.Second, 8 * time.Second}
+	verifyStart := time.Now()
+	verifyAttempts := 0
+	for i, d := range backoffs {
+		time.Sleep(d)
+		verifyAttempts = i + 1
+		// 先快速看端口，再做 health
+		if !process.IsPortListening(g.config.HealthPort) {
+			lastHealthErr = fmt.Errorf("port %d is not listening", g.config.HealthPort)
+			log.Printf("⏳ [HEAL] 网关端口仍未监听，继续等待... (%d/%d)", i+1, len(backoffs))
+			continue
+		}
+		if _, err := process.CheckHealth(); err != nil {
+			lastHealthErr = err
+			log.Printf("⏳ [HEAL] 健康检查未通过，继续等待... (%d/%d) err=%v", i+1, len(backoffs), err)
+			continue
+		}
+		ok = true
+		lastHealthErr = nil
+		break
+	}
+	verifyDurationMs := time.Since(verifyStart).Milliseconds()
 
+	statusAfter := process.GetGatewayStatus()
 	if !recovered {
 		recoveryMethodUsed = "强行重启 (未执行配置恢复)"
 	}
 
-	g.notifyFeishu(context.Background(), "✅ 小龙虾自愈成功", fmt.Sprintf("节点: %s\n状态: ✅ 已自动恢复上线\n操作: %s 并强行重启%s\n\n---\n**恢复后状态详情:**\n%s", hostname, recoveryMethodUsed, reportMsg, statusAfter))
-	
-	// Record to DB
-	g.recordHealEvent(reason, recoveryMethodUsed, "Success", reportPath)
+	if ok {
+		g.notifyFeishu(context.Background(), "✅ 小龙虾自愈成功", fmt.Sprintf("节点: %s\n状态: ✅ 已自动恢复上线\n操作: %s 并强行重启%s\n\n---\n**恢复后状态详情:**\n%s", hostname, recoveryMethodUsed, reportMsg, statusAfter))
+		g.recordHealEvent(reason, recoveryMethodUsed, "Success", reportPath, verifyAttempts, verifyDurationMs, "")
+	} else {
+		errText := "unknown"
+		if lastHealthErr != nil {
+			errText = lastHealthErr.Error()
+		}
+		utils.RecordSystemEvent("ERROR", fmt.Sprintf("自愈验收失败: %s", errText))
+		g.notifyFeishu(context.Background(), "❌ 小龙虾自愈失败", fmt.Sprintf("节点: %s\n状态: ❌ 自愈动作已执行，但验收未通过\n原因: %s\n操作: %s%s\n错误: %s\n\n---\n**当前状态详情:**\n%s", hostname, reason, recoveryMethodUsed, reportMsg, errText, statusAfter))
+		g.recordHealEvent(reason, recoveryMethodUsed, "Failed", reportPath, verifyAttempts, verifyDurationMs, errText)
+	}
 
 	log.Printf("🔄 Returning to monitoring loop...")
 }
 
-func (g *Guardian) recordHealEvent(reason, method, result, reportPath string) {
+func (g *Guardian) recordHealEvent(reason, method, result, reportPath string, verifyRetries int, verifyDurationMs int64, verifyError string) {
 	if utils.DB == nil {
 		return
 	}
 	_, err := utils.DB.Exec(`
-		INSERT INTO heal_events (reason, method, result, report_path)
-		VALUES (?, ?, ?, ?)
-	`, reason, method, result, reportPath)
+		INSERT INTO heal_events (reason, method, result, report_path, verify_retries, verify_duration_ms, verify_error)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, reason, method, result, reportPath, verifyRetries, verifyDurationMs, verifyError)
 	if err != nil {
 		log.Printf("❌ Failed to record heal event to DB: %v", err)
 	}
@@ -374,8 +424,8 @@ func copyFile(src, dst string) error {
 	return err
 }
 
-func (g *Guardian) checkVersionUpdate() {
-	url := "https://raw.githubusercontent.com/RandyChen1985/openclaw-buddy/main/VERSION"
+func (g *Guardian) CheckVersionUpdate() {
+	url := "https://ghproxy.net/https://raw.githubusercontent.com/RandyChen1985/openclaw-buddy/main/VERSION"
 	client := http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -407,7 +457,8 @@ func (g *Guardian) checkVersionUpdate() {
 	if err := utils.SetSetting("latest_version", latestVersion); err != nil {
 		log.Printf("❌ [Update] 存储最新版本号失败: %v", err)
 	} else {
-		utils.RecordSystemEvent("UPDATE", fmt.Sprintf("发现新版本: %s", latestVersion))
-		log.Printf("📡 [Update] 版本检查完成，当前最新版本: %s", latestVersion)
+		// 记录系统事件，方便在 UI 时间轴看到
+		utils.RecordSystemEvent("UPDATE", fmt.Sprintf("同步远程版本库成功: %s", latestVersion))
+		log.Printf("📡 [Update] 版本对账完成，远程最新版本: %s", latestVersion)
 	}
 }

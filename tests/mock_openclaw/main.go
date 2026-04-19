@@ -21,7 +21,7 @@ func main() {
 	case strings.Contains(cmd, "health"):
 		fmt.Println("Healthy")
 	case strings.Contains(cmd, "agents list"):
-		fmt.Println(`[{"id":"mock_bot","name":"模拟机器人","model":"gpt-4"}]`)
+		fmt.Println(`[{"id":"mock_bot","identityName":"模拟机器人","identityEmoji":"🤖","model":"gpt-4","workspace":"/tmp","agentDir":"/tmp","bindings":1,"routes":["Mock"]}]`)
 	case strings.Contains(cmd, "models list"):
 		fmt.Println(`[{"id":"gpt-4","name":"GPT-4","isDefault":true}]`)
 	case strings.Contains(cmd, "plugins list"):

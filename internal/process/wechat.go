@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"openclaw-buddy/internal/utils"
 )
 
 type WeChatQRCode struct {
@@ -121,17 +122,35 @@ func GetWeChatQRCode(force bool) (*WeChatQRCode, error) {
 	return qrCodeCache, nil
 }
 
-func GetWeChatPluginStatus() (*WeChatPluginStatus, error) {
+func GetWeChatPluginStatus(force bool) (*WeChatPluginStatus, error) {
 	cacheMutex.Lock()
-	// 如果缓存存在且未超过 5 分钟，直接返回
-	if statusCache != nil && time.Since(statusCacheTime) < 5*time.Minute {
+	// 1. 内存极速缓存 (30秒内不重复查 DB)
+	if !force && statusCache != nil && time.Since(statusCacheTime) < 30*time.Second {
 		defer cacheMutex.Unlock()
 		return statusCache, nil
 	}
 	cacheMutex.Unlock()
 
-	// 执行 openclaw plugins list
-	log.Printf("🔍 Executing: openclaw plugins list (Detecting WeChat Plugin Status)")
+	// 2. 尝试从数据库加载持久化缓存
+	if !force {
+		dbVal := utils.GetSetting("wechat_plugin_status", "")
+		if dbVal != "" {
+			var dbStatus WeChatPluginStatus
+			if err := json.Unmarshal([]byte(dbVal), &dbStatus); err == nil {
+				// 数据库缓存有效期：1 小时 (除非用户手动刷新)
+				if time.Since(dbStatus.LastCheck) < 1*time.Hour {
+					cacheMutex.Lock()
+					statusCache = &dbStatus
+					statusCacheTime = time.Now()
+					cacheMutex.Unlock()
+					return &dbStatus, nil
+				}
+			}
+		}
+	}
+
+	// 3. 执行物理检测: openclaw plugins list
+	log.Printf("🔍 Executing: openclaw plugins list (Detecting WeChat Plugin Status, Force: %v)", force)
 	res, _ := RunCommandWithTimeout(15*time.Second, "openclaw", "plugins", "list")
 	
 	status := &WeChatPluginStatus{
@@ -164,11 +183,13 @@ func GetWeChatPluginStatus() (*WeChatPluginStatus, error) {
 		}
 	}
 
-	// 更新缓存
+	// 4. 更新数据库和内存缓存
+	statusJson, _ := json.Marshal(status)
+	_ = utils.SetSetting("wechat_plugin_status", string(statusJson))
+
 	cacheMutex.Lock()
 	statusCache = status
 	statusCacheTime = time.Now()
-	statusCache.LastCheck = statusCacheTime
 	cacheMutex.Unlock()
 
 	return status, nil

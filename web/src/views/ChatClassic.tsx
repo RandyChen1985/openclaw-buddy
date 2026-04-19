@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip } from 'antd';
+import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip, Upload } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2, ArrowDown, ZapOff, Activity } from 'lucide-react';
+import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2, ArrowDown, ZapOff, Activity, Paperclip, FileText, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -12,12 +12,21 @@ import 'katex/dist/katex.min.css';
 import api, { getFullUrl } from '../api';
 import { getBaseURL } from '../utils/url';
 import storage from '../utils/storage';
-import { Mermaid, CodeBlock } from '../components/ChatComponents';
+import { Mermaid, CodeBlock, ECharts } from '../components/ChatComponents';
 import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 const { Option } = Select;
 
 // Components moved to ChatComponents.tsx
+
+interface FileInfo {
+  url: string;
+  thumbUrl?: string;
+  path: string;
+  filename: string;
+  size: number;
+  ext: string;
+}
 
 interface Message {
   role: 'user' | 'assistant' | 'system';
@@ -52,6 +61,8 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
     return saved ? JSON.parse(saved) : [];
   });
   const [quotedMsg, setQuotedMsg] = useState<string | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<FileInfo[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   // --- Provider Icon Component ---
   const ProviderIcon = ({ provider, size = 18 }: { provider: string, size?: number }) => {
@@ -95,7 +106,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
 
    const [isTyping, setIsTyping] = useState(false);
    const [showScrollButton, setShowScrollButton] = useState(false);
-   const [isComposing, setIsComposing] = useState(false);
+   const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);   const [isComposing, setIsComposing] = useState(false);
   const inputRef = useRef<any>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [chatEnabled, setChatEnabled] = useState<boolean | null>(null);
@@ -223,11 +234,21 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
     });
   };
 
+  const lastScrollTopRef = useRef(0);
+
   useEffect(() => {
     const handleScroll = () => {
       if (scrollRef.current) {
         const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+        
+        // 返回底部逻辑
         setShowScrollButton(scrollHeight - scrollTop - clientHeight > 300);
+
+        // 返回顶部逻辑: 仅向上翻页且超过 150px 时显示
+        const isScrollingUp = scrollTop < lastScrollTopRef.current;
+        setShowScrollTopBtn(isScrollingUp && scrollTop > 150);
+
+        lastScrollTopRef.current = scrollTop;
       }
     };
     const div = scrollRef.current;
@@ -239,6 +260,15 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  const scrollToTop = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({
+        top: 0,
         behavior: 'smooth'
       });
     }
@@ -264,17 +294,36 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
 
   const handleSend = async (textOverride?: string) => {
     const text = textOverride || inputText;
-    if (!text.trim() || isTyping || !selectedBot) return;
+    if ((!text.trim() && attachedFiles.length === 0) || isTyping || !selectedBot || isUploading) return;
 
     if (!textOverride) setInputText('');
     const currentQuoted = quotedMsg;
+    const currentFiles = [...attachedFiles];
+    
     setQuotedMsg(null); 
+    setAttachedFiles([]); // 清空已上传文件
     setIsTyping(true);
     
     abortControllerRef.current = new AbortController();
 
+    // 整合文件信息到文本中 (Markdown 格式)
+    let finalContent = text;
+    if (currentFiles.length > 0) {
+      const fileLinks = currentFiles.map(f => {
+        const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
+        if (isImage) {
+          return `\n![${f.filename}](${f.thumbUrl || f.url} "${f.url}")\n(File path: ${f.path})`;
+        }
+        return `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
+      }).join('');
+      
+      // 增加明确的专家指令
+      const fileInstruction = `\n\n**System Note for Expert:** The user has uploaded files. For any file analysis, reading, or processing tasks, please access the files directly using the absolute **"File path"** provided above. Do not attempt to download via URL.`;
+      finalContent += fileLinks + fileInstruction;
+    }
+
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const newUserMessage: Message = { role: 'user', content: text, timestamp, quotedMessage: currentQuoted || undefined };
+    const newUserMessage: Message = { role: 'user', content: finalContent, timestamp, quotedMessage: currentQuoted || undefined };
     const newMessages = [...messages, newUserMessage];
     setMessages(newMessages);
 
@@ -545,6 +594,8 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
         color: #1e293b;
       }
       .markdown-body p { margin-bottom: 6px; }
+      .markdown-body a { color: #2563eb; text-decoration: none; }
+      .markdown-body a:hover { text-decoration: underline; }
       .markdown-body ul, .markdown-body ol {
         margin-bottom: 6px;
         padding-left: 20px;
@@ -663,6 +714,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
               value={selectedBot}
               onChange={setSelectedBot}
               loading={loadingBots}
+              variant="borderless"
               dropdownStyle={{ borderRadius: 8, minWidth: 260 }}
               listHeight={400}
             >
@@ -816,17 +868,18 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                     key={i} 
                     className="stagger-entry card-float"
                     onClick={() => {
-                        if (!selectedBot) {
-                            message.warning(t('chat.selectBot'));
+                        if (!selectedBot || isTyping) {
+                            if (!selectedBot) message.warning(t('chat.selectBot'));
                             return;
                         }
                         handleSend(item.text);
                     }}
                     style={{ 
                       padding: '16px', background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', 
-                      cursor: 'pointer', textAlign: 'left', transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                      cursor: isTyping ? 'not-allowed' : 'pointer', transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
                       display: 'flex', flexDirection: 'column', gap: 6,
                       boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+                      opacity: isTyping ? 0.6 : 1,
                       '--delay': `${i * 0.05}s`
                     } as React.CSSProperties}
                   >
@@ -856,12 +909,12 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                 <Avatar 
                   size={isMobile ? 32 : 36} 
                   style={{ 
-                    background: msg.role === 'user' ? '#2563eb' : '#fff',
+                    background: msg.role === 'user' ? '#4f46e5' : '#fff',
                     border: msg.role === 'assistant' ? '1px solid #e2e8f0' : 'none',
                     boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
                     flexShrink: 0
                   }}
-                  icon={msg.role === 'user' ? <User size={18} /> : <Bot size={18} color="#2563eb" />}
+                  icon={msg.role === 'user' ? <User size={18} /> : <Bot size={18} color="#4f46e5" />}
                 />
                 <div style={{ 
                   maxWidth: isMobile ? '92%' : '85%',
@@ -875,7 +928,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                     borderRadius: 16,
                     borderTopRightRadius: msg.role === 'user' ? 4 : 16,
                     borderTopLeftRadius: msg.role === 'assistant' ? 4 : 16,
-                    background: msg.role === 'user' ? '#2563eb' : '#fff',
+                    background: msg.role === 'user' ? '#4f46e5' : '#fff',
                     color: msg.role === 'user' ? '#fff' : '#1e293b',
                     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
                     fontSize: 14,
@@ -969,10 +1022,14 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                                     return <Mermaid chart={codeContent} />;
                                   }
 
+                                  if (!inline && language === 'echarts') {
+                                    const isLastMessage = index === messages.length - 1;
+                                    return <ECharts optionStr={codeContent} isTyping={isLastMessage && isTyping} />;
+                                  }
+
                                   if (!inline && language) {
                                     return <CodeBlock language={language} value={codeContent} isMobile={isMobile} {...props} />;
-                                  }
-                                
+                                  }                                
                                 return (
                                   <code className={className} {...props} style={{
                                     padding: '0.2em 0.4em',
@@ -985,7 +1042,14 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                                     {children}
                                   </code>
                                 );
-                              }
+                              },
+                              img: ({ node, ...props }: any) => (
+                                <img 
+                                  {...props} 
+                                  style={{ maxWidth: '100%', borderRadius: 8, marginTop: 8, cursor: 'zoom-in', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} 
+                                  onClick={() => window.open(props.title || props.src, '_blank')}
+                                />
+                              )
                             }}
                           >
                             {preprocessMarkdown(msg.content)}
@@ -1063,6 +1127,31 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
           )}
         </div>
 
+        {/* Scroll to Top Button */}
+        {showScrollTopBtn && (
+          <Button
+            type="default"
+            shape="circle"
+            icon={<ChevronUp size={20} />}
+            onClick={scrollToTop}
+            style={{
+              position: 'absolute',
+              top: 80,
+              right: 24,
+              zIndex: 100,
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+              width: 44,
+              height: 44,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#fff',
+              color: '#64748b',
+              border: '1px solid #e2e8f0'
+            }}
+          />
+        )}
+
         {/* Scroll to Bottom Button */}
         {showScrollButton && (
           <Button
@@ -1119,8 +1208,9 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                     <Button 
                       key={item.id}
                       size="small"
-                      style={{ borderRadius: 16, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, background: '#f8fafc', color: '#64748b', borderColor: '#e2e8f0', flexShrink: 0 }}
+                      style={{ borderRadius: 16, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, background: '#f8fafc', color: '#64748b', borderColor: '#e2e8f0', flexShrink: 0, opacity: isTyping ? 0.6 : 1 }}
                       onClick={() => handleSend(item.prompt)}
+                      disabled={isTyping}
                     >
                       {item.label}
                     </Button>
@@ -1169,23 +1259,135 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
           </div>
 
           <div style={{ display: 'flex', gap: isMobile ? 8 : 12, alignItems: 'flex-end' }}>
-            <Input.TextArea 
-              ref={inputRef}
-              placeholder={selectedBot ? t('chat.inputPlaceholder') : t('chat.selectBotTip')}
-              autoSize={{ minRows: 1, maxRows: 4 }}
-              value={inputText}
-              onChange={e => setInputText(e.target.value)}
-              onCompositionStart={() => setIsComposing(true)}
-              onCompositionEnd={() => setIsComposing(false)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              style={{ borderRadius: 12, padding: isMobile ? '8px 12px' : '10px 16px', fontSize: isMobile ? 15 : 14 }}
-              disabled={!selectedBot || (isTyping && !abortControllerRef.current)}
-            />
+            <div style={{ flexShrink: 0, marginBottom: 2 }}>
+              <Upload
+                name="file"
+                action={`${getBaseURL()}/v1/openclaw/chat/upload`}
+                data={{ botId: selectedBot.replace('openclaw:', '') }}
+                headers={{
+                  Authorization: `Bearer ${storage.getItem('guardian_token')}`
+                }}
+                showUploadList={false}
+                disabled={isUploading || isTyping}
+                onChange={(info) => {
+                  if (info.file.status === 'uploading') {
+                    setIsUploading(true);
+                  }
+                  if (info.file.status === 'done') {
+                    setIsUploading(false);
+                    const res = info.file.response;
+                    if (res && res.code === 200) {
+                      setAttachedFiles(prev => [...prev, res.data]);
+                    } else {
+                      message.error(res?.message || 'Upload failed');
+                    }
+                  } else if (info.file.status === 'error') {
+                    setIsUploading(false);
+                    message.error(`${info.file.name} upload failed.`);
+                  }
+                }}
+              >
+                  <Button 
+                    type="text" 
+                    icon={<Paperclip size={20} />} 
+                    disabled={isUploading || isTyping}
+                    style={{ 
+                      color: (isUploading || isTyping) ? '#cbd5e1' : '#94a3b8', 
+                      borderRadius: 10, 
+                      height: 40, width: 40, 
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      opacity: (isUploading || isTyping) ? 0.5 : 1
+                    }} 
+                  />
+              </Upload>
+            </div>
+
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* 文件预览区域 */}
+              {(attachedFiles.length > 0 || isUploading) && (
+                <div style={{ 
+                  display: 'flex', 
+                  flexWrap: 'wrap', 
+                  gap: 8, 
+                  padding: '8px 0', 
+                  maxHeight: 120,
+                  overflowY: 'auto'
+                }}>
+                  {attachedFiles.map((file, idx) => (
+                    <div key={idx} style={{ 
+                      position: 'relative', 
+                      width: 56, 
+                      height: 56, 
+                      borderRadius: 8, 
+                      border: '1px solid #e2e8f0',
+                      background: '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                    }}>
+                      {file.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? (
+                        <img src={file.thumbUrl || file.url} alt={file.filename} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                          <FileText size={18} color="#64748b" />
+                          <span style={{ fontSize: 8, color: '#94a3b8', maxWidth: 48, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {file.filename}
+                          </span>
+                        </div>
+                      )}
+                      <button 
+                        onClick={() => setAttachedFiles(prev => prev.filter((_, i) => i !== idx))}
+                        style={{ 
+                          position: 'absolute', top: 2, right: 2, 
+                          background: 'rgba(0,0,0,0.4)', color: '#fff', 
+                          border: 'none', borderRadius: '50%', 
+                          width: 14, height: 14, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          padding: 0
+                        }}
+                      >
+                        <X size={10} />
+                      </button>
+                    </div>
+                  ))}
+                  {isUploading && (
+                    <div style={{ 
+                      width: 56, 
+                      height: 56, 
+                      borderRadius: 8, 
+                      border: '1px dashed #3b82f6',
+                      background: '#eff6ff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <Loader2 size={18} className="animate-spin" color="#3b82f6" />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <Input.TextArea 
+                ref={inputRef}
+                placeholder={selectedBot ? t('chat.inputPlaceholder') : t('chat.selectBotTip')}
+                autoSize={{ minRows: 1, maxRows: 4 }}
+                value={inputText}
+                onChange={e => setInputText(e.target.value)}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={() => setIsComposing(false)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                style={{ borderRadius: 12, padding: isMobile ? '8px 12px' : '10px 16px', fontSize: isMobile ? 15 : 14 }}
+                disabled={!selectedBot || isTyping}
+              />
+            </div>
+
             {isTyping ? (
               <Button 
                 danger 

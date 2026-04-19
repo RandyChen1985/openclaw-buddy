@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Card, Badge, Button, List, Tag, Modal, Spin, message, Tabs, Table, Typography, Space } from 'antd';
+import React, { useState, useEffect, useRef } from 'react';
+import { Card, Badge, Button, List, Tag, Modal, Spin, message, Tabs, Table, Typography, Space, Radio, Descriptions, Collapse } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Zap, Terminal, FileText, ChevronRight, RefreshCw, Clock, HardDrive, AlertCircle, History, FileSearch, Code } from 'lucide-react';
+import { Zap, Terminal, FileText, ChevronRight, RefreshCw, Clock, HardDrive, AlertCircle, History, Code, Wand2, Save, Layout as LayoutIcon, Copy, Activity } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -10,6 +10,258 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import dayjs from 'dayjs';
 import api from '../api';
+
+// --- Global Styles for SelfHealing ---
+const styles = `
+  .heal-tabs .ant-tabs-nav {
+    margin-bottom: 0 !important;
+  }
+  .heal-tabs .ant-tabs-tab {
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-bottom: none !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    border-radius: 8px 8px 0 0 !important;
+    margin-right: 4px !important;
+  }
+  .heal-tabs .ant-tabs-tab-active {
+    background: #fff !important;
+    border-top: 2px solid #3b82f6 !important;
+  }
+  .heal-tabs .ant-tabs-tab:hover {
+    color: #3b82f6 !important;
+    background: #fff !important;
+  }
+`;
+
+// --- Sub-components for Config Management ---
+
+const HighlightedJsonEditor: React.FC<{ 
+  value: string; 
+  onChange: (val: string) => void; 
+  onCopy?: (text: string) => void;
+  disabled?: boolean;
+  isMobile?: boolean;
+}> = ({ value, onChange, onCopy, disabled, isMobile }) => {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const preRef = useRef<HTMLDivElement>(null);
+
+  const handleScroll = () => {
+    if (textareaRef.current && preRef.current) {
+      preRef.current.scrollTop = textareaRef.current.scrollTop;
+      preRef.current.scrollLeft = textareaRef.current.scrollLeft;
+    }
+  };
+
+  // 关键：统一字体、行高、间距和折行属性
+  const commonStyles: React.CSSProperties = {
+    padding: isMobile ? '16px 12px' : '24px 20px',
+    fontSize: isMobile ? 12 : 13,
+    lineHeight: 1.6,
+    fontFamily: '"JetBrains Mono", Menlo, Monaco, Consolas, monospace',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-all',
+    boxSizing: 'border-box',
+    tabSize: 4,
+    MozTabSize: 4,
+  };
+
+  return (
+    <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', border: '1px solid #334155', background: '#1e1e1e', height: '100%', minHeight: 400 }}>
+      {/* 隐藏背景层中的滚动条，但保留其占位，确保换行一致 */}
+      <style>
+        {`
+          .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+          }
+        `}
+      </style>
+      <Button
+        icon={<Copy size={14} />}
+        size="small"
+        onClick={() => onCopy && onCopy(value)}
+        style={{
+          position: 'absolute',
+          top: 12,
+          right: 12,
+          zIndex: 20,
+          background: 'rgba(255, 255, 255, 0.1)',
+          borderColor: 'rgba(255, 255, 255, 0.2)',
+          color: '#fff',
+          borderRadius: 6
+        }}
+      />
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onScroll={handleScroll}
+        disabled={disabled}
+        spellCheck={false}
+        style={{
+          ...commonStyles,
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          background: 'transparent',
+          color: 'transparent',
+          caretColor: disabled ? 'transparent' : '#fff',
+          border: 'none',
+          outline: 'none',
+          resize: 'none',
+          overflowY: 'scroll', // 强制显示滚动条以保证宽度计算一致
+          overflowX: 'hidden',
+          zIndex: 10,
+          cursor: disabled ? 'not-allowed' : 'text'
+        }}
+      />
+      <div 
+        ref={preRef}
+        className="hide-scrollbar"
+        style={{ 
+          position: 'absolute', 
+          inset: 0, 
+          overflowY: 'scroll', // 同样强制滚动条空间
+          overflowX: 'hidden',
+          zIndex: 1, 
+          opacity: disabled ? 0.6 : 1,
+          pointerEvents: 'none',
+          scrollbarWidth: 'none', // Firefox 隐藏
+        }}
+      >
+        <SyntaxHighlighter
+          language="json"
+          style={vscDarkPlus}
+          codeTagProps={{
+            style: {
+              fontFamily: 'inherit',
+              lineHeight: 'inherit',
+              padding: 0,
+              margin: 0,
+            }
+          }}
+          customStyle={{
+            ...commonStyles,
+            margin: 0,
+            background: 'transparent',
+            pointerEvents: 'none',
+          }}
+        >
+          {value + (value.endsWith('\n') ? ' ' : '')}
+        </SyntaxHighlighter>
+      </div>
+    </div>
+  );
+};
+
+const JsonVisualizer = ({ content, isMobile }: { content: string, isMobile?: boolean }) => {
+  const { t } = useTranslation();
+  let data: any = {};
+  try {
+    data = JSON.parse(content);
+  } catch (e) {
+    return (
+      <div style={{ padding: '60px 0', textAlign: 'center', color: '#94a3b8' }}>
+        <AlertCircle size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
+        <div>{t('heal.parseFailed', { defaultValue: 'JSON 解析失败，请检查语法' })}</div>
+      </div>
+    );
+  }
+
+  const renderSection = (title: string, obj: any) => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+    
+    const entries = Object.entries(obj).filter(([_, val]) => val !== undefined && val !== null);
+    if (entries.length === 0) return null;
+
+    return (
+      <Descriptions 
+        title={<span style={{ fontSize: 13, color: '#3b82f6', fontWeight: 700 }}>{title}</span>}
+        column={isMobile ? 1 : { xxl: 2, xl: 2, lg: 2, md: 1, sm: 1, xs: 1 }}
+        size="small"
+        bordered
+        style={{ marginBottom: 20 }}
+      >
+        {entries.map(([key, val]: [string, any]) => (
+          <Descriptions.Item label={key} key={key}>
+            {typeof val === 'object' ? (
+              <pre style={{ margin: 0, fontSize: 11, background: '#f1f5f9', padding: '4px 8px', borderRadius: 4 }}>
+                {JSON.stringify(val, null, 2)}
+              </pre>
+            ) : (
+              <Typography.Text copyable={typeof val === 'string' && val.length > 20}>{String(val)}</Typography.Text>
+            )}
+          </Descriptions.Item>
+        ))}
+      </Descriptions>
+    );
+  };
+
+  const providers = data.models?.providers || {};
+  const flattenedModels: any[] = [];
+  Object.entries(providers).forEach(([providerId, provider]: [string, any]) => {
+    const models = provider.models || {};
+    Object.entries(models).forEach(([modelId, model]: [string, any]) => {
+      flattenedModels.push({
+        ...model,
+        id: modelId,
+        provider: providerId
+      });
+    });
+  });
+
+  return (
+    <div style={{ background: '#fff', padding: isMobile ? '12px' : '20px', borderRadius: 12, border: '1px solid #f1f5f9' }}>
+      <Collapse ghost defaultActiveKey={['gateway', 'defaults', 'agents', 'plugins']}>
+        <Collapse.Panel header={<Typography.Text strong>网关设置 (Gateway)</Typography.Text>} key="gateway">
+          {renderSection('HTTP', data.gateway?.http)}
+          {renderSection('Server', { host: data.host, port: data.port, debug: data.debug, logLevel: data.logLevel })}
+        </Collapse.Panel>
+        
+        <Collapse.Panel header={<Typography.Text strong>缺省配置 (Defaults)</Typography.Text>} key="defaults">
+          {renderSection('Compaction', data.defaults?.compaction)}
+          {renderSection('Model', data.defaults?.model)}
+          <Descriptions size="small" bordered column={1} labelStyle={{ background: '#f8fafc', width: 140 }}>
+            <Descriptions.Item label="maxConcurrent">{data.defaults?.maxConcurrent}</Descriptions.Item>
+          </Descriptions>
+        </Collapse.Panel>
+
+        <Collapse.Panel header={<Typography.Text strong>运行环境 (Agents & Scripts)</Typography.Text>} key="agents">
+          {renderSection('Agent Defaults', data.agents?.defaults)}
+          {data.external && renderSection('External Services', data.external)}
+        </Collapse.Panel>
+
+        <Collapse.Panel header={<Typography.Text strong>模型资产库 (Models Inventory)</Typography.Text>} key="models">
+          <Table 
+            size="small" 
+            pagination={{ pageSize: isMobile ? 5 : 10, size: 'small' }}
+            dataSource={flattenedModels}
+            scroll={{ x: isMobile ? 600 : undefined }}
+            columns={[
+              { title: 'ID', dataIndex: 'id', key: 'id', render: (v) => <Tag color="blue">{v}</Tag> },
+              { title: 'Name', dataIndex: 'name', key: 'name' },
+              { title: 'Provider', dataIndex: 'provider', key: 'provider', render: (v) => <Tag color="cyan">{v}</Tag> },
+              { title: 'Capabilities', dataIndex: 'capabilities', key: 'caps', render: (v) => Array.isArray(v) ? v.map(c => <Tag key={c}>{c}</Tag>) : '-' }
+            ]}
+          />
+        </Collapse.Panel>
+
+        <Collapse.Panel header={<Typography.Text strong>扩展插件 (Plugins, Skills, Tools)</Typography.Text>} key="plugins">
+           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+             {data.plugins && renderSection('Plugins Configuration', data.plugins)}
+             {data.tools && renderSection('Available Tools', data.tools)}
+             {data.skills && renderSection('Skills Config', data.skills)}
+             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+               {Object.keys(data.plugins || {}).map(p => <Tag key={p}>{p}</Tag>)}
+               {Object.keys(data.tools || {}).map(t => <Tag key={t} color="purple">{t}</Tag>)}
+             </div>
+           </div>
+        </Collapse.Panel>
+      </Collapse>
+    </div>
+  );
+};
 
 interface SelfHealingProps {
   selfHealingEnabled: boolean;
@@ -22,21 +274,27 @@ interface SelfHealingProps {
 const SelfHealing: React.FC<SelfHealingProps> = ({ 
   selfHealingEnabled, 
   healEvents, 
-  loadingSets, 
-  onToggle,
-  ocInstalled
+  onToggle
 }) => {
   const { t } = useTranslation();
-  const isMobile = window.innerWidth < 768;
   
-  // Reports State
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    message.success(t('common.copySuccess'));
+  };
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  
   const [reports, setReports] = useState<any[]>([]);
   const [loadingReports, setLoadingReports] = useState(false);
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [reportContent, setReportContent] = useState('');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   
-  // Backups State
   const [backups, setBackups] = useState<any[]>([]);
   const [loadingBackups, setLoadingBackups] = useState(false);
   const [backupContent, setBackupContent] = useState('');
@@ -47,7 +305,15 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
 
   const [loadingContent, setLoadingContent] = useState(false);
 
-  // --- Markdown 预处理逻辑 ---
+  // Config Modal State
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [configContent, setConfigContent] = useState('');
+  const [loadingConfig, setLoadingConfig] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [editMode, setEditMode] = useState<'editor' | 'visual'>('editor');
+  const [runningDoctor, setRunningDoctor] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+
   const preprocessMarkdown = (content: string) => {
     if (!content) return '';
     return content
@@ -55,18 +321,18 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
       .replace(/(#{1,6}\s.*)\n([^\n])/g, '$1\n\n$2')
       .replace(/([^\n])\n(```)/g, '$1\n\n$2')
       .replace(/(```[\s\S]*?```)\n([^\n])/g, '$1\n\n$2')
-      .replace(/([^\n])\n(\|)/g, (match, p1, p2) => {
-        return p1.trim().endsWith('|') ? match : p1 + '\n\n' + p2;
-      })
-      .replace(/(\|)\n([^|\n][^\n]*)/g, (match, p1, p2) => {
-        return p2.trim().startsWith('|') ? match : p1 + '\n\n' + p2;
-      })
+      .replace(/([^\n])\n(\|)/g, (match, p1, p2) => p1.trim().endsWith('|') ? match : p1 + '\n\n' + p2)
+      .replace(/(\|)\n([^|\n][^\n]*)/g, (match, p1, p2) => p2.trim().startsWith('|') ? match : p1 + '\n\n' + p2)
       .replace(/(\n\|[^\n]+\|)\n(\|(?:\s*:-+\s*\|)+)/g, '$1\n$2');
   };
 
   useEffect(() => {
+    const styleTag = document.createElement('style');
+    styleTag.innerHTML = styles;
+    document.head.appendChild(styleTag);
     fetchReports();
     fetchBackups();
+    return () => { document.head.removeChild(styleTag); };
   }, []);
 
   const fetchReports = async () => {
@@ -74,11 +340,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
     try {
       const res = await api.get('/v1/heal/reports');
       setReports(res.data || []);
-    } catch (err) {
-      console.error('Failed to fetch reports:', err);
-    } finally {
-      setLoadingReports(false);
-    }
+    } catch (err) { console.error(err); } finally { setLoadingReports(false); }
   };
 
   const fetchBackups = async () => {
@@ -86,10 +348,117 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
     try {
       const res = await api.get('/v1/heal/backups');
       setBackups(res.data || []);
+    } catch (err) { console.error(err); } finally { setLoadingBackups(false); }
+  };
+
+  const fetchConfig = async () => {
+    setLoadingConfig(true);
+    try {
+      const res = await api.get('/v1/openclaw/config');
+      setConfigContent(res.data.content);
     } catch (err) {
-      console.error('Failed to fetch backups:', err);
+      message.error(t('heal.readConfigFailed', { defaultValue: '读取配置失败' }));
     } finally {
-      setLoadingBackups(false);
+      setLoadingConfig(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isConfigModalOpen) {
+      fetchConfig();
+    }
+  }, [isConfigModalOpen]);
+
+  const cleanErrorMessage = (msg: string) => {
+    if (!msg) return "";
+    let clean = msg.replace(/^Error: /i, '').replace(/^failed to update config: /i, '');
+    const marker = "Problem:";
+    const index = clean.indexOf(marker);
+    if (index !== -1) {
+      clean = clean.substring(index + marker.length).trim();
+    }
+    return clean;
+  };
+
+  const handleSaveConfig = async () => {
+    Modal.confirm({
+      title: t('heal.saveConfigConfirm'),
+      content: t('heal.saveConfigConfirmDesc'),
+      okText: t('common.save'),
+      cancelText: t('common.cancel'),
+      onOk: async () => {
+        setSavingConfig(true);
+        try {
+          await api.post('/v1/openclaw/config', { content: configContent });
+          message.success(t('common.saveSuccess'));
+          fetchBackups();
+        } catch (err: any) {
+          const rawMsg = err.response?.data?.message || err.message || String(err);
+          const cleaned = cleanErrorMessage(rawMsg);
+          Modal.error({
+            title: t('heal.configErrorTitle', { defaultValue: '配置校验未通过' }),
+            width: 600,
+            centered: true,
+            content: (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ background: '#fff1f0', border: '1px solid #ffccc7', padding: '12px 16px', borderRadius: 8, color: '#cf1322', fontSize: 13, fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: 200, overflowY: 'auto' }}>
+                  {cleaned}
+                </div>
+                <div style={{ marginTop: 12, fontSize: 12, color: '#64748b' }}>
+                  {t('heal.configErrorTip', { defaultValue: '建议检查 JSON 语法或必填字段。系统已自动回滚，您的更改尚未生效。' })}
+                </div>
+              </div>
+            )
+          });
+        } finally {
+          setSavingConfig(false);
+        }
+      }
+    });
+  };
+
+  const handleRunDoctor = async () => {
+    Modal.confirm({
+      title: t('heal.doctorFixConfirm'),
+      content: t('heal.doctorFixConfirmDesc'),
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      onOk: async () => {
+        setRunningDoctor(true);
+        try {
+          await api.post('/v1/openclaw/doctor');
+          message.success(t('heal.doctorSuccess'));
+        } catch (err) { 
+          message.error(t('heal.doctorFailed')); 
+        } finally { 
+          setRunningDoctor(false); 
+        }
+      }
+    });
+  };
+
+  const handleValidateConfig = async () => {
+    setIsValidating(true);
+    try {
+      await api.post('/v1/openclaw/config/validate', { content: configContent });
+      message.success(t('heal.validateSuccess', { defaultValue: '配置内容合法' }));
+    } catch (err: any) {
+      const rawMsg = err.response?.data?.message || err.message || String(err);
+      const cleaned = cleanErrorMessage(rawMsg);
+      Modal.error({
+        title: t('heal.configErrorTitle', { defaultValue: '配置校验未通过' }),
+        width: 600,
+        centered: true,
+        content: (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ background: '#fff1f0', border: '1px solid #ffccc7', padding: '12px 16px', borderRadius: 8, color: '#cf1322', fontSize: 13, fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: 300, overflowY: 'auto' }}>
+              {cleaned}
+            </div>
+          </div>
+        )
+      });
+    } finally {
+      setIsValidating(false);
     }
   };
 
@@ -97,16 +466,10 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
     setSelectedReport(report);
     setIsReportModalOpen(true);
     setLoadingContent(true);
-    setReportContent('');
     try {
       const res = await api.get(`/v1/heal/reports/${report.name}`);
       setReportContent(res.data.content);
-    } catch (err) {
-      message.error(t('heal.readReportFailed'));
-      setIsReportModalOpen(false);
-    } finally {
-      setLoadingContent(false);
-    }
+    } catch (err) { message.error(t('heal.readReportFailed')); setIsReportModalOpen(false); } finally { setLoadingContent(false); }
   };
 
   const viewBackupContent = async (backup: any) => {
@@ -114,16 +477,10 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
     setModalMode('content');
     setIsBackupModalOpen(true);
     setLoadingContent(true);
-    setBackupContent('');
     try {
       const res = await api.get(`/v1/heal/backups/${backup.name}`);
       setBackupContent(res.data.content);
-    } catch (err) {
-      message.error(t('heal.readBackupFailed'));
-      setIsBackupModalOpen(false);
-    } finally {
-      setLoadingContent(false);
-    }
+    } catch (err) { message.error(t('heal.readBackupFailed')); setIsBackupModalOpen(false); } finally { setLoadingContent(false); }
   };
 
   const viewBackupDiff = async (backup: any) => {
@@ -131,159 +488,137 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
     setModalMode('diff');
     setIsBackupModalOpen(true);
     setLoadingContent(true);
-    setBackupDiff('');
     try {
       const res = await api.get(`/v1/heal/backups/${backup.name}/diff`);
       setBackupDiff(res.data.diff);
-    } catch (err) {
-      message.error(t('heal.diffFailed'));
-      setIsBackupModalOpen(false);
-    } finally {
-      setLoadingContent(false);
-    }
+    } catch (err) { message.error(t('heal.diffFailed')); setIsBackupModalOpen(false); } finally { setLoadingContent(false); }
   };
 
   const formatSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'], i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const markdownStyles = (
-    <style>{`
-      .markdown-body { font-size: 13.5px; line-height: 1.5; word-wrap: break-word; color: #334155; }
-      .markdown-body h1, .markdown-body h2, .markdown-body h3 { margin-top: 16px; margin-bottom: 8px; font-weight: 700; color: #1e293b; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px; }
-      .markdown-body p { margin-bottom: 8px; }
-      .markdown-body table th { background-color: #f8fafc; font-weight: 600; text-align: left; }
-      .markdown-body pre { margin-bottom: 10px !important; border-radius: 8px; overflow: hidden; }
-      .markdown-body blockquote { margin: 0 0 10px 0; padding: 0 12px; color: #64748b; border-left: 4px solid #e2e8f0; }
-      .heal-tabs .ant-tabs-nav { margin-bottom: 0px !important; }
-      .heal-tabs .ant-tabs-tab { padding: 12px 16px !important; }
-    `}</style>
-  );
-
   const backupColumns = [
-    {
-      title: t('common.name'),
-      dataIndex: 'name',
-      key: 'name',
-      render: (text: string) => (
+    { 
+      title: t('common.name'), 
+      dataIndex: 'name', 
+      key: 'name', 
+      render: (v: string, _: any, index: number) => (
         <Space size={8}>
-          <HardDrive size={14} color="#64748b" />
-          <Typography.Text strong style={{ fontSize: 13 }}>{text}</Typography.Text>
-          {text === 'openclaw.json.bak' && <Tag color="blue">{t('heal.latest')}</Tag>}
+          <HardDrive size={14} color="#94a3b8" style={{ flexShrink: 0 }} />
+          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</span>
+          {index === 0 && <Tag color="processing" style={{ fontSize: 10, borderRadius: 4 }}>{t('heal.latest')}</Tag>}
         </Space>
-      )
+      ) 
     },
-    {
-      title: t('common.time'),
-      dataIndex: 'time',
-      key: 'time',
-      width: 180,
-      render: (text: string) => (
-        <Space size={4} style={{ color: '#94a3b8', fontSize: 12 }}>
-          <Clock size={12} />
-          {text}
-        </Space>
-      )
-    },
-    {
-      title: t('common.size'),
-      dataIndex: 'size',
-      key: 'size',
-      width: 100,
-      render: (size: number) => <span style={{ color: '#94a3b8', fontSize: 12 }}>{formatSize(size)}</span>
-    },
-    {
-      title: t('common.action'),
-      key: 'action',
-      width: 220,
-      render: (_: any, record: any) => (
-        <Space size={8}>
-          <Button size="small" icon={<Code size={12} />} onClick={() => viewBackupContent(record)}>{t('heal.viewContent')}</Button>
-          <Button size="small" type="primary" ghost icon={<FileSearch size={12} />} onClick={() => viewBackupDiff(record)}>{t('heal.viewDiff')}</Button>
-        </Space>
-      )
-    }
+    { title: t('common.time'), dataIndex: 'time', key: 'time', render: (v: string) => <span style={{ fontSize: 12, color: '#64748b' }}>{v}</span> },
+    { title: t('common.size'), dataIndex: 'size', key: 'size', render: (v: number) => <span style={{ fontSize: 12 }}>{formatSize(v)}</span> },
+    { title: t('common.action'), key: 'action', render: (_: any, record: any) => (
+      <Space>
+        <Button size="small" type="link" onClick={() => viewBackupContent(record)}>{t('heal.viewContent')}</Button>
+        <Button size="small" type="link" onClick={() => viewBackupDiff(record)}>{t('heal.viewDiff')}</Button>
+      </Space>
+    )}
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {markdownStyles}
-      {/* 软开关卡片 */}
-      <Card
-        styles={{ body: { padding: isMobile ? '20px' : '24px 28px' } }}
-        style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
-      >
-        {/* ... (原有开关 UI 逻辑保持不变) ... */}
-        <div style={{ 
-          display: 'flex', 
-          flexDirection: isMobile ? 'column' : 'row',
-          alignItems: isMobile ? 'flex-start' : 'center', 
-          justifyContent: 'space-between',
-          gap: 20
-        }}>
+    <div style={{ padding: isMobile ? '12px' : '20px' }}>
+      <Card styles={{ body: { padding: isMobile ? '20px' : '24px' } }} style={{ borderRadius: 16, border: '1px solid #e2e8f0', marginBottom: 20 }}>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', gap: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 16 : 20 }}>
-            <div style={{ 
-              width: isMobile ? 44 : 52, 
-              height: isMobile ? 44 : 52, 
-              borderRadius: 12, 
-              background: selfHealingEnabled ? '#f0f9ff' : '#f8fafc',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0
-            }}>
-              <Zap size={isMobile ? 22 : 26} color={selfHealingEnabled ? '#3b82f6' : '#94a3b8'} fill={selfHealingEnabled ? '#3b82f6' : 'none'} style={{ opacity: selfHealingEnabled ? 1 : 0.5 }} />
+            <div style={{ width: isMobile ? 44 : 52, height: isMobile ? 44 : 52, borderRadius: 12, background: selfHealingEnabled ? '#f0f9ff' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Zap size={isMobile ? 22 : 26} color={selfHealingEnabled ? '#3b82f6' : '#94a3b8'} fill={selfHealingEnabled ? '#3b82f6' : 'none'} />
             </div>
             <div>
               <div style={{ fontWeight: 800, color: '#1e293b', fontSize: isMobile ? 16 : 17, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                {t('heal.title')}
-                <Badge status={selfHealingEnabled ? 'processing' : 'default'} />
+                {t('heal.title')} <Badge status={selfHealingEnabled ? 'processing' : 'default'} />
               </div>
-              <div style={{ color: '#64748b', fontSize: 13, maxWidth: 600, lineHeight: 1.5 }}>
-                {t('heal.description')}
-                {ocInstalled === false && (
-                  <div style={{ marginTop: 8, color: '#ef4444', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <AlertCircle size={12} /> 核心组件 `openclaw` 未安装，功能暂不可用
-                  </div>
-                )}
-              </div>
+              <div style={{ color: '#64748b', fontSize: 13, maxWidth: 600, lineHeight: 1.5 }}>{t('heal.description')}</div>
             </div>
           </div>
-          <div style={{ 
-            textAlign: isMobile ? 'left' : 'right',
-            width: isMobile ? '100%' : 'auto',
-            borderTop: isMobile ? '1px solid #f1f5f9' : 'none',
-            paddingTop: isMobile ? 16 : 0,
-            display: 'flex',
-            flexDirection: isMobile ? 'row' : 'column',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}>
+          <div style={{ textAlign: isMobile ? 'left' : 'right', width: isMobile ? '100%' : 'auto', display: 'flex', flexDirection: isMobile ? 'row' : 'column', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: isMobile ? 0 : 8, fontWeight: 600 }}>
               {t('heal.status')}: <span style={{ color: selfHealingEnabled ? '#16a34a' : '#ef4444' }}>{selfHealingEnabled ? t('heal.running') : t('heal.disabled')}</span>
             </div>
             <Button 
-              type={ocInstalled === null ? "default" : (selfHealingEnabled ? "default" : "primary")}
-              size="large"
-              loading={loadingSets || ocInstalled === null}
-              disabled={ocInstalled === false || ocInstalled === null}
-              onClick={() => onToggle(!selfHealingEnabled)}
-              style={{ 
-                borderRadius: 10, minWidth: 100, fontWeight: 700,
-                background: (ocInstalled === false || ocInstalled === null) ? '#cbd5e1' : (selfHealingEnabled ? '#ef4444' : '#2563eb'),
-                borderColor: (ocInstalled === false || ocInstalled === null) ? '#cbd5e1' : (selfHealingEnabled ? '#ef4444' : '#2563eb'),
-                color: '#fff'
-              }}
+               type={selfHealingEnabled ? "primary" : "primary"} 
+               danger={selfHealingEnabled} 
+               onClick={() => onToggle(!selfHealingEnabled)} 
+               style={{ borderRadius: 10, minWidth: 120, height: 48, fontWeight: 700, fontSize: 15 }}
             >
-              {ocInstalled === null ? "正在检测环境..." : (selfHealingEnabled ? t('heal.disableService') : t('heal.enableNow'))}
+              {selfHealingEnabled ? t('heal.disableService') : t('heal.enableNow')}
             </Button>
           </div>
         </div>
       </Card>
 
-      {/* 核心内容 Tabs */}
+      <Card styles={{ body: { padding: isMobile ? '16px' : '20px' } }} style={{ borderRadius: 16, border: '1px solid #e2e8f0', background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexDirection: isMobile ? 'column' : 'row', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Code size={20} color="#3b82f6" /></div>
+            <div><div style={{ fontSize: 15, fontWeight: 700, color: '#1e293b' }}>{t('heal.coreConfigTitle')}</div><div style={{ fontSize: 12, color: '#64748b' }}>{t('heal.coreConfigDesc')}</div></div>
+          </div>
+          <Space>
+            <Button type="primary" icon={<Wand2 size={14} />} onClick={() => setIsConfigModalOpen(true)} disabled={runningDoctor} style={{ borderRadius: 8, height: 44, fontWeight: 600, padding: '0 24px' }}>{t('heal.manageConfig')}</Button>
+            <Button icon={<RefreshCw size={14} />} onClick={handleRunDoctor} loading={runningDoctor} style={{ borderRadius: 8, height: 44, fontWeight: 600, borderColor: '#3b82f6', color: '#3b82f6', padding: '0 20px' }}>{t('heal.doctorFix')}</Button>
+          </Space>
+        </div>
+      </Card>
+
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', width: '95%', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 12 : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Code size={18} color="#3b82f6" /></div>
+              <span style={{ fontSize: 16, fontWeight: 700 }}>{t('heal.configModalTitle')}</span>
+            </div>
+            <Radio.Group value={editMode} onChange={(e) => setEditMode(e.target.value)} size="small" optionType="button" buttonStyle="solid">
+              <Radio.Button value="editor"><Space size={4}><Code size={12} />{t('heal.editorMode')}</Space></Radio.Button>
+              <Radio.Button value="visual"><Space size={4}><LayoutIcon size={12} />{t('heal.visualMode')}</Space></Radio.Button>
+            </Radio.Group>
+          </div>
+        }
+        open={isConfigModalOpen}
+        onCancel={() => setIsConfigModalOpen(false)}
+        width={isMobile ? '100%' : 1000}
+        style={isMobile ? { top: 0, margin: 0, maxWidth: '100vw' } : {}}
+        bodyStyle={isMobile ? { height: 'calc(100vh - 120px)', padding: '12px' } : {}}
+        centered={!isMobile}
+        footer={[
+          <div key="footer" style={{ display: 'flex', alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'space-between', flexDirection: isMobile ? 'column' : 'row', gap: 12 }}>
+            <div style={{ fontSize: 12, color: '#64748b', display: (isMobile && editMode === 'visual') ? 'none' : 'flex', alignItems: 'center', gap: 8, background: '#f8fafc', padding: '10px 14px', borderRadius: 8, textAlign: 'left', width: isMobile ? '100%' : 'auto' }}>
+              <AlertCircle size={14} color="#3b82f6" style={{ flexShrink: 0 }} /><span style={{ flex: 1 }}>{t('heal.configSaveTip')}</span>
+            </div>
+            <Space style={{ width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
+              <Button icon={<RefreshCw size={14} />} onClick={fetchConfig} loading={loadingConfig} disabled={isValidating}>{t('common.refresh')}</Button>
+              <Button 
+                icon={<Activity size={14} />} 
+                onClick={handleValidateConfig} 
+                loading={isValidating}
+                disabled={editMode === 'visual' || savingConfig || loadingConfig || isValidating}
+                style={{ borderRadius: 8 }}
+              >
+                {t('heal.validate', { defaultValue: '仅校验内容' })}
+              </Button>
+              <Button type="primary" icon={<Save size={16} />} onClick={handleSaveConfig} loading={savingConfig} disabled={editMode === 'visual' || savingConfig || loadingConfig || isValidating} style={{ fontWeight: 700, borderRadius: 8, height: 36, padding: '0 20px' }}>{t('common.save')}</Button>
+              <Button onClick={() => setIsConfigModalOpen(false)} style={{ borderRadius: 8 }}>{t('common.close')}</Button>
+            </Space>
+          </div>
+        ]}
+      >
+        <div style={{ marginTop: isMobile ? 0 : 16, height: '100%' }}>
+          {editMode === 'editor' ? (
+            <div style={{ height: isMobile ? '100%' : '65vh' }}>
+              <HighlightedJsonEditor value={configContent} onChange={setConfigContent} onCopy={handleCopy} disabled={savingConfig || loadingConfig} isMobile={isMobile} />
+            </div>
+          ) : (
+            <JsonVisualizer content={configContent} isMobile={isMobile} />
+          )}
+        </div>
+      </Modal>
+
       <Tabs 
         className="heal-tabs"
         type="card"
@@ -300,18 +635,27 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
                     <List.Item style={{ padding: '16px 0' }}>
                       <div style={{ width: '100%' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                          <Tag color="warning" style={{ borderRadius: 4, fontWeight: 600 }}>{item.reason}</Tag>
+                          <Space size={8} wrap>
+                            <Tag color="warning" style={{ borderRadius: 4, fontWeight: 600 }}>{item.reason}</Tag>
+                            <Tag color={item.result === 'Success' ? 'success' : (item.result === 'Failed' ? 'error' : 'default')} style={{ borderRadius: 4, fontWeight: 700 }}>
+                              {item.result || '-'}
+                            </Tag>
+                            <Tag style={{ borderRadius: 4, color: '#475569' }}>
+                              验收: {Number(item.verify_retries || 0)} 次 / {Number(item.verify_duration_ms || 0)}ms
+                            </Tag>
+                          </Space>
                           <span style={{ fontSize: 12, color: '#94a3b8', fontFamily: 'monospace' }}>{dayjs(item.timestamp).format('YYYY-MM-DD HH:mm:ss')}</span>
                         </div>
                         <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: 8, border: '1px solid #f1f5f9' }}>
-                          <div style={{ display: 'flex', gap: 12, fontSize: 13 }}>
-                            <span style={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>{t('heal.recoveryMethod')}:</span>
-                            <span style={{ color: '#1e293b' }}>{item.method}</span>
-                          </div>
-                          <div style={{ display: 'flex', gap: 12, fontSize: 13, marginTop: 4 }}>
-                            <span style={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>{t('heal.disposalResult')}:</span>
-                            <span style={{ color: item.result === 'Success' ? '#16a34a' : '#ef4444', fontWeight: 600 }}>{item.result === 'Success' ? '✅ ' + t('heal.recovered') : '❌ ' + t('heal.failed')}</span>
-                          </div>
+                          <div style={{ display: 'flex', gap: 12, fontSize: 13 }}><span style={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>{t('heal.recoveryMethod')}:</span><span style={{ color: '#1e293b' }}>{item.method}</span></div>
+                          {item.result === 'Failed' && item.verify_error && (
+                            <div style={{ marginTop: 10, display: 'flex', gap: 12, fontSize: 12 }}>
+                              <span style={{ color: '#ef4444', fontWeight: 700, whiteSpace: 'nowrap' }}>失败原因:</span>
+                              <span style={{ color: '#991b1b', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                {String(item.verify_error)}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </List.Item>
@@ -324,20 +668,8 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
             key: 'backups',
             label: <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><History size={14} /> {t('heal.backupHistory')}</span>,
             children: (
-              <Card 
-                style={{ borderTopLeftRadius: 0, border: '1px solid #e2e8f0', borderTop: 'none' }}
-                title={null}
-                extra={<Button size="small" type="text" icon={<RefreshCw size={12} />} onClick={fetchBackups} loading={loadingBackups}>{t('common.refresh')}</Button>}
-              >
-                <Table 
-                  dataSource={backups}
-                  columns={backupColumns}
-                  pagination={{ pageSize: 10 }}
-                  loading={loadingBackups}
-                  size="small"
-                  rowKey="name"
-                  scroll={{ x: 'max-content' }}
-                />
+              <Card style={{ borderTopLeftRadius: 0, border: '1px solid #e2e8f0', borderTop: 'none' }} extra={<Button size="small" type="text" icon={<RefreshCw size={12} />} onClick={fetchBackups} loading={loadingBackups}>{t('common.refresh')}</Button>}>
+                <Table dataSource={backups} columns={backupColumns} pagination={{ pageSize: 10 }} loading={loadingBackups} size="small" rowKey="name" scroll={{ x: 'max-content' }} />
               </Card>
             )
           },
@@ -351,22 +683,11 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
                   locale={{ emptyText: t('heal.noReports') }}
                   loading={loadingReports}
                   renderItem={(item: any) => (
-                    <List.Item 
-                      style={{ padding: '12px 0', cursor: 'pointer' }}
-                      onClick={() => viewReport(item)}
-                    >
+                    <List.Item style={{ padding: '12px 0', cursor: 'pointer' }} onClick={() => viewReport(item)}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <div style={{ width: 32, height: 32, borderRadius: 8, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <FileText size={16} color="#64748b" />
-                          </div>
-                          <div>
-                            <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 13 }}>{item.name}</div>
-                            <div style={{ display: 'flex', gap: 12, marginTop: 2 }}>
-                              <span style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={10} /> {item.time}</span>
-                              <span style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}><HardDrive size={10} /> {formatSize(item.size)}</span>
-                            </div>
-                          </div>
+                          <div style={{ width: 32, height: 32, borderRadius: 8, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={16} color="#64748b" /></div>
+                          <div><div style={{ fontWeight: 600, color: '#1e293b', fontSize: 13 }}>{item.name}</div><div style={{ display: 'flex', gap: 12, marginTop: 2 }}><span style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={10} /> {item.time}</span><span style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}><HardDrive size={10} /> {formatSize(item.size)}</span></div></div>
                         </div>
                         <ChevronRight size={16} color="#cbd5e1" />
                       </div>
@@ -379,56 +700,25 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
         ]}
       />
 
-      {/* 报表查看 Modal */}
-      <Modal
-        title={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FileText size={18} color="#3b82f6" /><span>{t('heal.reportDetail')}: {selectedReport?.name}</span></div>}
-        open={isReportModalOpen}
-        onCancel={() => setIsReportModalOpen(false)}
-        footer={[<Button key="close" type="primary" onClick={() => setIsReportModalOpen(false)}>{t('common.close')}</Button>]}
-        width={isMobile ? '95%' : 800}
-        centered
-        styles={{ body: { maxHeight: '70vh', overflowY: 'auto' } }}
-      >
-        {loadingContent ? <div style={{ padding: '60px 0', textAlign: 'center' }}><Spin /></div> : (
-          <div className="markdown-body">
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeSanitize]} components={{
-              code: ({ node, inline, className, children, ...props }: any) => {
-                const match = /language-(\w+)/.exec(className || '');
-                return !inline && match ? <SyntaxHighlighter {...props} style={vscDarkPlus} language={match[1]} PreTag="div">{String(children).replace(/\n$/, '')}</SyntaxHighlighter> : <code className={className} {...props}>{children}</code>;
-              }
-            }}>
-              {preprocessMarkdown(reportContent)}
-            </ReactMarkdown>
-          </div>
-        )}
+      <Modal title={<span>{t('heal.reportDetail')}: {selectedReport?.name}</span>} open={isReportModalOpen} onCancel={() => setIsReportModalOpen(false)} 
+        footer={[
+          <Button key="copy" icon={<Copy size={14} />} onClick={() => handleCopy(reportContent)}>{t('common.copy')}</Button>,
+          <Button key="close" type="primary" onClick={() => setIsReportModalOpen(false)}>{t('common.close')}</Button>
+        ]} 
+        width={isMobile ? '95%' : 800} centered styles={{ body: { maxHeight: '70vh', overflowY: 'auto' } }}>
+        {loadingContent ? <div style={{ padding: '60px 0', textAlign: 'center' }}><Spin /></div> : <div className="markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeSanitize]}>{preprocessMarkdown(reportContent)}</ReactMarkdown></div>}
       </Modal>
 
-      {/* 备份内容/Diff 查看 Modal */}
-      <Modal
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {modalMode === 'content' ? <Code size={18} color="#3b82f6" /> : <FileSearch size={18} color="#16a34a" />}
-            <span>{modalMode === 'content' ? t('heal.viewContent') : t('heal.currentDiff')}: {selectedBackup?.name}</span>
-          </div>
-        }
-        open={isBackupModalOpen}
-        onCancel={() => setIsBackupModalOpen(false)}
-        footer={[<Button key="close" type="primary" onClick={() => setIsBackupModalOpen(false)}>{t('common.close')}</Button>]}
-        width={isMobile ? '95%' : 900}
-        centered
-        styles={{ body: { maxHeight: '70vh', overflowY: 'auto', padding: 12 } }}
+      <Modal 
+        title={<span>{modalMode === 'content' ? t('heal.viewContent') : t('heal.currentDiff')}: {selectedBackup?.name}</span>} 
+        open={isBackupModalOpen} onCancel={() => setIsBackupModalOpen(false)} 
+        footer={[
+          <Button key="copy" icon={<Copy size={14} />} onClick={() => handleCopy(modalMode === 'content' ? backupContent : backupDiff)}>{t('common.copy')}</Button>,
+          <Button key="close" type="primary" onClick={() => setIsBackupModalOpen(false)}>{t('common.close')}</Button>
+        ]} 
+        width={isMobile ? '95%' : 900} centered styles={{ body: { maxHeight: '70vh', overflowY: 'auto', padding: 12 } }}
       >
-        {loadingContent ? <div style={{ padding: '60px 0', textAlign: 'center' }}><Spin tip="Loading..." /></div> : (
-          <div style={{ borderRadius: 8, overflow: 'hidden' }}>
-            <SyntaxHighlighter 
-              style={vscDarkPlus} 
-              language={modalMode === 'content' ? 'json' : 'diff'}
-              customStyle={{ margin: 0, fontSize: 12 }}
-            >
-              {modalMode === 'content' ? backupContent : (backupDiff || 'No changes detected between this backup and current config.')}
-            </SyntaxHighlighter>
-          </div>
-        )}
+        {loadingContent ? <Spin /> : <SyntaxHighlighter style={vscDarkPlus} language={modalMode === 'content' ? 'json' : 'diff'}>{modalMode === 'content' ? backupContent : backupDiff}</SyntaxHighlighter>}
       </Modal>
     </div>
   );

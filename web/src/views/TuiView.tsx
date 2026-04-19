@@ -8,7 +8,6 @@ import { RotateCcw, XCircle, Terminal as TerminalIcon, Info, Download, RefreshCw
 import api from '../api';
 import storage from '../utils/storage';
 import { getWsUrl } from '../utils/url';
-import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 const { Paragraph, Text } = Typography;
 
@@ -17,7 +16,7 @@ interface TuiViewProps {
   onNavigateToDashboard?: () => void;
 }
 
-const TuiView: React.FC<TuiViewProps> = ({ isRunning, onNavigateToDashboard }) => {
+const TuiView: React.FC<TuiViewProps> = () => {
   const { t } = useTranslation();
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
@@ -138,7 +137,7 @@ const TuiView: React.FC<TuiViewProps> = ({ isRunning, onNavigateToDashboard }) =
       };
 
       socket.onclose = () => {
-        term.write('\r\n\x1b[31m[Connection Closed]\x1b[0m\r\n');
+        term.write(`\r\n\x1b[31m[${t('common.connectionClosed')}]\x1b[0m\r\n`);
       };
 
       term.onData((data) => {
@@ -247,7 +246,7 @@ const TuiView: React.FC<TuiViewProps> = ({ isRunning, onNavigateToDashboard }) =
         position: 'relative'
       }}
     >
-      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
+      {/* 允许在网关停止时通过 TUI 工具进行对话（命令会自行处理连接错误） */}
       {/* 顶部信息栏与控制栏 */}
       <div 
         style={{ 

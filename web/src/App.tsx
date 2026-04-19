@@ -3,7 +3,8 @@ import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QR
 import { useTranslation } from 'react-i18next';
 import {
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
-  Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone, Rocket
+  Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone, Rocket,
+  ShieldCheck, Clock
 } from 'lucide-react';
 import api from './api';
 import storage from './utils/storage';
@@ -23,6 +24,8 @@ import TaskTray from './components/common/TaskTray';
 import SkillManagement from './views/SkillManagement';
 import ExpertMarket from './views/ExpertMarket';
 import PluginManagement from './views/PluginManagement';
+import SecurityManager from './views/SecurityManager';
+import CronJobsView from './views/CronJobsView';
 import TuiView from './views/TuiView';
 import ShellView from './views/ShellView';
 import CrayfishLoading from './components/common/CrayfishLoading';
@@ -63,6 +66,7 @@ const Dashboard = () => {
   const [loadingChannels, setLoadingChannels] = useState(false);
   const [weixinStatus, setWeixinStatus] = useState<any>(null);
   const [loadingWeixin, setLoadingWeixin] = useState(false);
+  const [refreshingWeixin, setRefreshingWeixin] = useState(false);
   const [checkWeixinSeconds, setCheckWeixinSeconds] = useState(0);
   const [botsModels, setBotsModels] = useState<any>(null);
   const [loadingBots, setLoadingBots] = useState(false);
@@ -116,7 +120,7 @@ const Dashboard = () => {
   // Hooks
   const { tasks: activeTasks, updateTask: baseUpdateTask, loading: tasksLoading, fetchActiveTasks } = useTaskCenter();
   const { status, history, fetching, refreshCountdown, fetchData } = useStatusPolling(
-    isTransitioning, targetStatus, () => {
+    isTransitioning, targetStatus, activeTab, () => {
       setIsTransitioning(false);
       setTargetStatus(null);
       setTransitionSeconds(0);
@@ -153,7 +157,7 @@ const Dashboard = () => {
           fetchPlugins();
         } else if (task.module === 'bots') {
           // 如果是模型相关变更（添加、删除、设置默认、新增渠道），触发物理对账
-          const modelActions = ['delete-model', 'add-model', 'add-provider', 'set-default-model', 'clone-expert'];
+          const modelActions = ['delete-model', 'add-model', 'add-provider', 'set-default-model', 'clone-expert', 'add', 'update'];
           if (modelActions.includes(task.action || '')) {
             console.log(`🔄 [Task Observer] 机器人/模型变更任务 (${task.action}) 完成，将在延迟后物理刷新...`);
             
@@ -288,21 +292,23 @@ const Dashboard = () => {
     }
   };
 
-  // 微信插件检测定时器逻辑 (1s UI计数, 5s 接口轮询)
   useEffect(() => {
     let counter: any;
     let poller: any;
     
-    if (activeTab === 'components' && weixinStatus === null) {
+    if (activeTab === 'components' && (weixinStatus === null || refreshingWeixin)) {
       counter = setInterval(() => setCheckWeixinSeconds(s => s + 1), 1000);
-      poller = setInterval(() => checkWeixinPlugin(), 5000);
+      // 仅在初始加载（status 为 null）且未手动刷新时开启轮询
+      if (weixinStatus === null && !refreshingWeixin) {
+        poller = setInterval(() => checkWeixinPlugin(), 5000);
+      }
     }
 
     return () => {
       if (counter) clearInterval(counter);
       if (poller) clearInterval(poller);
     };
-  }, [activeTab, weixinStatus]);
+  }, [activeTab, weixinStatus, refreshingWeixin]);
 
   // Methods
   const fetchBotsModels = async (force = false) => {
@@ -310,6 +316,7 @@ const Dashboard = () => {
     try {
       const res = await api.get(`/v1/openclaw/bots-models${force ? '?refresh=true' : ''}`);
       setBotsModels(res.data);
+      if (force) message.success(t('chat.syncAssetsSuccess'));
     } catch (e) {
       message.error(t('chat.syncAssetsError'));
     } finally {
@@ -334,6 +341,7 @@ const Dashboard = () => {
     try {
       const res = await api.get(`/v1/wechat/config/status${force ? '?refresh=true' : ''}`);
       setChatChannels(res.data);
+      if (force) message.success(t('channels.syncSuccess', { defaultValue: '渠道列表已同步并更新' }));
     } catch (e) {
       console.warn(t('chat.syncChannelsError'), e);
     } finally {
@@ -341,12 +349,19 @@ const Dashboard = () => {
     }
   };
 
-  const checkWeixinPlugin = async () => {
+  const checkWeixinPlugin = async (force = false) => {
+    if (force) {
+      setRefreshingWeixin(true);
+      setCheckWeixinSeconds(0);
+    }
     try {
-      const res = await api.get('/v1/wechat/plugin/status');
+      const res = await api.get(`/v1/wechat/plugin/status${force ? '?refresh=true' : ''}`);
       setWeixinStatus(res.data);
+      if (force) message.success(t('channels.weixinRefreshed'));
     } catch (err) {
       setWeixinStatus({ installed: false, status: 'Detection Failed', version: 'N/A' });
+    } finally {
+      if (force) setRefreshingWeixin(false);
     }
   };
 
@@ -355,6 +370,7 @@ const Dashboard = () => {
     try {
       const res = await api.get(`/v1/openclaw/devices${force ? '?refresh=true' : ''}`);
       setDevices(res.data);
+      if (force) message.success(t('common.refreshSuccess', { defaultValue: '列表已同步并刷新' }));
     } catch (err) {
       message.error(t('chat.syncDevicesError'));
     } finally {
@@ -410,9 +426,9 @@ const Dashboard = () => {
     setGlobalLoadingCountdown(Math.ceil(duration / 1000)); // 初始化倒计时秒数
   };
 
-  const checkVersionUpdate = async () => {
+  const checkVersionUpdate = async (refresh = false) => {
     try {
-      const res = await api.get('/v1/system/version');
+      const res = await api.get(`/v1/system/version${refresh ? '?refresh=true' : ''}`);
       if (res.data) {
         setVersionUpdate(res.data);
         return res.data;
@@ -906,6 +922,8 @@ const Dashboard = () => {
           icon: <Zap size={14} /> 
         },
         { key: 'shell', label: t('common.shell'), icon: <Terminal size={14} /> },
+        { key: 'security', label: t('security.title'), icon: <ShieldCheck size={14} /> },
+        { key: 'cron', label: t('common.cron'), icon: <Clock size={14} /> },
       ]
     },
     {
@@ -1021,6 +1039,8 @@ const Dashboard = () => {
           loadingWeixin={loadingWeixin} checkWeixinSeconds={checkWeixinSeconds}
           isGettingQR={isGettingQR} onInstallWeixin={handleInstallWeixin} onGetQRCode={() => handleControl('wechat')}
           onRefreshChannels={() => fetchChatChannels(true)}
+          onRefreshWeixin={() => checkWeixinPlugin(true)}
+          refreshingWeixin={refreshingWeixin}
           onUnbindWeixin={handleUnbindWeixin}
           activeTasks={activeTasks}
           isMobile={isMobile}
@@ -1087,7 +1107,20 @@ const Dashboard = () => {
       'experts': <ExpertMarket isMobile={isMobile} onNavigate={setActiveTab} isRunning={isRunning} onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
-          }} />
+          }} />,
+      'security': (
+        <SecurityManager 
+          isMobile={isMobile}
+          isRunning={isRunning}
+          bots={botsModels?.data?.bots || []}
+          activeTasks={activeTasks}
+          onNavigateToDashboard={() => {
+            setActiveTab('dashboard');
+            window.location.hash = 'actions';
+          }}
+        />
+      ),
+      'cron': <CronJobsView />
     };
 
     return (

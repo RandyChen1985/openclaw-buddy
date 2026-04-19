@@ -1,4 +1,6 @@
-package tests
+//go:build manual
+
+package main
 
 import (
 	"crypto/ed25519"

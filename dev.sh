@@ -4,6 +4,17 @@
 DEV_ROOT="temp-dev-test"
 PID_FILE="/tmp/openclaw-buddy-dev.pid"
 
+# 🦞 MacOS 开发环境路径补丁 (针对 Homebrew 与 /usr/local)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    EXTRA_PATHS="/opt/homebrew/bin:/usr/local/bin"
+    IFS=':' read -ra ADDR <<< "$EXTRA_PATHS"
+    for p in "${ADDR[@]}"; do
+        if [[ ":$PATH:" != *":$p:"* ]] && [ -d "$p" ]; then
+            export PATH="$p:$PATH"
+        fi
+    done
+fi
+
 stop_and_clean() {
     echo "🔍 检查端口 3000 占用情况..."
     PORT_PID=$(lsof -ti :3000)

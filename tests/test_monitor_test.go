@@ -16,7 +16,7 @@ func TestAuthVerify(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	token := "verify-token"
 	router := gin.New()
-	router.Use(api.AuthMiddleware(token))
+	router.Use(api.AuthMiddleware(token, nil))
 	router.GET("/v1/secure", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -54,7 +54,7 @@ func TestStatusParsingUtils(t *testing.T) {
 func TestHealthEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{Token: "test", WebPort: 3000}
-	s := api.NewServer(cfg)
+	s := api.NewServer(cfg, nil)
 	
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/health", nil)

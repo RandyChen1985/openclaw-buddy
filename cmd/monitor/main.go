@@ -18,6 +18,14 @@ import (
 	"github.com/natefinch/lumberjack"
 )
 
+func maskToken(token string) string {
+	t := token
+	if len(t) <= 6 {
+		return "***"
+	}
+	return t[:3] + "***" + t[len(t)-3:]
+}
+
 func main() {
 	// 1. Ensure required directories exist
 	_ = os.MkdirAll("data", 0755)
@@ -77,7 +85,7 @@ func main() {
 	go g.Run(ctx)
 
 	// 8. Start Web Server
-	server := api.NewServer(cfg)
+	server := api.NewServer(cfg, g)
 	
 	if runtime.GOOS == "windows" && os.Getenv("CLI_MODE") != "true" {
 		log.Printf("🚀 Starting GUI mode (Windows)...")
@@ -85,7 +93,7 @@ func main() {
 			log.Fatalf("❌ GUI Failed: %v", err)
 		}
 	} else {
-		log.Printf("🚀 Web Server starting on http://0.0.0.0:%d (Token: %s)", cfg.WebPort, cfg.Token)
+		log.Printf("🚀 Web Server starting on http://0.0.0.0:%d (Token: %s)", cfg.WebPort, maskToken(cfg.Token))
 		go func() {
 			if err := server.Run(); err != nil {
 				log.Printf("❌ Web Server failed: %v", err)

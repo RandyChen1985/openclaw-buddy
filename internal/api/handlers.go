@@ -22,6 +22,10 @@ import (
 	"openclaw-buddy/internal/utils"
 	"openclaw-buddy/internal/scheduler"
 	"openclaw-buddy/internal/analyzer"
+	"image"
+	_ "image/gif"
+	"image/jpeg"
+	_ "image/png"
 
 	"github.com/gin-gonic/gin"
 	"context"
@@ -67,6 +71,12 @@ func (s *Server) getDashboardURL(c *gin.Context) {
 }
 
 func (s *Server) proxyLobsterDashboard(c *gin.Context) {
+	// 额外防线：即使已鉴权，也禁止跨站 Origin 直接调用代理（防止被第三方站点利用）
+	if !s.isOriginAllowed(c.Request, c.GetHeader("Origin")) {
+		s.Error(c, http.StatusForbidden, "Forbidden origin")
+		return
+	}
+
 	targetPort := s.cfg.HealthPort
 	targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", targetPort))
 
@@ -74,10 +84,8 @@ func (s *Server) proxyLobsterDashboard(c *gin.Context) {
 
 	// 修改响应头以允许嵌入
 	proxy.ModifyResponse = func(res *http.Response) error {
-		res.Header.Del("Content-Security-Policy")
+		// 不再无条件移除 CSP（风险较高），仅移除会强制禁止 iframe 的 XFO
 		res.Header.Del("X-Frame-Options")
-		// 允许跨域
-		res.Header.Set("Access-Control-Allow-Origin", "*")
 		return nil
 	}
 
@@ -231,7 +239,7 @@ func (s *Server) runAsyncTaskWithPriority(c *gin.Context, task *process.Task, pr
 	// 提交到调度器排队执行
 	scheduler.GetScheduler().Submit(scheduler.TaskRequest{
 		Task:     task,
-		Execute:  run,
+		Execute:  func(_ context.Context) (string, error) { return run() },
 		Priority: priority,
 	})
 
@@ -248,7 +256,7 @@ func (s *Server) startGateway(c *gin.Context) {
 	log.Printf("🎮 [控制] 用户请求: 【启动 OpenClaw 网关服务】")
 
 	// 1. 预检查配置是否合法。如果配置不合法，直接返回错误，不记录为异步任务也不触发安装引导。
-	if isValid, problem, _ := process.CheckConfig(); !isValid {
+	if isValid, problem, _ := process.CheckConfig(s.cfg.OpenClawConfigDir); !isValid {
 		s.Error(c, http.StatusBadRequest, "配置校验未通过: "+problem)
 		return
 	}
@@ -394,7 +402,7 @@ func (s *Server) updateSelfHealingSetting(c *gin.Context) {
 
 func (s *Server) getHealEvents(c *gin.Context) {
 	rows, err := utils.DB.Query(`
-		SELECT id, timestamp, reason, method, result, report_path 
+		SELECT id, timestamp, reason, method, result, report_path, verify_retries, verify_duration_ms, verify_error
 		FROM heal_events 
 		ORDER BY timestamp DESC 
 		LIMIT 50
@@ -412,12 +420,15 @@ func (s *Server) getHealEvents(c *gin.Context) {
 		Method     string `json:"method"`
 		Result     string `json:"result"`
 		ReportPath string `json:"report_path"`
+		VerifyRetries    int   `json:"verify_retries"`
+		VerifyDurationMS int64 `json:"verify_duration_ms"`
+		VerifyError      string `json:"verify_error"`
 	}
 
 	events := []HealEvent{}
 	for rows.Next() {
 		var ev HealEvent
-		if err := rows.Scan(&ev.ID, &ev.Timestamp, &ev.Reason, &ev.Method, &ev.Result, &ev.ReportPath); err != nil {
+		if err := rows.Scan(&ev.ID, &ev.Timestamp, &ev.Reason, &ev.Method, &ev.Result, &ev.ReportPath, &ev.VerifyRetries, &ev.VerifyDurationMS, &ev.VerifyError); err != nil {
 			continue
 		}
 		events = append(events, ev)
@@ -567,7 +578,8 @@ func (s *Server) getTasksStatus(c *gin.Context) {
 }
 
 func (s *Server) checkWeChatPlugin(c *gin.Context) {
-	status, err := process.GetWeChatPluginStatus()
+	refresh := c.Query("refresh") == "true"
+	status, err := process.GetWeChatPluginStatus(refresh)
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
@@ -1024,6 +1036,121 @@ func (s *Server) reloadSkills(c *gin.Context) {
 	s.Success(c, gin.H{"status": "success", "message": "规则与技能已重新加载"})
 }
 
+func (s *Server) handleGetConfig(c *gin.Context) {
+	configPath := filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json")
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to read openclaw.json: "+err.Error())
+		return
+	}
+	s.Success(c, gin.H{"content": string(content)})
+}
+
+func (s *Server) handleUpdateConfig(c *gin.Context) {
+	var req struct {
+		Content string `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	configPath := filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json")
+	backupPath := configPath + ".bak.tmp"
+
+	// 1. 备份当前配置
+	oldContent, err := os.ReadFile(configPath)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to backup current config: "+err.Error())
+		return
+	}
+	if err := os.WriteFile(backupPath, oldContent, 0644); err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to write backup: "+err.Error())
+		return
+	}
+	defer os.Remove(backupPath)
+
+	// 2. 写入新配置
+	if err := os.WriteFile(configPath, []byte(req.Content), 0644); err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to update config: "+err.Error())
+		return
+	}
+
+	// 3. 校验新配置 (深度 Check)
+	isValid, problem, _ := process.CheckConfig(s.cfg.OpenClawConfigDir)
+	if !isValid {
+		// 校验失败，回滚
+		_ = os.WriteFile(configPath, oldContent, 0644)
+		s.Error(c, http.StatusBadRequest, "Configuration validation failed: "+problem)
+		return
+	}
+
+	// 校验成功
+	utils.RecordSystemEvent("CONFIG", "用户通过 Web 控制台手动更新了核心配置 openclaw.json")
+	s.Success(c, nil)
+}
+
+func (s *Server) handleValidateConfig(c *gin.Context) {
+	var req struct {
+		Content string `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// 1. 创建临时目录进行隔离校验 (避免污染真实运行路径)
+	tmpDir, err := os.MkdirTemp("", "openclaw-config-val-*")
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to create temp dir: "+err.Error())
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// 补丁：为了让校验器支持“深度校验”(如识别渠道插件)，需要把真实配置目录的内容软链接过来
+	// 但排除掉 openclaw.json 本身，我们将使用待校验的内容
+	if s.cfg.OpenClawConfigDir != "" {
+		absSrc, _ := filepath.Abs(s.cfg.OpenClawConfigDir)
+		entries, _ := os.ReadDir(absSrc)
+		for _, entry := range entries {
+			name := entry.Name()
+			if name == "openclaw.json" {
+				continue
+			}
+			srcPath := filepath.Join(absSrc, name)
+			dstPath := filepath.Join(tmpDir, name)
+			// 创建软链接，让临时目录拥有完整的上下文环境
+			_ = os.Symlink(srcPath, dstPath)
+		}
+	}
+
+	// 2. 写入待校验的配置
+	tmpConfigPath := filepath.Join(tmpDir, "openclaw.json")
+	if err := os.WriteFile(tmpConfigPath, []byte(req.Content), 0644); err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to write temp config: "+err.Error())
+		return
+	}
+
+	// 3. 调用底座校验
+	isValid, problem, _ := process.CheckConfig(tmpDir)
+	if !isValid {
+		s.Error(c, http.StatusBadRequest, "Configuration validation failed: "+problem)
+		return
+	}
+
+	s.Success(c, gin.H{"message": "Configuration is valid"})
+}
+
+func (s *Server) handleRunDoctor(c *gin.Context) {
+	output, err := process.RunDoctorFixWithOutput()
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "Doctor fix failed: "+err.Error()+"\n\nOutput:\n"+output)
+		return
+	}
+	utils.RecordSystemEvent("HEAL", "用户手动执行了一键体检修复 (Doctor Fix)")
+	s.Success(c, gin.H{"output": output})
+}
+
 func (s *Server) getSessions(c *gin.Context) {
 	refresh := c.Query("refresh") == "true"
 	if refresh {
@@ -1046,6 +1173,120 @@ func (s *Server) getSessions(c *gin.Context) {
 	s.Success(c, gin.H{
 		"data":       data,
 		"updated_at": updatedAt,
+	})
+}
+
+func (s *Server) getSecurityStatus(c *gin.Context) {
+	refresh := c.Query("refresh") == "true"
+	if refresh {
+		if err := process.SyncKeySingle("security_status", s.cfg.OpenClawConfigDir); err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+
+	data, updatedAt, err := process.GetCachedData("security_status")
+	if err != nil {
+		// 如果缓存没有，尝试实时同步一次
+		if err := process.SyncKeySingle("security_status", s.cfg.OpenClawConfigDir); err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		data, updatedAt, _ = process.GetCachedData("security_status")
+	}
+
+	// 将缓存的 map 转换为结构体或直接返回
+	s.Success(c, gin.H{
+		"data":       data,
+		"updated_at": updatedAt,
+	})
+}
+
+func (s *Server) triggerSecurityTask(c *gin.Context) {
+	var req struct {
+		Action   string `json:"action" binding:"required"`
+		Target   string `json:"target"` // Agent ID or Preset Name
+		Pattern  string `json:"pattern"`
+		Ask      string `json:"ask"`
+		Security string `json:"security"`
+		Content  string `json:"content"` // For full set-approvals
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "Invalid request")
+		return
+	}
+
+	var taskName string
+	var taskAction string
+	var runFunc func() (string, error)
+
+	switch req.Action {
+	case "apply-preset":
+		taskName = "tasks.apply_security_preset:" + req.Target
+		taskAction = "apply_security_preset"
+		runFunc = func() (string, error) {
+			if err := process.ApplyExecPreset(req.Target); err != nil {
+				return "", err
+			}
+			return "tasks.results.preset_applied", nil
+		}
+	case "set-policy":
+		taskName = "tasks.update_security_policy"
+		taskAction = "update_security_policy"
+		runFunc = func() (string, error) {
+			if err := process.SetExecPolicy(req.Ask, req.Security); err != nil {
+				return "", err
+			}
+			return "tasks.results.policy_updated", nil
+		}
+	case "add-allowlist":
+		taskName = "tasks.update_allowlist:" + req.Target
+		taskAction = "update_allowlist"
+		runFunc = func() (string, error) {
+			if err := process.AddAllowlistPattern(req.Target, req.Pattern); err != nil {
+				return "", err
+			}
+			return "tasks.results.allowlist_updated", nil
+		}
+	case "remove-allowlist":
+		taskName = "tasks.update_allowlist:" + req.Target
+		taskAction = "update_allowlist"
+		runFunc = func() (string, error) {
+			if err := process.RemoveAllowlistPattern(req.Target, req.Pattern); err != nil {
+				return "", err
+			}
+			return "tasks.results.allowlist_updated", nil
+		}
+	case "set-approvals":
+		taskName = "tasks.set_approvals"
+		taskAction = "set_approvals"
+		runFunc = func() (string, error) {
+			if err := process.SetApprovals(req.Content); err != nil {
+				return "", err
+			}
+			return "tasks.results.approvals_set", nil
+		}
+	default:
+		s.Error(c, http.StatusBadRequest, "Unsupported action: "+req.Action)
+		return
+	}
+
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   taskName,
+		Module: "security",
+		Action: taskAction,
+		Target: req.Target,
+	}
+
+	s.runAsyncTask(c, task, func() (string, error) {
+		res, err := runFunc()
+		if err == nil {
+			// 操作成功后立即触发同步，确保缓存与物理状态对齐
+			_ = process.SyncKeySingle("security_status", s.cfg.OpenClawConfigDir)
+		}
+		return res, err
 	})
 }
 
@@ -1265,8 +1506,15 @@ func (s *Server) testOpenClawModelDirect(c *gin.Context) {
 }
 func (s *Server) getSystemVersion(c *gin.Context) {
 	current := strings.TrimPrefix(config.Version, "v")
+
+	// 如果请求带了 refresh=true，则立即触发一次物理对账
+	if c.Query("refresh") == "true" && s.guardian != nil {
+		log.Printf("🌐 [API] 收到手动版本刷新请求，正在联网对账...")
+		s.guardian.CheckVersionUpdate()
+	}
+
 	latest := strings.TrimPrefix(utils.GetSetting("latest_version", current), "v")
-	
+
 	s.Success(c, gin.H{
 		"current":              current,
 		"latest":               latest,
@@ -1433,6 +1681,107 @@ func (s *Server) getOpenClawPlugins(c *gin.Context) {
 	s.Success(c, gin.H{
 		"data":       data,
 		"updated_at": updatedAt,
+	})
+}
+
+func (s *Server) getOpenClawCronJobs(c *gin.Context) {
+	refresh := c.Query("refresh") == "true"
+	if refresh {
+		if err := process.SyncKeySingle("cron_jobs", s.cfg.OpenClawConfigDir); err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+
+	data, updatedAt, err := process.GetCachedData("cron_jobs")
+	if err != nil {
+		// 如果缓存没有，尝试同步一次
+		if err := process.SyncKeySingle("cron_jobs", s.cfg.OpenClawConfigDir); err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		data, updatedAt, _ = process.GetCachedData("cron_jobs")
+	}
+
+	s.Success(c, gin.H{
+		"data":       data,
+		"updated_at": updatedAt,
+	})
+}
+
+func (s *Server) enableCronJob(c *gin.Context) {
+	var req struct {
+		ID string `json:"id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "cron job id is required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【启用定时任务】 (ID: %s)", req.ID)
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   "tasks.enable_cron_job:" + req.ID,
+		Module: "cron",
+		Action: "enable",
+		Target: req.ID,
+	}
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.EnableOpenClawCronJob(req.ID); err != nil {
+			return "", err
+		}
+		_ = process.SyncKeySingle("cron_jobs", s.cfg.OpenClawConfigDir)
+		return "tasks.results.enabled", nil
+	})
+}
+
+func (s *Server) disableCronJob(c *gin.Context) {
+	var req struct {
+		ID string `json:"id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "cron job id is required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【禁用定时任务】 (ID: %s)", req.ID)
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   "tasks.disable_cron_job:" + req.ID,
+		Module: "cron",
+		Action: "disable",
+		Target: req.ID,
+	}
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.DisableOpenClawCronJob(req.ID); err != nil {
+			return "", err
+		}
+		_ = process.SyncKeySingle("cron_jobs", s.cfg.OpenClawConfigDir)
+		return "tasks.results.disabled", nil
+	})
+}
+
+func (s *Server) removeCronJob(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		s.Error(c, http.StatusBadRequest, "cron job id is required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【删除定时任务】 (ID: %s)", id)
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   "tasks.remove_cron_job:" + id,
+		Module: "cron",
+		Action: "remove",
+		Target: id,
+	}
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.RemoveOpenClawCronJob(id); err != nil {
+			return "", err
+		}
+		_ = process.SyncKeySingle("cron_jobs", s.cfg.OpenClawConfigDir)
+		return "tasks.results.removed", nil
 	})
 }
 
@@ -1656,4 +2005,379 @@ func (s *Server) unbindWeChatAccount(c *gin.Context) {
 		_ = process.SyncKeySingle("chat_channels", s.cfg.OpenClawConfigDir)
 		return "tasks.results.unbound", nil
 	})
+}
+
+func (s *Server) summarizeSession(c *gin.Context) {
+	var req struct {
+		Messages []map[string]interface{} `json:"messages" binding:"required"`
+		ModelID  string                   `json:"modelID"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "参数错误: "+err.Error())
+		return
+	}
+
+	// 1. 获取模型和提供商配置
+	providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "无法加载模型配置: "+err.Error())
+		return
+	}
+
+	// 优先级：请求传参 > 全局默认模型 > 第一个可用模型
+	defaultModelID := req.ModelID
+	if defaultModelID == "" {
+		// 尝试获取全局默认模型 (原来的逻辑)
+		data, err := os.ReadFile(filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json"))
+		if err == nil {
+			var fullCfg map[string]interface{}
+			if err := json.Unmarshal(data, &fullCfg); err == nil {
+				if gateway, ok := fullCfg["gateway"].(map[string]interface{}); ok {
+					if chat, ok := gateway["chat"].(map[string]interface{}); ok {
+						defaultModelID, _ = chat["defaultModel"].(string)
+					}
+				}
+			}
+		}
+	}
+
+	// 如果没有全局默认，使用第一个可用的
+	if defaultModelID == "" {
+		for _, p := range providers {
+			if pm, ok := p.(map[string]interface{}); ok {
+				if models, ok := pm["models"].([]interface{}); ok && len(models) > 0 {
+					if m, ok := models[0].(map[string]interface{}); ok {
+						defaultModelID, _ = m["id"].(string)
+						break
+					}
+				}
+			}
+		}
+	}
+
+	if defaultModelID == "" {
+		s.Error(c, http.StatusInternalServerError, "未找到可用的 AI 模型配置")
+		return
+	}
+
+	// 2. 找到提供商并解析真正的模型 ID
+	var providerName string
+	actualModelID := defaultModelID
+	if strings.Contains(defaultModelID, "/") {
+		parts := strings.SplitN(defaultModelID, "/", 2)
+		providerName = parts[0]
+		actualModelID = parts[1]
+	} else {
+		// 遍历查找
+		for name, p := range providers {
+			if pm, ok := p.(map[string]interface{}); ok {
+				if models, ok := pm["models"].([]interface{}); ok {
+					for _, m := range models {
+						if mo, ok := m.(map[string]interface{}); ok {
+							if id, _ := mo["id"].(string); id == defaultModelID {
+								providerName = name
+								break
+							}
+						}
+					}
+				}
+			}
+			if providerName != "" {
+				break
+			}
+		}
+	}
+
+	rawProv, ok := providers[providerName].(map[string]interface{})
+	if !ok {
+		s.Error(c, http.StatusNotFound, "找不到对应提供商配置: "+providerName)
+		return
+	}
+
+	baseUrl, _ := rawProv["baseUrl"].(string)
+	apiKey, _ := rawProv["apiKey"].(string)
+
+	// 3. 构造总结请求
+	summarizePrompt := "请为以下对话总结一个 10 字以内的简短标题。只需输出标题文本，不要包含引号或任何解释说明性文字。"
+	historyText := ""
+	for i, msg := range req.Messages {
+		if i > 5 { break } // 只取前 6 条以节省 token
+		role, _ := msg["role"].(string)
+		content, _ := msg["content"].(string)
+		historyText += fmt.Sprintf("[%s]: %s\n", role, content)
+	}
+
+	chatReqBody := map[string]interface{}{
+		"model": actualModelID, // 使用解析后的纯模型名
+		"messages": []map[string]string{
+			{"role": "system", "content": summarizePrompt},
+			{"role": "user", "content": historyText},
+		},
+		"stream": false,
+	}
+	jsonBody, _ := json.Marshal(chatReqBody)
+
+	targetUrl := strings.TrimSuffix(baseUrl, "/") + "/chat/completions"
+	log.Printf("🤖 [Summarize] Requesting AI Provider: %s (Model: %s)", targetUrl, defaultModelID)
+	
+	httpReq, err := http.NewRequest("POST", targetUrl, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "创建请求失败: "+err.Error())
+		return
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+
+	client := &http.Client{Timeout: 60 * time.Second} // 延长至 60s
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		log.Printf("❌ [Summarize] AI Request Failed: %v", err)
+		s.Error(c, http.StatusBadGateway, "请求 AI 提供商失败: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("❌ [Summarize] AI Provider Error (%d): %s", resp.StatusCode, string(body))
+		s.Error(c, resp.StatusCode, "AI提供商响应异常: "+string(body))
+		return
+	}
+
+	var chatRes struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&chatRes); err != nil {
+		s.Error(c, http.StatusInternalServerError, "解析 AI 响应失败: "+err.Error())
+		return
+	}
+
+	title := "未命名会话"
+	if len(chatRes.Choices) > 0 {
+		title = strings.TrimSpace(chatRes.Choices[0].Message.Content)
+		title = strings.Trim(title, "\"'\"") // 去掉引号
+	}
+
+	s.Success(c, gin.H{"title": title})
+	}
+
+func (s *Server) handleChatUpload(c *gin.Context) {
+	// 0. 安全限制：50MB 大小限制
+	const maxFileSize = 50 * 1024 * 1024
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxFileSize)
+
+	botId := c.PostForm("botId") // 获取机器人 ID
+	file, err := c.FormFile("file")
+	if err != nil {
+		s.Error(c, http.StatusBadRequest, "文件上传失败 (大小可能超过 50MB): "+err.Error())
+		return
+	}
+
+	// 0.1 类型过滤：禁止危险文件类型直接执行
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	forbiddenExts := map[string]bool{
+		".exe": true, ".bat": true, ".cmd": true, ".msi": true, ".com": true,
+	}
+	if forbiddenExts[ext] {
+		s.Error(c, http.StatusForbidden, "禁止上传可执行文件: "+ext)
+		return
+	}
+
+	// 1. 确定存储基准目录
+	uploadDir := "./data/uploads" // 默认路径
+
+	if botId != "" {
+		// 查找机器人对应的 workspace
+		botsData, err := process.GetOpenClawBotsModels(s.cfg.OpenClawConfigDir)
+		if err == nil {
+			for _, bot := range botsData.Bots {
+				if bot.ID == botId && bot.Workspace != "" {
+					// 如果机器人有专属 workspace，则在其下创建 uploads 目录
+					uploadDir = filepath.Join(utils.ExpandPath(bot.Workspace), "uploads")
+					break
+				}
+			}
+		}
+	}
+
+	// 2. 确保目录存在
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		s.Error(c, http.StatusInternalServerError, "创建存储目录失败: "+err.Error())
+		return
+	}
+
+	// 3. 生成唯一文件名，防止冲突 & 路径注入
+	// 仅保留基本 ASCII 字母、数字、点、下划线和短横线，防止中文乱码或特殊字符导致路径解析问题
+	reg, _ := regexp.Compile(`[^a-zA-Z0-9._-]+`)
+	cleanBaseName := reg.ReplaceAllString(file.Filename, "_")
+	if cleanBaseName == "" || cleanBaseName == filepath.Ext(file.Filename) {
+		cleanBaseName = "file" + filepath.Ext(file.Filename)
+	}
+	uniqueName := fmt.Sprintf("%d_%s", time.Now().UnixNano(), cleanBaseName)
+	filePath := filepath.Join(uploadDir, uniqueName)
+
+	if err := c.SaveUploadedFile(file, filePath); err != nil {
+		s.Error(c, http.StatusInternalServerError, "保存文件失败: "+err.Error())
+		return
+	}
+
+	// 3.1 如果是图片，生成缩略图
+	thumbName := ""
+	if strings.HasPrefix(c.Request.Header.Get("Content-Type"), "image/") || 
+	   matchExt(ext, ".jpg", ".jpeg", ".png", ".webp", ".gif") {
+		// 统一缩略图后缀为 .thumb.jpg，方便辨认
+		thumbName = uniqueName + ".thumb.jpg"
+		err := generateThumbnail(filePath, filepath.Join(uploadDir, thumbName))
+		if err != nil {
+			log.Printf("⚠️ [Upload] 生成缩略图失败: %v", err)
+			thumbName = "" // 失败则清空，前端会自动降级到原图
+		}
+	}
+
+	// 获取绝对路径，方便专家直接调用
+	absPath, _ := filepath.Abs(filePath)
+
+	// 4. 返回文件的访问 URL 和 实际物理路径
+	var fullURL, thumbURL string
+	escapedName := url.PathEscape(uniqueName)
+	webRoot := s.cfg.WebRoot
+	if webRoot == "/" { webRoot = "" }
+
+	if botId != "" {
+		fullURL = fmt.Sprintf("%s/v1/openclaw/chat/files/%s/%s", webRoot, botId, escapedName)
+		if thumbName != "" {
+			thumbURL = fmt.Sprintf("%s/v1/openclaw/chat/files/%s/%s", webRoot, botId, url.PathEscape(thumbName))
+		}
+	} else {
+		fullURL = fmt.Sprintf("%s/v1/openclaw/chat/files/default/%s", webRoot, escapedName)
+		if thumbName != "" {
+			thumbURL = fmt.Sprintf("%s/v1/openclaw/chat/files/default/%s", webRoot, url.PathEscape(thumbName))
+		}
+	}
+
+	s.Success(c, gin.H{
+		"url":      fullURL,
+		"thumbUrl": thumbURL, // 增加缩略图地址
+		"path":     absPath,
+		"filename": file.Filename,
+		"size":     file.Size,
+		"ext":      ext,
+	})
+}
+
+// 辅助函数：匹配后缀
+func matchExt(ext string, targets ...string) bool {
+	for _, t := range targets {
+		if ext == t { return true }
+	}
+	return false
+}
+
+// 简单的缩略图生成逻辑 (使用原生 image 库)
+func generateThumbnail(srcPath, dstPath string) error {
+	file, err := os.Open(srcPath)
+	if err != nil { return err }
+	defer file.Close()
+
+	img, _, err := image.Decode(file)
+	if err != nil { return err }
+
+	// 计算缩放比例 (宽度固定 200px)
+	bounds := img.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	
+	newWidth := 200
+	if width < 200 { newWidth = width } // 如果原图就很小，保持原宽
+	
+	newHeight := (height * newWidth) / width
+	
+	newImg := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
+	// 简单的重采样 (Nearest Neighbor)
+	for y := 0; y < newHeight; y++ {
+		for x := 0; x < newWidth; x++ {
+			newImg.Set(x, y, img.At(x*width/newWidth, y*height/newHeight))
+		}
+	}
+
+	out, err := os.Create(dstPath)
+	if err != nil { return err }
+	defer out.Close()
+
+	// 统一存为 JPEG 提高加载速度，质量设为 75
+	return jpeg.Encode(out, newImg, &jpeg.Options{Quality: 75})
+}
+
+// handleGetChatFile 动态读取聊天文件，支持多 workspace 隔离
+func (s *Server) handleGetChatFile(c *gin.Context) {
+	botId := c.Param("botId")
+	filename := c.Param("filename")
+
+	// 1. 确定物理路径
+	uploadDir := "./data/uploads"
+	if botId != "" && botId != "default" {
+		botsData, err := process.GetOpenClawBotsModels(s.cfg.OpenClawConfigDir)
+		if err == nil {
+			for _, bot := range botsData.Bots {
+				if bot.ID == botId && bot.Workspace != "" {
+					uploadDir = filepath.Join(utils.ExpandPath(bot.Workspace), "uploads")
+					break
+				}
+			}
+		}
+	}
+
+	filePath := filepath.Join(uploadDir, filename)
+	
+	// 安全校验：防止路径穿越 (Path Traversal)
+	absUploadDir, err := filepath.Abs(uploadDir)
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	cleanPath, err := filepath.Abs(filePath)
+	if err != nil {
+		c.Status(http.StatusForbidden)
+		return
+	}
+
+	// ⚠️ strings.HasPrefix("/a/b2", "/a/b") 会误判为 true，因此必须用 filepath.Rel 做边界判断
+	rel, err := filepath.Rel(absUploadDir, cleanPath)
+	if err != nil {
+		c.Status(http.StatusForbidden)
+		return
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		c.Status(http.StatusForbidden)
+		return
+	}
+
+	if _, err := os.Stat(cleanPath); os.IsNotExist(err) {
+		c.Status(http.StatusNotFound)
+		return
+	}
+
+	c.File(cleanPath)
+}
+
+func (s *Server) getUsageCost(c *gin.Context) {
+	daysStr := c.DefaultQuery("days", "30")
+	forceStr := c.DefaultQuery("force", "false")
+	var days int
+	fmt.Sscanf(daysStr, "%d", &days)
+	force := forceStr == "true"
+
+	data, err := process.GetUsageCost(days, force)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, data)
 }

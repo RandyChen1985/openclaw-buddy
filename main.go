@@ -138,7 +138,7 @@ func main() {
 	go g.Run(ctx)
 
 	// 8. Start Web Server
-	server := api.NewServer(cfg)
+	server := api.NewServer(cfg, g)
 	
 	if runtime.GOOS == "windows" && os.Getenv("CLI_MODE") != "true" {
 		log.Printf("🚀 Starting GUI mode (Windows)...")
