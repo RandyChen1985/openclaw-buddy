@@ -1525,13 +1525,33 @@ export function useV3Messages({
       if (stream === 'lifecycle.end' || (stream === 'lifecycle' && agentData?.phase === 'end')) {
         lastStreamEventAtRef.current = Date.now();
         if (effectiveKey) {
-          cancelPendingFinalUiRelease(effectiveKey);
-          markSessionTyping(effectiveKey, false);
-        }
-        if (effectiveKey === sessionKeyRef.current) {
-          setIsTyping(false);
-          clearStallTimer();
-          streamingAssistantIndexRef.current = null;
+          if (effectiveKey === sessionKeyRef.current) {
+            clearStallTimer();
+          }
+          /**
+           * 与 chat.final 的释锁策略对齐：final 会先排一条短时延时任务再解锁。
+           * 若此处 cancelPendingFinalUiRelease + 立刻 setIsTyping(false)，会在「final 已排程、
+           * 网关仍在后续思考/子回合」时提前撤销 grace 并误释锁输入区；切会话再回来会靠
+           * loadSessionHistory 与流缓存把状态补正。
+           */
+          if (!finalUiReleaseTimersRef.current.has(effectiveKey)) {
+            cancelPendingFinalUiRelease(effectiveKey);
+            const timer = setTimeout(() => {
+              if (finalUiReleaseTimersRef.current.get(effectiveKey) === timer) {
+                finalUiReleaseTimersRef.current.delete(effectiveKey);
+              }
+              markSessionTyping(effectiveKey, false);
+              if (effectiveKey === sessionKeyRef.current) {
+                setIsTyping(false);
+                streamingAssistantIndexRef.current = null;
+                fetchSessions(true);
+                setTimeout(() => inputAreaRef.current?.focus(), 100);
+              } else {
+                fetchSessions(true);
+              }
+            }, FINAL_UI_SETTLE_MS);
+            finalUiReleaseTimersRef.current.set(effectiveKey, timer);
+          }
         }
       }
 
