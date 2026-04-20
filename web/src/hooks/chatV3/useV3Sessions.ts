@@ -30,8 +30,8 @@ export interface UseV3SessionsParams {
     loadSessionHistory?: (key: string) => Promise<void> | void;
     setHasNewMessages?: (val: boolean) => void;
     getMessagesCount?: () => number;
-    /** 新建/切换会话时清掉上一会话的生成中状态，避免输入框被 isTyping 锁死 */
-    resetTypingState?: () => void;
+    /** 新建/切换会话时平滑过渡生成中状态，避免输入框被 isTyping 锁死或闪烁 */
+    resetTypingState?: (nextKey?: string) => void;
   }>;
   inputAreaRef: React.RefObject<any>;
 }
@@ -132,8 +132,7 @@ export function useV3Sessions({
    */
   const handleSelectSession = useCallback((key: string) => {
     if (key === sessionKey) return;
-
-    messageOpsRef.current.resetTypingState?.();
+    messageOpsRef.current.resetTypingState?.(key);
 
     // 取消订阅旧会话的消息推送，订阅新会话
     if (sessionKey) {
@@ -173,8 +172,7 @@ export function useV3Sessions({
     if (creatingNewSessionRef.current) return;
     creatingNewSessionRef.current = true;
     setIsCreatingNewSession(true);
-
-    messageOpsRef.current.resetTypingState?.();
+    messageOpsRef.current.resetTypingState?.('');
     if (sessionKey) {
       sendRPC('sessions.messages.unsubscribe', { key: sessionKey, sessionKey }).catch(() => {});
     }

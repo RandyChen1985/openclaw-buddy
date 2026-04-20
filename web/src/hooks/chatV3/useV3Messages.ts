@@ -639,22 +639,6 @@ export function useV3Messages({
   }, []);
 
   /**
-   * 新建/切换会话时解除「当前消息区」的生成中锁：否则 isTyping 仍为 true，输入框会一直 disabled。
-   * 由会话层通过 messageOpsRef 调用（不代替 chat.abort，仅清本地 UI 状态）。
-   *
-   * 注意：不清空 `typingSessionKeys` / `typingSessionsRef`。侧边栏「笔」表示**各会话**是否在流式生成；
-   * 切换走后上一会话可能仍在生成，若此处清空且随后收不到 delta（如已 unsubscribe），笔会误消失。
-   */
-  const resetTypingState = useCallback(() => {
-    const current = sessionKeyRef.current;
-    if (current) cancelPendingFinalUiRelease(current);
-    abortRequestedRef.current = null;
-    clearStallTimer();
-    setIsTyping(false);
-    streamingAssistantIndexRef.current = null;
-  }, [cancelPendingFinalUiRelease, clearStallTimer]);
-
-  /**
    * 重置 stall 计时器：若在指定时间内未收到流式更新，则将 UI 标记为 stalled。
    */
   const resetStallTimer = useCallback(() => {
@@ -663,6 +647,53 @@ export function useV3Messages({
       setIsStalled(true);
     }, 2000);
   }, [clearStallTimer]);
+
+  /**
+   * 新建/切换会话时解除「当前消息区」的生成中锁：根据目标会话是否在生成中来平滑过渡 isTyping 状态。
+   * 由会话层通过 messageOpsRef 调用（不代替 chat.abort，仅维护本地 UI 状态）。
+   *
+   * @param nextKey 目标切换的会话 Key
+   */
+  const resetTypingState = useCallback((nextKey?: string) => {
+    const current = sessionKeyRef.current;
+    if (current) cancelPendingFinalUiRelease(current);
+    abortRequestedRef.current = null;
+    clearStallTimer();
+
+    // 如果目标会话已经在生成中（侧边栏有笔），则无缝平滑过渡 isTyping 状态，避免输入框闪烁释放
+    const targetIsTyping = nextKey ? typingSessionsRef.current.has(nextKey) : false;
+    
+    setIsTyping(targetIsTyping);
+    if (targetIsTyping) {
+      resetStallTimer();
+    }
+    
+    streamingAssistantIndexRef.current = null;
+  }, [cancelPendingFinalUiRelease, clearStallTimer, resetStallTimer]);
+
+  /**
+   * 延迟释放生成中锁：统一管理 chat.final 与 agent.lifecycle.end 的释锁时机。
+   * 采用“最后一次到达延迟发放”策略，确保各路流信息（消息、思考、工具调用）全部落盘后再解锁。
+   */
+  const releaseTypingLock = useCallback((key: string, ms = FINAL_UI_SETTLE_MS) => {
+    cancelPendingFinalUiRelease(key);
+    const timer = setTimeout(() => {
+      if (finalUiReleaseTimersRef.current.get(key) === timer) {
+        finalUiReleaseTimersRef.current.delete(key);
+      }
+      markSessionTyping(key, false);
+      if (key === sessionKeyRef.current) {
+        setIsTyping(false);
+        streamingAssistantIndexRef.current = null;
+        fetchSessions(true);
+        setTimeout(() => inputAreaRef.current?.focus(), 100);
+      } else {
+        fetchSessions(true);
+      }
+    }, ms);
+    finalUiReleaseTimersRef.current.set(key, timer);
+  }, [cancelPendingFinalUiRelease, fetchSessions, inputAreaRef, markSessionTyping]);
+
 
   /**
    * 将多种 content 结构统一格式化为 Markdown 文本，供渲染层消费。
@@ -991,32 +1022,9 @@ export function useV3Messages({
             return next;
           });
 
-          cancelPendingFinalUiRelease(pSessionKey);
-          const timer = setTimeout(() => {
-            if (finalUiReleaseTimersRef.current.get(pSessionKey) === timer) {
-              finalUiReleaseTimersRef.current.delete(pSessionKey);
-            }
-            markSessionTyping(pSessionKey, false);
-            if (pSessionKey === sessionKeyRef.current) {
-              setIsTyping(false);
-              streamingAssistantIndexRef.current = null;
-              fetchSessions(true);
-              setTimeout(() => inputAreaRef.current?.focus(), 100);
-            } else {
-              fetchSessions(true);
-            }
-          }, FINAL_UI_SETTLE_MS);
-          finalUiReleaseTimersRef.current.set(pSessionKey, timer);
+          releaseTypingLock(pSessionKey);
         } else {
-          cancelPendingFinalUiRelease(pSessionKey);
-          const timer = setTimeout(() => {
-            if (finalUiReleaseTimersRef.current.get(pSessionKey) === timer) {
-              finalUiReleaseTimersRef.current.delete(pSessionKey);
-            }
-            markSessionTyping(pSessionKey, false);
-            fetchSessions(true);
-          }, FINAL_UI_SETTLE_MS);
-          finalUiReleaseTimersRef.current.set(pSessionKey, timer);
+          releaseTypingLock(pSessionKey);
         }
       }
     } else if (payload.state === 'aborted') {
@@ -1528,30 +1536,9 @@ export function useV3Messages({
           if (effectiveKey === sessionKeyRef.current) {
             clearStallTimer();
           }
-          /**
-           * 与 chat.final 的释锁策略对齐：final 会先排一条短时延时任务再解锁。
-           * 若此处 cancelPendingFinalUiRelease + 立刻 setIsTyping(false)，会在「final 已排程、
-           * 网关仍在后续思考/子回合」时提前撤销 grace 并误释锁输入区；切会话再回来会靠
-           * loadSessionHistory 与流缓存把状态补正。
-           */
-          if (!finalUiReleaseTimersRef.current.has(effectiveKey)) {
-            cancelPendingFinalUiRelease(effectiveKey);
-            const timer = setTimeout(() => {
-              if (finalUiReleaseTimersRef.current.get(effectiveKey) === timer) {
-                finalUiReleaseTimersRef.current.delete(effectiveKey);
-              }
-              markSessionTyping(effectiveKey, false);
-              if (effectiveKey === sessionKeyRef.current) {
-                setIsTyping(false);
-                streamingAssistantIndexRef.current = null;
-                fetchSessions(true);
-                setTimeout(() => inputAreaRef.current?.focus(), 100);
-              } else {
-                fetchSessions(true);
-              }
-            }, FINAL_UI_SETTLE_MS);
-            finalUiReleaseTimersRef.current.set(effectiveKey, timer);
-          }
+          // 统一使用 releaseTypingLock 延迟释放。
+          // 不再检查 .has(effectiveKey)，以便后续到达的 lifecycle.end 能够“刷新”并延长释锁时间，防止提前释放。
+          releaseTypingLock(effectiveKey);
         }
       }
 
@@ -1972,6 +1959,13 @@ export function useV3Messages({
       t('chat.thinking'),
       t('chat.deepThinking', { defaultValue: '深度思考中...' }),
     );
+
+    // resetTypingState 只清当前页 isTyping，不会从 typingSessionsRef 摘掉「已切走」的会话。
+    // 若网关已发 final 导致 cache.isTyping=false，仅靠 cache 无法 shouldKeepTyping；但 ref 仍可能
+    // 表示该会话在生成（延时释锁尚未执行），切回时应恢复输入锁与 stall 计时。
+    if (!shouldKeepTyping && typingSessionsRef.current.has(key)) {
+      shouldKeepTyping = true;
+    }
 
     if (!isActiveRequest()) {
       if (latestHistoryRequestRef.current === requestId) setIsLoadingHistory(false);
