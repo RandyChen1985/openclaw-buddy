@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Drawer, Input, Spin, Tabs, Button, message } from 'antd';
-import { Eye, PenLine, Save, Sparkles, X } from 'lucide-react';
+import { Brain, Eye, PenLine, Save, X } from 'lucide-react';
 
 export interface V3SoulEditorDrawerProps {
   t: any;
@@ -71,20 +71,20 @@ export function V3SoulEditorDrawer({ t, isMobile, selectedBot, botsModels, statu
       <Button
         type="text"
         size="small"
-        icon={<Sparkles size={18} color="#eab308" />}
+        icon={<Brain size={18} color="#8b5cf6" />}
         onClick={handleOpen}
         disabled={!selectedBot || status !== 'authenticated'}
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#fffbeb',
+          background: '#f5f3ff',
           border: 'none',
           borderRadius: 10,
           height: 38,
           width: 38,
           padding: 0,
-          boxShadow: '0 2px 4px rgba(234, 179, 8, 0.05)'
+          boxShadow: '0 2px 4px rgba(124, 58, 237, 0.06)'
         }}
       />
 
@@ -103,7 +103,7 @@ export function V3SoulEditorDrawer({ t, isMobile, selectedBot, botsModels, statu
                   justifyContent: 'center'
                 }}
               >
-                <Sparkles size={18} color="#d97706" />
+                <Brain size={18} color="#7c3aed" />
               </div>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Badge, Button, Dropdown, Input, Modal, Radio, Select, Switch, Tooltip } from 'antd';
-import { LayoutPanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2 } from 'lucide-react';
+import { LayoutPanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2, Wifi } from 'lucide-react';
 import type { V3ThemeMode, V3ThemePresetId, V3ThemeTokens } from '../../hooks/chatV3/useV3Theme';
 
 export interface V3ChatHeaderProps {
@@ -535,7 +535,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           </div>
         )}
 
-        <Button size="small" type="text" icon={<RefreshCw size={13} />} onClick={onReconnect} title={t('common.restart')} />
+        <Button size="small" type="text" icon={<Wifi size={14} />} onClick={onReconnect} title={t('common.restart')} />
 
         <Dropdown
           open={settingsOpen}

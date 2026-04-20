@@ -295,6 +295,7 @@ export const useChatV3WebSocket = ({
     fetchSessions,
     handleSelectSession,
     startNewSession,
+    loadSessionHistory,
     handleSend,
     handleStopGeneration,
     handleRegenerate,
