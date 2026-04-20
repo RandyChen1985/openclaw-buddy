@@ -277,20 +277,16 @@ export function useV3GatewayConnection({
     connectInFlightRef.current = true;
 
     dispatch({ type: 'CONNECT_REQUEST' });
-    // 与 getTicket / WebSocket 建连并行预取 token，challenge 到达时多数已就绪
-    void ensureGatewayToken().catch(() => {});
+    
+    // 💡 性能优化：并行预取 Ticket 和 Gateway Token，缩短等待链路
+    const tokenPromise = ensureGatewayToken().catch(() => '');
+    const ticketPromise = getTicket().catch(() => null);
 
     const oldWs = wsRef.current;
     wsRef.current = null;
     if (oldWs) oldWs.close();
 
-    let ticket: string | null = null;
-    try {
-      ticket = await getTicket();
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('❌ [V3] getTicket 失败，回退到 token 认证:', e);
-    }
+    const [ticket] = await Promise.all([ticketPromise, tokenPromise]);
     const token = storage.getItem('guardian_token');
     const wsUrl = ticket
       ? getWsUrl(`/v1/ws/gateway?ticket=${ticket}`)

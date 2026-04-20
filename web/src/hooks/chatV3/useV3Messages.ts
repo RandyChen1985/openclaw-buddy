@@ -853,7 +853,6 @@ export function useV3Messages({
       cancelPendingFinalUiRelease(pSessionKey);
       markSessionTyping(pSessionKey, true);
       if (pSessionKey === sessionKeyRef.current) {
-        resetStallTimer();
         setIsTyping(true);
         const thinkLabel = t('chat.deepThinking', { defaultValue: '深度思考中...' });
         setMessages(prev => {
@@ -1589,7 +1588,6 @@ export function useV3Messages({
         }
         if (effectiveKey === sessionKeyRef.current) {
           setIsTyping(true);
-          resetStallTimer();
         }
       }
 
@@ -1713,7 +1711,8 @@ export function useV3Messages({
         cancelPendingFinalUiRelease(effectiveKey);
         markSessionTyping(effectiveKey, true);
         lastStreamEventAtRef.current = Date.now();
-        resetStallTimer();
+        // 💡 根据用户要求：工具调用和计划更新不再重置 stall 计时器，
+        // 只有收到真正的文字 delta 才会重置，这样在长时工具执行期间会准时显示安抚文案。
         setIsTyping(true);
 
         const pickFirst = (obj: any, keys: string[]) => {
