@@ -44,7 +44,6 @@ interface V3MessageItemProps {
   onDelete: (index: number) => void;
   onQuote: (content: string) => void;
   onSend: (content: string) => void;
-  onApprovalResolve?: (approvalId: string, decision: string) => void;
   onRegenerate: () => void;
   copyToClipboard: (text: string) => void;
   isTyping: boolean;
@@ -112,7 +111,7 @@ const CollapsibleMeta = ({ title, icon: Icon, children, defaultExpanded = false 
 const V3MessageItem: React.FC<V3MessageItemProps> = ({ 
   msg, index, isMobile, showThinking,
   editingMsgIndex, editContent, setEditContent,
-  onEdit, onSaveEdit, onCancelEdit, onQuote, onSend, onApprovalResolve, onRegenerate,
+  onEdit, onSaveEdit, onCancelEdit, onQuote, onSend, onRegenerate,
   copyToClipboard, isTyping, isLast, isStalled, tpsData, mainHasTranscript, metaContent, t
 }) => {
   const [thinkingSeconds, setThinkingSeconds] = useState(0);
@@ -229,7 +228,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
     setMetaExpanded((v) => !v);
   };
 
-  // 从原始消息提取完整 approvalId（UUID），供审批按钮 RPC 使用
+  // 从原始消息提取完整 approvalId（UUID），供 /approve 用户消息与网关一致
   const approvalMeta = useMemo(() => {
     if (!hasApproval) return { slug: '', approvalId: '' };
     const raw = msg.content;
@@ -306,13 +305,14 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         );
       }
       if (fullText.includes(':::approval')) {
-        const approvalIdForRPC = approvalMeta.approvalId;
+        const approvalId = approvalMeta.approvalId;
         const slug = approvalMeta.slug;
         const rawContent = msg.content;
         const alreadyResolved =
           rawContent.includes('— ✅') || rawContent.includes('— ❌') ||
-          rawContent.includes('— ⏱️') || rawContent.includes('已超时');
-        const approvalClickKey = approvalIdForRPC || slug;
+          rawContent.includes('— ⏱️') || rawContent.includes('已超时') ||
+          rawContent.includes('已批准(永久)');
+        const approvalClickKey = approvalId || slug;
         const isClicked = approvalClickKey ? !!approvalClicked[approvalClickKey] : false;
         const isDisabled = alreadyResolved || isClicked;
         return (
@@ -326,26 +326,35 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
               <span style={{ fontWeight: 600, fontSize: 14 }}>{t('chat.approvalRequired')}</span>
             </div>
             <div style={{ marginBottom: 12, opacity: 0.9 }}>{children}</div>
-            <Button
-              type="primary" danger block icon={<ShieldCheck size={16} />}
-              disabled={isDisabled}
-              onClick={() => {
-                if (!approvalIdForRPC || isDisabled) return;
-                setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true }));
-                if (onApprovalResolve) {
-                  const maybePromise = (onApprovalResolve as any)(approvalIdForRPC, 'allow-once');
-                  Promise.resolve(maybePromise).catch(() => {
-                    setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: false }));
-                  });
-                } else {
-                  onSend(`/approve ${approvalIdForRPC} allow-once`);
-                }
-                message.success(t('chat.approvalSent', { defaultValue: '已提交审批指令' }));
-              }}
-              style={{ borderRadius: 8, fontWeight: 600, height: 36 }}
-            >
-              {t('chat.approveNow')}
-            </Button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Button
+                type="primary" danger block icon={<ShieldCheck size={16} />}
+                disabled={isDisabled}
+                onClick={() => {
+                  if (!approvalId || isDisabled) return;
+                  setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true }));
+                  onSend(`/approve ${approvalId} allow-once`);
+                  message.success(t('chat.approvalSent', { defaultValue: '已提交审批指令' }));
+                }}
+                style={{ borderRadius: 8, fontWeight: 600, height: 36 }}
+              >
+                {t('chat.approveNow')}
+              </Button>
+              <Button
+                block
+                icon={<ShieldCheck size={16} />}
+                disabled={isDisabled}
+                onClick={() => {
+                  if (!approvalId || isDisabled) return;
+                  setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true }));
+                  onSend(`/approve ${approvalId} allow-always`);
+                  message.success(t('chat.approvalSentAlways', { defaultValue: '已提交永久审批' }));
+                }}
+                style={{ borderRadius: 8, fontWeight: 600, height: 36 }}
+              >
+                {t('chat.approveAllowAlways')}
+              </Button>
+            </div>
           </div>
         );
       }
@@ -565,7 +574,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                       // 不能用 hasApproval（整条消息级）：否则同条消息里 session.tool 追加的
                       // `> 🔧 \`exec\` 执行中…` 等普通引用块也会被误判成审批 UI，出现两个红框。
                       if (fullText.includes(':::approval')) {
-                        const approvalIdForRPC = approvalMeta.approvalId;
+                        const approvalId = approvalMeta.approvalId;
                         const slug = approvalMeta.slug;
 
                         const rawContent = msg.content;
@@ -573,9 +582,10 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                           rawContent.includes('— ✅') ||
                           rawContent.includes('— ❌') ||
                           rawContent.includes('— ⏱️') ||
-                          rawContent.includes('已超时');
+                          rawContent.includes('已超时') ||
+                          rawContent.includes('已批准(永久)');
 
-                        const approvalClickKey = approvalIdForRPC || slug;
+                        const approvalClickKey = approvalId || slug;
                         const isClicked = approvalClickKey ? !!approvalClicked[approvalClickKey] : false;
                         const isDisabled = alreadyResolved || isClicked;
 
@@ -590,31 +600,35 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                               <span style={{ fontWeight: 600, fontSize: 14 }}>{t('chat.approvalRequired')}</span>
                             </div>
                             <div style={{ marginBottom: 12, opacity: 0.9 }}>{children}</div>
-                            <Button 
-                              type="primary" danger block icon={<ShieldCheck size={16} />}
-                              disabled={isDisabled}
-                              onClick={() => {
-                                // 审批走 WebSocket RPC：exec.approval.resolve
-                                // 优先使用完整 approvalId（UUID），避免只用 slug 导致放行失败
-                                if (!approvalIdForRPC || isDisabled) return;
-
-                                setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true }));
-                                if (onApprovalResolve) {
-                                  const maybePromise = (onApprovalResolve as any)(approvalIdForRPC, 'allow-once');
-                                  Promise.resolve(maybePromise).catch(() => {
-                                    // 若 resolve 失败，恢复按钮，避免“卡死禁用”
-                                    setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: false }));
-                                  });
-                                } else {
-                                  // 兜底：没有注入 resolve handler 时，退回到发送命令
-                                  onSend(`/approve ${approvalIdForRPC} allow-once`);
-                                }
-                                message.success(t('chat.approvalSent', { defaultValue: '已提交审批指令' }));
-                              }}
-                              style={{ borderRadius: 8, fontWeight: 600, height: 36 }}
-                            >
-                              {t('chat.approveNow')}
-                            </Button>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <Button
+                                type="primary" danger block icon={<ShieldCheck size={16} />}
+                                disabled={isDisabled}
+                                onClick={() => {
+                                  if (!approvalId || isDisabled) return;
+                                  setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true }));
+                                  onSend(`/approve ${approvalId} allow-once`);
+                                  message.success(t('chat.approvalSent', { defaultValue: '已提交审批指令' }));
+                                }}
+                                style={{ borderRadius: 8, fontWeight: 600, height: 36 }}
+                              >
+                                {t('chat.approveNow')}
+                              </Button>
+                              <Button
+                                block
+                                icon={<ShieldCheck size={16} />}
+                                disabled={isDisabled}
+                                onClick={() => {
+                                  if (!approvalId || isDisabled) return;
+                                  setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true }));
+                                  onSend(`/approve ${approvalId} allow-always`);
+                                  message.success(t('chat.approvalSentAlways', { defaultValue: '已提交永久审批' }));
+                                }}
+                                style={{ borderRadius: 8, fontWeight: 600, height: 36 }}
+                              >
+                                {t('chat.approveAllowAlways')}
+                              </Button>
+                            </div>
                           </div>
                         );
                       }
