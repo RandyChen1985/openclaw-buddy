@@ -4,7 +4,7 @@ import type { FileInfo, Message } from '../useChatV3WebSocket';
 import { buildBuddyDirectSessionKey } from '../../utils/buddySessionKey';
 
 /** 收到 chat final 后延迟再松 typing，避免多段 final / 尾包 delta 时误以为已可输入 */
-const FINAL_UI_SETTLE_MS = 650;
+const FINAL_UI_SETTLE_MS = 1000;
 
 const MAX_SESSION_CACHE_ENTRIES = 30;
 
@@ -491,6 +491,8 @@ export function useV3Messages({
   const [typingSessionKeys, setTypingSessionKeys] = useState<string[]>([]);
 
   const typingSessionsRef = useRef<Set<string>>(new Set());
+  /** 追踪会话的全局状态 (running/done/error)，由于网关 chat.final 只是 run 结束，不能直接解锁 UI */
+  const sessionStatusMapRef = useRef<Map<string, string>>(new Map());
 
   /**
    * 标记某个 session 是否处于“正在生成/流式推送中”。
@@ -690,6 +692,12 @@ export function useV3Messages({
       const cache = sessionCacheRef.current.get(key);
       if (cache && cache.activeRuns && cache.activeRuns.size > 0) {
         // 仍有活跃任务（Parallel 执行中），暂不释放，等待下一个 lifecycle.end 或 chat.final
+        return;
+      }
+
+      // v3 增强：从网关全局视野判断，哪怕局部 run 结束，若 session 状态仍为 running 则不解锁
+      const globalStatus = sessionStatusMapRef.current.get(key);
+      if (globalStatus === 'running') {
         return;
       }
 
@@ -1520,6 +1528,27 @@ export function useV3Messages({
       handleChatDelta(data.payload);
       return;
     }
+    if (evt === 'sessions.changed') {
+      const { key: evtKey, data: sessionData } = data.payload || {};
+      if (evtKey) {
+        const oldStatus = sessionStatusMapRef.current.get(evtKey);
+        const newStatus = sessionData?.status;
+        sessionStatusMapRef.current.set(evtKey, newStatus);
+
+        // 如果状态变更为 done/error，且当前会话无活跃运行中 run，尝试触发延时解锁。
+        if (evtKey === sessionKeyRef.current && newStatus === 'running') {
+          setIsTyping(true);
+          // 仅当状态从非 running 切换到 running 时才重置 stall 计时器（初始化）。
+          // 后续在该状态下的元数据更新（如 token count 变化）不应重置它，否则会遮蔽“文字流停顿”的提示
+          if (oldStatus !== 'running') {
+            resetStallTimer();
+          }
+        } else if (newStatus === 'done' || newStatus === 'error') {
+          releaseTypingLock(evtKey);
+        }
+      }
+      return;
+    }
     if (evt === 'session.message') {
       handleSessionMessage(data.payload);
       return;
@@ -2008,10 +2037,8 @@ export function useV3Messages({
       t('chat.deepThinking', { defaultValue: '深度思考中...' }),
     );
 
-    // resetTypingState 只清当前页 isTyping，不会从 typingSessionsRef 摘掉「已切走」的会话。
-    // 若网关已发 final 导致 cache.isTyping=false，仅靠 cache 无法 shouldKeepTyping；但 ref 仍可能
-    // 表示该会话在生成（延时释锁尚未执行），切回时应恢复输入锁与 stall 计时。
-    if (!shouldKeepTyping && typingSessionsRef.current.has(key)) {
+    // v3 增强：切回会话时，除了看本地 1s 延时锁，也要看网关推来的全局 status 是否仍为 running
+    if (!shouldKeepTyping && (typingSessionsRef.current.has(key) || sessionStatusMapRef.current.get(key) === 'running')) {
       shouldKeepTyping = true;
     }
 
