@@ -25,6 +25,10 @@ type SessionStreamCache = {
    * 存下来以便切回该会话重新加载历史时能把折叠卡片贴回对应的 assistant 消息。
    */
   metadataByRunId: Map<string, string>;
+  /**
+   * 当前会话活跃中的 RunId 集合。用于并行任务场景下，只有当所有 Run 都结束时才真正关闭 typing 锁。
+   */
+  activeRuns: Set<string>;
 };
 
 const MAX_METADATA_ENTRIES_PER_SESSION = 20;
@@ -599,7 +603,8 @@ export function useV3Messages({
       tokenCount: 0,
       tpsData: [],
       lastTouched: Date.now(),
-      metadataByRunId: new Map<string, string>()
+      metadataByRunId: new Map<string, string>(),
+      activeRuns: new Set<string>()
     };
     touchAndPruneSessionCache(key, created);
     return created;
@@ -681,6 +686,13 @@ export function useV3Messages({
       if (finalUiReleaseTimersRef.current.get(key) === timer) {
         finalUiReleaseTimersRef.current.delete(key);
       }
+      
+      const cache = sessionCacheRef.current.get(key);
+      if (cache && cache.activeRuns && cache.activeRuns.size > 0) {
+        // 仍有活跃任务（Parallel 执行中），暂不释放，等待下一个 lifecycle.end 或 chat.final
+        return;
+      }
+
       markSessionTyping(key, false);
       if (key === sessionKeyRef.current) {
         setIsTyping(false);
@@ -827,6 +839,9 @@ export function useV3Messages({
     if (payload.state === 'thought' || payload.state === 'thinking') {
       const abortReq = abortRequestedRef.current;
       if (abortReq && abortReq.key === pSessionKey) return;
+
+      if (payload.runId) cache.activeRuns.add(payload.runId);
+
       cancelPendingFinalUiRelease(pSessionKey);
       markSessionTyping(pSessionKey, true);
       if (pSessionKey === sessionKeyRef.current) {
@@ -851,6 +866,8 @@ export function useV3Messages({
       // 用户已请求停止，丢弃 abort 生效前仍在途的 delta
       const abortReq = abortRequestedRef.current;
       if (abortReq && abortReq.key === pSessionKey) return;
+
+      if (payload.runId) cache.activeRuns.add(payload.runId);
 
       cancelPendingFinalUiRelease(pSessionKey);
       markSessionTyping(pSessionKey, true);
@@ -946,6 +963,9 @@ export function useV3Messages({
       const wasUserAbort = abortRequestedRef.current?.key === pSessionKey;
       abortRequestedRef.current = null;
       cache.isTyping = false;
+
+      if (payload.runId) cache.activeRuns.delete(payload.runId);
+
       touchAndPruneSessionCache(pSessionKey, cache);
       streamEndGraceRef.current = { key: pSessionKey, until: Date.now() + 3000 };
       if (pSessionKey === sessionKeyRef.current) clearStallTimer();
@@ -1034,6 +1054,9 @@ export function useV3Messages({
       const wasUserAbort = abortRequestedRef.current?.key === pSessionKey;
       abortRequestedRef.current = null;
       cache.isTyping = false;
+
+      if (payload.runId) cache.activeRuns.delete(payload.runId);
+
       touchAndPruneSessionCache(pSessionKey, cache);
       markSessionTyping(pSessionKey, false);
       streamEndGraceRef.current = { key: pSessionKey, until: Date.now() + 3000 };
@@ -1076,6 +1099,9 @@ export function useV3Messages({
       const wasUserAbort = abortRequestedRef.current?.key === pSessionKey;
       abortRequestedRef.current = null;
       cache.isTyping = false;
+
+      if (payload.runId) cache.activeRuns.delete(payload.runId);
+
       touchAndPruneSessionCache(pSessionKey, cache);
       markSessionTyping(pSessionKey, false);
       streamEndGraceRef.current = { key: pSessionKey, until: Date.now() + 3000 };
@@ -1111,7 +1137,7 @@ export function useV3Messages({
         setTimeout(() => inputAreaRef.current?.focus(), 100);
       }
     }
-  }, [cancelPendingFinalUiRelease, clearStallTimer, fetchSessions, formatMessageContent, getOrCreateSessionCache, inputAreaRef, markSessionTyping, rememberMetadataForRun, resetStallTimer, scrollRef, showScrollBtnRef, t, touchAndPruneSessionCache, virtuosoRef]);
+  }, [cancelPendingFinalUiRelease, clearStallTimer, fetchSessions, formatMessageContent, getOrCreateSessionCache, inputAreaRef, markSessionTyping, releaseTypingLock, rememberMetadataForRun, resetStallTimer, scrollRef, showScrollBtnRef, t, touchAndPruneSessionCache, virtuosoRef]);
 
   /**
    * 处理审批请求事件：将审批卡片以 Markdown block 注入到消息流中，确保 UI 一定可见。
@@ -1444,6 +1470,10 @@ export function useV3Messages({
 
     if (phase === 'start' || phase === '') {
       if (!showThinkingRef.current) return;
+      
+      const cache = getOrCreateSessionCache(evtKey);
+      if (runId) cache.activeRuns.add(runId);
+
       setMessages(prev => {
         const mainMsg = prev.find(m => !m._uiMetaOnly && m.role === 'assistant' && m.runId === runId);
         const effectiveRunId = runId || mainMsg?.runId
@@ -1470,7 +1500,7 @@ export function useV3Messages({
         );
       });
     }
-  }, [showThinkingRef, t]);
+  }, [getOrCreateSessionCache, showThinkingRef, t]);
 
   /**
    * 统一处理网关 event（除 health/connect.challenge/sessions.changed 外）。
@@ -1521,6 +1551,10 @@ export function useV3Messages({
       if (stream === 'lifecycle.start' || (stream === 'lifecycle' && agentData?.phase === 'start')) {
         lastStreamEventAtRef.current = Date.now();
         if (effectiveKey) {
+          const cache = getOrCreateSessionCache(effectiveKey);
+          const runId = (agentData?.runId as string | undefined) || (data.payload?.runId as string | undefined);
+          if (runId) cache.activeRuns.add(runId);
+
           cancelPendingFinalUiRelease(effectiveKey);
           markSessionTyping(effectiveKey, true);
         }
@@ -1533,6 +1567,10 @@ export function useV3Messages({
       if (stream === 'lifecycle.end' || (stream === 'lifecycle' && agentData?.phase === 'end')) {
         lastStreamEventAtRef.current = Date.now();
         if (effectiveKey) {
+          const cache = getOrCreateSessionCache(effectiveKey);
+          const runId = (agentData?.runId as string | undefined) || (data.payload?.runId as string | undefined);
+          if (runId) cache.activeRuns.delete(runId);
+
           if (effectiveKey === sessionKeyRef.current) {
             clearStallTimer();
           }
@@ -1545,6 +1583,10 @@ export function useV3Messages({
       if (stream === 'lifecycle.error' || (stream === 'lifecycle' && agentData?.phase === 'error')) {
         lastStreamEventAtRef.current = Date.now();
         if (effectiveKey) {
+          const cache = getOrCreateSessionCache(effectiveKey);
+          const runId = (agentData?.runId as string | undefined) || (data.payload?.runId as string | undefined);
+          if (runId) cache.activeRuns.delete(runId);
+
           cancelPendingFinalUiRelease(effectiveKey);
           markSessionTyping(effectiveKey, false);
         }
@@ -1633,6 +1675,12 @@ export function useV3Messages({
         if (!effectiveKey || effectiveKey !== sessionKeyRef.current) return;
 
         // transcript 已 final 但 agent 侧仍在推 thinking/tool：撤掉 final 的延时解锁，并保持会话「生成中」
+        const cache = getOrCreateSessionCache(effectiveKey);
+        const runId = (agentData?.runId as string | undefined)
+          || (data.payload?.runId as string | undefined)
+          || streamingAssistantIndexRef.current !== null ? messagesRef.current[streamingAssistantIndexRef.current!]?.runId : undefined;
+        if (runId) cache.activeRuns.add(runId);
+
         cancelPendingFinalUiRelease(effectiveKey);
         markSessionTyping(effectiveKey, true);
         lastStreamEventAtRef.current = Date.now();
@@ -1780,7 +1828,7 @@ export function useV3Messages({
       });
       return;
     }
-  }, [cancelPendingFinalUiRelease, clearStallTimer, handleApprovalRequested, handleApprovalResolved, handleChatDelta, handleSessionMessage, handleSessionTool, markSessionTyping, resetStallTimer, t]);
+  }, [cancelPendingFinalUiRelease, clearStallTimer, getOrCreateSessionCache, handleApprovalRequested, handleApprovalResolved, handleChatDelta, handleSessionMessage, handleSessionTool, markSessionTyping, releaseTypingLock, resetStallTimer, t]);
 
   /**
    * 加载会话历史并写入 messages；同时用 sessionCacheRef 缝合 DB 未落盘的临时消息。
@@ -2081,7 +2129,8 @@ export function useV3Messages({
       tpsData: [],
       lastUserMsg: newUserMsg,
       lastTouched: Date.now(),
-      metadataByRunId: prevCacheForSession?.metadataByRunId || new Map()
+      metadataByRunId: prevCacheForSession?.metadataByRunId || new Map(),
+      activeRuns: prevCacheForSession?.activeRuns || new Set<string>()
     };
     touchAndPruneSessionCache(currentKey, nextCache);
 
@@ -2110,6 +2159,7 @@ export function useV3Messages({
       const cache = sessionCacheRef.current.get(currentKey);
       if (cache) {
         cache.runId = res.payload.runId;
+        cache.activeRuns.add(res.payload.runId);
         touchAndPruneSessionCache(currentKey, cache);
       }
       setMessages(prev => {
@@ -2190,7 +2240,8 @@ export function useV3Messages({
       tpsData: [],
       lastUserMsg: userMsg,
       lastTouched: Date.now(),
-      metadataByRunId: prevCacheForSession?.metadataByRunId || new Map()
+      metadataByRunId: prevCacheForSession?.metadataByRunId || new Map(),
+      activeRuns: prevCacheForSession?.activeRuns || new Set<string>()
     };
     touchAndPruneSessionCache(sessionKey, nextCache);
 
@@ -2219,6 +2270,7 @@ export function useV3Messages({
       const cache = sessionCacheRef.current.get(sessionKey);
       if (cache) {
         cache.runId = res.payload.runId;
+        cache.activeRuns.add(res.payload.runId);
         touchAndPruneSessionCache(sessionKey, cache);
       }
       setMessages(prev => {
@@ -2370,7 +2422,8 @@ export function useV3Messages({
         tpsData: [],
         lastUserMsg: updatedUser,
         lastTouched: Date.now(),
-        metadataByRunId: prevCacheForSession?.metadataByRunId || new Map()
+        metadataByRunId: prevCacheForSession?.metadataByRunId || new Map(),
+        activeRuns: prevCacheForSession?.activeRuns || new Set<string>()
       };
       touchAndPruneSessionCache(currentKey, nextCache);
       setMessages(prev => {
@@ -2387,7 +2440,10 @@ export function useV3Messages({
       });
       if (res.ok && res.payload?.runId) {
         const cache = sessionCacheRef.current.get(currentKey);
-        if (cache) cache.runId = res.payload.runId;
+        if (cache) {
+          cache.runId = res.payload.runId;
+          cache.activeRuns.add(res.payload.runId);
+        }
       }
       if (!res.ok) {
         setIsTyping(false);
