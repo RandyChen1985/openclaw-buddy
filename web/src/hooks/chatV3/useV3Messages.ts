@@ -220,6 +220,66 @@ function updateMetaMessage(
   return [...prev, newMeta];
 }
 
+/** 列表中最后一条「正文」助手消息下标（排除 _uiMetaOnly 附录气泡）。审批等必须落在主气泡，不能跟在最后一条 meta 上。 */
+function findLastMainAssistantIndex(prev: Message[]): number {
+  for (let i = prev.length - 1; i >= 0; i--) {
+    const m = prev[i];
+    if (m.role === 'assistant' && !m._uiMetaOnly) return i;
+  }
+  return -1;
+}
+
+/** 从内容中移除与 slug 对应的一条 :::approval 块（用于纠正误写入 meta 气泡的历史数据） */
+function stripApprovalBlockWithSlug(content: string, slug: string): string {
+  if (!content || !slug || !content.includes(':::approval')) return content;
+  const esc = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const blockRe = new RegExp(
+    `(?:^|\\n)\\n?> :::approval\\n> \\*\\*${esc}\\*\\*\\n[\\s\\S]*?\\n> :::\\n*`,
+    'g',
+  );
+  return content.replace(blockRe, '\n').replace(/\n{3,}/g, '\n\n').trimEnd();
+}
+
+/**
+ * 网关 transcript 的 session.message 是否应对齐到「已有主气泡」的同一 runId。
+ * 若为 true，在 typing / streamEndGrace 期间仍应处理：否则审批后正文只走 transcript、
+ * 不走 chat.delta 时会被防冲突逻辑整段丢弃，用户只能重新拉历史才看见。
+ */
+function sessionMessageMergesExistingAssistantRun(rows: Message[], msg: { role?: string; runId?: string }): boolean {
+  if (!msg || msg.role !== 'assistant' || !msg.runId) return false;
+  const rid = String(msg.runId);
+  for (let i = 0; i < rows.length; i++) {
+    const m = rows[i];
+    if (m._uiMetaOnly) continue;
+    if (m.role !== 'assistant') continue;
+    if (m.runId === rid) return true;
+  }
+  return false;
+}
+
+/** 列表中时间上最后一条 user 消息的纯文本（trim），用于识别刚发出的 /approve */
+function lastUserMessageContent(rows: Message[]): string {
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].role === 'user') return String(rows[i].content || '').trim();
+  }
+  return '';
+}
+
+/** 用户显式发送的 /approve（单次或永久），用于 session.message 守卫放行等 */
+const APPROVE_USER_CMD_LINE_RE = /^\/approve\s+[a-f0-9-]+\s+(allow-once|allow-always)$/i;
+
+/**
+ * session.message 在 typing / streamEndGrace 窗口下是否仍应收下。
+ * 除「同 runId 可合并进已有主气泡」外，用户刚发 /approve 后网关常仍标 typing、且 transcript 的 runId
+ * 可能与 UI 气泡不一致或缺失——若仅依赖 runId 合并判断会间歇丢正文。
+ */
+function shouldBypassSessionMessageTypingGuard(rows: Message[], msg: { role?: string; runId?: string }): boolean {
+  if (!msg || msg.role !== 'assistant') return false;
+  if (sessionMessageMergesExistingAssistantRun(rows, msg)) return true;
+  if (APPROVE_USER_CMD_LINE_RE.test(lastUserMessageContent(rows))) return true;
+  return false;
+}
+
 /**
  * 将 assistant 消息内容拆分为「元数据区」(metadata) 和「正文区」(transcript)。
  * 元数据区包括 :::thinking / :::plan / :::commandOutput / :::toolCall / :::toolResult / :::warning
@@ -235,8 +295,8 @@ function partitionAssistantContent(content: string): { metadata: string, transcr
   const fencedCloseRe = /^\s*(?:>\s*)?:::\s*$/;
   const toolStatusRe = /^\s*(?:>\s*)?[🔧✅❌⚠️]\s*`[^`]+`\s*(?:执行中(?:…|\.{3})|完成|失败|错误)(?:\s*<!--[\s\S]*?-->)?\s*$/;
   const toolMarkerRe = /^\s*<!--\s*tool:[^>]*-->\s*$/;
-  const approveCmdRe = /^\s*(?:>\s*)?\/approve\s+[a-f0-9]{8,}\s+allow-once\s*$/i;
-  const approveConfirmRe = /^\s*(?:>\s*)?Approval\s+\S+\s+submitted\s+for\s+[a-f0-9]{8,}/i;
+  const approveCmdRe = /^\s*(?:>\s*)?\/approve\s+[a-f0-9-]+\s+(allow-once|allow-always)\s*$/i;
+  const approveConfirmRe = /^\s*(?:>\s*)?[\s\u2705]*✅?\s*Approval\s+\S+\s+submitted\s+for\s+[a-f0-9-]+/i;
   const blockquoteLineRe = /^\s*>/;
 
   const lines = content.split('\n');
@@ -697,12 +757,14 @@ export function useV3Messages({
 
   /**
    * 降噪：Agent 在触发审批卡片（exec.approval.requested）时，往往还会在文本流里重复输出
-   * “需要批准…请运行 /approve <slug> allow-once” 的提示语。UI 已有审批卡片时，这段文字应隐藏。
+   * “需要批准…请运行 /approve … allow-once|allow-always” 的提示语。UI 已有审批卡片时，这段文字应隐藏。
    */
   const extractApprovalSlugFromHint = useCallback((text: string): string => {
     if (!text) return '';
-    const m = /\/approve\s+([a-f0-9]{8,})\s+allow-once/i.exec(text);
-    return m ? m[1] : '';
+    const m = /\/approve\s+([a-f0-9-]+)\s+(allow-once|allow-always)/i.exec(text);
+    if (!m) return '';
+    const id = m[1].replace(/-/g, '');
+    return id.length >= 8 ? id.slice(0, 8) : id;
   }, []);
 
   const isApprovalHintText = useCallback((text: string): boolean => {
@@ -711,7 +773,7 @@ export function useV3Messages({
     return (
       (text.includes('需要批准') || text.includes('审批') || t.includes('approve')) &&
       t.includes('/approve') &&
-      t.includes('allow-once')
+      (t.includes('allow-once') || t.includes('allow-always'))
     );
   }, []);
 
@@ -1060,18 +1122,30 @@ export function useV3Messages({
     const command = request?.command || '';
     if (!approvalId || !slug || !command) return;
 
-    // 重要：按钮点击时需要用“完整 approvalId”做 exec.approval.resolve，
-    // 不能只用截断 slug（否则可能 resolve 成功回执但 agent 未真正放行）。
+    // 重要：卡片内需带完整 approvalId（UUID），用户发送 `/approve <id> allow-once|allow-always` 时须与此一致；
+    // 不能只用截断 slug，否则网关可能无法匹配待审批项。
     const approvalBlock = `\n\n> :::approval\n> **${slug}**\n> approvalId: ${approvalId}\n> \`\`\`bash\n> ${command}\n> \`\`\`\n> :::\n`;
 
     setMessages(prev => {
-      const last = prev[prev.length - 1];
-      if (last && last.role === 'assistant') {
+      const mainIdx = findLastMainAssistantIndex(prev);
+      if (mainIdx !== -1) {
+        const last = prev[mainIdx];
         if (last.content.includes(slug)) return prev;
         const newContent = (last.content === t('chat.thinking') || !last.content)
           ? approvalBlock
           : `${last.content}${approvalBlock}`;
-        return [...prev.slice(0, -1), { ...last, content: newContent }];
+        const next: Message[] = [...prev];
+        next[mainIdx] = { ...last, content: newContent };
+        // 纠正：旧逻辑曾把审批追加到列表末尾的 _uiMetaOnly 气泡，应从 meta 中剥掉同 slug 的审批块
+        for (let i = 0; i < next.length; i++) {
+          const m = next[i];
+          if (!m._uiMetaOnly || m.role !== 'assistant') continue;
+          const c = m.content || '';
+          if (!c.includes(':::approval') || !c.includes(slug)) continue;
+          const cleaned = stripApprovalBlockWithSlug(c, slug);
+          if (cleaned !== c) next[i] = { ...m, content: cleaned };
+        }
+        return next;
       }
       const now = Date.now();
       const newMsg: Message = {
@@ -1102,6 +1176,7 @@ export function useV3Messages({
     const decisionLabels: Record<string, string> = {
       'approved': '✅ 已批准',
       'allow-once': '✅ 已批准(单次)',
+      'allow-always': '✅ 已批准(永久)',
       'denied': '❌ 已拒绝',
       'rejected': '❌ 已拒绝',
       'timeout': '⏱️ 已超时',
@@ -1109,7 +1184,18 @@ export function useV3Messages({
     const label = decisionLabels[decision] || (decision === 'approved' ? '✅ 已批准' : `⚠️ ${decision || '未知'}`);
 
     setMessages(prev => {
-      const idx = prev.findIndex(m => m.role === 'assistant' && m.content.includes(slug));
+      let idx = prev.findLastIndex(
+        m =>
+          m.role === 'assistant' &&
+          !m._uiMetaOnly &&
+          m.content.includes(slug) &&
+          m.content.includes(':::approval'),
+      );
+      if (idx === -1) {
+        idx = prev.findLastIndex(
+          m => m.role === 'assistant' && m.content.includes(slug) && m.content.includes(':::approval'),
+        );
+      }
       if (idx === -1) return prev;
       const msg = prev[idx];
       if (msg.content.includes(label)) return prev;
@@ -1127,14 +1213,18 @@ export function useV3Messages({
 
   /**
    * 处理 session.message 事件：网关 transcript 更新推送。
-   * 仅在当前会话且非流式生成期间追加新消息（避免与 chat delta 流冲突）。
+   * 默认在「会话仍标记为流式生成」时暂缓，避免与 chat.delta 打架；
+   * 但对「同一 runId 合并进已有主气泡」的推送必须放行（审批后续、工具结果常只走 transcript）。
    */
   const handleSessionMessage = useCallback((payload: any) => {
     if (!payload) return;
     const { sessionKey: evtKey, message: msg } = payload;
     if (!evtKey || evtKey !== sessionKeyRef.current) return;
     if (!msg || !msg.role) return;
-    if (typingSessionsRef.current.has(evtKey)) {
+
+    const bypassSessionMessageGuards = shouldBypassSessionMessageTypingGuard(messagesRef.current || [], msg);
+
+    if (typingSessionsRef.current.has(evtKey) && !bypassSessionMessageGuards) {
       // 兜底：若 typing 卡住且一段时间没有任何流式事件，则允许 session.message 落 UI
       const lastStreamAt = lastStreamEventAtRef.current;
       const staleMs = 4500;
@@ -1152,7 +1242,7 @@ export function useV3Messages({
 
     // 流刚结束的冷却窗口内忽略 session.message，避免 transcript 推送追加重复消息
     const grace = streamEndGraceRef.current;
-    if (grace && grace.key === evtKey && Date.now() < grace.until) return;
+    if (grace && grace.key === evtKey && Date.now() < grace.until && !bypassSessionMessageGuards) return;
 
     let content = formatMessageContent(msg.content);
     if (!content || !content.trim()) return;
@@ -1191,14 +1281,14 @@ export function useV3Messages({
       content = `> :::toolResult\n> **${toolName}**\n> ${safeText}\n> :::\n`;
     }
 
-    // 降噪："Approval allow-once submitted for <slug>." 是网关对 /approve 的确认回执
-    const isApprovalConfirm = /^Approval\s+\S+\s+submitted\s+for\s+[a-f0-9]{8,}/i.test(content.trim());
+    // 降噪：网关对 /approve 的确认回执（allow-once / allow-always 等）
+    const isApprovalConfirm = /Approval\s+\S+\s+submitted\s+for\s+[a-f0-9-]+/i.test(content.trim());
     if (isApprovalConfirm) {
       content = `> :::toolResult\n> **approval**\n> ${content.trim()}\n> :::\n`;
     }
 
-    // 降噪：用户通过审批按钮发出的 "/approve <slug> allow-once" 命令行消息
-    const isApproveCommand = /^\/approve\s+[a-f0-9]{8,}\s+allow-once$/i.test(content.trim());
+    // 降噪：用户发出的 "/approve <id> allow-once|allow-always"
+    const isApproveCommand = /^\/approve\s+[a-f0-9-]+\s+(allow-once|allow-always)$/i.test(content.trim());
     if (isApproveCommand) {
       content = `> :::toolResult\n> **approval**\n> ${content.trim()}\n> :::\n`;
     }
@@ -1218,7 +1308,9 @@ export function useV3Messages({
         if (isSkeleton) return prev;
 
         if (msg.runId) {
-          const existingIdx = prev.findIndex(
+          // 必须用 findLastIndex：与 handleChatDelta 的「按 runId 找最后一条主气泡」一致。
+          // 若用 findIndex 命中上一条（含审批卡片的）气泡，而流式正文写在列表末尾的新气泡上，会出现两条完整输出。
+          const existingIdx = prev.findLastIndex(
             m => m.role === 'assistant' && !m._uiMetaOnly && m.runId === msg.runId,
           );
           if (existingIdx !== -1) {
@@ -1229,9 +1321,16 @@ export function useV3Messages({
               !!s && s !== thinkingPlaceholder && s !== deepThinkingPlaceholder;
 
             const bodyText = incomingTranscript || content;
+            const bt = bodyText.trim();
             let mergedContent = existing.content;
             if (isValidBody(bodyText)) {
-              if (!isValidBody(existing.content) || !existing.content.includes(bodyText.trim())) {
+              const ex = existing.content.trim();
+              if (!isValidBody(existing.content)) {
+                mergedContent = bodyText;
+              } else if (bt && (ex.includes(bt) || (bt.length >= 60 && bt.includes(ex)))) {
+                // 流式已写入或 transcript 为子集/同文，避免整段替换把审批块冲掉或造成双份
+                mergedContent = existing.content;
+              } else if (!ex.includes(bt)) {
                 mergedContent = bodyText;
               }
             }
@@ -1240,6 +1339,17 @@ export function useV3Messages({
             const next = [...prev];
             next[existingIdx] = { ...existing, content: mergedContent };
             return next;
+          }
+        }
+
+        // chat.delta 已把同一段正文写进「最后一条主气泡」后，session.message 又以新 id 追加一条时拦截（无 runId 或 runId 未对齐）
+        const incomingBodyDedup = (incomingTranscript || content).trim();
+        if (incomingBodyDedup.length > 80) {
+          const lastMainIdx = findLastMainAssistantIndex(prev);
+          if (lastMainIdx !== -1) {
+            const { transcript: lastT } = partitionAssistantContent(prev[lastMainIdx].content || '');
+            const lastBody = (lastT || prev[lastMainIdx].content || '').trim();
+            if (lastBody.length > 80 && lastBody === incomingBodyDedup) return prev;
           }
         }
       }
@@ -1394,6 +1504,7 @@ export function useV3Messages({
 
       if (stream === 'item' && agentData?.status === 'blocked') {
         lastStreamEventAtRef.current = Date.now();
+        if (effectiveKey) cancelPendingFinalUiRelease(effectiveKey);
         setIsTyping(false);
         clearStallTimer();
         streamingAssistantIndexRef.current = null;
@@ -1401,7 +1512,10 @@ export function useV3Messages({
 
       if (stream === 'lifecycle.start' || (stream === 'lifecycle' && agentData?.phase === 'start')) {
         lastStreamEventAtRef.current = Date.now();
-        if (effectiveKey) markSessionTyping(effectiveKey, true);
+        if (effectiveKey) {
+          cancelPendingFinalUiRelease(effectiveKey);
+          markSessionTyping(effectiveKey, true);
+        }
         if (effectiveKey === sessionKeyRef.current) {
           setIsTyping(true);
           resetStallTimer();
@@ -1410,7 +1524,10 @@ export function useV3Messages({
 
       if (stream === 'lifecycle.end' || (stream === 'lifecycle' && agentData?.phase === 'end')) {
         lastStreamEventAtRef.current = Date.now();
-        if (effectiveKey) markSessionTyping(effectiveKey, false);
+        if (effectiveKey) {
+          cancelPendingFinalUiRelease(effectiveKey);
+          markSessionTyping(effectiveKey, false);
+        }
         if (effectiveKey === sessionKeyRef.current) {
           setIsTyping(false);
           clearStallTimer();
@@ -1420,7 +1537,10 @@ export function useV3Messages({
 
       if (stream === 'lifecycle.error' || (stream === 'lifecycle' && agentData?.phase === 'error')) {
         lastStreamEventAtRef.current = Date.now();
-        if (effectiveKey) markSessionTyping(effectiveKey, false);
+        if (effectiveKey) {
+          cancelPendingFinalUiRelease(effectiveKey);
+          markSessionTyping(effectiveKey, false);
+        }
         if (effectiveKey === sessionKeyRef.current) {
           clearStallTimer();
           setIsTyping(false);
@@ -1503,7 +1623,14 @@ export function useV3Messages({
         stream === 'command_output' ||
         stream === 'tool'
       ) {
-        if (effectiveKey !== sessionKeyRef.current) return;
+        if (!effectiveKey || effectiveKey !== sessionKeyRef.current) return;
+
+        // transcript 已 final 但 agent 侧仍在推 thinking/tool：撤掉 final 的延时解锁，并保持会话「生成中」
+        cancelPendingFinalUiRelease(effectiveKey);
+        markSessionTyping(effectiveKey, true);
+        lastStreamEventAtRef.current = Date.now();
+        resetStallTimer();
+        setIsTyping(true);
 
         const pickFirst = (obj: any, keys: string[]) => {
           for (const k of keys) {
@@ -1608,9 +1735,7 @@ export function useV3Messages({
         }
 
         if (!body && !title) {
-          // 没内容可展示（例如仅生命周期 ping），只刷新 stall 计时器
-          lastStreamEventAtRef.current = Date.now();
-          resetStallTimer();
+          // 已在上方锁定 UI；无 meta 可写则跳过 setMessages（避免空事件误刷列表）
           return;
         }
 
@@ -1618,10 +1743,6 @@ export function useV3Messages({
           stream === 'command_output' ? 'commandOutput' :
           stream === 'tool' ? 'toolCall' :
           stream; // thinking | plan
-
-        lastStreamEventAtRef.current = Date.now();
-        resetStallTimer();
-        setIsTyping(true);
 
         setMessages(prev => {
           const idx = streamingAssistantIndexRef.current;
@@ -1652,7 +1773,7 @@ export function useV3Messages({
       });
       return;
     }
-  }, [clearStallTimer, handleApprovalRequested, handleApprovalResolved, handleChatDelta, handleSessionMessage, handleSessionTool, markSessionTyping, resetStallTimer, t]);
+  }, [cancelPendingFinalUiRelease, clearStallTimer, handleApprovalRequested, handleApprovalResolved, handleChatDelta, handleSessionMessage, handleSessionTool, markSessionTyping, resetStallTimer, t]);
 
   /**
    * 加载会话历史并写入 messages；同时用 sessionCacheRef 缝合 DB 未落盘的临时消息。
@@ -1714,14 +1835,14 @@ export function useV3Messages({
         }
       }
 
-      // 3) "Approval allow-once submitted for <slug>." —— 网关确认回执
-      if (/^Approval\s+\S+\s+submitted\s+for\s+[a-f0-9]{8,}/i.test(content.trim())) {
+      // 3) "Approval … submitted for <id>." —— 网关确认回执
+      if (/Approval\s+\S+\s+submitted\s+for\s+[a-f0-9-]+/i.test(content.trim())) {
         content = `> :::toolResult\n> **approval**\n> ${content.trim()}\n> :::\n`;
         roleOverride = 'assistant';
       }
 
-      // 4) "/approve <slug> allow-once" —— 按钮触发的指令消息
-      if (/^\/approve\s+[a-f0-9]{8,}\s+allow-once$/i.test(content.trim())) {
+      // 4) "/approve <id> allow-once|allow-always" —— 用户指令消息
+      if (/^\/approve\s+[a-f0-9-]+\s+(allow-once|allow-always)$/i.test(content.trim())) {
         content = `> :::toolResult\n> **approval**\n> ${content.trim()}\n> :::\n`;
         roleOverride = 'assistant';
       }

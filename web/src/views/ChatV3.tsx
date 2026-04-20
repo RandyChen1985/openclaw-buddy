@@ -150,13 +150,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     showThinkingRef
   });
 
-  const handleApprovalResolve = useCallback(async (approvalId: string, decision: string) => {
-    const res = await sendRPC('exec.approval.resolve', { id: approvalId, decision });
-    if (!res.ok) {
-      message.error(t('chat.approvalFailed', { defaultValue: `审批失败: ${res.error?.message || res.error || '未知错误'}` }));
-    }
-  }, [sendRPC, t]);
-
   // Local UI States
   const [isEditingLabel, setIsEditingLabel] = useState(false);
   const [editingLabelText, setEditingLabelText] = useState('');
@@ -454,7 +447,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           })}
           onQuote={setQuotedMsg}
           onSend={handleWrappedSend}
-          onApprovalResolve={handleApprovalResolve}
           onRegenerate={handleRegenerate}
           copyToClipboard={copyToClipboard}
         />
