@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox, Segmented, Empty } from 'antd';
+import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox, Segmented, Empty, Tabs, List as AntList, Popconfirm } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { 
   Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star, 
   ChevronDown, ChevronUp, Activity, ZapOff, Bot, LayoutGrid, List, FolderOpen,
-  Eye, Save, Brain, Edit3
+  Eye, Save, Brain, Edit3, BrainCircuit, Copy
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -117,11 +117,17 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   // --- 自动刷新闭环：监测后台任务完成情况 ---
 
   const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [editorType, setEditorType] = useState<'soul' | 'identity'>('soul');
+  const [editorType, setEditorType] = useState<'soul' | 'identity' | 'memory'>('soul');
   const [editorContent, setEditorContent] = useState('');
   const [editorBotId, setEditorBotId] = useState('');
   const [isEditorLoading, setIsEditorLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Memory management states
+  const [memoryFiles, setMemoryFiles] = useState<string[]>([]);
+  const [activeMemoryTab, setActiveMemoryTab] = useState<'long' | 'daily'>('long');
+  const [selectedMemoryFile, setSelectedMemoryFile] = useState<string | null>(null);
+  const [loadingMemoryList, setLoadingMemoryList] = useState(false);
 
 
   const fetchSessions = async (force = false) => {
@@ -335,10 +341,10 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     }
   };
 
-  const handleOpenFileEditor = async (botId: string, type: 'soul' | 'identity') => {
+  const handleOpenFileEditor = async (botId: string, type: 'soul' | 'identity' | 'memory', filename?: string, tabOverride?: 'long' | 'daily') => {
     try {
       setEditorBotId(botId);
-      setEditorType(type);
+      setEditorType(type as any);
       setEditorContent('');
       setIsEditorLoading(true);
       setIsEditorOpen(true);
@@ -346,7 +352,22 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
       const workspaceParam = bot?.workspace ? `&workspace=${encodeURIComponent(bot.workspace)}` : '';
       
-      const res = await api.get(`/v1/openclaw/bots/file?id=${botId}&type=${type}${workspaceParam}`);
+      const currentTab = tabOverride || activeMemoryTab;
+      
+      let url = `/v1/openclaw/bots/file?id=${botId}&type=${type}${workspaceParam}`;
+      if (type === 'memory' && currentTab === 'daily' && filename) {
+        url = `/v1/openclaw/bots/file?id=${botId}&type=memory_file&filename=${encodeURIComponent(filename)}${workspaceParam}`;
+        setSelectedMemoryFile(filename);
+      } else if (type === 'memory' && currentTab === 'long') {
+        setSelectedMemoryFile(null);
+      } else if (type === 'memory' && currentTab === 'daily' && !filename) {
+          // 如果没传文件名且处于日期记忆 Tab，先拉列表
+          fetchMemoryList(botId, bot?.workspace);
+          setIsEditorLoading(false);
+          return;
+      }
+
+      const res = await api.get(url);
       setEditorContent(res.data.content || '');
     } catch (err: any) {
       if (isEditorOpen) {
@@ -357,19 +378,60 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     }
   };
 
+  const fetchMemoryList = async (botId: string, workspace?: string) => {
+    setLoadingMemoryList(true);
+    try {
+      const workspaceParam = workspace ? `&workspace=${encodeURIComponent(workspace)}` : '';
+      const res = await api.get(`/v1/openclaw/bots/memory/list?id=${botId}${workspaceParam}`);
+      setMemoryFiles(res.data.files || []);
+    } catch (err: any) {
+      message.error(t('common.loadFailed') + ': ' + (err.response?.data?.error || err.message));
+    } finally {
+      setLoadingMemoryList(false);
+    }
+  };
+
+  const handleDeleteMemoryFile = async (botId: string, filename: string, workspace?: string) => {
+    try {
+      const workspaceParam = workspace ? `&workspace=${encodeURIComponent(workspace)}` : '';
+      await api.delete(`/v1/openclaw/bots/memory/file?id=${botId}&filename=${encodeURIComponent(filename)}${workspaceParam}`);
+      message.success(t('common.success'));
+      fetchMemoryList(botId, workspace);
+      if (selectedMemoryFile === filename) {
+        setEditorContent('');
+        setSelectedMemoryFile(null);
+      }
+    } catch (err: any) {
+      message.error(t('common.error') + ': ' + (err.response?.data?.error || err.message));
+    }
+  };
+
   const handleSaveFileContent = async () => {
     try {
       setIsSaving(true);
       
       const bot = botsModels?.data?.bots?.find((b: any) => b.id === editorBotId);
-      await api.post('/v1/openclaw/bots/file', {
+      
+      const params: any = {
         id: editorBotId,
-        type: editorType,
+        type: editorType === 'memory' ? (activeMemoryTab === 'long' ? 'memory' : 'memory_file') : editorType,
         content: editorContent,
         workspace: bot?.workspace
-      });
+      };
+
+      if (editorType === 'memory' && activeMemoryTab === 'daily' && selectedMemoryFile) {
+        params.filename = selectedMemoryFile;
+      }
+
+      await api.post('/v1/openclaw/bots/file', params);
       message.success(t('bots.saveSuccess'));
-      setIsEditorOpen(false); // 隐藏对话框
+      
+      if (editorType === 'memory' && activeMemoryTab === 'daily') {
+          // 仅刷新列表，不关闭 Modal 以便继续操作
+          fetchMemoryList(editorBotId, bot?.workspace);
+      } else {
+          setIsEditorOpen(false);
+      }
     } catch (err: any) {
       message.error(t('bots.saveFailed') + ': ' + (err.response?.data?.error || err.message));
     } finally {
@@ -517,12 +579,13 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                         </div>
 
                         <div style={{ position: 'relative', zIndex: 1 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', marginBottom: 4 }}>
-                            <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.5px' }}>{bot.name || bot.id}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                            <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.5px' }}>{bot.displayName || bot.name || bot.id}</div>
                             <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', border: '2px solid #fff', boxShadow: '0 0 10px rgba(34, 197, 94, 0.4)', flexShrink: 0 }} className="status-pulse" />
-                            
-                            {/* 基于用户图片更新的图标组 - 靠右对齐 */}
-                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                          </div>
+                          
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, marginTop: 10 }}>
+                            <div style={{ display: 'flex', gap: 8 }}>
                               <Tooltip title={t('bots.editSoul')}>
                                 <Button 
                                   type="text" 
@@ -549,9 +612,43 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                   }}
                                 />
                               </Tooltip>
+                              <Tooltip title={t('bots.editMemory')}>
+                                <Button 
+                                  type="text" 
+                                  size="small" 
+                                  icon={<BrainCircuit size={16} color="#059669" />} 
+                                  onClick={() => {
+                                    setActiveMemoryTab('long');
+                                    handleOpenFileEditor(bot.id, 'memory');
+                                  }}
+                                  style={{ 
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 28, height: 28, borderRadius: 8, background: '#ecfdf5', 
+                                    border: '1px solid #d1fae5'
+                                  }}
+                                />
+                              </Tooltip>
+                            </div>
+
+                            <div 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(bot.id);
+                                message.success(t('common.copySuccess'));
+                              }}
+                              style={{ 
+                                display: 'inline-flex', alignItems: 'center', gap: 6, 
+                                padding: '2px 8px', background: '#f1f5f9', border: '1px solid #e2e8f0',
+                                borderRadius: 6, cursor: 'pointer', transition: 'all 0.2s',
+                                fontSize: 11, color: '#64748b', fontFamily: 'monospace', fontWeight: 600
+                              }}
+                              className="id-copy-tag"
+                            >
+                              <span style={{ opacity: 0.7 }}>#</span>
+                              {bot.id}
+                              <Copy size={10} style={{ opacity: 0.5 }} />
                             </div>
                           </div>
-                          <div style={{ fontSize: 12, color: '#94a3b8', fontFamily: 'monospace', marginBottom: 16 }}>ID: {bot.id}</div>
                           
                           <div style={{ background: 'rgba(255, 255, 255, 0.5)', backdropFilter: 'blur(8px)', padding: '14px', borderRadius: 18, border: `1px solid ${color.border}60` }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1303,26 +1400,49 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         </div>
       </Modal>
 
-      {/* 机器人核心人格/身份编辑器 (分屏预览模式) */}
+      {/* 机器人核心人格/身份/记忆编辑器 (分屏预览模式) */}
       <Modal
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ 
               padding: 8, 
-              background: editorType === 'soul' ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' : 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)', 
+              background: editorType === 'soul' ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' : (editorType === 'identity' ? 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)' : 'linear-gradient(135deg, #059669 0%, #10b981 100%)'), 
               borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
               boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
             }}>
-              {editorType === 'soul' ? <Brain size={18} color="#fff" /> : <ShieldCheck size={18} color="#fff" />}
+              {editorType === 'soul' ? <Brain size={18} color="#fff" /> : (editorType === 'identity' ? <ShieldCheck size={18} color="#fff" /> : <BrainCircuit size={18} color="#fff" />)}
             </div>
-            <div>
+            <div style={{ flex: 1 }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b', marginBottom: 2 }}>
-                {editorType === 'soul' ? t('bots.editSoul') : t('bots.editIdentity')}
+                {editorType === 'soul' ? t('bots.editSoul') : (editorType === 'identity' ? t('bots.editIdentity') : t('bots.editMemory'))}
               </div>
               <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
-                {editorBotId} · {editorType === 'soul' ? 'SOUL.md' : 'IDENTITY.md'}
+                {editorBotId} · {editorType === 'soul' ? 'SOUL.md' : (editorType === 'identity' ? 'IDENTITY.md' : (selectedMemoryFile || 'MEMORY.md'))}
               </div>
             </div>
+            {editorType === 'memory' && (
+              <Tabs 
+                size="small" 
+                activeKey={activeMemoryTab} 
+                onChange={(key: any) => {
+                  setActiveMemoryTab(key);
+                  if (key === 'long') {
+                    handleOpenFileEditor(editorBotId, 'memory', undefined, 'long');
+                  } else {
+                    const bot = botsModels?.data?.bots?.find((b: any) => b.id === editorBotId);
+                    fetchMemoryList(editorBotId, bot?.workspace);
+                    setEditorContent('');
+                    setSelectedMemoryFile(null);
+                  }
+                }}
+                className="memory-tabs"
+                style={{ marginBottom: -16, marginRight: 24 }}
+                items={[
+                  { key: 'long', label: t('bots.longTermMemory') },
+                  { key: 'daily', label: t('bots.dailyMemory') }
+                ]}
+              />
+            )}
           </div>
         }
         open={isEditorOpen}
@@ -1337,12 +1457,17 @@ const BotsManager: React.FC<BotsManagerProps> = ({
             loading={isSaving} 
             icon={<Save size={14} />} 
             onClick={handleSaveFileContent} 
-            style={{ borderRadius: 8, background: editorType === 'soul' ? '#8b5cf6' : '#2563eb', border: 'none' }}
+            disabled={editorType === 'memory' && activeMemoryTab === 'daily' && !selectedMemoryFile}
+            style={{ 
+              borderRadius: 8, 
+              background: editorType === 'soul' ? '#8b5cf6' : (editorType === 'identity' ? '#2563eb' : '#059669'), 
+              border: 'none' 
+            }}
           >
             {t('common.save')}
           </Button>
         ]}
-        width={isMobile ? '100%' : 1100}
+        width={isMobile ? '100%' : (editorType === 'memory' && activeMemoryTab === 'daily' ? 1250 : 1100)}
         centered
         bodyStyle={{ padding: '0', height: isMobile ? 'calc(100vh - 120px)' : '75vh', overflow: 'hidden' }}
       >
@@ -1352,53 +1477,145 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           style={{ height: '100%' }}
           wrapperClassName="bot-editor-spin-wrapper"
         >
-          {isEditorLoading ? (
-            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
-              <div style={{ marginTop: 16, color: '#94a3b8', fontSize: 14 }}>{t('common.loading')}</div>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', height: '100%', flexDirection: isMobile ? 'column' : 'row' }}>
-              {/* 左侧编辑器 */}
-              <div style={{ flex: 1, borderRight: isMobile ? 'none' : '1px solid #f1f5f9', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#f8fafc' }}>
-                  <Edit3 size={14} color="#64748b" />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{t('bots.markdownSource')}</span>
+          <div style={{ display: 'flex', height: '100%', flexDirection: isMobile ? 'column' : 'row' }}>
+            {/* 记忆文件列表 (仅在日期记忆 Tab 显示) */}
+            {editorType === 'memory' && activeMemoryTab === 'daily' && (
+              <div style={{ width: 240, borderRight: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: '#475569' }}>{t('bots.dailyMemory')}</span>
+                  <Tooltip title={t('bots.addMemoryFile')}>
+                    <Button 
+                      size="small" 
+                      type="text" 
+                      icon={<Plus size={14} />} 
+                      onClick={() => {
+                        const bot = botsModels?.data?.bots?.find((b: any) => b.id === editorBotId);
+                        const today = dayjs().format('YYYY-MM-DD');
+                        Modal.confirm({
+                          title: t('bots.addMemoryFile'),
+                          content: (
+                            <div style={{ marginTop: 16 }}>
+                              <Input id="new-memory-filename" defaultValue={`${today}.md`} placeholder="YYYY-MM-DD.md" />
+                            </div>
+                          ),
+                          onOk: async () => {
+                            const filename = (document.getElementById('new-memory-filename') as HTMLInputElement).value;
+                            if (filename) {
+                              setSelectedMemoryFile(filename);
+                              setEditorContent('');
+                              // 自动触发一次保存来创建文件
+                              await api.post('/v1/openclaw/bots/file', {
+                                id: editorBotId,
+                                type: 'memory_file',
+                                filename: filename,
+                                content: '# ' + filename.replace('.md', ''),
+                                workspace: bot?.workspace
+                              });
+                              fetchMemoryList(editorBotId, bot?.workspace);
+                              handleOpenFileEditor(editorBotId, 'memory', filename);
+                            }
+                          }
+                        });
+                      }} 
+                    />
+                  </Tooltip>
                 </div>
-                <div style={{ flex: 1, padding: 0, position: 'relative', overflow: 'hidden' }}>
-                  <Input.TextArea
-                    value={editorContent}
-                    onChange={(e) => setEditorContent(e.target.value)}
-                    placeholder={editorType === 'soul' ? t('experts.soulPlaceholder') : t('experts.identityPlaceholder')}
-                    className="bot-editor-textarea"
-                    style={{ 
-                      height: '100%', border: 'none', background: 'transparent',
-                      padding: '24px', resize: 'none', fontSize: 14, fontFamily: 'monospace',
-                      lineHeight: 1.7, borderRadius: 0, overflowY: 'auto'
-                    }}
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                  <AntList
+                    loading={loadingMemoryList}
+                    dataSource={memoryFiles}
+                    renderItem={item => (
+                      <AntList.Item 
+                        onClick={() => handleOpenFileEditor(editorBotId, 'memory', item)}
+                        style={{ 
+                          padding: '10px 16px', 
+                          cursor: 'pointer',
+                          background: selectedMemoryFile === item ? '#fff' : 'transparent',
+                          borderLeft: selectedMemoryFile === item ? '3px solid #10b981' : '3px solid transparent',
+                          transition: 'all 0.2s'
+                        }}
+                        className="memory-list-item"
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                          <span style={{ fontSize: 13, color: selectedMemoryFile === item ? '#059669' : '#64748b', fontWeight: selectedMemoryFile === item ? 700 : 500 }}>{item}</span>
+                          <Popconfirm
+                            title={t('bots.confirmDeleteMemory')}
+                            onConfirm={(e) => {
+                              e?.stopPropagation();
+                              const bot = botsModels?.data?.bots?.find((b: any) => b.id === editorBotId);
+                              handleDeleteMemoryFile(editorBotId, item, bot?.workspace);
+                            }}
+                            onCancel={(e) => e?.stopPropagation()}
+                          >
+                            <Button size="small" type="text" icon={<Trash2 size={12} />} onClick={e => e.stopPropagation()} style={{ color: '#94a3b8' }} />
+                          </Popconfirm>
+                        </div>
+                      </AntList.Item>
+                    )}
                   />
                 </div>
               </div>
+            )}
 
-              {/* 右侧预览 */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa' }}>
-                <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#fff' }}>
-                  <Eye size={14} color="#64748b" />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{t('experts.preview')}</span>
-                </div>
-                <div style={{ flex: 1, padding: 30, overflowY: 'auto', backgroundColor: '#fff' }}>
-                  {editorContent ? (
-                    <div className="markdown-body" style={{ fontSize: 15 }}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
-                    </div>
-                  ) : (
-                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>
-                      <Empty description={t('common.noContent')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
-                    </div>
-                  )}
-                </div>
+            {isEditorLoading ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
+                <Spin tip={t('common.loading')} />
               </div>
-            </div>
-          )}
+            ) : (
+              <>
+                {/* 左侧编辑器 */}
+                <div style={{ flex: 1, borderRight: isMobile ? 'none' : '1px solid #f1f5f9', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ padding: '8px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Edit3 size={14} color="#64748b" />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{t('bots.markdownSource')}</span>
+                    </div>
+                    <Tooltip title={t('common.refresh')}>
+                      <Button 
+                        size="small" 
+                        type="text" 
+                        icon={<RefreshCw size={12} className={isEditorLoading ? 'animate-spin' : ''} />} 
+                        onClick={() => handleOpenFileEditor(editorBotId, editorType, selectedMemoryFile || undefined)} 
+                        style={{ color: '#94a3b8' }}
+                      />
+                    </Tooltip>
+                  </div>
+                  <div style={{ flex: 1, padding: 0, position: 'relative', overflow: 'hidden' }}>
+                    <Input.TextArea
+                      value={editorContent}
+                      onChange={(e) => setEditorContent(e.target.value)}
+                      placeholder={editorType === 'soul' ? t('experts.soulPlaceholder') : (editorType === 'identity' ? t('experts.identityPlaceholder') : t('bots.memoryPlaceholder'))}
+                      className="bot-editor-textarea"
+                      style={{ 
+                        height: '100%', border: 'none', background: 'transparent',
+                        padding: '24px', resize: 'none', fontSize: 14, fontFamily: 'monospace',
+                        lineHeight: 1.7, borderRadius: 0, overflowY: 'auto'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* 右侧预览 */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa' }}>
+                  <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#fff' }}>
+                    <Eye size={14} color="#64748b" />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{t('experts.preview')}</span>
+                  </div>
+                  <div style={{ flex: 1, padding: 30, overflowY: 'auto', backgroundColor: '#fff' }}>
+                    {editorContent ? (
+                      <div className="markdown-body" style={{ fontSize: 15 }}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>
+                        <Empty description={t('common.noContent')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </Spin>
       </Modal>
       </div>
@@ -1432,6 +1649,17 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           height: 100% !important;
           overflow-y: auto !important;
           padding: 24px !important;
+        }
+        .memory-tabs .ant-tabs-nav::before {
+          border-bottom: none !important;
+        }
+        .memory-list-item:hover {
+          background: #f1f5f9 !important;
+        }
+        .id-copy-tag:hover {
+          background: #e2e8f0 !important;
+          border-color: #cbd5e1 !important;
+          color: #1e293b !important;
         }
       ` }} />
     </div>

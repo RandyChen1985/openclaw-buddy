@@ -512,6 +512,13 @@
   "bots": {
     "editSoul": "人格编辑 (SOUL)",
     "editIdentity": "身份编辑 (IDENTITY)",
+    "editMemory": "记忆管理 (MEMORY)",
+    "longTermMemory": "长期记忆",
+    "dailyMemory": "日期记忆",
+    "memoryPlaceholder": "请在这里记录此机器人的重要记忆点，这些信息将作为机器人的长期认知存储。",
+    "addMemoryFile": "添加日期记录",
+    "memoryFileName": "记录日期 (文件名)",
+    "confirmDeleteMemory": "确认删除该日期记录吗？",
     "editorTitle": "机器人核心特征编辑器",
     "title": "虾兵蟹将",
     "description": "管理并配置您的 OpenClaw 机器人节点，分配 AI 核心并监控运行状态。",

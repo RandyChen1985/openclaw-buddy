@@ -1914,6 +1914,7 @@ func (s *Server) createBotFromExpert(c *gin.Context) {
 func (s *Server) getOpenClawBotFile(c *gin.Context) {
 	botID := c.Query("id")
 	fileType := c.Query("type")
+	filename := c.Query("filename")
 	workspace := c.Query("workspace")
 
 	if botID == "" || fileType == "" {
@@ -1921,7 +1922,7 @@ func (s *Server) getOpenClawBotFile(c *gin.Context) {
 		return
 	}
 
-	content, err := process.GetOpenClawBotFileContent(s.cfg.OpenClawConfigDir, botID, fileType, workspace)
+	content, err := process.GetOpenClawBotFileContent(s.cfg.OpenClawConfigDir, botID, fileType, filename, workspace)
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
@@ -1933,6 +1934,7 @@ func (s *Server) updateOpenClawBotFile(c *gin.Context) {
 	var req struct {
 		ID        string `json:"id" binding:"required"`
 		Type      string `json:"type" binding:"required"`
+		Filename  string `json:"filename"`
 		Content   string `json:"content" binding:"required"`
 		Workspace string `json:"workspace"`
 	}
@@ -1941,8 +1943,44 @@ func (s *Server) updateOpenClawBotFile(c *gin.Context) {
 		return
 	}
 
-	log.Printf("🎮 [控制] 用户请求: 【更新机器人配置文件】 (ID: %s, Type: %s)", req.ID, req.Type)
-	err := process.SaveOpenClawBotFileContent(s.cfg.OpenClawConfigDir, req.ID, req.Type, req.Content, req.Workspace)
+	log.Printf("🎮 [控制] 用户请求: 【更新机器人配置文件】 (ID: %s, Type: %s, Filename: %s)", req.ID, req.Type, req.Filename)
+	err := process.SaveOpenClawBotFileContent(s.cfg.OpenClawConfigDir, req.ID, req.Type, req.Filename, req.Content, req.Workspace)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success"})
+}
+
+func (s *Server) listOpenClawBotMemoryFiles(c *gin.Context) {
+	botID := c.Query("id")
+	workspace := c.Query("workspace")
+
+	if botID == "" {
+		s.Error(c, http.StatusBadRequest, "Missing bot id")
+		return
+	}
+
+	files, err := process.ListOpenClawBotMemoryFiles(s.cfg.OpenClawConfigDir, botID, workspace)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"files": files})
+}
+
+func (s *Server) deleteOpenClawBotMemoryFile(c *gin.Context) {
+	botID := c.Query("id")
+	filename := c.Query("filename")
+	workspace := c.Query("workspace")
+
+	if botID == "" || filename == "" {
+		s.Error(c, http.StatusBadRequest, "Missing id or filename")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【删除机器人记忆文件】 (ID: %s, Filename: %s)", botID, filename)
+	err := process.DeleteOpenClawBotMemoryFile(s.cfg.OpenClawConfigDir, botID, filename, workspace)
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
