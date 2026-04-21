@@ -30,8 +30,8 @@ export interface UseV3SessionsParams {
     loadSessionHistory?: (key: string) => Promise<void> | void;
     setHasNewMessages?: (val: boolean) => void;
     getMessagesCount?: () => number;
-    /** 新建/切换会话时清掉上一会话的生成中状态，避免输入框被 isTyping 锁死 */
-    resetTypingState?: () => void;
+    /** 新建/切换会话时平滑过渡生成中状态，避免输入框被 isTyping 锁死或闪烁 */
+    resetTypingState?: (nextKey?: string) => void;
   }>;
   inputAreaRef: React.RefObject<any>;
 }
@@ -90,15 +90,10 @@ export function useV3Sessions({
    */
   const fetchSessions = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoadingSessions(true);
-    const startTime = Date.now();
 
     const res = await sendRPC('sessions.list', { limit: 50 });
 
-    // 非静默模式下保证 loading 状态至少显示 300ms，避免闪烁
-    if (!isSilent) {
-      const elapsed = Date.now() - startTime;
-      if (elapsed < 300) await new Promise(r => setTimeout(r, 300 - elapsed));
-    }
+    // 已移除：以前为了防止 Loading 动画闪烁硬编码了 300ms 延迟，现在为了极致响应速度将其移除
 
     if (res.ok) {
       const list = res.payload?.items || res.payload?.sessions || (Array.isArray(res.payload) ? res.payload : []);
@@ -132,8 +127,7 @@ export function useV3Sessions({
    */
   const handleSelectSession = useCallback((key: string) => {
     if (key === sessionKey) return;
-
-    messageOpsRef.current.resetTypingState?.();
+    messageOpsRef.current.resetTypingState?.(key);
 
     // 取消订阅旧会话的消息推送，订阅新会话
     if (sessionKey) {
@@ -173,8 +167,7 @@ export function useV3Sessions({
     if (creatingNewSessionRef.current) return;
     creatingNewSessionRef.current = true;
     setIsCreatingNewSession(true);
-
-    messageOpsRef.current.resetTypingState?.();
+    messageOpsRef.current.resetTypingState?.('');
     if (sessionKey) {
       sendRPC('sessions.messages.unsubscribe', { key: sessionKey, sessionKey }).catch(() => {});
     }
@@ -419,20 +412,25 @@ export function useV3Sessions({
    */
   useEffect(() => {
     if (status !== 'authenticated') return;
-    // 订阅 sessions.changed 事件（网关为订阅制，不订阅不推送）
-    sendRPC('sessions.subscribe', {}).catch(() => {});
-    if (sessionKeyRef.current) {
-      // 兼容：部分网关版本只认 key 字段
-      sendRPC('sessions.messages.subscribe', { key: sessionKeyRef.current, sessionKey: sessionKeyRef.current }).catch(() => {});
-    }
-    fetchSessions(true);
-    if (sessionKeyRef.current) {
-      // 保持旧逻辑：只有当消息为空时才加载历史（避免“撤自/清屏”）
+
+    // 💡 性能优化：所有初始化 RPC 并发发出，不再等待前一个完成
+    const currentKey = sessionKeyRef.current;
+
+    // 1. 订阅会话变更（网关订阅制）
+    void sendRPC('sessions.subscribe', {}).catch(() => {});
+
+    // 2. 如果已有会话，并行订阅消息流并加载历史
+    if (currentKey) {
+      void sendRPC('sessions.messages.subscribe', { key: currentKey, sessionKey: currentKey }).catch(() => {});
+      
       const count = messageOpsRef.current.getMessagesCount?.() ?? 0;
       if (count === 0) {
-        messageOpsRef.current.loadSessionHistory?.(sessionKeyRef.current);
+        void messageOpsRef.current.loadSessionHistory?.(currentKey);
       }
     }
+
+    // 3. 并行拉取会话列表
+    void fetchSessions(true);
   }, [fetchSessions, messageOpsRef, sendRPC, status]);
 
   return useMemo(() => {

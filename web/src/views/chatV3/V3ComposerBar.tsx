@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Button, Select } from 'antd';
+import { Button, Select, Tooltip } from 'antd';
 import { Activity, Bot, Cpu, Plus, Quote, RefreshCw, Zap } from 'lucide-react';
 import type { InputAreaHandle } from '../../components/Chat/V3InputArea';
 import V3InputArea from '../../components/Chat/V3InputArea';
@@ -12,6 +12,9 @@ export interface V3ComposerBarProps {
   isTyping: boolean;
   /** 新建会话创建中等：锁输入，但不视为「生成中」（不显示停止按钮） */
   sessionComposeBlocked?: boolean;
+  sessionKey: string | null;
+  isLoadingHistory: boolean;
+  onRefreshSession: () => void;
   loadingBots: boolean;
 
   selectedBot: string;
@@ -43,6 +46,9 @@ export function V3ComposerBar({
   status,
   isTyping,
   sessionComposeBlocked = false,
+  sessionKey,
+  isLoadingHistory,
+  onRefreshSession,
   loadingBots,
   selectedBot,
   setSelectedBot,
@@ -192,6 +198,41 @@ export function V3ComposerBar({
           botsModels={botsModels}
           status={status}
         />
+
+        <Tooltip
+          title={
+            isTyping
+              ? t('chat.refreshWaitReply', { defaultValue: '请等待当前回复结束后刷新' })
+              : (status === 'authenticated' && sessionKey)
+                ? t('chat.refreshSession', { defaultValue: '刷新' })
+                : t('chat.refreshSessionNoSession', { defaultValue: '暂无可刷新的会话' })
+          }
+        >
+          <span style={{ display: 'inline-flex', marginLeft: 2 }}>
+            <Button
+              type="text"
+              size="small"
+              icon={<RefreshCw size={16} className={isLoadingHistory ? 'animate-spin' : ''} />}
+              onClick={onRefreshSession}
+              disabled={status !== 'authenticated' || !sessionKey || isTyping || isLoadingHistory}
+              aria-label={t('chat.refreshSession', { defaultValue: '刷新' })}
+              style={{
+                height: 38,
+                width: 38,
+                borderRadius: 10,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#f5f3ff',
+                border: 'none',
+                padding: 0,
+                boxShadow: '0 2px 4px rgba(124, 58, 237, 0.06)',
+                color: (status !== 'authenticated' || !sessionKey || isTyping || isLoadingHistory) ? '#cbd5e1' : '#64748b',
+                opacity: (status !== 'authenticated' || !sessionKey || isTyping || isLoadingHistory) ? 0.55 : 1
+              }}
+            />
+          </span>
+        </Tooltip>
       </div>
 
       {quotedMsg && (

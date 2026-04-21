@@ -251,14 +251,17 @@ export const useChatV3WebSocket = ({
     if (isTyping) return;
     if (isSummarizing) return;
     if (v3Messages.length < 2) return;
-    if (!isUntitledSessionLabel(sessionLabel)) return;
+    const listLabel = sessions.find((s: any) => s.key === sessionKey)?.label;
+    const effectivelyUntitled =
+      isUntitledSessionLabel(sessionLabel) && isUntitledSessionLabel(listLabel);
+    if (!effectivelyUntitled) return;
 
     const timer = setTimeout(() => {
       // silent=true：避免频繁 toast；force=false：遵循“自动不覆盖已有标题”的语义
       handleAutoSummarize(v3Messages, true, sessionKey, false);
     }, 1000);
     return () => clearTimeout(timer);
-  }, [handleAutoSummarize, isSummarizing, isTyping, v3Messages, sessionKey, sessionLabel, status]);
+  }, [handleAutoSummarize, isSummarizing, isTyping, v3Messages, sessionKey, sessionLabel, sessions, status]);
 
   // 后台任务：为未命名会话自动补全标题（去抖 + 并发控制 + 可取消）
   useV3UntitledAutoTitle({
@@ -292,6 +295,7 @@ export const useChatV3WebSocket = ({
     fetchSessions,
     handleSelectSession,
     startNewSession,
+    loadSessionHistory,
     handleSend,
     handleStopGeneration,
     handleRegenerate,

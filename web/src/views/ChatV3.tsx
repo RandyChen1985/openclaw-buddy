@@ -123,6 +123,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     fetchSessions,
     handleSelectSession,
     startNewSession,
+    loadSessionHistory,
     handleSend,
     handleStopGeneration,
     handleRegenerate,
@@ -484,6 +485,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               status={status}
               isTyping={isTyping}
               sessionComposeBlocked={isCreatingNewSession}
+              sessionKey={sessionKey}
+              isLoadingHistory={isLoadingHistory}
+              onRefreshSession={() => {
+                if (!sessionKey) return;
+                void loadSessionHistory(sessionKey);
+              }}
               loadingBots={loadingBots}
               selectedBot={selectedBot}
               setSelectedBot={setSelectedBot}

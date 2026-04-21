@@ -45,7 +45,22 @@ export function useV3AutoSummarize({
     if (activeKey === 'agent:main:main') return;
 
     const existing = sessions.find(s => s.key === activeKey);
-    const currentLabel = activeKey === sessionKey ? sessionLabel : existing?.label;
+    /**
+     * 当前会话优先用 state 里的 sessionLabel；若仍为「未命名」但列表里已有标题
+     * （例如仅恢复了 sessionKey、列表后到），应用列表值，避免误触发生成覆盖。
+     */
+    let currentLabel: string | null | undefined;
+    if (activeKey === sessionKey) {
+      const fromState = sessionLabel;
+      const fromList = existing?.label;
+      currentLabel = !isUntitledSessionLabel(fromState)
+        ? fromState
+        : !isUntitledSessionLabel(fromList)
+          ? fromList
+          : (fromState ?? fromList);
+    } else {
+      currentLabel = existing?.label;
+    }
     if (!force && !isUntitledSessionLabel(currentLabel)) {
       return;
     }
