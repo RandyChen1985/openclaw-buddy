@@ -568,6 +568,33 @@ button.v3-settings-reasoning-btn:active {
 .markdown-body-v3 { line-height: 1.6; font-size: 14px; }
 .markdown-body-v3 a { color: var(--v3-link); text-decoration: none; }
 .markdown-body-v3 a:hover { text-decoration: underline; }
+.v3-quick-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  color: #4f46e5;
+  cursor: pointer;
+  font-size: 0.9em;
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  margin: 2px 4px 2px 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  vertical-align: middle;
+  line-height: 1.4;
+}
+.v3-quick-link:hover {
+  background: #4f46e5;
+  color: #ffffff !important;
+  border-color: #4f46e5;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+  transform: translateY(-1px);
+}
+.v3-quick-link:active {
+  transform: translateY(0) scale(0.98);
+}
 .markdown-body-v3 h1, .markdown-body-v3 h2, .markdown-body-v3 h3 { margin-top: 16px; margin-bottom: 8px; font-weight: 700; color: inherit; }
 .markdown-body-v3 h1 { font-size: 1.5em; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
 .markdown-body-v3 h2 { font-size: 1.3em; }

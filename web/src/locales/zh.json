@@ -340,6 +340,7 @@
     "dropToUpload": "松开即可上传文件",
     "showThinking": "显示思考或工具调用",
     "showDebug": "显示推送日志",
+    "showDebugHint": "仅 debug 调试用，开启可能占用 CPU",
     "reasoningMode": "思考模式",
     "reasoningModeHint": "点击后将发送用户消息 /reasoning on 或 off（由网关/模型解析；与上方「显示思考或工具调用」仅控制本地展示不同）。",
     "reasoningDesc": {

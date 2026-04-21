@@ -10,15 +10,18 @@ import remarkBreaks from 'remark-breaks';
 import remarkMath from 'remark-math';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import rehypeKatex from 'rehype-katex';
+import { defaultUrlTransform } from 'react-markdown';
 
 const katexSanitizeSchema: typeof defaultSchema = {
   ...defaultSchema,
   attributes: {
     ...defaultSchema.attributes,
-    div: [...(defaultSchema.attributes?.div || []), 'className', 'style'],
-    span: [...(defaultSchema.attributes?.span || []), 'className', 'style'],
-    math: ['xmlns'],
-    annotation: ['encoding']
+    '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'style'],
+    a: [...(defaultSchema.attributes?.a || []), 'href', 'target', 'rel']
+  },
+  protocols: {
+    ...defaultSchema.protocols,
+    href: ['http', 'https', 'mailto', 'tel', 'quick']
   },
   tagNames: [
     ...(defaultSchema.tagNames || []),
@@ -377,6 +380,30 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       if (!inline && language === 'echarts') return <ECharts optionStr={String(children).replace(/\n$/, '')} isTyping={isLast && isTyping} />;
       if (!inline && language) return <CodeBlock language={language} value={String(children).replace(/\n$/, '')} isMobile={isMobile} {...props} />;
       return <code {...props} style={{ padding: '0.2em 0.4em', backgroundColor: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(175, 184, 193, 0.2)', borderRadius: '6px', fontSize: '85%' }}>{children}</code>;
+    },
+    a: ({ node, href, children, ...props }: any) => {
+        const isQuick = href?.startsWith('quick:') || href?.includes('quick:');
+        const query = isQuick ? decodeURIComponent(href.replace(/^.*quick:/, '')) : '';
+        
+        if (isQuick) {
+          return (
+            <span 
+              className="v3-quick-link"
+              style={{ 
+                textDecoration: 'none', 
+                display: 'inline-flex',
+                cursor: 'pointer'
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                onSend(query);
+              }}
+            >
+              {children}
+            </span>
+          );
+        }
+      return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
     }
   };
 
@@ -491,6 +518,10 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                   remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
                   rehypePlugins={[rehypeKatex, [rehypeSanitize, katexSanitizeSchema]]}
                   components={markdownComponents as any}
+                  urlTransform={(url) => {
+                    if (url.startsWith('quick:')) return url;
+                    return defaultUrlTransform(url);
+                  }}
                 >
                   {processedContent}
                 </ReactMarkdown>
@@ -550,6 +581,10 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                           remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
                           rehypePlugins={[rehypeKatex, [rehypeSanitize, katexSanitizeSchema]]}
                           components={markdownComponents as any}
+                          urlTransform={(url) => {
+                            if (url.startsWith('quick:')) return url;
+                            return defaultUrlTransform(url);
+                          }}
                         >
                           {processedMetaContent}
                         </ReactMarkdown>

@@ -332,6 +332,7 @@
     "dropToUpload": "Drop to Upload",
     "showThinking": "Show thinking & tool calls",
     "showDebug": "Show Push Logs",
+    "showDebugHint": "Debug only, may increase CPU usage",
     "reasoningMode": "Reasoning mode",
     "reasoningModeHint": "Sends /reasoning on or off as a user message (handled by gateway/model). Separate from “show thinking (history only)”, which only toggles local display.",
     "reasoningDesc": {

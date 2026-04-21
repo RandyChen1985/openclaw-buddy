@@ -9,7 +9,20 @@ import (
 	"strconv"
 	"strings"
 	"sort"
+	"sync"
+	"time"
 )
+
+var (
+	metricsCache     SystemMetrics
+	lastMetricsTime  time.Time
+	metricsMu        sync.RWMutex
+
+	versionCache string
+	versionMu    sync.RWMutex
+)
+
+const MetricsTTL = 30 * time.Second
 
 type SystemMetrics struct {
 	CPUUsage    float64 `json:"cpu_usage"`
@@ -67,10 +80,22 @@ func GetStructuredStatus(port int) (OpenClawStatus, error) {
 		Agents:   []ServiceStatus{},
 	}
 
-	// 0. 获取版本号
-	verCmd := exec.Command("openclaw", "--version")
-	verOut, _ := verCmd.CombinedOutput()
-	status.Version = strings.TrimSpace(StripANSI(string(verOut)))
+	// 0. 获取版本号 (增加缓存逻辑)
+	versionMu.RLock()
+	cachedVer := versionCache
+	versionMu.RUnlock()
+
+	if cachedVer != "" {
+		status.Version = cachedVer
+	} else {
+		verCmd := exec.Command("openclaw", "--version")
+		verOut, _ := verCmd.CombinedOutput()
+		status.Version = strings.TrimSpace(StripANSI(string(verOut)))
+		
+		versionMu.Lock()
+		versionCache = status.Version
+		versionMu.Unlock()
+	}
 
 	// 0.1 获取系统负载 (支持 Mac/Linux)
 	status.Metrics = GetSystemMetrics()
@@ -107,6 +132,21 @@ func GetProcessRuntime(pid int) string {
 }
 
 func GetSystemMetrics() SystemMetrics {
+	metricsMu.RLock()
+	if time.Since(lastMetricsTime) < MetricsTTL {
+		defer metricsMu.RUnlock()
+		return metricsCache
+	}
+	metricsMu.RUnlock()
+
+	metricsMu.Lock()
+	defer metricsMu.Unlock()
+
+	// Double check
+	if time.Since(lastMetricsTime) < MetricsTTL {
+		return metricsCache
+	}
+
 	metrics := SystemMetrics{
 		CPUUsage:    0,
 		MemoryUsage: 0,
@@ -155,6 +195,9 @@ func GetSystemMetrics() SystemMetrics {
 	if diskRaw != "" {
 		metrics.DiskUsage, _ = strconv.ParseFloat(diskRaw, 64)
 	}
+
+	metricsCache = metrics
+	lastMetricsTime = time.Now()
 
 	return metrics
 }

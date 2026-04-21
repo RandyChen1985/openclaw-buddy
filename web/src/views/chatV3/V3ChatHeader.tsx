@@ -234,8 +234,13 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
             <div style={{ height: 1, background: '#f1f5f9' }} />
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
-                {t('chat.showDebug', { defaultValue: '显示推送日志' })}
+              <div>
+                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+                  {t('chat.showDebug', { defaultValue: '显示推送日志' })}
+                </div>
+                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+                  {t('chat.showDebugHint', { defaultValue: '仅 debug 调试用，开启可能占用 CPU' })}
+                </div>
               </div>
               <Switch size="small" checked={showDebug} onChange={(val) => setShowDebug(val)} />
             </div>
