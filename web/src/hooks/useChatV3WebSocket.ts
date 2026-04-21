@@ -50,6 +50,7 @@ interface UseChatV3WebSocketProps {
   scrollRef: React.RefObject<HTMLDivElement>;
   /** 与「显示思考或工具调用」开关同步；关闭时不注入 session.tool 进度行 */
   showThinkingRef: React.MutableRefObject<boolean>;
+  onLog?: (log: any) => void;
 }
 
 export const useChatV3WebSocket = ({
@@ -62,7 +63,8 @@ export const useChatV3WebSocket = ({
   inputAreaRef,
   virtuosoRef,
   scrollRef,
-  showThinkingRef
+  showThinkingRef,
+  onLog
 }: UseChatV3WebSocketProps) => {
   // --- States ---
   const [sessionKey, setSessionKey] = useState<string | null>(() => storage.getItem('v3_current_session_key'));
@@ -101,8 +103,9 @@ export const useChatV3WebSocket = ({
   const gatewayEventHandlerRef = useRef<((data: any) => void) | null>(null);
 
   const handlers = useMemo(() => ({
-    onEvent: (data: any) => gatewayEventHandlerRef.current?.(data)
-  }), []);
+    onEvent: (data: any) => gatewayEventHandlerRef.current?.(data),
+    onLog
+  }), [onLog]);
 
   const {
     status,

@@ -39,6 +39,8 @@ export function useV3UntitledAutoTitle({
 }: UseV3UntitledAutoTitleParams) {
   const runTokenRef = useRef(0);
   const inFlightRef = useRef<Set<string>>(new Set());
+  /** 💡 记录最近处理过的会话及其时间，避免在短时间内过度重复扫描同一个未命名会话 */
+  const processedSessionsRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -60,7 +62,13 @@ export function useV3UntitledAutoTitle({
           if (!key) continue;
           if (token !== runTokenRef.current) return;
           if (inFlightRef.current.has(key)) continue;
+
+          // 💡 频率控制：5 分钟内处理过的会话不再重复扫描历史
+          const lastProcessedAt = processedSessionsRef.current.get(key) || 0;
+          if (Date.now() - lastProcessedAt < 5 * 60 * 1000) continue;
+
           inFlightRef.current.add(key);
+          processedSessionsRef.current.set(key, Date.now());
           try {
             const hRes = await sendRPC('chat.history', { sessionKey: key, limit: historyLimit });
             if (token !== runTokenRef.current) return;

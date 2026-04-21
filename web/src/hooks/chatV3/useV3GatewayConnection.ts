@@ -58,6 +58,10 @@ export interface V3GatewayConnectionHandlers {
    * 处理后端 res（RPC 响应）。
    */
   onResponse?: (data: any) => void;
+  /**
+   * 捕获原始日志。
+   */
+  onLog?: (log: { direction: 'in' | 'out'; timestamp: number; data: any }) => void;
 }
 
 export interface UseV3GatewayConnectionParams {
@@ -175,9 +179,12 @@ export function useV3GatewayConnection({
         clearTimeout(timer);
         resolve(res);
       });
-      wsRef.current.send(JSON.stringify(req));
+      
+      const raw = JSON.stringify(req);
+      handlers?.onLog?.({ direction: 'out', timestamp: Date.now(), data: req });
+      wsRef.current.send(raw);
     });
-  }, []);
+  }, [handlers]);
 
   /**
    * 完成 challenge 握手并发起 connect 授权。
@@ -334,11 +341,13 @@ export function useV3GatewayConnection({
           handleChallenge(data.payload.nonce, ws);
           return;
         }
+        handlers?.onLog?.({ direction: 'in', timestamp: Date.now(), data });
         handlers?.onEvent?.(data, ws);
         return;
       }
 
       if (data.type === 'res') {
+        handlers?.onLog?.({ direction: 'in', timestamp: Date.now(), data });
         const resolve = pendingRequests.current.get(data.id);
         if (resolve) {
           resolve(data);

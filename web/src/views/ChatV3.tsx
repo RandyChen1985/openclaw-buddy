@@ -18,6 +18,7 @@ import { V3ChatHeader } from './chatV3/V3ChatHeader';
 import { V3FloatingButtons } from './chatV3/V3FloatingButtons';
 import { V3MessagePane } from './chatV3/V3MessagePane';
 import { V3ComposerBar } from './chatV3/V3ComposerBar';
+import { V3DebugPane } from './chatV3/V3DebugPane';
 import { useV3Theme } from '../hooks/chatV3/useV3Theme';
 import '../styles/ChatV3.css';
 
@@ -89,9 +90,20 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [selectedBot, setSelectedBot] = useState<string>('');
   const [keyPair, setKeyPair] = useState<nacl.BoxKeyPair | null>(null);
   const [deviceId, setDeviceId] = useState<string>('');
-  const [showThinking, setShowThinking] = useState<boolean>(() => storage.getItem('v3_show_thinking') === 'true');
+  const [showThinking, setShowThinking] = useState<boolean>(() => storage.getItem('v3_show_thinking') !== 'false');
   const showThinkingRef = useRef(showThinking);
   showThinkingRef.current = showThinking;
+
+  // Debug Logs
+  const [showDebug, setShowDebug] = useState(() => storage.getItem('v3_show_debug') === 'true');
+  const [wsLogs, setWsLogs] = useState<any[]>([]);
+
+  const handleAddLog = useCallback((log: any) => {
+    // 💡 只有开启调试模式且非心跳包时才记录，防止内存溢出与性能损耗
+    if (!storage.getItem('v3_show_debug')) return;
+    if (log.data?.event === 'health') return; 
+    setWsLogs(prev => [...prev.slice(-99), log]);
+  }, []);
 
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -99,6 +111,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const inputAreaRef = useRef<InputAreaHandle>(null);
 
   // Hook usage
+  const handleSetSelectedBot = React.useCallback((bot: string) => setSelectedBot(bot), []);
+
   const {
     messages, setMessages,
     status,
@@ -142,13 +156,14 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     keyPair,
     deviceId,
     selectedBot,
-    setSelectedBot: (bot: string) => setSelectedBot(bot),
+    setSelectedBot: handleSetSelectedBot,
     botsModels,
     t,
     inputAreaRef,
     virtuosoRef,
     scrollRef,
-    showThinkingRef
+    showThinkingRef,
+    onLog: handleAddLog
   });
 
   // Local UI States
@@ -398,6 +413,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           getSourceMeta={getSourceMeta}
           botsModels={botsModels}
           v3Theme={v3Theme}
+          showDebug={showDebug}
+          setShowDebug={(val) => {
+            setShowDebug(val);
+            storage.setItem('v3_show_debug', val ? 'true' : 'false');
+            if (!val) setWsLogs([]); // 关闭时自动清屏
+          }}
         />
   
         <V3MessagePane
@@ -506,6 +527,18 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
           </div>
         </div>
+        {showDebug && !isMobile && (
+          <V3DebugPane 
+            t={t} 
+            logs={wsLogs} 
+            onClear={() => setWsLogs([])} 
+            onClose={() => {
+              setShowDebug(false);
+              storage.setItem('v3_show_debug', 'false');
+              setWsLogs([]);
+            }} 
+          />
+        )}
         <ChatV3Auth 
           status={status} 
           isMobile={!!isMobile} 

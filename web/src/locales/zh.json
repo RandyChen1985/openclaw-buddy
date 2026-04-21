@@ -339,6 +339,7 @@
     "thinkingLevelHelpBody": "当你通过 /reasoning 等方式开启思考模式后，Think Level 决定模型在推理阶段愿意投入多少「精力」、大致会生成多少推理类 token。不同挡位通常对应不同的推理策略，以及不同的耗时与算力成本。",
     "dropToUpload": "松开即可上传文件",
     "showThinking": "显示思考或工具调用",
+    "showDebug": "显示推送日志",
     "reasoningMode": "思考模式",
     "reasoningModeHint": "点击后将发送用户消息 /reasoning on 或 off（由网关/模型解析；与上方「显示思考或工具调用」仅控制本地展示不同）。",
     "reasoningDesc": {
@@ -359,6 +360,9 @@
     "lastSevenDays": "最近 7 天",
     "searchSessions": "搜索会话...",
     "thinkingProcess": "思考过程",
+    "debugLogs": "WS 推送日志",
+    "noLogs": "暂无推送日志",
+    "debugLogsHint": "提示：仅保留最新 100 条业务日志",
     "metaFoldExpand": "点击展开本次思考或工具调用",
     "metaFoldExpandLive": "点击展开查看思考或工具调用",
     "metaFoldExpandLiveTool": "工具调用生成中",

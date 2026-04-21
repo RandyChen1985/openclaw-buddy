@@ -331,6 +331,7 @@
     "thinkingLevelHelpBody": "After reasoning is enabled (e.g. with /reasoning on), Think Level sets how much effort the model spends in the reasoning phase and roughly how many reasoning-style tokens it may emit. Each preset usually maps to a different reasoning strategy, latency, and compute cost.",
     "dropToUpload": "Drop to Upload",
     "showThinking": "Show thinking & tool calls",
+    "showDebug": "Show Push Logs",
     "reasoningMode": "Reasoning mode",
     "reasoningModeHint": "Sends /reasoning on or off as a user message (handled by gateway/model). Separate from “show thinking (history only)”, which only toggles local display.",
     "reasoningDesc": {
@@ -351,6 +352,9 @@
     "lastSevenDays": "Last 7 days",
     "searchSessions": "Search sessions...",
     "thinkingProcess": "Thinking Process",
+    "debugLogs": "WS Push Logs",
+    "noLogs": "No push logs yet",
+    "debugLogsHint": "Hint: Only the latest 100 business logs are kept",
     "metaFoldExpand": "Click to expand reasoning & tool activity",
     "metaFoldExpandLive": "Click to expand to view reasoning & tools",
     "metaFoldExpandLiveTool": "Tool call in progress…",

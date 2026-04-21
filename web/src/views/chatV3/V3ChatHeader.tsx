@@ -39,6 +39,10 @@ export interface V3ChatHeaderProps {
   thinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   onThinkingLevelChange: (val: any) => void;
 
+  // debug logging
+  showDebug: boolean;
+  setShowDebug: (val: boolean) => void;
+
   /** 发送 `/reasoning …` 等用户消息（需在已连接且非生成中时由父组件校验） */
   onSendReasoningCommand?: (text: string) => void;
 
@@ -95,6 +99,8 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     setShowThinking,
     thinkingLevel,
     onThinkingLevelChange,
+    showDebug,
+    setShowDebug,
     onSendReasoningCommand,
     parseSessionKey,
     getSourceMeta,
@@ -222,6 +228,19 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           </div>
           <Switch size="small" checked={showThinking} onChange={(val) => setShowThinking(val)} />
         </div>
+
+        {!isMobile && (
+          <>
+            <div style={{ height: 1, background: '#f1f5f9' }} />
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+                {t('chat.showDebug', { defaultValue: '显示推送日志' })}
+              </div>
+              <Switch size="small" checked={showDebug} onChange={(val) => setShowDebug(val)} />
+            </div>
+          </>
+        )}
 
         <div style={{ height: 1, background: '#f1f5f9' }} />
 
