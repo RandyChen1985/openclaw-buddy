@@ -1467,7 +1467,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
             {t('common.save')}
           </Button>
         ]}
-        width={isMobile ? '100%' : (editorType === 'memory' && activeMemoryTab === 'daily' ? 1250 : 1100)}
+        width={isMobile ? '100%' : (editorType === 'memory' && activeMemoryTab === 'daily' ? 1540 : 1300)}
         centered
         bodyStyle={{ padding: '0', height: isMobile ? 'calc(100vh - 120px)' : '75vh', overflow: 'hidden' }}
       >
@@ -1601,7 +1601,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                     <Eye size={14} color="#64748b" />
                     <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{t('experts.preview')}</span>
                   </div>
-                  <div style={{ flex: 1, padding: 30, overflowY: 'auto', backgroundColor: '#fff' }}>
+                  <div style={{ flex: 1, padding: '24px', overflowY: 'auto', backgroundColor: '#fff' }}>
                     {editorContent ? (
                       <div className="markdown-body" style={{ fontSize: 15 }}>
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
@@ -1628,6 +1628,10 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         .markdown-body li { margin-bottom: 6px; color: #475569; }
         .markdown-body code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; color: #2563eb; }
         .markdown-body blockquote { border-left: 4px solid #e2e8f0; padding-left: 16px; color: #64748b; font-style: italic; margin: 16px 0; }
+        .markdown-body table { display: block; width: 100%; overflow-x: auto; border-collapse: collapse; margin-bottom: 16px; }
+        .markdown-body table th, .markdown-body table td { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; }
+        .markdown-body table th { background: #f8fafc; font-weight: 700; color: #475569; }
+        .markdown-body table td { color: #64748b; }
         @keyframes pulse-green {
           0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
           70% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
