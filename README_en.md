@@ -95,7 +95,7 @@ Use the provided one-click development script `dev.sh`:
 ### Production Deployment (Release)
 
 1. **Execute Build**: `./build_linux.sh` (cross-compile for Linux)
-2. **Get Artifacts**: Found in the `release/` directory. Upload to your server.
+2. **Get Artifacts**: Prebuilt packages: [GitHub Releases](https://github.com/RandyChen1985/openclaw-buddy/releases). If you build from source, artifacts are under `release/`. Extract and upload to your server.
 3. **Configuration**: Modify the `env` file (a random 16-character `BUDDY_TOKEN` is generated on first run).
 4. **Start Service**: `./start.sh`
 

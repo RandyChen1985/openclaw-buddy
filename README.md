@@ -91,7 +91,7 @@ OpenClaw Buddy 采用非侵入式的“侧挂”架构，通过监控回路与�
 ### 生产部署 (Release)
 
 1. **执行构建**: `./build_linux.sh` (交叉编译为 Linux)
-2. **获取产物**: 产物位于 `release/` 目录下，解压后上传至服务器。
+2. **获取产物**: 预编译包见 [GitHub Releases](https://github.com/RandyChen1985/openclaw-buddy/releases)；自行构建时产物位于 `release/` 目录，解压后上传至服务器。
 3. **参数配置**: 修改 `env` 文件（首次启动会自动生成 16 位随机 `BUDDY_TOKEN`）。
 4. **启动服务**: `./start.sh`
 

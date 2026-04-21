@@ -14,42 +14,57 @@
 ## 0. 安装与部署 (Installation & Deployment)
 
 ### 0.1 获取与解压
-从 Release 页面或构建产物中获取对应系统的压缩包（例如 `openclaw-buddy-linux-1.0.0.tar.gz`），并执行以下命令：
+从 [GitHub Releases](https://github.com/RandyChen1985/openclaw-buddy/releases) 下载预编译包，或在本地执行 `./build_linux.sh` 后从 `release/` 目录获取 **Linux 全量包**（文件名形如 `openclaw-buddy-linux-<版本号>.tar.gz`，版本号随构建递增）。解压后进入与压缩包同名的目录即可：
+
 ```bash
 tar -xzf openclaw-buddy-linux-1.0.0.tar.gz
 cd openclaw-buddy-linux-1.0.0
 ```
 
+> **Windows 桌面版**：为独立安装包（如 `openclaw-buddy-windows-vX.Y.Z.zip`），解压后运行 `openclaw-buddy.exe`，无 `start.sh`/`stop.sh`；详见仓库根目录下的 [README_windows.md](README_windows.md)。
+
 ### 0.2 配置指南
-在程序根目录下，找到 `env` 文件进行环境配置。
+在运行目录下编辑 **`env`** 文件（文件名即为 `env`，不是 `.env`）。若该文件尚不存在，**首次启动**时会由程序自动生成一份模板；其中 **`BUDDY_TOKEN`** 在自动生成场景下为 `sk-` 前缀加随机十六进制串。Linux 发布包内附带的示例 `env` 可能为占位符 `sk-replace-me-on-first-run`，部署到生产环境前请务必改为强随机令牌；你也可以改为任意复杂字符串，不限于 `sk-` 前缀。
+
 #### 关键配置项解读：
-- **`WEB_PORT`**: Guardian 控制面板的 HTTP 监听端口，默认为 `3000`。
-- **`BUDDY_TOKEN`**: **[安全]** 访问面板的认证令牌。不一定以 `sk-` 开头，你可以修改为任何复杂的字符串。此外，初次启动时为了安全起见，系统会默认创建一个随机的复杂的密码并自动更新到 `env` 文件中。
-- **`DB_FILE`**: 系统运行时产生的 SQLite 数据库路径，默认位于 `./data/guardian.db`。
-- **`OPENCLAW_CONFIG_DIR`**: **[核心]** 小龙虾 (OpenClaw AI Agent) 的配置根目录（通常为 `~/.openclaw`）。Buddy 会实时读取并监控其中的 `openclaw.json`。
-- **`CHECK_INTERVAL_SECONDS`**: 健康状态的主动巡检频率（秒），默认 `30` 秒。
-- **`HEALTH_PORT`**: 小龙虾网关暴露的健康检查端口，通常在 `openclaw.json` 中配置为 `18789`。
-- **`FEISHU_ENABLED`**: 是否开启飞书机器人故障实时报警通知（需配置对应的 AppID 和 Secret）。
+- **`WEB_PORT`**: Guardian 控制面板的 HTTP 监听端口，默认 `3000`。
+- **`WEB_ROOT`**: 面板挂载的 URL 基础路径，默认 `/`；若设为子路径（如 `/claw`），访问地址需带上该前缀。
+- **`BUDDY_TOKEN`**: **[安全]** 访问面板的认证令牌。
+- **`DB_FILE`**: SQLite 数据库路径，默认 `./data/guardian.db`。
+- **`OPENCLAW_CONFIG_DIR`**: **[核心]** OpenClaw 配置根目录（通常为 `~/.openclaw`），Buddy 会读取并监控其中的 `openclaw.json`。
+- **`CHECK_INTERVAL_SECONDS`**: 健康巡检间隔（秒），代码默认 **`60`**（与发布包模板一致）。
+- **`HEALTH_PORT`**: 网关健康检查 TCP 端口，默认 **`18789`**（须与 `openclaw.json` 中网关配置一致）。
+- **`MAX_RETRIES`**: 自愈等逻辑的最大重试次数，默认 `3`。
+- **`BACKUP_DIR` / `REPORT_DIR` / `LOG_FILE`**: 配置备份、故障报表与守护进程日志路径；日志轮转可通过 **`LOG_MAX_SIZE`**、**`LOG_MAX_BACKUPS`**、**`LOG_MAX_AGE`**、**`LOG_COMPRESS`** 调整（均有代码默认值，未写入 `env` 时即生效）。
+- **`EXTERNAL_DASHBOARD_URL`**: 可选，填写后用于侧栏「外部工具」中安全跳转/透传原生 OpenClaw 面板等场景。
+- **`SHOW_EXTERNAL_TOOLS`**: 是否显示「外部工具」菜单组，默认 `false`。
+- **`GUI_DISABLE_FEATURES`**: 逗号分隔的功能开关，用于隐藏部分菜单（如 `terminal`、`logs`），Windows 图形版常用。
+- **`CORS_ALLOW_ORIGINS`**: 嵌入或跨域访问时的 Origin 白名单（逗号分隔）；自动生成 `env` 时默认示例为 `https://yovole.com`，集成到自有域名时请改为包含实际业务 Origin 的列表。
+- **`FEISHU_ENABLED`**: 是否开启飞书通知；为 `true` 时需同时配置 **`FEISHU_APP_ID`**、**`FEISHU_APP_SECRET`**、**`FEISHU_CHAT_ID`**。
 
 ### 0.3 启动与停止
-- **启动服务**:
+**Linux 发布包**解压后，根目录内由 `build_linux.sh` 生成的 **`start.sh` / `stop.sh`** 与二进制 **`lib/openclaw-buddy`** 配套使用：
+
+- **启动服务**（后台运行，PID 写入 `./pid/openclaw-buddy.pid`）:
   ```bash
   ./start.sh
   ```
-  *提示：服务将以后台进程运行，并自动生成对应的 PID 文件。*
 - **停止服务**:
   ```bash
   ./stop.sh
   ```
 
+从**源码**本地预览或调试，请使用仓库根目录的 **`./dev.sh`**（隔离目录、编译前后端），说明见 [README.md](README.md)。仓库源码根目录**默认不包含** `start.sh`/`stop.sh`，它们仅出现在打好的 Linux 包内。
+
 ### 0.4 查看日志
-若需观察系统自愈过程或诊断异常，请查看 `logs/guardian.log`：
+若需观察系统自愈过程或诊断异常，请查看 `logs/guardian.log`（路径可通过 `LOG_FILE` 修改）：
+
 ```bash
 tail -f ./logs/guardian.log
 ```
 
 ### 0.5 访问
-http://x.x.x.x:port/  输入你 env 中的 token 登录即可。
+在浏览器中打开 `http://<主机>:<WEB_PORT><WEB_ROOT>/`（`WEB_ROOT` 为 `/` 时可简写为 `http://<主机>:<WEB_PORT>/`），使用 `env` 中的 `BUDDY_TOKEN` 登录。支持 URL 参数 `?token=...` 自动登录（常用于嵌入），详见下文第 9 节。
 
 ---
 
@@ -74,8 +89,9 @@ http://x.x.x.x:port/  输入你 env 中的 token 登录即可。
 ### 功能点
 - **负载监控**：实时查看 CPU、内存占用以及工作区磁盘剩余空间。
 - **健康指标**：展示系统运行状态（Running/Stopped）及连续运行时长（Uptime）。
-- **生命周期控制**：直接在面板上执行网关的 **启动 (Start)**、**停止 (Stop)** 和 **异步重启 (Restart)**。
-- **实时日志**：通过底部的日志追踪器，实时观察网关输出的运行日志。
+- **生命周期控制**：直接在面板上执行网关的 **启动 (Start)**、**停止 (Stop)** 和 **异步重启 (Restart)**（重启等关键操作为异步任务，可结合界面上的任务提示查看进度）。
+- **实时日志与终端**：支持 WebSocket 日志流、远程交互式终端（TUI）等能力，便于在网关异常时仍能从 Buddy 侧排查；具体菜单是否展示可通过 `GUI_DISABLE_FEATURES` 控制。
+- **外部工具**：当 `SHOW_EXTERNAL_TOOLS=true` 且配置好 `EXTERNAL_DASHBOARD_URL` 等时，可从侧栏访问原生 OpenClaw 面板等外链能力。
 
 ![仪表盘](docs/images/overview.png)
 
@@ -176,12 +192,14 @@ http://x.x.x.x:port/  输入你 env 中的 token 登录即可。
 ## 9. 高级：嵌入式集成 (Embed Support)
 
 ### 功能说明
-Buddy 支持以嵌入模式运行，你可以将特定功能无缝挂载到自己的网站中。
+Buddy 支持以嵌入模式运行，你可以将特定功能无缝挂载到自己的网站中。更完整的参数说明、Iframe 示例与跨域注意项见仓库中的 [Embedding.md](Embedding.md)。
 
 ### 常用参数
-- `embed=true`：开启**纯净模式**，隐藏导航栏。
+- `embed=true`：开启**纯净模式**，隐藏主导航与页眉，便于嵌入 Iframe。
 - `page=chat`：直接进入对话实验室页面。
-- `bot=your_bot_id`：预设默认对话的机器人。
+- `token=<BUDDY_TOKEN>`：静默登录（**请勿**将带真实 Token 的页面暴露在不受信任的公网路径）。
+- `bot=<机器人 ID 或名称>`：预设默认对话的机器人。
+- `user=<业务侧用户标识>`：用于区分不同终端用户的会话上下文（多租户/集成场景）。
 
 ![嵌入模式示例](docs/images/embed.png)
 
