@@ -131,11 +131,9 @@ export function useV3Sessions({
 
     // 取消订阅旧会话的消息推送，订阅新会话
     if (sessionKey) {
-      // 兼容：部分网关版本只认 key 字段
-      sendRPC('sessions.messages.unsubscribe', { key: sessionKey, sessionKey }).catch(() => {});
+      sendRPC('sessions.messages.unsubscribe', { key: sessionKey }).catch(() => {});
     }
-    // 兼容：部分网关版本只认 key 字段
-    sendRPC('sessions.messages.subscribe', { key, sessionKey: key }).catch(() => {});
+    sendRPC('sessions.messages.subscribe', { key }).catch(() => {});
 
     setSessionKey(key);
 
@@ -169,7 +167,7 @@ export function useV3Sessions({
     setIsCreatingNewSession(true);
     messageOpsRef.current.resetTypingState?.('');
     if (sessionKey) {
-      sendRPC('sessions.messages.unsubscribe', { key: sessionKey, sessionKey }).catch(() => {});
+      sendRPC('sessions.messages.unsubscribe', { key: sessionKey }).catch(() => {});
     }
     messageOpsRef.current.setMessages?.([]);
     setSessionLabel(null);
@@ -197,7 +195,7 @@ export function useV3Sessions({
         }
         const currentKey = (res.payload?.key as string) || key;
         setSessionKey(currentKey);
-        sendRPC('sessions.messages.subscribe', { key: currentKey, sessionKey: currentKey }).catch(() => {});
+        sendRPC('sessions.messages.subscribe', { key: currentKey }).catch(() => {});
         void sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel }).catch(() => {});
         setSessions(prev => {
           if (prev.some((s: any) => s.key === currentKey)) return prev;
@@ -268,8 +266,7 @@ export function useV3Sessions({
 
           if (res.ok) {
             antdMessage.success({ content: t('common.success'), key: 'deletingSession' });
-            // 兼容：部分网关版本只认 key 字段
-            sendRPC('sessions.messages.unsubscribe', { key, sessionKey: key }).catch(() => {});
+            sendRPC('sessions.messages.unsubscribe', { key }).catch(() => {});
             if (sessionKey === key) {
               setSessionKey(null);
               messageOpsRef.current.setMessages?.([]);
@@ -316,8 +313,7 @@ export function useV3Sessions({
           antdMessage.success({ content: t('common.success'), key: 'clearingGroup' });
 
           if (sessionKey && sessionKeys.includes(sessionKey)) {
-            // 兼容：部分网关版本只认 key 字段
-            sendRPC('sessions.messages.unsubscribe', { key: sessionKey, sessionKey }).catch(() => {});
+            sendRPC('sessions.messages.unsubscribe', { key: sessionKey }).catch(() => {});
             setSessionKey(null);
             messageOpsRef.current.setMessages?.([]);
             setSessionLabel(null);
@@ -350,8 +346,7 @@ export function useV3Sessions({
           antdMessage.success({ content: t('chat.clearAllSuccess'), key: 'clearingAll' });
 
           if (sessionKeyRef.current) {
-            // 兼容：部分网关版本只认 key 字段
-            sendRPC('sessions.messages.unsubscribe', { key: sessionKeyRef.current, sessionKey: sessionKeyRef.current }).catch(() => {});
+            sendRPC('sessions.messages.unsubscribe', { key: sessionKeyRef.current }).catch(() => {});
           }
           setSessionKey(null);
           messageOpsRef.current.setMessages?.([]);
@@ -421,7 +416,7 @@ export function useV3Sessions({
 
     // 2. 如果已有会话，并行订阅消息流并加载历史
     if (currentKey) {
-      void sendRPC('sessions.messages.subscribe', { key: currentKey, sessionKey: currentKey }).catch(() => {});
+      void sendRPC('sessions.messages.subscribe', { key: currentKey }).catch(() => {});
       
       const count = messageOpsRef.current.getMessagesCount?.() ?? 0;
       if (count === 0) {

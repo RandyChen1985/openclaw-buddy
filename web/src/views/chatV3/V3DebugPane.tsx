@@ -13,10 +13,22 @@ interface V3DebugPaneProps {
 
 const LogItem = ({ log }: { log: any }) => {
   const [expanded, setExpanded] = useState(false);
-  const timeStr = new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const date = new Date(log.timestamp);
+  const timeStr = date.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.' + String(date.getMilliseconds()).padStart(3, '0');
   
   const isOut = log.direction === 'out';
-  const method = log.data?.method || log.data?.event || 'unknown';
+  let method = log.data?.method || log.data?.event || '';
+  
+  // 💡 如果是响应包 (type: "res") 且没有 method 字段，尝试从 id 中解析出原始方法名
+  if (!method && log.data?.type === 'res' && log.data?.id) {
+    const idParts = log.data.id.split('-');
+    if (idParts.length > 0) {
+      // 提取前缀，例如 "sessions.messages.unsubscribe"
+      method = idParts[0];
+    }
+  }
+
+  if (!method) method = 'unknown';
 
   const copyToClipboard = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -34,15 +46,16 @@ const LogItem = ({ log }: { log: any }) => {
         style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
         onClick={() => setExpanded(!expanded)}
       >
-        <span style={{ color: '#94a3b8', fontFamily: 'monospace', width: 60, flexShrink: 0 }}>{timeStr}</span>
+        <span style={{ color: '#94a3b8', fontFamily: 'monospace', width: 95, flexShrink: 0, fontSize: 10 }}>{timeStr}</span>
         <span style={{ 
           color: isOut ? '#38bdf8' : '#4ade80', 
           display: 'inline-flex', 
           alignItems: 'center',
           gap: 2,
           fontWeight: 600,
-          width: 35,
-          flexShrink: 0
+          width: 40,
+          flexShrink: 0,
+          fontSize: 10
         }}>
           {isOut ? <ArrowUpRight size={12} /> : <ArrowDownLeft size={12} />}
           {isOut ? 'OUT' : 'IN'}
@@ -187,8 +200,8 @@ export const V3DebugPane: React.FC<V3DebugPaneProps> = ({ t, logs, onClear, onCl
              buttonStyle="solid"
            >
              <Radio.Button value="all" style={{ fontSize: 10, background: direction === 'all' ? '#38bdf8' : '#1e293b', borderColor: '#334155', color: direction === 'all' ? '#fff' : '#94a3b8' }}>{t('common.all', { defaultValue: '全部' })}</Radio.Button>
-             <Radio.Button value="out" style={{ fontSize: 10, background: direction === 'out' ? '#38bdf8' : '#1e293b', borderColor: '#334155', color: direction === 'out' ? '#fff' : '#94a3b8' }}>OUT</Radio.Button>
-             <Radio.Button value="in" style={{ fontSize: 10, background: direction === 'in' ? '#38bdf8' : '#1e293b', borderColor: '#334155', color: direction === 'in' ? '#fff' : '#94a3b8' }}>IN</Radio.Button>
+             <Radio.Button value="out" style={{ fontSize: 10, background: direction === 'out' ? '#38bdf8' : '#1e293b', borderColor: '#334155', color: direction === 'out' ? '#fff' : '#94a3b8' }}>OUT(发送)</Radio.Button>
+             <Radio.Button value="in" style={{ fontSize: 10, background: direction === 'in' ? '#38bdf8' : '#1e293b', borderColor: '#334155', color: direction === 'in' ? '#fff' : '#94a3b8' }}>IN(接收)</Radio.Button>
            </Radio.Group>
         </div>
       </div>

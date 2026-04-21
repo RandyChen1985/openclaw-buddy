@@ -1528,10 +1528,11 @@ export function useV3Messages({
       return;
     }
     if (evt === 'sessions.changed') {
-      const { key: evtKey, data: sessionData } = data.payload || {};
+      const payload = data.payload || {};
+      const evtKey = payload.sessionKey || payload.key || payload.session?.key;
       if (evtKey) {
         const oldStatus = sessionStatusMapRef.current.get(evtKey);
-        const newStatus = sessionData?.status;
+        const newStatus = payload.status || payload.session?.status || payload.data?.status;
         sessionStatusMapRef.current.set(evtKey, newStatus);
 
         // 如果状态变更为 done/error，且当前会话无活跃运行中 run，尝试触发延时解锁。
@@ -2090,7 +2091,7 @@ export function useV3Messages({
         currentKey = res.payload.key;
         setSessionKey(currentKey);
         // 兼容：部分网关版本只认 key 字段
-        sendRPC('sessions.messages.subscribe', { key: currentKey, sessionKey: currentKey }).catch(() => {});
+        sendRPC('sessions.messages.subscribe', { key: currentKey }).catch(() => {});
         // 不在此处 await patch：否则会拖住首条消息的 setMessages，会话区体感「卡住」。
         void sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel }).catch(() => {});
         // 静默刷新列表，避免 setLoadingSessions(true) + 300ms 最短 loading 与首屏消息抢同一帧
