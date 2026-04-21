@@ -429,7 +429,13 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
               {!isMobile && sessionMeta.bot && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#64748b', background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>
                   <span>{sessionMeta.bot.identityEmoji || '🤖'}</span>
-                  <span style={{ fontWeight: 600 }}>{sessionMeta.bot.identityName || sessionMeta.bot.id}</span>
+                  <span style={{ fontWeight: 600 }}>
+                    {(() => {
+                      const botId = sessionMeta.botId || sessionMeta.bot.id;
+                      const botName = sessionMeta.bot.identityName || sessionMeta.bot.name;
+                      return botName ? `${botId}（${botName}）` : botId;
+                    })()}
+                  </span>
                 </div>
               )}
             </div>

@@ -161,7 +161,7 @@ export function useV3Sessions({
    * 开始新会话：立即在网关创建空白会话并写入 sessionKey，顶部与会话列表立刻可显示；
    * 消息区保持空，首条发送时不再走 sessions.create。
    */
-  const startNewSession = useCallback(() => {
+  const startNewSession = useCallback((agentIdOverride?: string) => {
     if (creatingNewSessionRef.current) return;
     creatingNewSessionRef.current = true;
     setIsCreatingNewSession(true);
@@ -180,7 +180,7 @@ export function useV3Sessions({
           antdMessage.warning(t('chat.gatewayConnecting'));
           return;
         }
-        const agentId = (selectedBot || '').replace(/^openclaw:/, '').trim();
+        const agentId = (agentIdOverride || (selectedBot || '').replace(/^openclaw:/, '')).trim();
         if (!agentId) {
           setSessionKey(null);
           antdMessage.warning(t('chat.selectBot'));
@@ -214,6 +214,7 @@ export function useV3Sessions({
 
     void run();
   }, [
+    // agentIdOverride is an argument
     fetchSessions,
     inputAreaRef,
     messageOpsRef,

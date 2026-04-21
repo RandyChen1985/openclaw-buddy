@@ -18,7 +18,13 @@ export interface V3ComposerBarProps {
   loadingBots: boolean;
 
   selectedBot: string;
-  setSelectedBot: (bot: string) => void;
+  /**
+   * 请求“以某个 bot 创建新会话”（会弹确认框，由上层决定是否执行）。
+   * 说明：v3 在已有 sessionKey 的页面里，切换 bot 视为创建新会话，而不是切换当前会话。
+   */
+  onRequestNewSessionWithBot: (bot: string) => void;
+  /** 当前会话对应的 botId（用于隐藏每个 bot 右侧的“新会话”按钮） */
+  currentSessionBotId?: string | null;
   botsModels: any;
 
   sessionModel: string;
@@ -51,7 +57,8 @@ export function V3ComposerBar({
   onRefreshSession,
   loadingBots,
   selectedBot,
-  setSelectedBot,
+  onRequestNewSessionWithBot,
+  currentSessionBotId = null,
   botsModels,
   sessionModel,
   onSessionModelChange,
@@ -122,7 +129,7 @@ export function V3ComposerBar({
             placeholder={t('chat.selectBotTip')}
             style={{ width: isMobile ? '45%' : 220, fontSize: isMobile ? 11 : 13 }}
             value={selectedBot}
-            onChange={setSelectedBot}
+            onChange={onRequestNewSessionWithBot}
             loading={loadingBots}
             disabled={isTyping || sessionComposeBlocked}
             variant="borderless"
@@ -136,7 +143,7 @@ export function V3ComposerBar({
                   <div style={{ flexShrink: 0 }}>
                     <BotAvatar provider={bot.provider || (bot.id === 'main' ? 'openai' : '')} size={20} />
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2', minWidth: 0 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2', minWidth: 0, flex: 1 }}>
                     <span style={{ fontWeight: 600, color: '#1e293b', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {bot.name || bot.id}
                     </span>
@@ -144,6 +151,30 @@ export function V3ComposerBar({
                       {bot.model || '---'} {t('chat.defaultSuffix', { defaultValue: '(默认)' })}
                     </span>
                   </div>
+
+                  {bot.id !== currentSessionBotId && (
+                    <Tooltip title={t('chat.newSession', { defaultValue: '新会话' })}>
+                      <Button
+                        size="small"
+                        type="text"
+                        icon={<Plus size={14} />}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onRequestNewSessionWithBot(`openclaw:${bot.id}`);
+                        }}
+                        style={{
+                          height: 24,
+                          width: 24,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: 8,
+                          color: '#64748b'
+                        }}
+                      />
+                    </Tooltip>
+                  )}
                 </div>
               </Select.Option>
             ))}

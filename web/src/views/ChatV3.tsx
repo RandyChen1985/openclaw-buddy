@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { VirtuosoHandle } from 'react-virtuoso';
-import { message } from 'antd';
+import { message, Modal } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Monitor, MessageCircle, Send, Globe, Clock, Zap, Sparkles, Settings } from 'lucide-react';
 import 'katex/dist/katex.min.css';
@@ -263,6 +263,51 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     [status, isTyping, isCreatingNewSession, handleSend, t]
   );
 
+  const currentSessionBotId = React.useMemo(() => {
+    if (!sessionKey) return null;
+    return parseSessionKey(sessionKey).botId;
+  }, [sessionKey]);
+
+  const handleRequestNewSessionWithBot = React.useCallback((botValue: string) => {
+    const nextBot = (botValue || '').trim();
+    if (!nextBot) return;
+
+    // 没有会话时允许直接切换 bot（用于首次进入/准备阶段）
+    if (!sessionKey) {
+      setSelectedBot(nextBot);
+      return;
+    }
+
+    if (status !== 'authenticated') {
+      message.warning(t('chat.v3Connecting'));
+      return;
+    }
+    if (isTyping) {
+      message.info(t('chat.refreshWaitReply', { defaultValue: '请等待当前回复结束后再切换' }));
+      return;
+    }
+    if (isCreatingNewSession) return;
+
+    const agentId = nextBot.replace(/^openclaw:/, '').trim();
+    const bot = botsModels?.data?.bots?.find((b: any) => b.id === agentId);
+    const botName = bot?.name || agentId;
+
+    Modal.confirm({
+      title: t('chat.confirmCreateNewSessionTitle', { defaultValue: '确认创建新会话？' }),
+      content: t('chat.confirmCreateNewSessionContent', {
+        defaultValue: `将以「${botName}」创建一个新的会话。当前会话不会被覆盖。`,
+        botName
+      }),
+      okText: t('common.confirm', { defaultValue: '确定' }),
+      cancelText: t('common.cancel', { defaultValue: '取消' }),
+      onOk: async () => {
+        // 先更新下拉选择的显示，再创建新会话
+        setSelectedBot(nextBot);
+        startNewSession(agentId);
+      }
+    });
+  }, [botsModels, isCreatingNewSession, isTyping, sessionKey, startNewSession, status, t]);
+
   return (
     <>
       {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
@@ -514,7 +559,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               }}
               loadingBots={loadingBots}
               selectedBot={selectedBot}
-              setSelectedBot={setSelectedBot}
+              onRequestNewSessionWithBot={handleRequestNewSessionWithBot}
+              currentSessionBotId={currentSessionBotId}
               botsModels={botsModels}
               sessionModel={sessionModel}
               onSessionModelChange={handleModelChange}
