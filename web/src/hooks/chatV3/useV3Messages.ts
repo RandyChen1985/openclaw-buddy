@@ -727,7 +727,7 @@ export function useV3Messages({
 
     let prefix = '';
     if (topThought) {
-      prefix = `> :::thinking\n> ${String(topThought).replace(/\n/g, '\n> ')}\n> :::\n\n`;
+      prefix = `> :::thinking\n> \n> ${String(topThought).replace(/\n/g, '\n> ')}\n> \n> :::\n\n`;
     }
 
     let body = '';
@@ -751,14 +751,14 @@ export function useV3Messages({
         let thinkingPart = '';
         if (c.thinking || c.thought || c.reasoning || c.type === 'thinking') {
           const thought = c.thinking || c.thought || c.reasoning || c.content || '';
-          thinkingPart = `> :::thinking\n> ${String(thought).replace(/\n/g, '\n> ')}\n> :::\n\n`;
+          thinkingPart = `> :::thinking\n> \n> ${String(thought).replace(/\n/g, '\n> ')}\n> \n> :::\n\n`;
           matched = true;
         }
 
         let planPart = '';
         if (c.type === 'plan' || c.plan) {
           const plan = c.plan || c.content || '';
-          planPart = `> :::plan\n> ${String(plan).replace(/\n/g, '\n> ')}\n> :::\n\n`;
+          planPart = `> :::plan\n> \n> ${String(plan).replace(/\n/g, '\n> ')}\n> \n> :::\n\n`;
           matched = true;
         }
 

@@ -275,14 +275,38 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         return '';
       };
       const fullText = extractText(children);
+
+      // 定义标识符过滤逻辑：移除仅仅包含标识符的段落/文本
+      const filterMarkers = (nodes: any): any => {
+        return React.Children.map(nodes, (child) => {
+          const text = extractText(child).trim();
+          // 如果该节点纯粹是标识符或标记行，则过滤掉
+          if (
+            text === ':::thinking' || 
+            text === ':::plan' || 
+            text === ':::toolCall' || 
+            text === ':::commandOutput' || 
+            text === ':::approval' || 
+            text === ':::warning' || 
+            text === ':::' ||
+            /^:::warning\s+/.test(text)
+          ) {
+            return null;
+          }
+          return child;
+        });
+      };
+
+      const cleanChildren = filterMarkers(children);
+
       if (fullText.includes(':::thinking')) {
-        return <CollapsibleMeta title={t('chat.thinkingProcess', { defaultValue: '思考过程' })} icon={Cpu} defaultExpanded={false}>{children}</CollapsibleMeta>;
+        return <CollapsibleMeta title={t('chat.thinkingProcess', { defaultValue: '思考过程' })} icon={Cpu} defaultExpanded={false}>{cleanChildren}</CollapsibleMeta>;
       }
       if (fullText.includes(':::plan')) {
-        return <CollapsibleMeta title={t('chat.executionPlan', { defaultValue: '执行计划' })} icon={ListTodo} defaultExpanded={false}>{children}</CollapsibleMeta>;
+        return <CollapsibleMeta title={t('chat.executionPlan', { defaultValue: '执行计划' })} icon={ListTodo} defaultExpanded={false}>{cleanChildren}</CollapsibleMeta>;
       }
       if (fullText.includes(':::toolCall')) {
-        return <CollapsibleMeta title={t('chat.systemTool', { defaultValue: '系统工具' })} icon={Terminal} defaultExpanded={false}>{children}</CollapsibleMeta>;
+        return <CollapsibleMeta title={t('chat.systemTool', { defaultValue: '系统工具' })} icon={Terminal} defaultExpanded={false}>{cleanChildren}</CollapsibleMeta>;
       }
       if (fullText.includes(':::commandOutput')) {
         const titleMatch = fullText.match(/^\s*:::commandOutput\s*\n+\s*\*\*([^*\n]+)\*\*/);
@@ -299,7 +323,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                 maxHeight: 360, overflowY: 'auto', whiteSpace: 'pre-wrap'
               }}
             >
-              {children}
+              {cleanChildren}
             </div>
           </CollapsibleMeta>
         );
@@ -308,81 +332,40 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         const approvalId = approvalMeta.approvalId;
         const slug = approvalMeta.slug;
         const rawContent = msg.content;
-        const alreadyResolved =
-          rawContent.includes('— ✅') || rawContent.includes('— ❌') ||
-          rawContent.includes('— ⏱️') || rawContent.includes('已超时') ||
-          rawContent.includes('已批准(永久)');
+        const alreadyResolved = rawContent.includes('— ✅') || rawContent.includes('— ❌') || rawContent.includes('— ⏱️') || rawContent.includes('已超时') || rawContent.includes('已批准(永久)');
         const approvalClickKey = approvalId || slug;
         const isClicked = approvalClickKey ? !!approvalClicked[approvalClickKey] : false;
         const isDisabled = alreadyResolved || isClicked;
+
         return (
-          <div style={{
-            margin: '12px 0', padding: '16px', background: '#fef2f2',
-            border: '1px solid #fee2e2', borderRadius: 12,
-            boxShadow: '0 2px 8px rgba(239, 68, 68, 0.05)'
-          }}>
+          <div style={{ margin: '12px 0', padding: '16px', background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: 12, boxShadow: '0 2px 8px rgba(239, 68, 68, 0.05)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: '#ef4444' }}>
               <ShieldAlert size={18} />
               <span style={{ fontWeight: 600, fontSize: 14 }}>{t('chat.approvalRequired')}</span>
             </div>
-            <div style={{ marginBottom: 12, opacity: 0.9 }}>{children}</div>
+            <div style={{ marginBottom: 12, opacity: 0.9 }}>{cleanChildren}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Button
-                type="primary" danger block icon={<ShieldCheck size={16} />}
-                disabled={isDisabled}
-                onClick={() => {
-                  if (!approvalId || isDisabled) return;
-                  setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true }));
-                  onSend(`/approve ${approvalId} allow-once`);
-                  message.success(t('chat.approvalSent', { defaultValue: '已提交审批指令' }));
-                }}
-                style={{ borderRadius: 8, fontWeight: 600, height: 36 }}
-              >
-                {t('chat.approveNow')}
-              </Button>
-              <Button
-                block
-                icon={<ShieldCheck size={16} />}
-                disabled={isDisabled}
-                onClick={() => {
-                  if (!approvalId || isDisabled) return;
-                  setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true }));
-                  onSend(`/approve ${approvalId} allow-always`);
-                  message.success(t('chat.approvalSentAlways', { defaultValue: '已提交永久审批' }));
-                }}
-                style={{ borderRadius: 8, fontWeight: 600, height: 36 }}
-              >
-                {t('chat.approveAllowAlways')}
-              </Button>
+              <Button type="primary" danger block icon={<ShieldCheck size={16} />} disabled={isDisabled} onClick={() => { if (!approvalId || isDisabled) return; setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true })); onSend(`/approve ${approvalId} allow-once`); message.success(t('chat.approvalSent', { defaultValue: '已提交审批指令' })); }} style={{ borderRadius: 8, fontWeight: 600, height: 36 }}>{t('chat.approveNow')}</Button>
+              <Button block icon={<ShieldCheck size={16} />} disabled={isDisabled} onClick={() => { if (!approvalId || isDisabled) return; setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true })); onSend(`/approve ${approvalId} allow-always`); message.success(t('chat.approvalSentAlways', { defaultValue: '已提交永久审批' })); }} style={{ borderRadius: 8, fontWeight: 600, height: 36 }}>{t('chat.approveAllowAlways')}</Button>
             </div>
           </div>
         );
       }
       if (fullText.includes(':::warning')) {
+        const titleLine = fullText.split('\n').find(l => l.includes(':::warning')) || '';
+        const title = titleLine.replace(/^>\s?:::warning\s?/, '').trim() || 'Warning';
         return (
-          <div style={{
-            margin: '12px 0', padding: '12px', background: '#fffbeb',
-            border: '1px solid #fef3c7', borderRadius: 8, fontSize: 12
-          }}>
+          <div style={{ margin: '12px 0', padding: '12px', background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: 8, fontSize: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: '#d97706' }}>
               <ShieldAlert size={14} />
-              <span style={{ fontWeight: 600 }}>{fullText.split('\n')[0].replace('> :::warning ', '')}</span>
+              <span style={{ fontWeight: 600 }}>{title}</span>
             </div>
-            {children}
+            {cleanChildren}
           </div>
         );
       }
       return (
-        <blockquote
-          className="v3-quote"
-          style={{
-            borderLeft: `4px solid ${isUser ? 'var(--v3-user-border, rgba(255,255,255,0.7))' : 'var(--v3-border, #e2e8f0)'}`,
-            padding: '8px 10px', paddingLeft: 12,
-            color: isUser ? 'var(--v3-user-text, rgba(255,255,255,0.92))' : 'var(--v3-text-muted, #64748b)',
-            background: isUser ? 'var(--v3-user-surface, rgba(255,255,255,0.12))' : 'rgba(241, 245, 249, 0.6)',
-            borderRadius: 10, margin: '8px 0', fontStyle: 'normal'
-          }}
-        >
+        <blockquote className="v3-quote" style={{ borderLeft: `4px solid ${isUser ? 'var(--v3-user-border, rgba(255,255,255,0.7))' : 'var(--v3-border, #e2e8f0)'}`, padding: '8px 10px', paddingLeft: 12, color: isUser ? 'var(--v3-user-text, rgba(255,255,255,0.92))' : 'var(--v3-text-muted, #64748b)', background: isUser ? 'var(--v3-user-surface, rgba(255,255,255,0.12))' : 'rgba(241, 245, 249, 0.6)', borderRadius: 10, margin: '8px 0', fontStyle: 'normal' }}>
           {children}
         </blockquote>
       );
@@ -507,175 +490,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                 <ReactMarkdown 
                   remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
                   rehypePlugins={[rehypeKatex, [rehypeSanitize, katexSanitizeSchema]]}
-                  components={{
-                    p: ({children}: any) => <p style={{margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere'}}>{children}</p>,
-                    img: ({ node, ...props }: any) => (
-                      <img 
-                        {...props} 
-                        style={{ maxWidth: '100%', borderRadius: 8, marginTop: 8, cursor: 'zoom-in', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} 
-                        onClick={() => window.open(props.title || props.src, '_blank')}
-                      />
-                    ),
-                    pre: ({children}: any) => <pre style={{ overflowX: 'auto', maxWidth: '100%', margin: '8px 0', padding: '10px', background: '#f8fafc', borderRadius: 8 }}>{children}</pre>,
-                    blockquote: ({ children }: any) => {
-                      const extractText = (node: any): string => {
-                        if (typeof node === 'string') return node;
-                        if (Array.isArray(node)) return node.map(extractText).join('');
-                        if (node?.props?.children) return extractText(node.props.children);
-                        return '';
-                      };
-                      const fullText = extractText(children);
-                      if (fullText.includes(':::thinking')) {
-                        return <CollapsibleMeta title={t('chat.thinkingProcess', { defaultValue: '思考过程' })} icon={Cpu} defaultExpanded={false}>{children}</CollapsibleMeta>;
-                      }
-                      if (fullText.includes(':::plan')) {
-                        return <CollapsibleMeta title={t('chat.executionPlan', { defaultValue: '执行计划' })} icon={ListTodo} defaultExpanded={false}>{children}</CollapsibleMeta>;
-                      }
-                      if (fullText.includes(':::toolCall')) {
-                        return <CollapsibleMeta title={t('chat.systemTool', { defaultValue: '系统工具' })} icon={Terminal} defaultExpanded={false}>{children}</CollapsibleMeta>;
-                      }
-                      if (fullText.includes(':::commandOutput')) {
-                        // 从 fullText 第一行的加粗标题提取命令摘要作为折叠头副标题，尽量简洁
-                        const titleMatch = fullText.match(/^\s*:::commandOutput\s*\n+\s*\*\*([^*\n]+)\*\*/);
-                        const subtitle = titleMatch ? titleMatch[1].trim() : '';
-                        const headerTitle = subtitle
-                          ? `Command Output · ${subtitle}`
-                          : 'Command Output';
-                        return (
-                          <CollapsibleMeta
-                            title={headerTitle}
-                            icon={Terminal}
-                            defaultExpanded={false}
-                          >
-                            <div
-                              className="v3-command-output-shell"
-                              style={{
-                                margin: '4px 0',
-                                borderRadius: 8,
-                                overflow: 'hidden',
-                                border: '1px solid #1e293b',
-                                background: '#030712',
-                                color: '#e2e8f0',
-                                padding: '10px 12px',
-                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                                fontSize: 12,
-                                lineHeight: 1.5,
-                                maxHeight: 360,
-                                overflowY: 'auto',
-                                whiteSpace: 'pre-wrap'
-                              }}
-                            >
-                              {children}
-                            </div>
-                          </CollapsibleMeta>
-                        );
-                      }
-                      // 仅当「当前」blockquote 内含 :::approval 时才套审批卡片。
-                      // 不能用 hasApproval（整条消息级）：否则同条消息里 session.tool 追加的
-                      // `> 🔧 \`exec\` 执行中…` 等普通引用块也会被误判成审批 UI，出现两个红框。
-                      if (fullText.includes(':::approval')) {
-                        const approvalId = approvalMeta.approvalId;
-                        const slug = approvalMeta.slug;
-
-                        const rawContent = msg.content;
-                        const alreadyResolved =
-                          rawContent.includes('— ✅') ||
-                          rawContent.includes('— ❌') ||
-                          rawContent.includes('— ⏱️') ||
-                          rawContent.includes('已超时') ||
-                          rawContent.includes('已批准(永久)');
-
-                        const approvalClickKey = approvalId || slug;
-                        const isClicked = approvalClickKey ? !!approvalClicked[approvalClickKey] : false;
-                        const isDisabled = alreadyResolved || isClicked;
-
-                        return (
-                          <div style={{ 
-                            margin: '12px 0', padding: '16px', background: '#fef2f2', 
-                            border: '1px solid #fee2e2', borderRadius: 12,
-                            boxShadow: '0 2px 8px rgba(239, 68, 68, 0.05)'
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: '#ef4444' }}>
-                              <ShieldAlert size={18} />
-                              <span style={{ fontWeight: 600, fontSize: 14 }}>{t('chat.approvalRequired')}</span>
-                            </div>
-                            <div style={{ marginBottom: 12, opacity: 0.9 }}>{children}</div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                              <Button
-                                type="primary" danger block icon={<ShieldCheck size={16} />}
-                                disabled={isDisabled}
-                                onClick={() => {
-                                  if (!approvalId || isDisabled) return;
-                                  setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true }));
-                                  onSend(`/approve ${approvalId} allow-once`);
-                                  message.success(t('chat.approvalSent', { defaultValue: '已提交审批指令' }));
-                                }}
-                                style={{ borderRadius: 8, fontWeight: 600, height: 36 }}
-                              >
-                                {t('chat.approveNow')}
-                              </Button>
-                              <Button
-                                block
-                                icon={<ShieldCheck size={16} />}
-                                disabled={isDisabled}
-                                onClick={() => {
-                                  if (!approvalId || isDisabled) return;
-                                  setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true }));
-                                  onSend(`/approve ${approvalId} allow-always`);
-                                  message.success(t('chat.approvalSentAlways', { defaultValue: '已提交永久审批' }));
-                                }}
-                                style={{ borderRadius: 8, fontWeight: 600, height: 36 }}
-                              >
-                                {t('chat.approveAllowAlways')}
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      }
-                      // 💡 关键新增：渲染未知/警告块
-                      if (fullText.includes(':::warning')) {
-                        return (
-                          <div style={{ 
-                            margin: '12px 0', padding: '12px', background: '#fffbeb', 
-                            border: '1px solid #fef3c7', borderRadius: 8,
-                            fontSize: 12
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: '#d97706' }}>
-                              <ShieldAlert size={14} />
-                              <span style={{ fontWeight: 600 }}>{fullText.split('\n')[0].replace('> :::warning ', '')}</span>
-                            </div>
-                            {children}
-                          </div>
-                        );
-                      }
-                      // 普通引用块（用户气泡/助手气泡分别做对比度适配）
-                      return (
-                        <blockquote
-                          className="v3-quote"
-                          style={{
-                            borderLeft: `4px solid ${isUser ? 'var(--v3-user-border, rgba(255,255,255,0.7))' : 'var(--v3-border, #e2e8f0)'}`,
-                            padding: '8px 10px',
-                            paddingLeft: 12,
-                            color: isUser ? 'var(--v3-user-text, rgba(255,255,255,0.92))' : 'var(--v3-text-muted, #64748b)',
-                            background: isUser ? 'var(--v3-user-surface, rgba(255,255,255,0.12))' : 'rgba(241, 245, 249, 0.6)',
-                            borderRadius: 10,
-                            margin: '8px 0',
-                            fontStyle: 'normal'
-                          }}
-                        >
-                          {children}
-                        </blockquote>
-                      );
-                    },
-                    code: ({ inline, className, children, ...props }: any) => {
-                      const match = /language-(\w+)/.exec(className || '');
-                      const language = match ? match[1] : '';
-                      if (!inline && language === 'mermaid') return <Mermaid chart={String(children).replace(/\n$/, '')} />;
-                      if (!inline && language === 'echarts') return <ECharts optionStr={String(children).replace(/\n$/, '')} isTyping={isLast && isTyping} />;
-                      if (!inline && language) return <CodeBlock language={language} value={String(children).replace(/\n$/, '')} isMobile={isMobile} {...props} />;
-                      return <code {...props} style={{ padding: '0.2em 0.4em', backgroundColor: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(175, 184, 193, 0.2)', borderRadius: '6px', fontSize: '85%' }}>{children}</code>;
-                    }
-                  }}
+                  components={markdownComponents as any}
                 >
                   {processedContent}
                 </ReactMarkdown>

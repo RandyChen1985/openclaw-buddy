@@ -550,9 +550,9 @@ button.v3-settings-reasoning-btn:active {
   margin-top: -12px !important; /* 抵消大部分间距 */
 }
 
-/* 隐藏特殊的容器标记文本 */
-.v3-meta-content p:first-child {
-   display: none;
+/* 结构化块内元素的基础间距微调 */
+.v3-meta-content p {
+   margin: 4px 0 !important;
 }
 
 .v3-meta-content blockquote {
@@ -561,6 +561,7 @@ button.v3-settings-reasoning-btn:active {
    margin: 0 !important;
    font-style: normal !important;
    color: inherit !important;
+   background: transparent !important;
 }
 
 /* --- 4. Markdown 增强样式 --- */
