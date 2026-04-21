@@ -503,6 +503,8 @@
   "bots": {
     "editSoul": "Edit Personality (SOUL)",
     "editIdentity": "Edit Background (IDENTITY)",
+    "editHeartbeat": "Heartbeat (HEARTBEAT)",
+    "editAgents": "Multi-Agents (AGENTS)",
     "editorTitle": "Bot Core Features Editor",
     "title": "Lobster Bots",
     "lastSynced": "Last synced",

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { 
   Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star, 
   ChevronDown, ChevronUp, Activity, ZapOff, Bot, LayoutGrid, List, FolderOpen,
-  Eye, Save, Brain, Edit3, BrainCircuit, Copy
+  Eye, Save, Brain, Edit3, BrainCircuit, Copy, Heart, Users
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -117,7 +117,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   // --- 自动刷新闭环：监测后台任务完成情况 ---
 
   const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [editorType, setEditorType] = useState<'soul' | 'identity' | 'memory'>('soul');
+  const [editorType, setEditorType] = useState<'soul' | 'identity' | 'memory' | 'heartbeat' | 'agents'>('soul');
   const [editorContent, setEditorContent] = useState('');
   const [editorBotId, setEditorBotId] = useState('');
   const [isEditorLoading, setIsEditorLoading] = useState(false);
@@ -128,6 +128,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const [activeMemoryTab, setActiveMemoryTab] = useState<'long' | 'daily'>('long');
   const [selectedMemoryFile, setSelectedMemoryFile] = useState<string | null>(null);
   const [loadingMemoryList, setLoadingMemoryList] = useState(false);
+  const [editorViewMode, setEditorViewMode] = useState<'code' | 'preview'>('code');
 
 
   const fetchSessions = async (force = false) => {
@@ -341,13 +342,14 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     }
   };
 
-  const handleOpenFileEditor = async (botId: string, type: 'soul' | 'identity' | 'memory', filename?: string, tabOverride?: 'long' | 'daily') => {
+  const handleOpenFileEditor = async (botId: string, type: 'soul' | 'identity' | 'memory' | 'heartbeat' | 'agents', filename?: string, tabOverride?: 'long' | 'daily') => {
     try {
       setEditorBotId(botId);
       setEditorType(type as any);
       setEditorContent('');
       setIsEditorLoading(true);
       setIsEditorOpen(true);
+      setEditorViewMode('code');
       
       const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
       const workspaceParam = bot?.workspace ? `&workspace=${encodeURIComponent(bot.workspace)}` : '';
@@ -582,6 +584,25 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                             <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.5px' }}>{bot.displayName || bot.name || bot.id}</div>
                             <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', border: '2px solid #fff', boxShadow: '0 0 10px rgba(34, 197, 94, 0.4)', flexShrink: 0 }} className="status-pulse" />
+                            <div 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(bot.id);
+                                message.success(t('common.copySuccess'));
+                              }}
+                              style={{ 
+                                display: 'inline-flex', alignItems: 'center', gap: 6, 
+                                padding: '2px 8px', background: '#f1f5f9', border: '1px solid #e2e8f0',
+                                borderRadius: 6, cursor: 'pointer', transition: 'all 0.2s',
+                                fontSize: 11, color: '#64748b', fontFamily: 'monospace', fontWeight: 600,
+                                marginLeft: 4
+                              }}
+                              className="id-copy-tag"
+                            >
+                              <span style={{ opacity: 0.7 }}>#</span>
+                              {bot.id}
+                              <Copy size={10} style={{ opacity: 0.5 }} />
+                            </div>
                           </div>
                           
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, marginTop: 10 }}>
@@ -628,26 +649,35 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                   }}
                                 />
                               </Tooltip>
+                              <Tooltip title={t('bots.editHeartbeat')}>
+                                <Button 
+                                  type="text" 
+                                  size="small" 
+                                  icon={<Heart size={16} color="#f97316" />} 
+                                  onClick={() => handleOpenFileEditor(bot.id, 'heartbeat')}
+                                  style={{ 
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 28, height: 28, borderRadius: 8, background: '#fff7ed', 
+                                    border: '1px solid #ffedd5'
+                                  }}
+                                />
+                              </Tooltip>
+                              <Tooltip title={t('bots.editAgents')}>
+                                <Button 
+                                  type="text" 
+                                  size="small" 
+                                  icon={<Users size={16} color="#0891b2" />} 
+                                  onClick={() => handleOpenFileEditor(bot.id, 'agents')}
+                                  style={{ 
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 28, height: 28, borderRadius: 8, background: '#ecfeff', 
+                                    border: '1px solid #cffafe'
+                                  }}
+                                />
+                              </Tooltip>
                             </div>
 
-                            <div 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigator.clipboard.writeText(bot.id);
-                                message.success(t('common.copySuccess'));
-                              }}
-                              style={{ 
-                                display: 'inline-flex', alignItems: 'center', gap: 6, 
-                                padding: '2px 8px', background: '#f1f5f9', border: '1px solid #e2e8f0',
-                                borderRadius: 6, cursor: 'pointer', transition: 'all 0.2s',
-                                fontSize: 11, color: '#64748b', fontFamily: 'monospace', fontWeight: 600
-                              }}
-                              className="id-copy-tag"
-                            >
-                              <span style={{ opacity: 0.7 }}>#</span>
-                              {bot.id}
-                              <Copy size={10} style={{ opacity: 0.5 }} />
-                            </div>
+
                           </div>
                           
                           <div style={{ background: 'rgba(255, 255, 255, 0.5)', backdropFilter: 'blur(8px)', padding: '14px', borderRadius: 18, border: `1px solid ${color.border}60` }}>
@@ -1406,18 +1436,34 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ 
               padding: 8, 
-              background: editorType === 'soul' ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' : (editorType === 'identity' ? 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)' : 'linear-gradient(135deg, #059669 0%, #10b981 100%)'), 
+              background: editorType === 'soul' ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' : 
+                         editorType === 'identity' ? 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)' : 
+                         editorType === 'heartbeat' ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' :
+                         editorType === 'agents' ? 'linear-gradient(135deg, #0891b2 0%, #0e7490 100%)' :
+                         'linear-gradient(135deg, #059669 0%, #10b981 100%)', 
               borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
               boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
             }}>
-              {editorType === 'soul' ? <Brain size={18} color="#fff" /> : (editorType === 'identity' ? <ShieldCheck size={18} color="#fff" /> : <BrainCircuit size={18} color="#fff" />)}
+              {editorType === 'soul' ? <Brain size={18} color="#fff" /> : 
+               editorType === 'identity' ? <ShieldCheck size={18} color="#fff" /> : 
+               editorType === 'heartbeat' ? <Heart size={18} color="#fff" /> :
+               editorType === 'agents' ? <Users size={18} color="#fff" /> :
+               <BrainCircuit size={18} color="#fff" />}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b', marginBottom: 2 }}>
-                {editorType === 'soul' ? t('bots.editSoul') : (editorType === 'identity' ? t('bots.editIdentity') : t('bots.editMemory'))}
+                {editorType === 'soul' ? t('bots.editSoul') : 
+                 editorType === 'identity' ? t('bots.editIdentity') : 
+                 editorType === 'heartbeat' ? t('bots.editHeartbeat') :
+                 editorType === 'agents' ? t('bots.editAgents') :
+                 t('bots.editMemory')}
               </div>
               <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
-                {editorBotId} · {editorType === 'soul' ? 'SOUL.md' : (editorType === 'identity' ? 'IDENTITY.md' : (selectedMemoryFile || 'MEMORY.md'))}
+                {editorBotId} · {editorType === 'soul' ? 'SOUL.md' : 
+                              editorType === 'identity' ? 'IDENTITY.md' : 
+                              editorType === 'heartbeat' ? 'HEARTBEAT.md' :
+                              editorType === 'agents' ? 'AGENTS.md' :
+                              (selectedMemoryFile || 'MEMORY.md')}
               </div>
             </div>
             {editorType === 'memory' && (
@@ -1467,7 +1513,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
             {t('common.save')}
           </Button>
         ]}
-        width={isMobile ? '100%' : (editorType === 'memory' && activeMemoryTab === 'daily' ? 1540 : 1300)}
+        width={isMobile ? '100%' : (editorType === 'memory' && activeMemoryTab === 'daily' ? 1200 : 1000)}
         centered
         bodyStyle={{ padding: '0', height: isMobile ? 'calc(100vh - 120px)' : '75vh', overflow: 'hidden' }}
       >
@@ -1562,58 +1608,72 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 <Spin tip={t('common.loading')} />
               </div>
             ) : (
-              <>
-                {/* 左侧编辑器 */}
-                <div style={{ flex: 1, borderRight: isMobile ? 'none' : '1px solid #f1f5f9', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ padding: '8px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Edit3 size={14} color="#64748b" />
-                      <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{t('bots.markdownSource')}</span>
-                    </div>
-                    <Tooltip title={t('common.refresh')}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+                {/* Tab 切换控制栏 */}
+                <div style={{ 
+                  padding: '12px 20px', 
+                  borderBottom: '1px solid #f1f5f9', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  background: '#f8fafc' 
+                }}>
+                  <Segmented
+                    value={editorViewMode}
+                    onChange={(value: any) => setEditorViewMode(value)}
+                    options={[
+                      { label: <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Edit3 size={14} />{t('bots.markdownSource')}</div>, value: 'code' },
+                      { label: <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Eye size={14} />{t('experts.preview')}</div>, value: 'preview' }
+                    ]}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                     <Tooltip title={t('common.refresh')}>
                       <Button 
                         size="small" 
                         type="text" 
-                        icon={<RefreshCw size={12} className={isEditorLoading ? 'animate-spin' : ''} />} 
+                        icon={<RefreshCw size={14} className={isEditorLoading ? 'animate-spin' : ''} />} 
                         onClick={() => handleOpenFileEditor(editorBotId, editorType, selectedMemoryFile || undefined)} 
                         style={{ color: '#94a3b8' }}
                       />
                     </Tooltip>
                   </div>
-                  <div style={{ flex: 1, padding: 0, position: 'relative', overflow: 'hidden' }}>
-                    <Input.TextArea
-                      value={editorContent}
-                      onChange={(e) => setEditorContent(e.target.value)}
-                      placeholder={editorType === 'soul' ? t('experts.soulPlaceholder') : (editorType === 'identity' ? t('experts.identityPlaceholder') : t('bots.memoryPlaceholder'))}
-                      className="bot-editor-textarea"
-                      style={{ 
-                        height: '100%', border: 'none', background: 'transparent',
-                        padding: '24px', resize: 'none', fontSize: 14, fontFamily: 'monospace',
-                        lineHeight: 1.7, borderRadius: 0, overflowY: 'auto'
-                      }}
-                    />
-                  </div>
                 </div>
 
-                {/* 右侧预览 */}
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa' }}>
-                  <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#fff' }}>
-                    <Eye size={14} color="#64748b" />
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{t('experts.preview')}</span>
-                  </div>
-                  <div style={{ flex: 1, padding: '24px', overflowY: 'auto', backgroundColor: '#fff' }}>
-                    {editorContent ? (
-                      <div className="markdown-body" style={{ fontSize: 15 }}>
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
-                      </div>
-                    ) : (
-                      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>
-                        <Empty description={t('common.noContent')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
-                      </div>
-                    )}
-                  </div>
+                {/* 内容区 */}
+                <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                  {editorViewMode === 'code' ? (
+                    <div style={{ flex: 1, padding: 0, position: 'relative', overflow: 'hidden' }}>
+                      <Input.TextArea
+                        value={editorContent}
+                        onChange={(e) => setEditorContent(e.target.value)}
+                        placeholder={editorType === 'soul' ? t('experts.soulPlaceholder') : 
+                                     editorType === 'identity' ? t('experts.identityPlaceholder') : 
+                                     editorType === 'heartbeat' ? 'HEARTBEAT.md configuration...' :
+                                     editorType === 'agents' ? 'AGENTS.md configuration...' :
+                                     t('bots.memoryPlaceholder')}
+                        className="bot-editor-textarea"
+                        style={{ 
+                          height: '100%', border: 'none', background: 'transparent',
+                          padding: '24px', resize: 'none', fontSize: 14, fontFamily: 'monospace',
+                          lineHeight: 1.7, borderRadius: 0, overflowY: 'auto'
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ flex: 1, padding: '30px 40px', overflowY: 'auto', backgroundColor: '#fff' }}>
+                      {editorContent ? (
+                        <div className="markdown-body" style={{ fontSize: 15, maxWidth: '900px', margin: '0 auto' }}>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>
+                          <Empty description={t('common.noContent')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </>
+              </div>
             )}
           </div>
         </Spin>

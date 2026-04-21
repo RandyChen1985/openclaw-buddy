@@ -512,6 +512,8 @@
   "bots": {
     "editSoul": "人格编辑 (SOUL)",
     "editIdentity": "身份编辑 (IDENTITY)",
+    "editHeartbeat": "心跳巡检 (HEARTBEAT)",
+    "editAgents": "多主体协作 (AGENTS)",
     "editMemory": "记忆管理 (MEMORY)",
     "longTermMemory": "长期记忆",
     "dailyMemory": "日期记忆",

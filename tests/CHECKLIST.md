@@ -55,6 +55,7 @@
 - [x] 更新 `tests/CHECKLIST.md` 中的自动化测试清单
 - [x] 验证更改并运行全量回归测试脚本 `./tests/run_tests.sh`
 - [ ] **机器人内容保存**: `POST /v1/openclaw/bots/file` 应支持原子化覆盖写入，并触发 `SyncKeySingle` 缓存同步。
+- [ ] **多文件编辑支持**: `GET /v1/openclaw/bots/file` 应支持 `HEARTBEAT` 和 `AGENTS` 类型，正确读写 `HEARTBEAT.md` 和 `AGENTS.md`。 `2026-04-21`
 - [ ] **原子化读写安全**: 验证接口是否无法通过 `../` 等手段绕过机器人工作区目录。
 - [x] **心智编辑器预览**: 点击 ✨ 图标后弹出的编辑器已采用 Tab 切换布局（编辑/预览），确保在窄屏下也有良好的书写空间。 `2026-04-08`
 - [x] **网关使用统计**: `GET /v1/gateway/usage-cost` 应返回带 `daily` 数组和 `totals` 的 JSON 统计数据（已通过 Stdout/Stderr 分离及 ExtractJSON 修复警告干扰问题）。 `2026-04-14`

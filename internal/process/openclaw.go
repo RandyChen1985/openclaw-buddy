@@ -454,6 +454,10 @@ func GetOpenClawBotFileContent(configDir, id, fileType, filename, workspace stri
 		filePath = filepath.Join(botWorkspace, "USER.md")
 	case "memory":
 		filePath = filepath.Join(botWorkspace, "MEMORY.md")
+	case "heartbeat":
+		filePath = filepath.Join(botWorkspace, "HEARTBEAT.md")
+	case "agents":
+		filePath = filepath.Join(botWorkspace, "AGENTS.md")
 	case "memory_file":
 		if filename == "" {
 			return "", fmt.Errorf("filename is required for memory_file type")
@@ -521,6 +525,10 @@ func SaveOpenClawBotFileContent(configDir, id, fileType, filename, content, work
 		filePath = filepath.Join(botWorkspace, "USER.md")
 	case "memory":
 		filePath = filepath.Join(botWorkspace, "MEMORY.md")
+	case "heartbeat":
+		filePath = filepath.Join(botWorkspace, "HEARTBEAT.md")
+	case "agents":
+		filePath = filepath.Join(botWorkspace, "AGENTS.md")
 	case "memory_file":
 		if filename == "" {
 			return fmt.Errorf("filename is required for memory_file type")
