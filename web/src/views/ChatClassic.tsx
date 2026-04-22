@@ -12,7 +12,7 @@ import 'katex/dist/katex.min.css';
 import api, { getFullUrl } from '../api';
 import { getBaseURL } from '../utils/url';
 import storage from '../utils/storage';
-import { Mermaid, CodeBlock, ECharts } from '../components/ChatComponents';
+import { Mermaid, CodeBlock, ECharts, isEchartsCodeFenceLanguage } from '../components/ChatComponents';
 import GatewayOfflineMask from '../components/GatewayOfflineMask';
 
 const { Option } = Select;
@@ -1024,7 +1024,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                                     return <Mermaid chart={codeContent} />;
                                   }
 
-                                  if (!inline && language === 'echarts') {
+                                  if (!inline && isEchartsCodeFenceLanguage(language)) {
                                     const isLastMessage = index === messages.length - 1;
                                     return <ECharts optionStr={codeContent} isTyping={isLastMessage && isTyping} />;
                                   }

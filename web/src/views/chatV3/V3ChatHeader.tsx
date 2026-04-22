@@ -47,7 +47,7 @@ export interface V3ChatHeaderProps {
   onSendReasoningCommand?: (text: string) => void;
 
   // source meta helper
-  parseSessionKey: (key: string) => { botId: string; source: string };
+  parseSessionKey: (key: string) => { botId: string; source: string; openAIUser?: string };
   getSourceMeta: (source: string) => { icon: any; color: string; label: string };
 
   // bots for showing identity chip
@@ -152,11 +152,11 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
 
   const sessionMeta = useMemo(() => {
     if (!sessionKey) return null;
-    const { botId, source } = parseSessionKey(sessionKey);
+    const { botId, source, openAIUser } = parseSessionKey(sessionKey);
     const sourceMeta = getSourceMeta(source);
     const isMain = sessionKey === 'agent:main:main';
     const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
-    return { botId, sourceMeta, isMain, bot };
+    return { botId, sourceMeta, isMain, bot, source, openAIUser };
   }, [botsModels, getSourceMeta, parseSessionKey, sessionKey]);
 
   /**
@@ -433,7 +433,12 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                     {(() => {
                       const botId = sessionMeta.botId || sessionMeta.bot.id;
                       const botName = sessionMeta.bot.identityName || sessionMeta.bot.name;
-                      return botName ? `${botId}（${botName}）` : botId;
+                      const botText = botName ? `${botId}（${botName}）` : botId;
+                      const userText =
+                        (sessionMeta.source || '').toLowerCase() === 'openai-user' && sessionMeta.openAIUser
+                          ? ` · ${sessionMeta.openAIUser}`
+                          : '';
+                      return `${botText}${userText}`;
                     })()}
                   </span>
                 </div>

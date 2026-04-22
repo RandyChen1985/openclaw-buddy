@@ -39,6 +39,8 @@ type Config struct {
 	ExternalDashboardURL string
 	GUIDisableFeatures   string
 	ShowExternalTools    bool
+	CacheSyncOnStartup   bool
+	CacheSyncConcurrency int
 }
 
 func LoadConfig() (*Config, error) {
@@ -51,6 +53,8 @@ func LoadConfig() (*Config, error) {
 	webPort, _ := strconv.Atoi(getEnv("WEB_PORT", "3000"))
 	feishuEnabled, _ := strconv.ParseBool(getEnv("FEISHU_ENABLED", "false"))
 	showExternalTools, _ := strconv.ParseBool(getEnv("SHOW_EXTERNAL_TOOLS", "false"))
+	cacheSyncOnStartup, _ := strconv.ParseBool(getEnv("CACHE_SYNC_ON_STARTUP", "true"))
+	cacheSyncConcurrency, _ := strconv.Atoi(getEnv("CACHE_SYNC_CONCURRENCY", "2"))
 
 	// 规范化 WebRoot
 	webRoot := getEnv("WEB_ROOT", "/")
@@ -95,6 +99,8 @@ func LoadConfig() (*Config, error) {
 		ExternalDashboardURL: getEnv("EXTERNAL_DASHBOARD_URL", ""),
 		GUIDisableFeatures:   getEnv("GUI_DISABLE_FEATURES", ""),
 		ShowExternalTools:    showExternalTools,
+		CacheSyncOnStartup:   cacheSyncOnStartup,
+		CacheSyncConcurrency: cacheSyncConcurrency,
 	}, nil
 }
 
@@ -143,6 +149,12 @@ REPORT_DIR="./reports"
 CHECK_INTERVAL_SECONDS=60
 HEALTH_PORT=18789
 MAX_RETRIES=3
+
+# [缓存同步]
+# 启动时是否执行一次全量缓存同步（会调用 openclaw CLI，多进程并发可能造成 CPU 峰值）
+CACHE_SYNC_ON_STARTUP=true
+# 全量同步时的并发上限（建议 1-3；过大可能造成启动 CPU 飙升）
+CACHE_SYNC_CONCURRENCY=2
 
 # [高级选项]
 EXTERNAL_DASHBOARD_URL=""

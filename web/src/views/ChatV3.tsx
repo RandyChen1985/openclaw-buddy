@@ -24,12 +24,22 @@ import '../styles/ChatV3.css';
 
 // --- Utils & Config ---
 const parseSessionKey = (key: string) => {
-  if (!key || !key.startsWith('agent:')) return { botId: 'main', source: 'dashboard' };
+  if (!key || !key.startsWith('agent:')) return { botId: 'main', source: 'dashboard' as const, openAIUser: undefined as string | undefined };
   const parts = key.split(':');
-  return {
-    botId: parts[1] || 'main',
-    source: parts[2] || 'dashboard'
-  };
+  const botId = parts[1] || 'main';
+  const source = parts[2] || 'dashboard';
+
+  // openai-user: agent:{botId}:openai-user:{username}-{uuid}
+  let openAIUser: string | undefined;
+  if ((source || '').toLowerCase() === 'openai-user') {
+    const raw = (parts[3] || '').trim();
+    if (raw) {
+      // 约定：用户名不包含 "-"；uuid 会包含多个 "-"
+      openAIUser = raw.split('-')[0] || raw;
+    }
+  }
+
+  return { botId, source, openAIUser };
 };
 
 const SourceConfig: Record<string, { icon: any; color: string; labelKey: string; defaultLabel: string }> = {

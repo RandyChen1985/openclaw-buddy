@@ -127,6 +127,23 @@ tail -f ./logs/guardian.log
 - **会话监控**：实时查看当前网关中所有活跃会话的上下文使用情况。
 - **一键嵌入**：提供嵌入代码，方便将对话窗口集成到你的其他业务平台。
 
+### 4.1 V3 聊天：快捷按钮与 `quick:` 协议（给模型 / 集成方）
+
+**对话实验室 V3** 除底部「快捷指令」按钮外，还支持在 **助手 Markdown 正文**里放置可点击的「伪链接」，点击后会把约定内容当作用户消息发出（与底部按钮同属「一键填充并发送」体验）。
+
+1. **底部快捷指令条**  
+   - 数据来自 Buddy API：`GET/POST/DELETE /v1/openclaw/chat/quick-commands`（每条含 **按钮名称 `label`** 与 **发送内容 `prompt`**）。  
+   - 在已连接网关且非「新建会话占用」等阻塞态时，点击按钮即调用 `onSend(prompt)`，等价于你在输入框里粘贴 `prompt` 并发送。  
+   - 展开/折叠状态在 V3 会写入浏览器 `localStorage`（键名 `v3_show_quick_actions`），与经典版实验室互不混用。
+
+2. **Markdown 内联：`quick:` 链接**  
+   - 语法：`[用户看到的文字](quick:这里是要发送的正文)`。  
+   - 若正文含空格、中文、换行或特殊字符，请对 **`quick:` 之后的整段 payload** 先做 `encodeURIComponent` 再写入 `href`；前端会用 `decodeURIComponent` 还原后再发送。简单英文/数字也可不编码，例如：`[总结上文](quick:请用三句话总结上文)`。  
+   - 实现上只要 `href` 以 `quick:` 开头，或 **任意位置包含** `quick:`（用于兼容少数被包在更长 URL 里的写法），都会截取 **最后一次出现的 `quick:`** 之后的字符串作为 payload。  
+   - 该协议仅在 **V3 消息 Markdown 渲染器**中生效（`react-markdown` 的 `urlTransform` 会放行 `quick:`，避免被默认安全策略剥掉）。
+
+更完整的 HTTP 字段与返回体见仓库 [API.md](API.md) 中「快捷指令」小节。
+
 ![对话实验室](docs/images/chat.png)
 
 ---

@@ -58,7 +58,11 @@ func (g *Guardian) Run(ctx context.Context) {
 			log.Printf("🧹 [DB] 已自动清理超过 7 天的旧监控数据 (共 %d 条).", rows)
 		}
 		process.CleanupOrphanedTasks()
-		process.SyncAll(g.config.OpenClawConfigDir)
+		if g.config.CacheSyncOnStartup {
+			process.SyncAllWithConcurrency(g.config.OpenClawConfigDir, g.config.CacheSyncConcurrency)
+		} else {
+			log.Printf("ℹ️ [Cache] 启动时全量同步已关闭 (CACHE_SYNC_ON_STARTUP=false)")
+		}
 		g.CheckVersionUpdate()
 	}()
 
