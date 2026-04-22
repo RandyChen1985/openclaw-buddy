@@ -541,6 +541,7 @@ func (s *Server) installWeChatPlugin(c *gin.Context) {
 		if err != nil {
 			return "", err
 		}
+
 		return "tasks.results.installed", nil
 	})
 }
@@ -2531,4 +2532,127 @@ func (s *Server) getUsageCost(c *gin.Context) {
 		return
 	}
 	s.Success(c, data)
+}
+func (s *Server) getChannelsMetadata(c *gin.Context) {
+	s.Success(c, gin.H{"data": process.SupportedChannels})
+}
+
+func (s *Server) getChannelsStatus(c *gin.Context) {
+	status, err := process.GetChannelsStatus(s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to get channels status: "+err.Error())
+		return
+	}
+	s.Success(c, gin.H{"data": status})
+}
+
+func (s *Server) getChannelQRCode(c *gin.Context) {
+	channelID := c.Param("id")
+	if channelID == "" {
+		s.Error(c, http.StatusBadRequest, "Channel ID is required")
+		return
+	}
+
+	force := c.Query("force") == "true"
+	// 如果是微信，复用原逻辑
+	if channelID == "openclaw-weixin" {
+		qr, err := process.GetWeChatQRCode(force)
+		if err != nil {
+			s.Error(c, http.StatusInternalServerError, "获取微信二维码失败: "+err.Error())
+			return
+		}
+		s.Success(c, qr)
+		return
+	}
+
+	// 其他渠道使用通用逻辑
+	qr, err := process.GetGenericQRCode(channelID)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "获取二维码失败: "+err.Error())
+		return
+	}
+	s.Success(c, qr)
+}
+
+func (s *Server) saveChannelConfig(c *gin.Context) {
+	var req struct {
+		ChannelID string            `json:"channelId" binding:"required"`
+		AgentID   string            `json:"agentId"`
+		Secrets   map[string]string `json:"secrets" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// 使用新的 SaveChannelSecret（接收整个 secrets map，按渠道选择正确写入方式）
+	if err := process.SaveChannelSecret(s.cfg.OpenClawConfigDir, req.ChannelID, req.Secrets); err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to save channel config: "+err.Error())
+		return
+	}
+
+	// 如果指定了机器人，进行绑定
+	if req.AgentID != "" {
+		var bindErr error
+		switch req.ChannelID {
+		case "feishu":
+			bindErr = process.BindFeishuToAgent(s.cfg.OpenClawConfigDir, req.AgentID)
+		case "telegram":
+			bindErr = process.BindTelegramToAgent(s.cfg.OpenClawConfigDir, req.AgentID)
+		case "qqbot":
+			bindErr = process.BindQQBotToAgent(s.cfg.OpenClawConfigDir, req.AgentID)
+		default:
+			log.Printf("⚠️ No specific binding logic for channel: %s", req.ChannelID)
+			configPath := filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json")
+			env := []string{"OPENCLAW_CONFIG_PATH=" + configPath}
+			_, bindErr = process.RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "agents", "bind",
+				"--agent", req.AgentID, "--bind", req.ChannelID)
+		}
+
+		if bindErr != nil {
+			s.Error(c, http.StatusInternalServerError, "Failed to bind channel to agent: "+bindErr.Error())
+			return
+		}
+	}
+
+	s.Success(c, gin.H{"message": "Configuration saved successfully"})
+}
+
+// unbindChannel 解绑指定渠道与 Agent 的绑定关系
+// DELETE /v1/channels/:channelId/setup
+func (s *Server) unbindChannel(c *gin.Context) {
+	channelID := c.Param("channelId")
+	agentID := c.DefaultQuery("agentId", "main")
+
+	if channelID == "" {
+		s.Error(c, http.StatusBadRequest, "channelId is required")
+		return
+	}
+
+	log.Printf("🔗 Unbinding channel %s from agent %s", channelID, agentID)
+
+	var unbindErr error
+	switch channelID {
+	case "feishu":
+		unbindErr = process.UnbindFeishuFromAgent(s.cfg.OpenClawConfigDir, agentID)
+	case "telegram":
+		unbindErr = process.UnbindTelegramFromAgent(s.cfg.OpenClawConfigDir, agentID)
+	case "qqbot":
+		unbindErr = process.UnbindQQBotFromAgent(s.cfg.OpenClawConfigDir, agentID)
+	default:
+		log.Printf("⚠️ No specific unbind logic for channel: %s, falling back to basic CLI unbind", channelID)
+		configPath := filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json")
+		env := []string{"OPENCLAW_CONFIG_PATH=" + configPath}
+		_, unbindErr = process.RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "agents", "unbind",
+			"--agent", agentID, "--bind", channelID)
+	}
+
+	if unbindErr != nil {
+		log.Printf("❌ Unbind failed for %s: %v", channelID, unbindErr)
+		s.Error(c, http.StatusInternalServerError, "Failed to unbind channel: "+unbindErr.Error())
+		return
+	}
+
+	log.Printf("✅ Successfully unbound channel %s from agent %s", channelID, agentID)
+	s.Success(c, gin.H{"message": "Channel unbound successfully"})
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
 	"os/exec"
 	"time"
 )
@@ -19,10 +20,18 @@ type CommandResult struct {
 
 // RunCommandWithTimeout executes a command and captures its output with a timeout.
 func RunCommandWithTimeout(timeout time.Duration, name string, args ...string) (*CommandResult, error) {
+	return RunCommandWithEnvAndTimeout(timeout, nil, name, args...)
+}
+
+// RunCommandWithEnvAndTimeout executes a command with custom environment variables and captures its output with a timeout.
+func RunCommandWithEnvAndTimeout(timeout time.Duration, env []string, name string, args ...string) (*CommandResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, args...)
+	if env != nil {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

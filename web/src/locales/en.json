@@ -464,6 +464,8 @@
     }
   },
   "channels": {
+    "title": "Channel Management",
+    "description": "Manage connections between OpenClaw and various social platforms",
     "boundChannels": "Bound Channels",
     "syncedAt": "Synced at",
     "syncing": "Syncing channel info...",
@@ -483,7 +485,18 @@
     "getLoginCodeDesc": "Generate a WeChat QR code for identity authorization. Valid for 5 minutes.",
     "getNow": "Get Now",
     "unbind": "Unbind",
-    "unbindConfirm": "Are you sure you want to unbind WeChat account {{id}}?\nThis will physically delete local credentials, and you'll need to re-scan next time."
+    "unbindConfirm": "Are you sure you want to unbind WeChat account {{id}}?\nThis will physically delete local credentials, and you'll need to re-scan next time.",
+    "moreGateways": "More Channel Gateways",
+    "configured": "Configured",
+    "setup": "Setup",
+    "qrLoading": "Generating authorization QR code...",
+    "qrError": "Failed to get QR code",
+    "qrFailed": "No QR code URL found",
+    "scanToLogin": "Please use the corresponding App to scan and authorize",
+    "orManual": "Or manually configure credentials",
+    "manageAccounts": "Manage Accounts",
+    "targetBot": "Target Agent",
+    "targetBotTip": "Specify which agent should respond to messages from this channel. Default is main."
   },
   "devices": {
     "pendingRequests": "Pending Connection Requests",

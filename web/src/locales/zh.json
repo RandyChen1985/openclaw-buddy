@@ -471,6 +471,8 @@
     }
   },
   "channels": {
+    "title": "渠道绑定管理",
+    "description": "管理 OpenClaw 与各类社交平台的连接状态",
     "boundChannels": "已绑定渠道",
     "syncedAt": "同步于",
     "syncing": "正在同步渠道信息...",
@@ -491,7 +493,19 @@
     "getLoginCodeDesc": "生成用于身份授权的微信二维码，用于绑定个人微信，有效期 5 分钟",
     "getNow": "立即获取",
     "unbind": "解绑",
-    "unbindConfirm": "确定要解绑微信账号 {{id}} 吗？\n解绑将物理删除本地登录凭证，下次使用需要重新扫码。"
+    "unbindConfirm": "确定要解绑微信账号 {{id}} 吗？\n解绑将物理删除本地登录凭证，下次使用需要重新扫码。",
+    "moreGateways": "更多渠道网关",
+    "configured": "已配置",
+    "setup": "配置",
+    "qrLoading": "正在生成授权二维码...",
+    "qrError": "获取二维码失败",
+    "qrFailed": "未能获取到二维码",
+    "scanToLogin": "请使用对应 App 扫码授权",
+    "orManual": "或者手动配置凭证",
+    "manageAccounts": "账号管理",
+    "targetBot": "目标机器人 (Target Agent)",
+    "targetBotTip": "指定该渠道的消息由哪个机器人响应。默认为 main (智渊)。",
+    "noAccountsInChannel": "该渠道暂无已绑定账号"
   },
   "devices": {
     "pendingRequests": "待处理连接请求",
