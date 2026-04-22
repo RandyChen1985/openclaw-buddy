@@ -10,6 +10,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import dayjs from 'dayjs';
 import api from '../api';
+import TokenBadge from '../components/TokenBadge';
 
 // --- Global Styles for SelfHealing ---
 const styles = `
@@ -91,6 +92,7 @@ const HighlightedJsonEditor: React.FC<{
           borderRadius: 6
         }}
       />
+      <TokenBadge text={value} style={{ top: 12, right: 50, background: 'rgba(30, 30, 30, 0.8)', color: '#94a3b8', borderColor: 'rgba(255, 255, 255, 0.1)' }} />
       <textarea
         ref={textareaRef}
         value={value}

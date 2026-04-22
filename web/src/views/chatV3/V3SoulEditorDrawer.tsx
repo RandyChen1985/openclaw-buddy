@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Drawer, Input, Spin, Tabs, Button, message } from 'antd';
 import { Brain, Eye, PenLine, Save, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import TokenBadge from '../../components/TokenBadge';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import rehypeSanitize from 'rehype-sanitize';
@@ -179,24 +180,27 @@ export function V3SoulEditorDrawer({ t, isMobile, selectedBot, botsModels, statu
                       <div style={{ padding: '8px 16px', background: '#f8fafc', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, flexShrink: 0 }}>
                         {t('chat.soulEditorSourceTitle', { defaultValue: '灵魂内容 (Markdown)' })}
                       </div>
-                      <Input.TextArea
-                        value={soulContent}
-                        onChange={e => setSoulContent(e.target.value)}
-                        placeholder={t('chat.soulEditorPlaceholder', { defaultValue: '请输入专家灵魂（提示词）...' })}
-                        style={{
-                          flex: 1,
-                          minHeight: 0,
-                          border: 'none',
-                          borderRadius: 0,
-                          resize: 'none',
-                          fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                          fontSize: 13,
-                          padding: 20,
-                          background: '#fff',
-                          lineHeight: 1.6,
-                          overflowY: 'auto'
-                        }}
-                      />
+                      <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                        <TokenBadge text={soulContent} />
+                        <Input.TextArea
+                          value={soulContent}
+                          onChange={e => setSoulContent(e.target.value)}
+                          placeholder={t('chat.soulEditorPlaceholder', { defaultValue: '请输入专家灵魂（提示词）...' })}
+                          style={{
+                            flex: 1,
+                            minHeight: 0,
+                            border: 'none',
+                            borderRadius: 0,
+                            resize: 'none',
+                            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                            fontSize: 13,
+                            padding: 20,
+                            background: '#fff',
+                            lineHeight: 1.6,
+                            overflowY: 'auto'
+                          }}
+                        />
+                      </div>
                     </div>
                   )
                 },

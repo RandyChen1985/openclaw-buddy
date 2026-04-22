@@ -12,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import api from '../api';
 import type { Task } from '../hooks/useTaskCenter';
+import TokenBadge from '../components/TokenBadge';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
@@ -595,12 +596,15 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
         <Paragraph type="warning">
           <Alert message={t('security.saveConfirm')} type="warning" showIcon />
         </Paragraph>
-        <Input.TextArea 
-          value={jsonContent}
-          onChange={e => setJsonContent(e.target.value)}
-          rows={20}
-          style={{ fontFamily: 'monospace', fontSize: 13 }}
-        />
+        <div style={{ position: 'relative' }}>
+          <TokenBadge text={jsonContent} />
+          <Input.TextArea 
+            value={jsonContent}
+            onChange={e => setJsonContent(e.target.value)}
+            rows={20}
+            style={{ fontFamily: 'monospace', fontSize: 13 }}
+          />
+        </div>
       </Modal>
     </div>
   );

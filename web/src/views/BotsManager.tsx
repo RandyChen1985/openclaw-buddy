@@ -11,6 +11,7 @@ import remarkGfm from 'remark-gfm';
 import dayjs from 'dayjs';
 import api from '../api';
 import { message } from 'antd';
+import TokenBadge from '../components/TokenBadge';
 
 interface BotsManagerProps {
   botsModels: any; 
@@ -99,7 +100,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const isModelProcessing = (modelFullId: string) => {
     return activeTasks.some(t => 
       t.module === 'bots' && 
-      (t.action === 'set-default-model' || t.action === 'delete-model') && 
+      (t.action === 'set-default-model' || t.action === 'delete-model' || t.action === 'add-model') && 
       t.target === modelFullId && 
       t.status === 'Running'
     );
@@ -108,7 +109,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const isProviderProcessing = (providerName: string) => {
     return activeTasks.some(t => 
       t.module === 'bots' && 
-      (t.action === 'add-provider' || t.action === 'add-model') && 
+      (t.action === 'add-provider' || t.action === 'add-model' || t.action === 'delete-provider' || t.action === 'update-provider') && 
       t.target === providerName && 
       t.status === 'Running'
     );
@@ -278,6 +279,24 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         } catch (err: any) {
           message.error(t('bots.deleteFailed') + ': ' + (err.response?.data?.error || err.message));
           onRefresh(); // 失败回退对账
+        }
+      }
+    });
+  };
+
+  const handleDeleteProvider = (name: string) => {
+    Modal.confirm({
+      title: t('bots.removeProviderTitle', { name }),
+      content: t('bots.removeProviderWarning', { name }),
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await api.delete(`/v1/openclaw/models/provider/${name}`);
+          message.success(t('common.waitingGateway'));
+        } catch (err: any) {
+          message.error(t('bots.deleteFailed') + ': ' + (err.response?.data?.error || err.message));
         }
       }
     });
@@ -803,7 +822,6 @@ const BotsManager: React.FC<BotsManagerProps> = ({
               ) : modelsConfig ? (
                 Object.entries(modelsConfig).map(([providerName, providerData]: [string, any]) => {
                   const providerModels = (providerData.models || []);
-                  if (providerModels.length === 0) return null;
 
                   return (
                     <div key={providerName} style={{ marginBottom: 28 }}>
@@ -835,12 +853,26 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                           }}
                           style={{ color: '#94a3b8', padding: 0, height: 18, width: 18, marginLeft: -4 }}
                         />
+                        <Button 
+                          type="text" 
+                          size="small" 
+                          danger
+                          icon={<Trash2 size={12} />} 
+                          disabled={isProviderProcessing(providerName)}
+                          loading={isProviderProcessing(providerName)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteProvider(providerName);
+                          }}
+                          style={{ color: '#ef4444', padding: 0, height: 18, width: 18, marginLeft: 4 }}
+                        />
                         {collapsedProviders.has(providerName) ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
                         <div style={{ height: 1, flex: 1, background: '#f1f5f9', marginLeft: 8 }}></div>
                       </div>
                       {!collapsedProviders.has(providerName) && (
-                        (modelsViewMode === 'card' || isMobile) ? (
-                          <Row gutter={[16, 16]}>
+                        providerModels.length > 0 ? (
+                          (modelsViewMode === 'card' || isMobile) ? (
+                            <Row gutter={[16, 16]}>
                             {providerModels.map((m: any, mIdx: number) => {
                               const isDefault = botsModels?.data?.models?.find((dm: any) => dm.id === `${providerName}/${m.id}`)?.isDefault;
                               const color = cardColors[mIdx % cardColors.length];
@@ -993,7 +1025,12 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                             ]}
                           />
                         )
-                      )}
+                      ) : (
+                        <div style={{ textAlign: 'center', padding: '20px', background: '#f8fafc', borderRadius: 12, border: '1px dashed #e2e8f0', marginBottom: 28 }}>
+                          <Empty description={t('common.noContent')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                        </div>
+                      )
+                    )}
                     </div>
                   );
                 })
@@ -1643,6 +1680,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                   {editorViewMode === 'code' ? (
                     <div style={{ flex: 1, padding: 0, position: 'relative', overflow: 'hidden' }}>
+                      <TokenBadge text={editorContent} />
                       <Input.TextArea
                         value={editorContent}
                         onChange={(e) => setEditorContent(e.target.value)}

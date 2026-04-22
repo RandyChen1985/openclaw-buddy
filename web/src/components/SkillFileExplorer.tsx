@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import rehypeSanitize from 'rehype-sanitize';
 import api from '../api';
+import TokenBadge from './TokenBadge';
 
 interface FileEntry {
   name: string;
@@ -191,22 +192,25 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
             </div>
             <div style={{ flex: 1, overflow: 'hidden' }}>
               {activeTab === 'edit' || !isMarkdown ? (
-                <Input.TextArea
-                  value={fileContent}
-                  onChange={(e) => setFileContent(e.target.value)}
-                  style={{
-                    height: '100%',
-                    border: 'none',
-                    borderRadius: 0,
-                    resize: 'none',
-                    fontFamily: 'monospace',
-                    fontSize: 13,
-                    padding: 16,
-                    background: '#fff',
-                    outline: 'none',
-                    boxShadow: 'none'
-                  }}
-                />
+                <div style={{ position: 'relative', height: '100%' }}>
+                  <TokenBadge text={fileContent} />
+                  <Input.TextArea
+                    value={fileContent}
+                    onChange={(e) => setFileContent(e.target.value)}
+                    style={{
+                      height: '100%',
+                      border: 'none',
+                      borderRadius: 0,
+                      resize: 'none',
+                      fontFamily: 'monospace',
+                      fontSize: 13,
+                      padding: 16,
+                      background: '#fff',
+                      outline: 'none',
+                      boxShadow: 'none'
+                    }}
+                  />
+                </div>
               ) : (
                 <div style={{ height: '100%', padding: 24, overflowY: 'auto' }}>
                   <div style={{ maxWidth: 800, margin: '0 auto', background: '#fff', padding: 32, borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>

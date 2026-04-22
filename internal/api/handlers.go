@@ -1441,6 +1441,33 @@ func (s *Server) deleteOpenClawModelFromProvider(c *gin.Context) {
 	})
 }
 
+func (s *Server) deleteOpenClawProvider(c *gin.Context) {
+	name := c.Param("provider")
+	if name == "" {
+		s.Error(c, http.StatusBadRequest, "渠道名称是必填项")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【删除模型渠道】 (Provider: %s)", name)
+	task := &process.Task{
+		ID:     fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Name:   fmt.Sprintf("删除渠道: %s", name),
+		Module: "bots",
+		Action: "delete-provider",
+		Target: name,
+	}
+
+	s.runAsyncTask(c, task, func() (string, error) {
+		if err := process.DeleteOpenClawProvider(s.cfg.OpenClawConfigDir, name); err != nil {
+			return "", err
+		}
+		// 成功后强制同步 bots_models 缓存
+		_ = process.SyncKeySingle("bots_models", s.cfg.OpenClawConfigDir)
+		return "tasks.results.provider_removed", nil
+	})
+}
+
+
 func (s *Server) testOpenClawModelDirect(c *gin.Context) {
 	var req struct {
 		ProviderName string `json:"providerName" binding:"required"`

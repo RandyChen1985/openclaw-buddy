@@ -1351,6 +1351,64 @@ func DeleteOpenClawModelFromProvider(configDir, providerName, modelID string) er
 	return os.WriteFile(configPath, newData, 0644)
 }
 
+func DeleteOpenClawProvider(configDir, providerName string) error {
+	configPath := filepath.Join(configDir, "openclaw.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+
+	var fullCfg map[string]interface{}
+	if err := json.Unmarshal(data, &fullCfg); err != nil {
+		return err
+	}
+
+	// 1. 从 models.providers 中移除
+	models, ok := fullCfg["models"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("models section not found")
+	}
+
+	providers, ok := models["providers"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("providers section not found")
+	}
+
+	if _, ok := providers[providerName]; !ok {
+		return fmt.Errorf("provider %s not found", providerName)
+	}
+
+	delete(providers, providerName)
+
+	// 2. 从 agents.defaults.models 中移除该渠道下的所有模型注册
+	agents, ok := fullCfg["agents"].(map[string]interface{})
+	if ok {
+		defaults, ok := agents["defaults"].(map[string]interface{})
+		if ok {
+			registeredModels, ok := defaults["models"].(map[string]interface{})
+			if ok {
+				prefix := providerName + "/"
+				for key := range registeredModels {
+					if strings.HasPrefix(key, prefix) {
+						delete(registeredModels, key)
+					}
+				}
+				defaults["models"] = registeredModels
+			}
+			agents["defaults"] = defaults
+		}
+		fullCfg["agents"] = agents
+	}
+
+	newData, err := json.MarshalIndent(fullCfg, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(configPath, newData, 0644)
+}
+
+
 func GetOpenClawExperts() ([]Expert, error) {
 	files, err := expertTemplates.ReadDir("experts")
 	if err != nil {
