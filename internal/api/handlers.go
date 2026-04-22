@@ -1313,6 +1313,73 @@ func (s *Server) saveSkillFileContent(c *gin.Context) {
 	s.Success(c, gin.H{"status": "success"})
 }
 
+// Generic File Explorer Handlers
+
+func (s *Server) getExplorerFilesList(c *gin.Context) {
+	path := c.Query("path")
+	if path == "" {
+		s.Error(c, http.StatusBadRequest, "path is required")
+		return
+	}
+
+	files, err := process.ListExplorerFiles(path, s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"files": files})
+}
+
+func (s *Server) getExplorerFileContent(c *gin.Context) {
+	path := c.Query("path")
+	if path == "" {
+		s.Error(c, http.StatusBadRequest, "path is required")
+		return
+	}
+
+	content, err := process.ReadExplorerFile(path, s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"content": content})
+}
+
+func (s *Server) saveExplorerFileContent(c *gin.Context) {
+	var req struct {
+		Path    string `json:"path" binding:"required"`
+		Content string `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "path and content are required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【保存资源文件】 (Path: %s)", req.Path)
+	err := process.WriteExplorerFile(req.Path, req.Content, s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success"})
+}
+
+func (s *Server) deleteExplorerFile(c *gin.Context) {
+	path := c.Query("path")
+	if path == "" {
+		s.Error(c, http.StatusBadRequest, "path is required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【删除资源文件】 (Path: %s)", path)
+	err := process.DeleteExplorerFile(path, s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success"})
+}
+
 func (s *Server) getOpenClawModelsConfig(c *gin.Context) {
 	providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir)
 	if err != nil {

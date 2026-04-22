@@ -160,7 +160,7 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
       width={isMobile ? '100%' : 1000}
       footer={null}
       styles={{ 
-        body: { padding: 0, height: 750, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+        body: { padding: 0, height: 500, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
         header: { padding: '16px 24px', borderBottom: '1px solid #f1f5f9' }
       }}
       centered

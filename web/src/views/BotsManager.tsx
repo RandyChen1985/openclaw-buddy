@@ -12,6 +12,7 @@ import dayjs from 'dayjs';
 import api from '../api';
 import { message } from 'antd';
 import TokenBadge from '../components/TokenBadge';
+import FileExplorer from '../components/FileExplorer';
 
 interface BotsManagerProps {
   botsModels: any; 
@@ -130,6 +131,10 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const [selectedMemoryFile, setSelectedMemoryFile] = useState<string | null>(null);
   const [loadingMemoryList, setLoadingMemoryList] = useState(false);
   const [editorViewMode, setEditorViewMode] = useState<'code' | 'preview'>('code');
+
+  const [explorerOpen, setExplorerOpen] = useState(false);
+  const [explorerPath, setExplorerPath] = useState('');
+  const [explorerTitle, setExplorerTitle] = useState('');
 
 
   const fetchSessions = async (force = false) => {
@@ -724,7 +729,29 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                         <FolderOpen size={12} color="#64748b" />
                                     </div>
                                     <Tooltip title={bot.workspace}>
-                                      <span style={{ fontSize: 12, fontWeight: 700, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontFamily: 'monospace' }}>
+                                      <span 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (bot.workspace) {
+                                            setExplorerPath(bot.workspace);
+                                            setExplorerTitle(`${bot.name} ${t('bots.workspace')}`);
+                                            setExplorerOpen(true);
+                                          }
+                                        }}
+                                        style={{ 
+                                          fontSize: 12, 
+                                          fontWeight: 700, 
+                                          color: '#0ea5e9', 
+                                          overflow: 'hidden', 
+                                          textOverflow: 'ellipsis', 
+                                          whiteSpace: 'nowrap', 
+                                          flex: 1, 
+                                          fontFamily: 'monospace',
+                                          cursor: 'pointer',
+                                          textDecoration: 'underline',
+                                          textDecorationStyle: 'dotted'
+                                        }}
+                                      >
                                         {bot.workspace?.length > 24 ? bot.workspace.substring(0, 10) + '...' + bot.workspace.substring(bot.workspace.length - 10) : bot.workspace}
                                       </span>
                                     </Tooltip>
@@ -1764,6 +1791,14 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           color: #1e293b !important;
         }
       ` }} />
+      <FileExplorer 
+        open={explorerOpen}
+        onClose={() => setExplorerOpen(false)}
+        rootPath={explorerPath}
+        title={explorerTitle}
+        t={t}
+        isMobile={isMobile}
+      />
     </div>
   );
 };

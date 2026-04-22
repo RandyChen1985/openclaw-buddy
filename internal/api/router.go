@@ -158,6 +158,13 @@ func (s *Server) setupRoutes() {
 			oc.GET("/skills/files/list", s.getSkillFilesList)
 			oc.GET("/skills/files/get", s.getSkillFileContent)
 			oc.POST("/skills/files/save", s.saveSkillFileContent)
+			
+			// Generic File Explorer
+			oc.GET("/files/list", s.getExplorerFilesList)
+			oc.GET("/files/get", s.getExplorerFileContent)
+			oc.POST("/files/save", s.saveExplorerFileContent)
+			oc.DELETE("/files/delete", s.deleteExplorerFile)
+
 			oc.GET("/plugins", s.getOpenClawPlugins)
 			oc.POST("/plugins/reload", s.reloadPlugins)
 			oc.POST("/plugins/enable", s.enablePlugin)
