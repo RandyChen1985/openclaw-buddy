@@ -37,6 +37,8 @@
     "save": "保存",
     "saveSuccess": "保存成功",
     "noContent": "暂无内容",
+    "back": "返回",
+    "preview": "预览",
     "add": "添加",
     "action": "操作",
     "name": "名称",
@@ -774,7 +776,10 @@
       "step3": "点击进入详情页，复制右侧侧边栏中的安装指令",
       "step4": "回到 OpenClaw Buddy，进入“运维终端”或**直接粘贴给 AI 助手**执行安装",
       "step5": "安装成功后，返回此处点击“刷新”即可生效"
-    }
+    },
+    "path": "路径",
+    "resources": "资源",
+    "resourceExplorer": "资源浏览器"
   },
   "plugins": {
     "title": "插件管理",

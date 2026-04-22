@@ -1262,6 +1262,57 @@ func (s *Server) triggerSecurityTask(c *gin.Context) {
 	})
 }
 
+// Skill File Management Handlers
+
+func (s *Server) getSkillFilesList(c *gin.Context) {
+	path := c.Query("path")
+	if path == "" {
+		s.Error(c, http.StatusBadRequest, "path is required")
+		return
+	}
+
+	files, err := process.ListSkillResources(path)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"files": files})
+}
+
+func (s *Server) getSkillFileContent(c *gin.Context) {
+	path := c.Query("path")
+	if path == "" {
+		s.Error(c, http.StatusBadRequest, "path is required")
+		return
+	}
+
+	content, err := process.ReadSkillResource(path)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"content": content})
+}
+
+func (s *Server) saveSkillFileContent(c *gin.Context) {
+	var req struct {
+		Path    string `json:"path" binding:"required"`
+		Content string `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "path and content are required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【保存技能资源文件】 (Path: %s)", req.Path)
+	err := process.SaveSkillResource(req.Path, req.Content)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success"})
+}
+
 func (s *Server) getOpenClawModelsConfig(c *gin.Context) {
 	providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir)
 	if err != nil {

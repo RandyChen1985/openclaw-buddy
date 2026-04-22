@@ -48,6 +48,23 @@ type OpenClawSession struct {
 	UpdatedAt     int64  `json:"updatedAt"`
 }
 
+type OpenClawSkill struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Emoji       string `json:"emoji,omitempty"`
+	Eligible    bool   `json:"eligible"`
+	Disabled    bool   `json:"disabled"`
+	Source      string `json:"source"`
+	Bundled     bool   `json:"bundled"`
+	Path        string `json:"path"` // 绝对路径
+	Missing     *struct {
+		Bins   []string `json:"bins"`
+		Env    []string `json:"env"`
+		Config []string `json:"config"`
+		OS     []string `json:"os"`
+	} `json:"missing,omitempty"`
+}
+
 type OpenClawBotsModelsResponse struct {
 	Bots     []OpenClawBot     `json:"bots"`
 	Models   []OpenClawModel   `json:"models"`
@@ -974,12 +991,42 @@ func GetOpenClawSkills() (any, error) {
 	cleanOut := StripANSI(string(out))
 	cleanOut = ExtractJSON(cleanOut)
 
-	var skills interface{}
+	var data struct {
+		Skills []OpenClawSkill `json:"skills"`
+	}
 	decoder := json.NewDecoder(strings.NewReader(cleanOut))
-	if err := decoder.Decode(&skills); err != nil {
+	if err := decoder.Decode(&data); err != nil {
 		return nil, fmt.Errorf("failed to parse skills json: %v", err)
 	}
-	return skills, nil
+
+	skills := data.Skills
+
+	// 补全绝对路径
+	searchDirs := []string{
+		"~/.openclaw/skills",
+		"~/.openclaw/workspace/skills",
+		"~/.agents/skills",
+		"~/.openclaw/lib/skills",
+	}
+
+	// Add bundled skills path if detected
+	if bundledPath := GetBundledSkillsPath(); bundledPath != "" {
+		searchDirs = append(searchDirs, bundledPath)
+	}
+
+	for i := range skills {
+		name := skills[i].Name
+		for _, dir := range searchDirs {
+			absDir := utils.ExpandPath(dir)
+			skillPath := filepath.Join(absDir, name)
+			if info, err := os.Stat(skillPath); err == nil && info.IsDir() {
+				skills[i].Path = skillPath
+				break
+			}
+		}
+	}
+
+	return map[string]any{"skills": skills}, nil
 }
 
 func UninstallOpenClawSkill(name string) error {

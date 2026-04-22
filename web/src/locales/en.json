@@ -34,7 +34,10 @@
     "delete": "Delete",
     "edit": "Edit",
     "save": "Save",
+    "saveSuccess": "Save Success",
     "noContent": "No Content",
+    "back": "Back",
+    "preview": "Preview",
     "add": "Add",
     "action": "Action",
     "name": "Name",
@@ -734,7 +737,10 @@
       "step3": "Enter detail page, copy it from the 'Copy Install Command' button",
       "step4": "Return to OpenClaw Buddy, use \"Maintenance Terminal\" or **simply send it to the AI Chat**",
       "step5": "Once installed, click 'Refresh' here to update the list"
-    }
+    },
+    "path": "Path",
+    "resources": "Resources",
+    "resourceExplorer": "Resource Explorer"
   },
   "plugins": {
     "title": "Plugins",
