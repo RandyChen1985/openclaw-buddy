@@ -79,51 +79,85 @@ const AuditDashboard: React.FC = () => {
     };
   }, [dateRange, logKeyword, logLevel, granularity]);
 
-  const renderCharts = () => {
-    if (!summary || loading) return;
+  const renderTrendChart = () => {
+    if (!trendChartRef.current || !summary?.trend?.length) return;
+    
+    // 仅销毁并重建趋势图实例，不影响其他图表
+    if (charts.current.trend) charts.current.trend.dispose();
+    charts.current.trend = echarts.init(trendChartRef.current);
+
+    const xAxisData = summary.trend.map((i: any) => {
+      const d = dayjs(i.time);
+      return granularity === 'day' ? d.format('MM-DD') : d.format('HH:00');
+    });
 
     const chartTheme = {
       color: ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'],
       textStyle: { fontFamily: 'inherit' }
     };
 
-    // 1. Trend Chart
-    if (trendChartRef.current && summary.trend?.length > 0) {
-      if (!charts.current.trend) charts.current.trend = echarts.init(trendChartRef.current);
-      charts.current.trend.setOption({
-        ...chartTheme,
-        tooltip: { trigger: 'axis', backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: 8, shadowBlur: 10 },
-        grid: { left: '10', right: '10', top: '10', bottom: '10', containLabel: true },
-        xAxis: { 
-          type: 'category', 
-          boundaryGap: false, 
-          data: summary.trend.map((i: any) => granularity === 'day' ? dayjs(i.time).format('MM-DD') : dayjs(i.time + ':00').format('HH:00')),
-          axisLine: { lineStyle: { color: '#e2e8f0' } },
-          axisLabel: { fontSize: 10, color: '#64748b' }
+    charts.current.trend.setOption({
+      ...chartTheme,
+      tooltip: { 
+        trigger: 'axis', 
+        backgroundColor: 'rgba(255, 255, 255, 0.9)', 
+        borderRadius: 8, 
+        shadowBlur: 10,
+        formatter: (params: any) => {
+          const item = params[0];
+          const time = summary.trend[item.dataIndex]?.time;
+          return `<b>${dayjs(time).format(granularity === 'day' ? 'YYYY-MM-DD' : 'MM-DD HH:00')}</b><br/>Tokens: ${item.value.toLocaleString()}`;
+        }
+      },
+      grid: { left: '10', right: '10', top: '10', bottom: '10', containLabel: true },
+      xAxis: { 
+        type: 'category', 
+        boundaryGap: false, 
+        data: xAxisData,
+        axisLine: { lineStyle: { color: '#e2e8f0' } },
+        axisLabel: { fontSize: 10, color: '#64748b' }
+      },
+      yAxis: { 
+        type: 'value', 
+        splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } }, 
+        axisLabel: { 
+          fontSize: 10, 
+          color: '#64748b',
+          formatter: (val: number) => {
+            if (val >= 1000) return (val / 1000).toFixed(0) + 'K';
+            return val;
+          }
+        } 
+      },
+      series: [{
+        name: 'Tokens',
+        data: summary.trend.map((i: any) => i.tokens),
+        type: 'line',
+        smooth: 0.4,
+        symbol: 'circle',
+        symbolSize: 4,
+        lineStyle: { width: 2, color: '#4f46e5' },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(79, 70, 229, 0.1)' },
+            { offset: 1, color: 'rgba(79, 70, 229, 0)' }
+          ])
         },
-        yAxis: { type: 'value', splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } }, axisLabel: { fontSize: 10, color: '#64748b' } },
-        series: [{
-          name: 'Tokens',
-          data: summary.trend.map((i: any) => i.tokens),
-          type: 'line',
-          smooth: 0.4,
-          symbol: 'circle',
-          symbolSize: 4,
-          lineStyle: { width: 2, color: '#4f46e5' },
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: 'rgba(79, 70, 229, 0.1)' },
-              { offset: 1, color: 'rgba(79, 70, 229, 0)' }
-            ])
-          },
-          itemStyle: { color: '#4f46e5' }
-        }]
-      }, true);
-    }
+        itemStyle: { color: '#4f46e5' }
+      }]
+    }, true);
+  };
+
+  const renderTabCharts = () => {
+    const chartTheme = {
+      color: ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'],
+      textStyle: { fontFamily: 'inherit' }
+    };
 
     // 2. Model Chart
-    if (modelChartRef.current && summary.model_distribution?.length > 0) {
-      if (!charts.current.model) charts.current.model = echarts.init(modelChartRef.current);
+    if (activeTab === 'model' && modelChartRef.current && summary?.model_distribution?.length > 0) {
+      if (charts.current.model) charts.current.model.dispose();
+      charts.current.model = echarts.init(modelChartRef.current);
       charts.current.model.setOption({
         ...chartTheme,
         tooltip: { trigger: 'item' },
@@ -141,8 +175,9 @@ const AuditDashboard: React.FC = () => {
     }
 
     // 2.1 Agent Chart
-    if (agentChartRef.current && summary.agent_distribution?.length > 0) {
-      if (!charts.current.agent) charts.current.agent = echarts.init(agentChartRef.current);
+    if (activeTab === 'agent' && agentChartRef.current && summary?.agent_distribution?.length > 0) {
+      if (charts.current.agent) charts.current.agent.dispose();
+      charts.current.agent = echarts.init(agentChartRef.current);
       charts.current.agent.setOption({
         ...chartTheme,
         tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
@@ -180,8 +215,9 @@ const AuditDashboard: React.FC = () => {
     }
 
     // 3. Tools Chart
-    if (toolsChartRef.current && tools.length > 0) {
-      if (!charts.current.tools) charts.current.tools = echarts.init(toolsChartRef.current);
+    if (activeTab === 'tools' && toolsChartRef.current && tools.length > 0) {
+      if (charts.current.tools) charts.current.tools.dispose();
+      charts.current.tools = echarts.init(toolsChartRef.current);
       charts.current.tools.setOption({
         ...chartTheme,
         tooltip: { trigger: 'axis' },
@@ -221,7 +257,12 @@ const AuditDashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    const timer = setTimeout(renderCharts, 300);
+    const timer = setTimeout(renderTrendChart, 300);
+    return () => clearTimeout(timer);
+  }, [summary?.trend, granularity, loading]);
+
+  useEffect(() => {
+    const timer = setTimeout(renderTabCharts, 300);
     return () => clearTimeout(timer);
   }, [summary, tools, loading, activeTab]);
 

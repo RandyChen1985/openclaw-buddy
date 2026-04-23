@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 	"openclaw-buddy/internal/utils"
@@ -85,26 +86,35 @@ func (s *Server) handleGetAuditSummary(c *gin.Context) {
 
 	// 3. 每日趋势 (Token 消耗)
 	granularity := c.DefaultQuery("granularity", "day")
-	groupFormat := 10 // YYYY-MM-DD
+	groupLen := 10 // YYYY-MM-DD
 	if granularity == "hour" {
-		groupFormat = 13 // YYYY-MM-DD HH
+		groupLen = 13 // YYYY-MM-DD HH
 	}
 
 	trend := []gin.H{}
-	// 使用 substr 提取对应颗粒度的时间字符串
-	trendRows, err := utils.DB.Query(`
-		SELECT substr(timestamp, 1, ?) as time_unit, SUM(prompt_tokens + completion_tokens) 
+	// 直接在 SQL 中拼接 groupLen 以确保 SQLite 解析稳定性
+	query := fmt.Sprintf(`
+		SELECT substr(timestamp, 1, %d) as time_unit, SUM(prompt_tokens + completion_tokens) 
 		FROM audit_usage 
 		WHERE timestamp >= ? AND timestamp <= ?
 		GROUP BY time_unit 
-		ORDER BY time_unit ASC`, groupFormat, start, end)
+		ORDER BY time_unit ASC`, groupLen)
+
+	trendRows, err := utils.DB.Query(query, start, end)
 	if err == nil {
 		defer trendRows.Close()
 		for trendRows.Next() {
 			var unit string
 			var tokens int64
 			if err := trendRows.Scan(&unit, &tokens); err == nil {
-				trend = append(trend, gin.H{"time": unit, "tokens": tokens})
+				formattedTime := unit
+				// 如果是 2026-04-23 11 这种格式，补全为 dayjs 易读格式
+				if len(unit) == 13 {
+					formattedTime = unit + ":00:00"
+				} else if len(unit) == 10 {
+					formattedTime = unit + " 00:00:00"
+				}
+				trend = append(trend, gin.H{"time": formattedTime, "tokens": tokens})
 			}
 		}
 	}
