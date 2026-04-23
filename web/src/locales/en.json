@@ -1,6 +1,22 @@
 {
+  "audit": {
+    "title": "Audit Dashboard",
+    "retentionTip": "Data retained for 7 days",
+    "totalTokens": "Total Token Consumption",
+    "activeAgents": "Active Agents",
+    "securityHits": "Security Hits",
+    "modelCoverage": "Model Coverage",
+    "trendTitle": "Token Usage Trend",
+    "modelDistTitle": "Model Distribution",
+    "toolsRanking": "Tool Usage Ranking",
+    "securityLogs": "Security Audit Logs",
+    "lastUpdated": "Last Updated",
+    "riskLevel": "Risk Level"
+  },
   "common": {
     "dashboard": "Dashboard",
+    "monitor": "Monitoring",
+    "overview": "Overview",
     "logs": "Realtime Logs",
     "tools": "Self-Healing",
     "chat": "Online Chat",

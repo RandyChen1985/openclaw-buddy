@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
   Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone, Rocket,
-  ShieldCheck, Clock
+  ShieldCheck, Clock, Activity
 } from 'lucide-react';
 import api from './api';
 import storage from './utils/storage';
@@ -13,6 +13,7 @@ import storage from './utils/storage';
 import LoginView from './views/LoginView';
 import Sidebar from './components/layout/Sidebar';
 import DashboardOverview from './views/DashboardOverview';
+import AuditDashboard from './views/AuditDashboard';
 import BotsManager from './views/BotsManager';
 import ChannelsManager from './views/ChannelsManager';
 import DeviceManager from './views/DeviceManager';
@@ -862,12 +863,13 @@ const Dashboard = () => {
   const rawMenuItems = [
     {
       key: 'grp-monitor',
-      label: t('common.monitor_center'),
-      type: 'group',
+      label: t('common.monitor'),
+      icon: <Activity size={16} />,
       children: [
         { key: 'dashboard', label: t('common.dashboard'), icon: <LayoutDashboard size={14} /> },
-        { 
-          key: 'logs', 
+        { key: 'audit', label: t('audit.title'), icon: <ShieldCheck size={14} /> },
+        {
+          key: 'logs',
           label: (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
               <span>{t('common.logs')}</span>
@@ -894,7 +896,7 @@ const Dashboard = () => {
     {
       key: 'grp-assets',
       label: t('common.assets'),
-      type: 'group',
+      icon: <Boxes size={16} />,
       children: [
         { key: 'chat', label: t('common.chat'), icon: <MessageSquare size={14} /> },
         { key: 'tui', label: t('common.tuiChat'), icon: <Terminal size={14} /> },
@@ -907,7 +909,7 @@ const Dashboard = () => {
     {
       key: 'grp-binding',
       label: t('common.binding'),
-      type: 'group',
+      icon: <ToyBrick size={16} />,
       children: [
         { key: 'components', label: t('common.channels'), icon: <ToyBrick size={14} /> },
         { key: 'devices', label: t('common.devices'), icon: <Smartphone size={14} /> },
@@ -916,7 +918,7 @@ const Dashboard = () => {
     {
       key: 'grp-external',
       label: t('common.external'),
-      type: 'group',
+      icon: <ExternalLink size={16} />,
       children: [
         { key: 'lobster-panel', label: t('common.lobsterPanel'), icon: <ExternalLink size={14} /> },
       ]
@@ -975,11 +977,11 @@ const Dashboard = () => {
           onRefreshVersion={checkVersionUpdate}
           onUpgrade={handleUpgrade}
           onRestart={handleRestart}
-        />
-      ),
-      'bots-models': (
-        <BotsManager 
-          modelsConfig={modelsConfig}
+          />
+          ),
+          'audit': <AuditDashboard />,
+          'bots-models': (
+          <BotsManager          modelsConfig={modelsConfig}
           loadingConfig={loadingModelsConfig}
           onRefresh={fetchModelsConfig}
           botsModels={botsModels} 

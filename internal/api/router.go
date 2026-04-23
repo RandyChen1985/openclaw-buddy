@@ -199,6 +199,13 @@ func (s *Server) setupRoutes() {
 		v1.GET("/stats/health", s.getHealthStats)
 		v1.GET("/wechat/qrcode", s.getWeChatQRCode)
 		
+		audit := v1.Group("/audit")
+		{
+			audit.GET("/dashboard/summary", s.handleGetAuditSummary)
+			audit.GET("/dashboard/tools", s.handleGetAuditTools)
+			audit.GET("/logs", s.handleGetAuditLogs)
+		}
+		
 		channels := v1.Group("/channels")
 		{
 			channels.GET("/metadata", s.getChannelsMetadata)
