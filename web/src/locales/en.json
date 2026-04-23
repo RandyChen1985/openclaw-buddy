@@ -593,6 +593,7 @@
     "running": "Running",
     "localNode": "Local Node",
     "noBots": "No bots configured yet",
+    "noBotsWarning": "The agent list is currently empty, which may indicate a backend service exception. Please go to \"Dashboard\" to check the OpenClaw Health status.",
     "modelLegion": "Model Legion",
     "searchModels": "Quick search models...",
     "addChannel": "Add Channel",

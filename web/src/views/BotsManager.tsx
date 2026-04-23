@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox, Segmented, Empty, Tabs, List as AntList, Popconfirm } from 'antd';
+import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox, Segmented, Empty, Tabs, List as AntList, Popconfirm, Alert } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { 
   Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star, 
@@ -34,7 +34,8 @@ interface BotsManagerProps {
 const BotsManager: React.FC<BotsManagerProps> = ({ 
   botsModels, loadingBots, isMobile, onRefresh, onRefreshBots, modelsConfig, loadingConfig,
   onAddBot, onUpdateBot, onDeleteBot, onSetDefaultModel,
-  activeTasks = [] 
+  activeTasks = [],
+  onNavigateToDashboard
 }) => {
   const { t } = useTranslation();
   const cardColors = [
@@ -548,9 +549,32 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       ) : (
         <Row gutter={[20, 20]}>
           <Col span={24}>
-            {(botsViewMode === 'card' || isMobile) ? (
+            {(!botsModels?.data?.bots || botsModels.data.bots.length === 0) ? (
+              <div style={{ padding: '20px 0' }}>
+                <Alert
+                  message={
+                    <span style={{ fontWeight: 600 }}>{t('bots.noBotsWarning')}</span>
+                  }
+                  type="warning"
+                  showIcon
+                  icon={<Activity size={20} />}
+                  style={{ borderRadius: 12, border: '1px solid #fed7aa', backgroundColor: '#fff7ed' }}
+                  action={
+                    <Button 
+                      size="small" 
+                      type="primary" 
+                      ghost 
+                      onClick={onNavigateToDashboard}
+                      style={{ borderRadius: 6, fontSize: 12 }}
+                    >
+                      {t('common.dashboard')}
+                    </Button>
+                  }
+                />
+              </div>
+            ) : (botsViewMode === 'card' || isMobile) ? (
               <Row gutter={[20, 20]}>
-                {botsModels?.data?.bots?.map((bot: any, index: number) => {
+                {botsModels.data.bots.map((bot: any, index: number) => {
                   const color = cardColors[index % cardColors.length];
                   return (
                     <Col xs={24} sm={12} md={12} lg={8} xl={6} key={bot.id}>

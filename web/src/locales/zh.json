@@ -620,6 +620,7 @@
     "running": "运行中",
     "localNode": "本地节点",
     "noBots": "暂无配置机器人",
+    "noBotsWarning": "当前机器人列表为空，这可能意味着后端服务异常。请前往“运行状态”检查 OpenClaw Health 状态。",
     "modelLegion": "模型军团 (Models)",
     "searchModels": "快速检索模型...",
     "addChannel": "添加渠道",
