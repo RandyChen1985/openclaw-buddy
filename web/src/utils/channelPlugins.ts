@@ -62,8 +62,12 @@ export function getPluginIdAliases(channelId: string): string[] {
   return aliases;
 }
 
-/** 在插件列表中寻找与特定渠道匹配的插件（考虑别名） */
+/** 在插件列表中寻找与特定渠道匹配的插件（考虑别名，且优先选择可用状态的插件） */
 export function findPluginForChannel(plugins: PluginLike[], channelId: string): PluginLike | undefined {
   const aliases = getPluginIdAliases(channelId);
-  return plugins.find(p => p.id && aliases.includes(p.id));
+  const matches = plugins.filter(p => p.id && aliases.includes(p.id));
+  if (matches.length === 0) return undefined;
+  
+  // 优先级：优先返回「已启用/已加载」的插件，避免被同名的禁用插件（如内置 feishu）覆盖
+  return matches.find(p => isPluginOperational(p)) || matches[0];
 }

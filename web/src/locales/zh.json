@@ -482,8 +482,6 @@
       "dashboard": "管理后台",
       "weixin": "微信",
       "feishu": "飞书 (Feishu)",
-      "lark": "飞书 (Lark)",
-      "openclaw-lark": "飞书 (Lark)",
       "telegram": "Telegram",
       "cron": "定时任务",
       "openaiUser": "OpenAI API",

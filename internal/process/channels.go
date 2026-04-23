@@ -43,7 +43,7 @@ type ChannelMetadata struct {
 var SupportedChannels = []ChannelMetadata{
 	{
 		ID:          "feishu",
-		Name:        "飞书 (Feishu)",
+		Name:        "飞书 (Feishu/ Lark)",
 		Description: "支持企业自建应用，配置 AppID 和 Secret 实现消息推送",
 		Icon:        "Lark",
 		SetupType:   "form",
@@ -58,23 +58,7 @@ var SupportedChannels = []ChannelMetadata{
 			},
 		},
 	},
-	{
-		ID:          "openclaw-lark",
-		Name:        "飞书 (Lark)",
-		Description: "支持企业自建应用，配置 AppID 和 Secret 实现消息推送",
-		Icon:        "Lark",
-		SetupType:   "form",
-		Fields: []ChannelField{
-			{
-				Key: "appId", Label: "App ID", Placeholder: "输入飞书应用的 App ID (cli_...)", Type: "text", Required: true,
-				HelpURL: "https://open.feishu.cn/app",
-			},
-			{
-				Key: "appSecret", Label: "App Secret", Placeholder: "输入飞书应用的 App Secret", Type: "password", Required: true,
-				HelpURL: "https://open.feishu.cn/app",
-			},
-		},
-	},
+
 	{
 		ID:          "telegram",
 		Name:        "Telegram",
@@ -316,7 +300,7 @@ func qqbotCredentialFromMap(qq map[string]interface{}) (has bool, hint string) {
 
 func GetChannelAccounts(configDir, channelID string) ([]ChannelAccount, error) {
 	switch channelID {
-	case "feishu", "openclaw-lark":
+	case "feishu":
 		return listLarkAccounts(configDir, channelID)
 	case "qqbot":
 		return listQQBotAccounts(configDir)
@@ -340,20 +324,55 @@ func readChannelCredentialSnapshots(configDir string) map[string]channelCredenti
 		return out
 	}
 	chRoot, _ := root["channels"].(map[string]interface{})
+	pluginsRoot, _ := root["plugins"].(map[string]interface{})
+	pluginsEntries, _ := pluginsRoot["entries"].(map[string]interface{})
 
 	// 遍历 SupportedChannels 自动填充快照
 	for _, sc := range SupportedChannels {
-		if fs, ok := chRoot[sc.ID].(map[string]interface{}); ok {
-			// 如果是飞书系列
-			if sc.ID == "feishu" || sc.ID == "openclaw-lark" {
-				appID := jsonStringish(fs["appId"])
-				secret := jsonStringish(fs["appSecret"])
-				if appID != "" && secret != "" {
-					out[sc.ID] = channelCredentialSnapshot{
-						HasCredentials: true,
-						ChannelEnabled: jsonBoolish(fs["enabled"]),
-						Hint:           "AppID " + maskMiddle(appID, 6, 4),
+		if sc.ID == "feishu" {
+			// 针对飞书系列，按优先级 (openclaw-lark > lark > feishu) 聚合状态
+			for _, id := range []string{"openclaw-lark", "lark", "feishu"} {
+				// 1. 检查 channels 节点（配置与启用状态）
+				if fs, ok := chRoot[id].(map[string]interface{}); ok {
+					appID := jsonStringish(fs["appId"])
+					secret := jsonStringish(fs["appSecret"])
+					if appID != "" && secret != "" {
+						snap := out[sc.ID]
+						snap.HasCredentials = true
+						if snap.Hint == "" {
+							snap.Hint = "AppID " + maskMiddle(appID, 6, 4)
+						}
+						// 只要 channels 里开启了，就视为启用
+						if jsonBoolish(fs["enabled"]) {
+							snap.ChannelEnabled = true
+						}
+						out[sc.ID] = snap
 					}
+				}
+				// 2. 检查 plugins.entries 节点（很多时候插件级开启即代表渠道开启）
+				if pe, ok := pluginsEntries[id].(map[string]interface{}); ok {
+					if jsonBoolish(pe["enabled"]) {
+						snap := out[sc.ID]
+						snap.ChannelEnabled = true
+						out[sc.ID] = snap
+					}
+				}
+			}
+		} else {
+			// 通用逻辑：优先检查 channels 节点
+			if fs, ok := chRoot[sc.ID].(map[string]interface{}); ok {
+				out[sc.ID] = channelCredentialSnapshot{
+					HasCredentials: true,
+					ChannelEnabled: jsonBoolish(fs["enabled"]),
+					Hint:           "",
+				}
+			}
+			// 补充检查 plugins.entries 节点
+			if pe, ok := pluginsEntries[sc.ID].(map[string]interface{}); ok {
+				if jsonBoolish(pe["enabled"]) {
+					snap := out[sc.ID]
+					snap.ChannelEnabled = true
+					out[sc.ID] = snap
 				}
 			}
 		}
@@ -979,7 +998,7 @@ func GetGenericQRCode(channelID string) (*WeChatQRCode, error) {
 
 	// 不同渠道的 URL 匹配正则
 	var re *regexp.Regexp
-	if channelID == "feishu" || channelID == "lark" || channelID == "openclaw-lark" {
+	if channelID == "feishu" || channelID == "lark" {
 		re = regexp.MustCompile(`https://(?:accounts|open)\.(?:feishu\.cn|larksuite\.com)/oauth/v1/app/registration\?[^\s\n]*`)
 	} else if channelID == "openclaw-weixin" {
 		re = regexp.MustCompile(`https://liteapp\.weixin\.qq\.com/q/[^\s\n]*`)
@@ -1034,7 +1053,7 @@ func SaveChannelSecret(configDir, channelID string, creds map[string]string) err
 	log.Printf("⚙️ Saving credentials for channel %s (config: %s)", channelID, configPath)
 
 	switch channelID {
-	case "feishu", "openclaw-lark":
+	case "feishu":
 		// 如果 creds 中包含 accountId，则写入 accounts 映射表，否则写入根部。
 		if aid := creds["accountId"]; aid != "" && aid != "default" {
 			return saveLarkAccountManual(configDir, channelID, aid, creds["appId"], creds["appSecret"])

@@ -2550,7 +2550,7 @@ func (s *Server) getChannelsStatus(c *gin.Context) {
 func (s *Server) getChannelAccounts(c *gin.Context) {
 	channelID := c.Param("channelId")
 	switch channelID {
-	case "feishu", "telegram", "qqbot", "openclaw-lark":
+	case "feishu", "telegram", "qqbot":
 	default:
 		s.Error(c, http.StatusBadRequest, "unsupported channelId")
 		return
@@ -2567,7 +2567,7 @@ func (s *Server) getChannelAccounts(c *gin.Context) {
 func (s *Server) bindChannelRoute(c *gin.Context) {
 	channelID := c.Param("channelId")
 	switch channelID {
-	case "feishu", "telegram", "qqbot", "openclaw-lark":
+	case "feishu", "telegram", "qqbot":
 	default:
 		s.Error(c, http.StatusBadRequest, "unsupported channelId")
 		return
@@ -2636,7 +2636,7 @@ func (s *Server) saveChannelConfig(c *gin.Context) {
 	if req.AgentID != "" {
 		var bindErr error
 		switch req.ChannelID {
-		case "feishu", "openclaw-lark":
+		case "feishu":
 			bindErr = process.BindChannelRouteToAgent(s.cfg.OpenClawConfigDir, req.ChannelID, req.AgentID, "")
 		case "telegram":
 			bindErr = process.BindTelegramToAgent(s.cfg.OpenClawConfigDir, req.AgentID)
@@ -2678,7 +2678,7 @@ func (s *Server) unbindChannel(c *gin.Context) {
 
 	var unbindErr error
 	switch channelID {
-	case "feishu", "telegram", "qqbot", "openclaw-lark":
+	case "feishu", "telegram", "qqbot":
 		unbindErr = process.UnbindChannelRouteFromAgent(s.cfg.OpenClawConfigDir, channelID, agentID, accountID)
 	default:
 		log.Printf("⚠️ No specific unbind logic for channel: %s, falling back to basic CLI unbind", channelID)
