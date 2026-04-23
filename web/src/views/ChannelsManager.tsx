@@ -1,8 +1,20 @@
 import React from 'react';
 import { Card, Tag, Button, Modal, message } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Cloud, RefreshCw, Smartphone, Trash2, Send, MessageSquare, Bell, Settings, LayoutGrid, AlertCircle, Copy, Users } from 'lucide-react';
+import { 
+  Cloud, RefreshCw, Smartphone, Trash2, Send, MessageSquare, Bell, Settings, 
+  LayoutGrid, AlertCircle, Copy, Users, HelpCircle 
+} from 'lucide-react';
 import api from '../api';
+
+const HELP_URLS: Record<string, string> = {
+  weixin: 'https://github.com/hao-ji-xing/openclaw-weixin/blob/main/packages/openclaw-weixin/README.zh_CN.md',
+  feishu: 'https://open.feishu.cn/document/faq/trouble-shooting/how-to-obtain-app-id',
+  lark: 'https://open.feishu.cn/document/faq/trouble-shooting/how-to-obtain-app-id',
+  telegram: 'https://core.telegram.org/bots/tutorial',
+  qqbot: 'https://q.qq.com/',
+  dingtalk: 'https://open.dingtalk.com/document/orgapp/application-types',
+};
 
 import ChannelAccountsModal from '../components/ChannelAccountsModal';
 import { channelPluginUiState, findPluginForChannel, type ChannelPluginUiState } from '../utils/channelPlugins';
@@ -204,7 +216,12 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                     <Smartphone size={24} color="#16a34a" />
                   </div>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 14 }}>{t('channels.weixinPlugin')}</div>
+                    <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {t('channels.weixinPlugin')}
+                      <a href={HELP_URLS.weixin} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ display: 'flex' }}>
+                        <HelpCircle size={14} color="#94a3b8" style={{ cursor: 'pointer' }} />
+                      </a>
+                    </div>
                     <div style={{ color: '#64748b', fontSize: 11, marginTop: 2, lineHeight: 1.45 }}>
                       {t('channels.weixinCardDescription')}
                     </div>
@@ -320,7 +337,14 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                         {getIcon(ch.icon)}
                       </div>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 14 }}>{ch.name}</div>
+                        <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {ch.name}
+                          {HELP_URLS[ch.id.toLowerCase()] && (
+                            <a href={HELP_URLS[ch.id.toLowerCase()]} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ display: 'flex' }}>
+                              <HelpCircle size={14} color="#94a3b8" style={{ cursor: 'pointer' }} />
+                            </a>
+                          )}
+                        </div>
                         <div style={{ color: '#64748b', fontSize: 11, marginTop: 2 }}>{ch.description}</div>
                         {isLoaded && status?.credentialHint && (
                           <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, fontFamily: 'monospace' }}>{status.credentialHint}</div>
