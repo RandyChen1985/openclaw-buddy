@@ -204,6 +204,7 @@ func (s *Server) setupRoutes() {
 			channels.GET("/metadata", s.getChannelsMetadata)
 			channels.GET("/status", s.getChannelsStatus)
 			channels.GET("/:channelId/accounts", s.getChannelAccounts)
+			channels.DELETE("/:channelId/accounts/:accountId", s.deleteChannelAccount) // 新增：删除子账号凭证
 			channels.POST("/:channelId/bind", s.bindChannelRoute)
 			channels.GET("/qrcode/:id", s.getChannelQRCode)
 			channels.POST("/setup", s.saveChannelConfig)

@@ -2704,3 +2704,24 @@ func (s *Server) unbindChannel(c *gin.Context) {
 	log.Printf("✅ Successfully unbound channel %s from agent %s", channelID, agentID)
 	s.Success(c, gin.H{"message": "Channel unbound successfully"})
 }
+
+// deleteChannelAccount 删除渠道账号凭证
+// DELETE /v1/channels/:channelId/accounts/:accountId
+func (s *Server) deleteChannelAccount(c *gin.Context) {
+	channelID := c.Param("channelId")
+	accountID := c.Param("accountId")
+
+	if channelID == "" || accountID == "" {
+		s.Error(c, http.StatusBadRequest, "channelId and accountId are required")
+		return
+	}
+
+	log.Printf("🗑️ Deleting channel account credentials: %s:%s", channelID, accountID)
+
+	if err := process.DeleteChannelAccount(s.cfg.OpenClawConfigDir, channelID, accountID); err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to delete account: "+err.Error())
+		return
+	}
+
+	s.Success(c, gin.H{"message": "Account deleted successfully"})
+}

@@ -103,6 +103,26 @@ type ChannelStatus struct {
 	CredentialHint       string `json:"credentialHint,omitempty"`
 }
 
+type ChannelAccount struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	IsConfigured bool   `json:"isConfigured"`
+}
+
+func getChannelsConfig(configDir string) (map[string]interface{}, error) {
+	configPath := filepath.Join(configDir, "openclaw.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, err
+	}
+	var root map[string]interface{}
+	if err := json.Unmarshal(data, &root); err != nil {
+		return nil, err
+	}
+	ch, _ := root["channels"].(map[string]interface{})
+	return ch, nil
+}
+
 // channelCredentialSnapshot 从 openclaw.json 的 channels.<id> 解析（不返回密钥明文）。
 type channelCredentialSnapshot struct {
 	HasCredentials bool
@@ -275,6 +295,19 @@ func qqbotCredentialFromMap(qq map[string]interface{}) (has bool, hint string) {
 	return false, ""
 }
 
+func GetChannelAccounts(configDir, channelID string) ([]ChannelAccount, error) {
+	switch channelID {
+	case "feishu":
+		return listFeishuAccounts(configDir)
+	case "qqbot":
+		return listQQBotAccounts(configDir)
+	case "telegram":
+		return listGenericAccounts(configDir, "telegram")
+	default:
+		return listGenericAccounts(configDir, channelID)
+	}
+}
+
 // readChannelCredentialSnapshots 读取 openclaw.json 中各渠道是否已写入凭证（比 CLI 文本解析可靠）。
 func readChannelCredentialSnapshots(configDir string) map[string]channelCredentialSnapshot {
 	out := make(map[string]channelCredentialSnapshot)
@@ -325,6 +358,135 @@ func readChannelCredentialSnapshots(configDir string) map[string]channelCredenti
 	}
 
 	return out
+}
+
+func listFeishuAccounts(configDir string) ([]ChannelAccount, error) {
+	channels, err := getChannelsConfig(configDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var accounts []ChannelAccount
+	fs, ok := channels["feishu"].(map[string]interface{})
+	if !ok {
+		return accounts, nil
+	}
+
+	// 1. 检查根级全局配置
+	appID := jsonStringish(fs["appId"])
+	if appID != "" {
+		accounts = append(accounts, ChannelAccount{
+			ID:           "default",
+			Name:         "默认账号 (" + appID + ")",
+			IsConfigured: true,
+		})
+	}
+
+	// 2. 检查 accounts 映射表
+	if accs, ok := fs["accounts"].(map[string]interface{}); ok {
+		for id, val := range accs {
+			name := id
+			if m, ok := val.(map[string]interface{}); ok {
+				if n := jsonStringish(m["name"]); n != "" {
+					name = n
+				} else if aid := jsonStringish(m["appId"]); aid != "" {
+					name = id + " (" + aid + ")"
+				}
+			}
+			accounts = append(accounts, ChannelAccount{
+				ID:           id,
+				Name:         name,
+				IsConfigured: true,
+			})
+		}
+	}
+
+	return accounts, nil
+}
+
+func listQQBotAccounts(configDir string) ([]ChannelAccount, error) {
+	channels, err := getChannelsConfig(configDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var accounts []ChannelAccount
+	qq, ok := channels["qqbot"].(map[string]interface{})
+	if !ok {
+		return accounts, nil
+	}
+
+	// 1. 检查根级
+	appID := jsonStringish(qq["appId"])
+	if appID != "" {
+		accounts = append(accounts, ChannelAccount{
+			ID:           "default",
+			Name:         "默认账号 (" + appID + ")",
+			IsConfigured: true,
+		})
+	}
+
+	// 2. 检查 accounts 映射表
+	if accs, ok := qq["accounts"].(map[string]interface{}); ok {
+		for id, val := range accs {
+			name := id
+			if m, ok := val.(map[string]interface{}); ok {
+				if n := jsonStringish(m["name"]); n != "" {
+					name = n
+				} else if aid := jsonStringish(m["appId"]); aid != "" {
+					name = id + " (" + aid + ")"
+				}
+			}
+			accounts = append(accounts, ChannelAccount{
+				ID:           id,
+				Name:         name,
+				IsConfigured: true,
+			})
+		}
+	}
+
+	return accounts, nil
+}
+
+func listGenericAccounts(configDir, channelID string) ([]ChannelAccount, error) {
+	channels, err := getChannelsConfig(configDir)
+	if err != nil {
+		return nil, err
+	}
+	ch, ok := channels[channelID].(map[string]interface{})
+	if !ok {
+		return nil, nil
+	}
+
+	var accounts []ChannelAccount
+	hasDefault := false
+	if jsonStringish(ch["token"]) != "" || jsonStringish(ch["botToken"]) != "" || jsonStringish(ch["appId"]) != "" {
+		hasDefault = true
+	}
+	if hasDefault {
+		accounts = append(accounts, ChannelAccount{
+			ID:           "default",
+			Name:         "默认账号",
+			IsConfigured: true,
+		})
+	}
+
+	if accs, ok := ch["accounts"].(map[string]interface{}); ok {
+		for id, val := range accs {
+			name := id
+			if m, ok := val.(map[string]interface{}); ok {
+				if n := jsonStringish(m["name"]); n != "" {
+					name = n
+				}
+			}
+			accounts = append(accounts, ChannelAccount{
+				ID:           id,
+				Name:         name,
+				IsConfigured: true,
+			})
+		}
+	}
+	return accounts, nil
 }
 
 type agentListJSONRow struct {
@@ -547,6 +709,7 @@ type ChannelAccountsOverview struct {
 	CredentialConfigured bool                    `json:"credentialConfigured"`
 	CredentialHint       string                  `json:"credentialHint,omitempty"`
 	ChannelEnabled       bool                    `json:"channelEnabled"`
+	Credentials          []ChannelAccount        `json:"credentials"` // 已配置的凭证列表
 	Bindings             []ChannelBindingAccount `json:"bindings"`
 	Notices              []string                `json:"notices,omitempty"`
 	CandidateAgents      []ChannelAgentPick      `json:"candidateAgents,omitempty"`
@@ -563,15 +726,45 @@ func GetChannelAccountsOverview(configDir, channelID string) (*ChannelAccountsOv
 		CredentialConfigured: snap.HasCredentials,
 		CredentialHint:       snap.Hint,
 		ChannelEnabled:       snap.ChannelEnabled,
+		Credentials:          nil,
 		Bindings:             nil,
 	}
+
+	// 获取所有已配置的凭证
+	creds, _ := GetChannelAccounts(configDir, channelID)
+	ov.Credentials = creds
 	rows, notices := listRouteBindingRowsForChannel(configDir, channelID)
 	ov.Notices = notices
 
-	agents, err := listAgentsJSONWithConfig(configDir)
-	if err != nil {
-		log.Printf("⚠️ list agents for channel %s: %v", channelID, err)
+	// 1. 优先从缓存获取机器人列表 (与“虾兵蟹将”页面同步)
+	var agents []agentListJSONRow
+	if cached, _, err := GetCachedData("bots_models"); err == nil && cached != nil {
+		// 尝试解析缓存数据
+		if m, ok := cached.(map[string]interface{}); ok {
+			if bots, ok := m["bots"].([]interface{}); ok {
+				for _, b := range bots {
+					if bm, ok := b.(map[string]interface{}); ok {
+						agents = append(agents, agentListJSONRow{
+							ID:            jsonStringish(bm["id"]),
+							IdentityName:  jsonStringish(bm["name"]),
+							IdentityEmoji: jsonStringish(bm["emoji"]),
+						})
+					}
+				}
+			}
+		}
 	}
+
+	// 2. 如果缓存没拿到，则实时获取一次
+	if len(agents) == 0 {
+		var err error
+		agents, err = listAgentsJSONWithConfig(configDir)
+		if err != nil {
+			// 如果实时也失败了，不报错，仅返回空列表（可能 openclaw 未启动）
+			agents = []agentListJSONRow{}
+		}
+	}
+
 	agentMeta := make(map[string]agentListJSONRow)
 	for _, a := range agents {
 		agentMeta[a.ID] = a
@@ -733,7 +926,7 @@ func GetGenericQRCode(channelID string) (*WeChatQRCode, error) {
 //   - feishu：直接用 config set channels.feishu.{appId,appSecret}（因为 feishu credentials 是空的，无 channels add 支持）
 //   - telegram：openclaw channels add --channel telegram --token <botToken>
 //   - qqbot：openclaw channels add --channel qqbot --token <appId> --password <clientSecret>
-func SaveChannelSecret(configDir, channelID string, secrets map[string]string) error {
+func SaveChannelSecret(configDir, channelID string, creds map[string]string) error {
 	env, err := OpenClawConfigEnv(configDir)
 	if err != nil {
 		return err
@@ -743,62 +936,32 @@ func SaveChannelSecret(configDir, channelID string, secrets map[string]string) e
 
 	switch channelID {
 	case "feishu":
-		// Feishu 的 ChannelSetupWizard.credentials 是空数组，不支持 channels add 非交互模式。
-		// 必须直接写 channels.feishu.{appId, appSecret}。
-		for k, v := range secrets {
-			path := fmt.Sprintf("channels.feishu.%s", k)
-			_, err := RunCommandWithEnvAndTimeout(10*time.Second, env, "openclaw", "config", "set", path, v)
-			if err != nil {
-				log.Printf("❌ Failed to set %s: %v", path, err)
-				return fmt.Errorf("failed to set %s: %w", path, err)
-			}
-			log.Printf("✅ Set %s", path)
+		// Feishu: 如果 creds 中包含 accountId，则写入 accounts 映射表，否则写入根部。
+		if aid := creds["accountId"]; aid != "" && aid != "default" {
+			return saveFeishuAccountManual(configDir, aid, creds["appId"], creds["appSecret"])
 		}
-		// 启用 feishu 渠道
-		if _, err := RunCommandWithEnvAndTimeout(5*time.Second, env, "openclaw", "config", "set", "channels.feishu.enabled", "true"); err != nil {
-			return fmt.Errorf("enable feishu channel: %w", err)
-		}
-
+		return saveFeishuSecretManual(configDir, creds["appId"], creds["appSecret"])
 	case "telegram":
-		// openclaw channels add --channel telegram --token <botToken>
-		// Telegram 的 inputKey 是 "token"，对应 channels add 的 --token flag
-		token, ok := secrets["token"]
-		if !ok || token == "" {
+		// Telegram 支持 channels add --token
+		token := creds["token"]
+		if token == "" {
 			return fmt.Errorf("telegram requires 'token' field")
 		}
 		_, err := RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "channels", "add",
 			"--channel", "telegram",
 			"--token", token,
 		)
-		if err != nil {
-			log.Printf("❌ Failed to configure telegram: %v", err)
-			return fmt.Errorf("failed to configure telegram: %w", err)
-		}
-		log.Printf("✅ Telegram configured via channels add")
-
+		return err
 	case "qqbot":
-		// openclaw channels add --channel qqbot --token <appId>:<clientSecret>
-		// qqbot 的 --token 需要以 appId:clientSecret 的格式传入
-		appId, _ := secrets["token"]
-		clientSecret, _ := secrets["password"]
-		if appId == "" || clientSecret == "" {
-			return fmt.Errorf("qqbot requires 'token' (AppID) and 'password' (ClientSecret) fields")
+		// QQBot: 如果 creds 中包含 accountId，则写入 accounts 映射表，否则写入根部。
+		if aid := creds["accountId"]; aid != "" && aid != "default" {
+			return saveQQBotAccountManual(configDir, aid, creds["appId"], creds["token"])
 		}
-		token := fmt.Sprintf("%s:%s", appId, clientSecret)
-		_, err := RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "channels", "add",
-			"--channel", "qqbot",
-			"--token", token,
-		)
-		if err != nil {
-			log.Printf("❌ Failed to configure qqbot: %v", err)
-			return fmt.Errorf("failed to configure qqbot: %w", err)
-		}
-		log.Printf("✅ QQBot configured via channels add")
-
+		return saveQQBotSecretManual(configDir, creds["appId"], creds["token"])
 	default:
 		// 通用回退：直接写 channels.<id>.<key>
 		log.Printf("⚠️ Using generic config set for unknown channel: %s", channelID)
-		for k, v := range secrets {
+		for k, v := range creds {
 			path := fmt.Sprintf("channels.%s.%s", channelID, k)
 			if _, err := RunCommandWithEnvAndTimeout(10*time.Second, env, "openclaw", "config", "set", path, v); err != nil {
 				return fmt.Errorf("set %s: %w", path, err)
@@ -809,12 +972,95 @@ func SaveChannelSecret(configDir, channelID string, secrets map[string]string) e
 	return nil
 }
 
+// DeleteChannelAccount 从 openclaw.json 中删除指定账号的凭证。
+func DeleteChannelAccount(configDir, channelID, accountID string) error {
+	return updateOpenClawConfig(configDir, func(cfg map[string]interface{}) error {
+		channels := ensureMap(cfg, "channels")
+		ch, ok := channels[channelID].(map[string]interface{})
+		if !ok {
+			return nil
+		}
+		if accountID == "default" || accountID == "" {
+			// 删除根部关键字段
+			delete(ch, "appId")
+			delete(ch, "appSecret")
+			delete(ch, "token")
+			delete(ch, "botToken")
+		} else {
+			accounts, ok := ch["accounts"].(map[string]interface{})
+			if ok {
+				delete(accounts, accountID)
+			}
+		}
+		return nil
+	})
+}
+
+func saveFeishuSecretManual(configDir, appID, appSecret string) error {
+	return updateOpenClawConfig(configDir, func(cfg map[string]interface{}) error {
+		channels := ensureMap(cfg, "channels")
+		feishu := ensureMap(channels, "feishu")
+		feishu["appId"] = strings.TrimSpace(appID)
+		feishu["appSecret"] = strings.TrimSpace(appSecret)
+		feishu["enabled"] = true
+		return nil
+	})
+}
+
+func saveFeishuAccountManual(configDir, accountID, appID, appSecret string) error {
+	return updateOpenClawConfig(configDir, func(cfg map[string]interface{}) error {
+		channels := ensureMap(cfg, "channels")
+		feishu := ensureMap(channels, "feishu")
+		accounts := ensureMap(feishu, "accounts")
+		acc := ensureMap(accounts, accountID)
+		acc["appId"] = strings.TrimSpace(appID)
+		acc["appSecret"] = strings.TrimSpace(appSecret)
+		return nil
+	})
+}
+
+func saveQQBotSecretManual(configDir, appID, token string) error {
+	return updateOpenClawConfig(configDir, func(cfg map[string]interface{}) error {
+		channels := ensureMap(cfg, "channels")
+		qqbot := ensureMap(channels, "qqbot")
+		qqbot["appId"] = strings.TrimSpace(appID)
+		qqbot["token"] = strings.TrimSpace(token)
+		qqbot["enabled"] = true
+		return nil
+	})
+}
+
+func saveQQBotAccountManual(configDir, accountID, appID, token string) error {
+	return updateOpenClawConfig(configDir, func(cfg map[string]interface{}) error {
+		channels := ensureMap(cfg, "channels")
+		qqbot := ensureMap(channels, "qqbot")
+		accounts := ensureMap(qqbot, "accounts")
+		acc := ensureMap(accounts, accountID)
+		acc["appId"] = strings.TrimSpace(appID)
+		acc["token"] = strings.TrimSpace(token)
+		return nil
+	})
+}
+
 // BindChannelRouteToAgent 写入根级 bindings[]（openclaw agents bind --bind <channel[:account]>）。
+// 如果该渠道已绑定到其它 Agent，则会自动解绑，实现“切换”效果。
 func BindChannelRouteToAgent(configDir, channelID, agentID, accountID string) error {
 	env, err := OpenClawConfigEnv(configDir)
 	if err != nil {
 		return err
 	}
+
+	// 1. 精准检查冲突：只有当【同一个渠道】且【同一个账号】已经绑定了【不同的 Agent】时，才需要解绑。
+	// 这允许不同的账号（AccountId）绑定到不同的 Agent 而不互相干扰。
+	rows, _ := listRouteBindingRowsForChannel(configDir, channelID)
+	for _, row := range rows {
+		// 只要 AccountID 一致，但 Agent 不同，就存在路由冲突（openclaw 不允许同一个端点给两个机器人）
+		if row.AccountID == accountID && row.AgentID != agentID {
+			log.Printf("⚠️ Found conflicting binding for %s:%s (Current Agent: %s, New Agent: %s), unbinding old one...", channelID, accountID, row.AgentID, agentID)
+			_ = UnbindChannelRouteFromAgent(configDir, channelID, row.AgentID, row.AccountID)
+		}
+	}
+
 	configPath := filepath.Join(configDir, "openclaw.json")
 	bindSpec := strings.TrimSpace(channelID)
 	if aid := strings.TrimSpace(accountID); aid != "" {
@@ -891,3 +1137,39 @@ func BindDingTalkToAgent(configDir, agentID string) error {
 // 注意：DingTalk 不是 openclaw 的有效渠道（不在 openclaw extensions 中），
 // 因此没有 BindDingTalkToAgent 和 UnbindDingTalkFromAgent 函数。
 // 如果将来 openclaw 官方支持 DingTalk，再添加。
+
+func updateOpenClawConfig(configDir string, fn func(map[string]interface{}) error) error {
+	configPath := filepath.Join(configDir, "openclaw.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+	var cfg map[string]interface{}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return err
+	}
+	if err := fn(cfg); err != nil {
+		return err
+	}
+	newData, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(configPath, newData, 0644)
+}
+
+func ensureMap(parent map[string]interface{}, key string) map[string]interface{} {
+	v, ok := parent[key]
+	if !ok || v == nil {
+		m := make(map[string]interface{})
+		parent[key] = m
+		return m
+	}
+	m, ok := v.(map[string]interface{})
+	if !ok {
+		m = make(map[string]interface{})
+		parent[key] = m
+		return m
+	}
+	return m
+}

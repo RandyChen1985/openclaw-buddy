@@ -3,7 +3,7 @@ import { Card, Tag, Button, Modal, message, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Cloud, RefreshCw, Smartphone, Trash2, Send, MessageSquare, Bell, Settings, LayoutGrid, AlertCircle, Copy, Users } from 'lucide-react';
 import api from '../api';
-import ChannelSetupModal from '../components/ChannelSetupModal';
+
 import ChannelAccountsModal from '../components/ChannelAccountsModal';
 import { channelPluginUiState, type ChannelPluginUiState } from '../utils/channelPlugins';
 
@@ -61,7 +61,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   const [pluginsList, setPluginsList] = React.useState<any[]>([]);
   const [loadingPlugins, setLoadingPlugins] = React.useState(false);
   const [pluginsListError, setPluginsListError] = React.useState<string | null>(null);
-  const [setupVisible, setSetupVisible] = React.useState(false);
+
   const [selectedChannel, setSelectedChannel] = React.useState<any>(null);
   const [accountsModalVisible, setAccountsModalVisible] = React.useState(false);
   const [, setLoadingMetadata] = React.useState(false);
@@ -313,8 +313,8 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                 hoverable={isLoaded}
                 onClick={() => {
                   if (isLoaded) {
-                    setSelectedChannel(ch);
-                    setSetupVisible(true);
+                    setRouteAccountsChannel(ch);
+                    setRouteAccountsOpen(true);
                   }
                 }}
                 styles={{ body: { padding: 16 } }}
@@ -355,6 +355,8 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                       }}
                     >
                       <Button
+                        type="primary"
+                        ghost={isConfigured}
                         size="small"
                         icon={<Users size={13} />}
                         onClick={(e) => {
@@ -366,22 +368,6 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                       >
                         {t('channels.manageAccounts')}
                       </Button>
-                      <Tooltip title={t('channels.setupTooltip')}>
-                        <Button
-                          type="primary"
-                          size="small"
-                          ghost={isConfigured}
-                          icon={<Settings size={13} />}
-                          style={{ borderRadius: 6, fontSize: 12 }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedChannel(ch);
-                            setSetupVisible(true);
-                          }}
-                        >
-                          {t('channels.setup')}
-                        </Button>
-                      </Tooltip>
                     </div>
                   )}
                 </div>
@@ -487,15 +473,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
           }}
         />
 
-        <ChannelSetupModal 
-          visible={setupVisible}
-          channel={selectedChannel}
-          onClose={() => setSetupVisible(false)}
-          onSuccess={() => {
-            void Promise.all([fetchStatus(), fetchOpenClawPlugins()]);
-            onRefreshChannels();
-          }}
-        />
+
       </div>
     </div>
   );

@@ -540,7 +540,17 @@
     "bindRouteSubmit": "添加绑定",
     "bindRouteSuccess": "已添加路由绑定",
     "bindingSourceRoot": "根级 bindings",
-    "bindingSourceAgentsList": "agents.list 内（可能无效）"
+    "bindingSourceAgentsList": "agents.list 内（可能无效）",
+    "credentialManagement": "账号凭证管理",
+    "addCredential": "添加新账号凭证",
+    "editCredential": "编辑",
+    "deleteCredential": "删除",
+    "saveCredential": "确认保存",
+    "newAccountIdPlaceholder": "账号 ID (例如: nomi_bot)",
+    "appIdPlaceholder": "App ID",
+    "appSecretPlaceholder": "App Secret",
+    "credentialManagementHint": "此处管理该渠道的 AppID/Secret 凭证。默认账号 (default) 是全局通用的，子账号用于多 Bot 独立运行。",
+    "bindRelationshipHint": "关联（路由绑定）决定了当该渠道收到消息时，转发给哪只小龙虾处理。"
   },
   "devices": {
     "pendingRequests": "待处理连接请求",

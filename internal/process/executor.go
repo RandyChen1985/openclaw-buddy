@@ -53,6 +53,48 @@ func trimRunOutputForErr(s string, max int) string {
 	return s[:max] + "..."
 }
 
+// cleanOutputForHint 移除 Config warnings 及 ASCII 装饰边框，只保留核心错误。
+func cleanOutputForHint(s string) string {
+	lines := strings.Split(s, "\n")
+	var filtered []string
+	isWarningBlock := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		// 识别 openclaw 的 Config warnings 装饰块
+		if strings.Contains(trimmed, "Config warnings") {
+			isWarningBlock = true
+			continue
+		}
+		// 装饰边框
+		if strings.Contains(trimmed, "───") || strings.Contains(trimmed, "╰─") || strings.Contains(trimmed, "╭─") || strings.Contains(trimmed, "│") || strings.Contains(trimmed, "◇") {
+			continue
+		}
+
+		// 过滤掉已知的无用日志行
+		if strings.HasPrefix(trimmed, "09:") || strings.HasPrefix(trimmed, "10:") || strings.Contains(trimmed, "[plugins]") {
+			continue
+		}
+
+		if isWarningBlock && strings.HasPrefix(trimmed, "- ") {
+			// 警告内容行，可以保留也可以跳过。由于我们现在追求精简，先跳过。
+			continue
+		}
+
+		filtered = append(filtered, trimmed)
+	}
+
+	if len(filtered) == 0 {
+		return trimRunOutputForErr(s, 800)
+	}
+
+	return trimRunOutputForErr(strings.Join(filtered, " | "), 800)
+}
+
 // expandUserConfigDir 展开 ~/ 前缀，避免 filepath.Abs("~/.openclaw") 把 ~ 当成普通目录名。
 func expandUserConfigDir(dir string) string {
 	d := strings.TrimSpace(dir)
@@ -118,7 +160,7 @@ func RunCommandWithEnvAndTimeout(timeout time.Duration, env []string, name strin
 
 	if err != nil {
 		result.Success = false
-		hint := trimRunOutputForErr(combinedOutput, 800)
+		hint := cleanOutputForHint(combinedOutput)
 		if result.ReturnCode != 0 {
 			return result, fmt.Errorf("%s %v: exit %d: %s", name, args, result.ReturnCode, hint)
 		}
