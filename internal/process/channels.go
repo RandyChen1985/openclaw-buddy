@@ -543,7 +543,7 @@ func listAgentsJSONWithConfig(configDir string) ([]agentListJSONRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := RunCommandWithEnvAndTimeout(25*time.Second, env, "openclaw", "agents", "list", "--json")
+	res, err := RunCommandWithEnvAndTimeout(45*time.Second, env, "openclaw", "agents", "list", "--json")
 	if err != nil {
 		return nil, fmt.Errorf("agents list: %w", err)
 	}
@@ -881,7 +881,7 @@ func GetChannelsStatus(configDir string) ([]ChannelStatus, error) {
 		res = &CommandResult{Output: ""}
 	} else {
 		var err error
-		res, err = RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "channels", "list")
+		res, err = RunCommandWithEnvAndTimeout(45*time.Second, env, "openclaw", "channels", "list")
 		if err != nil {
 			log.Printf("⚠️ openclaw channels list failed: %v", err)
 		}
@@ -1065,7 +1065,7 @@ func SaveChannelSecret(configDir, channelID string, creds map[string]string) err
 		if token == "" {
 			return fmt.Errorf("telegram requires 'token' field")
 		}
-		_, err := RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "channels", "add",
+		_, err := RunCommandWithEnvAndTimeout(45*time.Second, env, "openclaw", "channels", "add",
 			"--channel", "telegram",
 			"--token", token,
 		)
@@ -1081,7 +1081,7 @@ func SaveChannelSecret(configDir, channelID string, creds map[string]string) err
 		log.Printf("⚠️ Using generic config set for unknown channel: %s", channelID)
 		for k, v := range creds {
 			path := fmt.Sprintf("channels.%s.%s", channelID, k)
-			if _, err := RunCommandWithEnvAndTimeout(10*time.Second, env, "openclaw", "config", "set", path, v); err != nil {
+			if _, err := RunCommandWithEnvAndTimeout(30*time.Second, env, "openclaw", "config", "set", path, v); err != nil {
 				return fmt.Errorf("set %s: %w", path, err)
 			}
 		}
@@ -1185,7 +1185,7 @@ func BindChannelRouteToAgent(configDir, channelID, agentID, accountID string) er
 		bindSpec = bindSpec + ":" + aid
 	}
 	log.Printf("🔗 Binding %s -> agent %s (config: %s)", bindSpec, agentID, configPath)
-	_, err = RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "agents", "bind",
+	_, err = RunCommandWithEnvAndTimeout(60*time.Second, env, "openclaw", "agents", "bind",
 		"--agent", strings.TrimSpace(agentID),
 		"--bind", bindSpec,
 	)
@@ -1203,7 +1203,7 @@ func UnbindChannelRouteFromAgent(configDir, channelID, agentID, accountID string
 		bindSpec = bindSpec + ":" + aid
 	}
 	log.Printf("🔗 Unbinding %s from agent %s", bindSpec, agentID)
-	_, err = RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "agents", "unbind",
+	_, err = RunCommandWithEnvAndTimeout(60*time.Second, env, "openclaw", "agents", "unbind",
 		"--agent", strings.TrimSpace(agentID),
 		"--bind", bindSpec,
 	)
