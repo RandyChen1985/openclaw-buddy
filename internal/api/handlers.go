@@ -2644,8 +2644,11 @@ func (s *Server) saveChannelConfig(c *gin.Context) {
 			bindErr = process.BindQQBotToAgent(s.cfg.OpenClawConfigDir, req.AgentID)
 		default:
 			log.Printf("⚠️ No specific binding logic for channel: %s", req.ChannelID)
-			configPath := filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json")
-			env := []string{"OPENCLAW_CONFIG_PATH=" + configPath}
+			env, envErr := process.OpenClawConfigEnv(s.cfg.OpenClawConfigDir)
+			if envErr != nil {
+				s.Error(c, http.StatusInternalServerError, envErr.Error())
+				return
+			}
 			_, bindErr = process.RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "agents", "bind",
 				"--agent", req.AgentID, "--bind", req.ChannelID)
 		}
@@ -2679,8 +2682,11 @@ func (s *Server) unbindChannel(c *gin.Context) {
 		unbindErr = process.UnbindChannelRouteFromAgent(s.cfg.OpenClawConfigDir, channelID, agentID, accountID)
 	default:
 		log.Printf("⚠️ No specific unbind logic for channel: %s, falling back to basic CLI unbind", channelID)
-		configPath := filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json")
-		env := []string{"OPENCLAW_CONFIG_PATH=" + configPath}
+		env, envErr := process.OpenClawConfigEnv(s.cfg.OpenClawConfigDir)
+		if envErr != nil {
+			s.Error(c, http.StatusInternalServerError, envErr.Error())
+			return
+		}
 		bindSpec := channelID
 		if accountID != "" {
 			bindSpec = channelID + ":" + accountID

@@ -910,13 +910,15 @@ func RemoveOpenClawCronJob(id string) error {
 	return nil
 }
 
-// GetOpenClawPlugins 列出插件；configDir 为 OpenClaw 配置目录（内含 openclaw.json），与 channels list 等命令一致地注入 OPENCLAW_CONFIG_PATH，避免控制台与网关使用不同配置时插件列表不一致。
+// GetOpenClawPlugins 列出插件；configDir 为 OpenClaw 配置目录（内含 openclaw.json），与渠道命令一致注入 OpenClawConfigEnv，避免 CLI 写到默认目录导致与网关不一致。
 func GetOpenClawPlugins(configDir string) (any, error) {
-	configPath := filepath.Join(configDir, "openclaw.json")
-	env := []string{"OPENCLAW_CONFIG_PATH=" + configPath}
-	res, _ := RunCommandWithEnvAndTimeout(45*time.Second, env, GetOpenClawBinary(), "plugins", "list", "--json")
-	if !res.Success {
-		return nil, fmt.Errorf("failed to list plugins: %s. Output: %s", res.Error, res.Output)
+	env, err := OpenClawConfigEnv(configDir)
+	if err != nil {
+		return nil, err
+	}
+	res, err := RunCommandWithEnvAndTimeout(45*time.Second, env, GetOpenClawBinary(), "plugins", "list", "--json")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list plugins: %w", err)
 	}
 
 	// 清理 ANSI 颜色代码

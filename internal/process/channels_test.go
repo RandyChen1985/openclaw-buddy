@@ -33,14 +33,16 @@ func setupTestEnv(t *testing.T) string {
 }
 
 func validateConfig(t *testing.T, configDir string) {
-	configPath := filepath.Join(configDir, "openclaw.json")
-	env := []string{"OPENCLAW_CONFIG_PATH=" + configPath}
-	
-	timeout := 10 * time.Second
-	if testing.Short() {
-		timeout = 1 * time.Second
+	env, err := OpenClawConfigEnv(configDir)
+	if err != nil {
+		t.Fatalf("OpenClawConfigEnv: %v", err)
 	}
-	_, err := RunCommandWithEnvAndTimeout(timeout, env, "openclaw", "config", "validate")
+	// validate 冷启动可能较慢，过短超时会在 CLI 已输出「Config valid」时仍被判定为 deadline
+	timeout := 30 * time.Second
+	if testing.Short() {
+		timeout = 20 * time.Second
+	}
+	_, err = RunCommandWithEnvAndTimeout(timeout, env, "openclaw", "config", "validate")
 	if err != nil {
 		t.Fatalf("Config validation failed: %v", err)
 	}

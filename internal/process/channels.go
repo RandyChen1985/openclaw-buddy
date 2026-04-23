@@ -336,11 +336,13 @@ type agentListJSONRow struct {
 }
 
 func listAgentsJSONWithConfig(configDir string) ([]agentListJSONRow, error) {
-	configPath := filepath.Join(configDir, "openclaw.json")
-	env := []string{"OPENCLAW_CONFIG_PATH=" + configPath}
-	res, _ := RunCommandWithEnvAndTimeout(25*time.Second, env, "openclaw", "agents", "list", "--json")
-	if !res.Success {
-		return nil, fmt.Errorf("agents list: %s", res.Error)
+	env, err := OpenClawConfigEnv(configDir)
+	if err != nil {
+		return nil, err
+	}
+	res, err := RunCommandWithEnvAndTimeout(25*time.Second, env, "openclaw", "agents", "list", "--json")
+	if err != nil {
+		return nil, fmt.Errorf("agents list: %w", err)
 	}
 	clean := StripANSI(res.Output)
 	js := ExtractJSON(clean)
@@ -614,11 +616,19 @@ func GetChannelAccountsOverview(configDir, channelID string) (*ChannelAccountsOv
 }
 
 func GetChannelsStatus(configDir string) ([]ChannelStatus, error) {
-	configPath := filepath.Join(configDir, "openclaw.json")
-	env := []string{"OPENCLAW_CONFIG_PATH=" + configPath}
+	var res *CommandResult
+	if env, e := OpenClawConfigEnv(configDir); e != nil {
+		log.Printf("⚠️ GetChannelsStatus: invalid config dir: %v", e)
+		res = &CommandResult{Output: ""}
+	} else {
+		var err error
+		res, err = RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "channels", "list")
+		if err != nil {
+			log.Printf("⚠️ openclaw channels list failed: %v", err)
+		}
+	}
 
 	// 调用 openclaw channels list 获取实时状态（与旧逻辑兼容）
-	res, _ := RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "channels", "list")
 
 	statusMap := make(map[string]bool)
 	lines := strings.Split(res.Output, "\n")
@@ -724,8 +734,11 @@ func GetGenericQRCode(channelID string) (*WeChatQRCode, error) {
 //   - telegram：openclaw channels add --channel telegram --token <botToken>
 //   - qqbot：openclaw channels add --channel qqbot --token <appId> --password <clientSecret>
 func SaveChannelSecret(configDir, channelID string, secrets map[string]string) error {
+	env, err := OpenClawConfigEnv(configDir)
+	if err != nil {
+		return err
+	}
 	configPath := filepath.Join(configDir, "openclaw.json")
-	env := []string{"OPENCLAW_CONFIG_PATH=" + configPath}
 	log.Printf("⚙️ Saving credentials for channel %s (config: %s)", channelID, configPath)
 
 	switch channelID {
@@ -742,7 +755,9 @@ func SaveChannelSecret(configDir, channelID string, secrets map[string]string) e
 			log.Printf("✅ Set %s", path)
 		}
 		// 启用 feishu 渠道
-		_, _ = RunCommandWithEnvAndTimeout(5*time.Second, env, "openclaw", "config", "set", "channels.feishu.enabled", "true")
+		if _, err := RunCommandWithEnvAndTimeout(5*time.Second, env, "openclaw", "config", "set", "channels.feishu.enabled", "true"); err != nil {
+			return fmt.Errorf("enable feishu channel: %w", err)
+		}
 
 	case "telegram":
 		// openclaw channels add --channel telegram --token <botToken>
@@ -785,7 +800,9 @@ func SaveChannelSecret(configDir, channelID string, secrets map[string]string) e
 		log.Printf("⚠️ Using generic config set for unknown channel: %s", channelID)
 		for k, v := range secrets {
 			path := fmt.Sprintf("channels.%s.%s", channelID, k)
-			_, _ = RunCommandWithEnvAndTimeout(10*time.Second, env, "openclaw", "config", "set", path, v)
+			if _, err := RunCommandWithEnvAndTimeout(10*time.Second, env, "openclaw", "config", "set", path, v); err != nil {
+				return fmt.Errorf("set %s: %w", path, err)
+			}
 		}
 	}
 
@@ -794,14 +811,17 @@ func SaveChannelSecret(configDir, channelID string, secrets map[string]string) e
 
 // BindChannelRouteToAgent 写入根级 bindings[]（openclaw agents bind --bind <channel[:account]>）。
 func BindChannelRouteToAgent(configDir, channelID, agentID, accountID string) error {
+	env, err := OpenClawConfigEnv(configDir)
+	if err != nil {
+		return err
+	}
 	configPath := filepath.Join(configDir, "openclaw.json")
-	env := []string{"OPENCLAW_CONFIG_PATH=" + configPath}
 	bindSpec := strings.TrimSpace(channelID)
 	if aid := strings.TrimSpace(accountID); aid != "" {
 		bindSpec = bindSpec + ":" + aid
 	}
 	log.Printf("🔗 Binding %s -> agent %s (config: %s)", bindSpec, agentID, configPath)
-	_, err := RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "agents", "bind",
+	_, err = RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "agents", "bind",
 		"--agent", strings.TrimSpace(agentID),
 		"--bind", bindSpec,
 	)
@@ -810,14 +830,16 @@ func BindChannelRouteToAgent(configDir, channelID, agentID, accountID string) er
 
 // UnbindChannelRouteFromAgent 从根级 bindings[] 移除路由（openclaw agents unbind --bind <channel[:account]>）。
 func UnbindChannelRouteFromAgent(configDir, channelID, agentID, accountID string) error {
-	configPath := filepath.Join(configDir, "openclaw.json")
-	env := []string{"OPENCLAW_CONFIG_PATH=" + configPath}
+	env, err := OpenClawConfigEnv(configDir)
+	if err != nil {
+		return err
+	}
 	bindSpec := strings.TrimSpace(channelID)
 	if aid := strings.TrimSpace(accountID); aid != "" {
 		bindSpec = bindSpec + ":" + aid
 	}
 	log.Printf("🔗 Unbinding %s from agent %s", bindSpec, agentID)
-	_, err := RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "agents", "unbind",
+	_, err = RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "agents", "unbind",
 		"--agent", strings.TrimSpace(agentID),
 		"--bind", bindSpec,
 	)

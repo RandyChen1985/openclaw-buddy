@@ -3,9 +3,12 @@ package process
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -16,6 +19,34 @@ type CommandResult struct {
 	Stderr     string `json:"stderr"`
 	ReturnCode int    `json:"return_code"`
 	Error      string `json:"error,omitempty"`
+}
+
+// OpenClawConfigEnv 返回注入子进程的环境变量，使 openclaw CLI 读写指定目录下的 openclaw.json。
+// 与 Buddy 的 OPENCLAW_CONFIG_DIR 及 CheckConfig 中 OPENCLAW_CONFIG_DIR 用法一致；若只设置
+// OPENCLAW_CONFIG_PATH 而部分 CLI 仍认「配置目录」，可能把变更写到默认 ~/.openclaw。
+func OpenClawConfigEnv(configDir string) ([]string, error) {
+	dir := strings.TrimSpace(configDir)
+	if dir == "" {
+		return nil, fmt.Errorf("openclaw config dir is empty")
+	}
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
+	cfgPath := filepath.Join(absDir, "openclaw.json")
+	return []string{
+		"OPENCLAW_CONFIG_DIR=" + absDir,
+		"OPENCLAW_STATE_DIR=" + absDir,
+		"OPENCLAW_CONFIG_PATH=" + cfgPath,
+	}, nil
+}
+
+func trimRunOutputForErr(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
 }
 
 // RunCommandWithTimeout executes a command and captures its output with a timeout.
@@ -41,18 +72,8 @@ func RunCommandWithEnvAndTimeout(timeout time.Duration, env []string, name strin
 	stderrStr := StripANSI(stderr.String())
 	combinedOutput := stdoutStr + stderrStr
 
-	if ctx.Err() == context.DeadlineExceeded {
-		return &CommandResult{
-			Success: false,
-			Output:  combinedOutput,
-			Stdout:  stdoutStr,
-			Stderr:  stderrStr,
-			Error:   "Command timed out",
-		}, nil
-	}
-
 	result := &CommandResult{
-		Success: err == nil,
+		Success: err == nil && ctx.Err() == nil,
 		Output:  combinedOutput,
 		Stdout:  stdoutStr,
 		Stderr:  stderrStr,
@@ -62,6 +83,23 @@ func RunCommandWithEnvAndTimeout(timeout time.Duration, env []string, name strin
 		result.ReturnCode = exitErr.ExitCode()
 	} else if err != nil {
 		result.Error = err.Error()
+	}
+
+	if ctx.Err() == context.DeadlineExceeded {
+		result.Success = false
+		if result.Error == "" {
+			result.Error = "Command timed out"
+		}
+		return result, fmt.Errorf("%s: %w (%s)", name, ctx.Err(), trimRunOutputForErr(combinedOutput, 800))
+	}
+
+	if err != nil {
+		result.Success = false
+		hint := trimRunOutputForErr(combinedOutput, 800)
+		if result.ReturnCode != 0 {
+			return result, fmt.Errorf("%s %v: exit %d: %s", name, args, result.ReturnCode, hint)
+		}
+		return result, fmt.Errorf("%s %v: %v; %s", name, args, err, hint)
 	}
 
 	return result, nil

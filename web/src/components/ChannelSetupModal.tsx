@@ -100,7 +100,8 @@ const ChannelSetupModal: React.FC<ChannelSetupModalProps> = ({ visible, channel,
       onSuccess();
       onClose();
     } catch (err: any) {
-      message.error(t('common.saveFailed') || '保存失败');
+      const detail = err?.response?.data?.message || err?.response?.data?.error || err?.message;
+      message.error(detail || t('common.saveFailed') || '保存失败');
     } finally {
       setLoading(false);
     }
