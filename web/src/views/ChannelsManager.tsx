@@ -1,16 +1,15 @@
 import React from 'react';
-import { Card, Tag, Button, Modal, message } from 'antd';
+import { Card, Tag, Button, Modal, message, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Cloud, RefreshCw, Smartphone, Trash2, Send, MessageSquare, Bell, Settings, LayoutGrid, AlertCircle, Copy } from 'lucide-react';
 import api from '../api';
 import ChannelSetupModal from '../components/ChannelSetupModal';
+import { channelPluginUiState, type ChannelPluginUiState } from '../utils/channelPlugins';
 
 interface ChannelStatus {
   id: string;
   configured: boolean;
   enabled: boolean;
-  pluginStatus: string;
-  pluginError: string;
 }
 
 interface ChannelsManagerProps {
@@ -52,11 +51,13 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   const { t } = useTranslation();
   const channelsList = chatChannels?.data || [];
   const configuredChannels = channelsList.filter((c: any) => c.configured);
-  
-  const isRefreshing = loadingBots || loadingConfig || refreshingWeixin || loadingChannels;
 
   const [channelMetadata, setChannelMetadata] = React.useState<any[]>([]);
   const [channelStatus, setChannelStatus] = React.useState<ChannelStatus[]>([]);
+  /** 与插件管理页同源：GET /v1/openclaw/plugins */
+  const [pluginsList, setPluginsList] = React.useState<any[]>([]);
+  const [loadingPlugins, setLoadingPlugins] = React.useState(false);
+  const [pluginsListError, setPluginsListError] = React.useState<string | null>(null);
   const [setupVisible, setSetupVisible] = React.useState(false);
   const [selectedChannel, setSelectedChannel] = React.useState<any>(null);
   const [accountsModalVisible, setAccountsModalVisible] = React.useState(false);
@@ -65,9 +66,26 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   const [activeChannelAccounts, setActiveChannelAccounts] = React.useState<any[]>([]);
   const [managementTitle, setManagementTitle] = React.useState('');
 
+  const isRefreshing = loadingBots || loadingConfig || refreshingWeixin || loadingChannels || loadingPlugins;
+
+  const fetchOpenClawPlugins = async () => {
+    setLoadingPlugins(true);
+    setPluginsListError(null);
+    try {
+      const res = await api.get('/v1/openclaw/plugins');
+      const body = res.data;
+      const list = body?.data ?? body;
+      setPluginsList(Array.isArray(list) ? list : []);
+    } catch (err: any) {
+      setPluginsListError(err?.message || 'fetch failed');
+      setPluginsList([]);
+    } finally {
+      setLoadingPlugins(false);
+    }
+  };
+
   React.useEffect(() => {
-    fetchMetadata();
-    fetchStatus();
+    void Promise.all([fetchMetadata(), fetchStatus(), fetchOpenClawPlugins()]);
   }, []);
 
   const fetchMetadata = async () => {
@@ -105,7 +123,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
         try {
           await api.delete(`/v1/channels/${ch.id}/setup`);
           message.success(`${ch.name} 解绑成功`);
-          fetchStatus();
+          void Promise.all([fetchStatus(), fetchOpenClawPlugins()]);
           onRefreshChannels();
         } catch (err: any) {
           message.error(`解绑失败: ${err?.response?.data?.message || err.message}`);
@@ -176,7 +194,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
             onClick={() => {
               onRefreshChannels();
               if (onRefreshWeixin) onRefreshWeixin();
-              fetchStatus();
+              void Promise.all([fetchStatus(), fetchOpenClawPlugins()]);
             }}
             loading={isRefreshing}
             style={{ borderRadius: 8 }}
@@ -184,6 +202,13 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
             {t('common.refresh')}
           </Button>
         </div>
+
+        {pluginsListError && (
+          <div style={{ marginBottom: 16, padding: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, color: '#64748b' }}>
+            {t('channels.pluginHintUnknown')}
+            <span style={{ color: '#94a3b8', marginLeft: 8 }}>({pluginsListError})</span>
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
           
@@ -236,24 +261,55 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
           {channelMetadata.map(ch => {
             const status = channelStatus.find(s => s.id === ch.id);
             const isConfigured = status?.configured || false;
-            const pluginStatus = status?.pluginStatus || 'missing';
-            
+            const pluginRow = pluginsList.find((p: any) => p.id === ch.id);
+            const pluginUi: ChannelPluginUiState = pluginsListError ? 'unknown' : channelPluginUiState(pluginRow);
+            const isLoaded = pluginUi === 'loaded';
+
+            const installCmd = `openclaw plugins install @openclaw/${ch.id}`;
+            const enableCmd = `openclaw plugins enable ${ch.id}`;
+
+            const hintBg =
+              pluginUi === 'disabled' ? '#fffbeb' : pluginUi === 'unknown' ? '#f8fafc' : '#fef2f2';
+            const hintBorder =
+              pluginUi === 'disabled' ? '#fde68a' : pluginUi === 'unknown' ? '#e2e8f0' : '#fecaca';
+            const hintColor =
+              pluginUi === 'disabled' ? '#d97706' : pluginUi === 'unknown' ? '#64748b' : '#dc2626';
+
+            const statusTag = (() => {
+              if (isLoaded) return null;
+              if (pluginUi === 'unknown') {
+                return <Tag color="default" style={{ borderRadius: 4, margin: 0, border: 'none' }}>{t('channels.pluginUnknown')}</Tag>;
+              }
+              if (pluginUi === 'disabled') {
+                return <Tag color="warning" style={{ borderRadius: 4, margin: 0, border: 'none' }}>{t('channels.pluginDisabled')}</Tag>;
+              }
+              if (pluginUi === 'error') {
+                const errText = (pluginRow?.error as string) || '';
+                return (
+                  <Tooltip title={errText || undefined}>
+                    <Tag color="error" style={{ borderRadius: 4, margin: 0, border: 'none' }}>{t('channels.pluginError')}</Tag>
+                  </Tooltip>
+                );
+              }
+              return <Tag color="error" style={{ borderRadius: 4, margin: 0, border: 'none' }}>{t('channels.pluginMissing')}</Tag>;
+            })();
+
             return (
               <Card 
                 key={ch.id}
-                hoverable={pluginStatus === 'loaded'}
+                hoverable={isLoaded}
                 onClick={() => {
-                  if (pluginStatus === 'loaded') {
+                  if (isLoaded) {
                     setSelectedChannel(ch);
                     setSetupVisible(true);
                   }
                 }}
                 styles={{ body: { padding: 16 } }}
-                style={{ borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', opacity: pluginStatus === 'loaded' ? 1 : 0.8 }}
+                style={{ borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', opacity: isLoaded ? 1 : 0.85 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ padding: 10, background: '#f8fafc', borderRadius: 10, flexShrink: 0, opacity: pluginStatus === 'loaded' ? 1 : 0.5 }}>
+                    <div style={{ padding: 10, background: '#f8fafc', borderRadius: 10, flexShrink: 0, opacity: isLoaded ? 1 : 0.5 }}>
                       {getIcon(ch.icon)}
                     </div>
                     <div>
@@ -262,7 +318,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {pluginStatus === 'loaded' ? (
+                    {isLoaded ? (
                       isConfigured ? (
                         <>
                           <Tag color="success" style={{ borderRadius: 4, margin: 0, border: 'none', background: '#f0fdf4', color: '#16a34a' }}>
@@ -289,38 +345,44 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                         </Button>
                       )
                     ) : (
-                      <Tag color={pluginStatus === 'disabled' ? 'warning' : 'error'} style={{ borderRadius: 4, margin: 0, border: 'none' }}>
-                        {pluginStatus === 'disabled' ? '未启用' : '未安装'}
-                      </Tag>
+                      statusTag
                     )}
                   </div>
                 </div>
                 
-                {pluginStatus !== 'loaded' && (
-                  <div style={{ marginTop: 16, padding: '12px', background: pluginStatus === 'disabled' ? '#fffbeb' : '#fef2f2', borderRadius: 8, border: `1px solid ${pluginStatus === 'disabled' ? '#fde68a' : '#fecaca'}`, display: 'flex', flexDirection: 'column', gap: 8 }} onClick={e => e.stopPropagation()}>
-                    <div style={{ fontSize: 12, color: pluginStatus === 'disabled' ? '#d97706' : '#dc2626', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+                {!isLoaded && (
+                  <div style={{ marginTop: 16, padding: '12px', background: hintBg, borderRadius: 8, border: `1px solid ${hintBorder}`, display: 'flex', flexDirection: 'column', gap: 8 }} onClick={e => e.stopPropagation()}>
+                    <div style={{ fontSize: 12, color: hintColor, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
                       <AlertCircle size={14} />
-                      {pluginStatus === 'disabled' ? '此插件已安装但被禁用，请先启用：' : '此渠道插件尚未安装，请先安装：'}
+                      {pluginUi === 'unknown' && t('channels.pluginHintUnknown')}
+                      {pluginUi === 'missing' && t('channels.pluginHintMissing')}
+                      {pluginUi === 'disabled' && t('channels.pluginHintDisabled')}
+                      {pluginUi === 'error' && t('channels.pluginHintError')}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.03)', borderRadius: 6, padding: '6px 10px', gap: 8 }}>
-                      <code style={{ fontSize: 11, color: '#334155', flex: 1, fontFamily: 'monospace', userSelect: 'all', wordBreak: 'break-all' }}>
-                        {pluginStatus === 'disabled' 
-                          ? `openclaw config set plugins.${ch.id}.enabled true` 
-                          : `openclaw plugins install @openclaw/${ch.id}`}
-                      </code>
-                      <Button 
-                        type="text" 
-                        size="small" 
-                        icon={<Copy size={12} />} 
-                        onClick={() => {
-                          navigator.clipboard.writeText(pluginStatus === 'disabled' 
-                            ? `openclaw config set plugins.${ch.id}.enabled true` 
-                            : `openclaw plugins install @openclaw/${ch.id}`);
-                          message.success('已复制命令');
-                        }}
-                        style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: '#64748b' }}
-                      />
-                    </div>
+                    {pluginUi === 'error' && pluginRow?.error && (
+                      <div style={{ fontSize: 11, color: '#991b1b', lineHeight: 1.5, wordBreak: 'break-word' }}>{String(pluginRow.error)}</div>
+                    )}
+                    {pluginUi === 'error' && (
+                      <div style={{ fontSize: 11, color: hintColor }}>{t('channels.pluginHintErrorFooter')}</div>
+                    )}
+                    {(pluginUi === 'missing' || pluginUi === 'disabled') && (
+                      <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.03)', borderRadius: 6, padding: '6px 10px', gap: 8 }}>
+                        <code style={{ fontSize: 11, color: '#334155', flex: 1, fontFamily: 'monospace', userSelect: 'all', wordBreak: 'break-all' }}>
+                          {pluginUi === 'disabled' ? enableCmd : installCmd}
+                        </code>
+                        <Button 
+                          type="text" 
+                          size="small" 
+                          icon={<Copy size={12} />} 
+                          onClick={() => {
+                            const cmd = pluginUi === 'disabled' ? enableCmd : installCmd;
+                            void navigator.clipboard.writeText(cmd);
+                            message.success(t('common.copySuccess'));
+                          }}
+                          style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: '#64748b' }}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </Card>

@@ -505,7 +505,16 @@
     "manageAccounts": "账号管理",
     "targetBot": "目标机器人 (Target Agent)",
     "targetBotTip": "指定该渠道的消息由哪个机器人响应。默认为 main (智渊)。",
-    "noAccountsInChannel": "该渠道暂无已绑定账号"
+    "noAccountsInChannel": "该渠道暂无已绑定账号",
+    "pluginMissing": "未安装",
+    "pluginDisabled": "未启用",
+    "pluginError": "加载异常",
+    "pluginUnknown": "状态未知",
+    "pluginHintMissing": "插件列表中未找到该渠道插件，请先安装：",
+    "pluginHintDisabled": "插件已安装但未启用，请在终端执行（与插件管理页「启用」一致）：",
+    "pluginHintError": "插件上报错误，请根据详情排查或在插件管理中查看：",
+    "pluginHintErrorFooter": "修复后可点击刷新或前往插件管理重试启用。",
+    "pluginHintUnknown": "无法拉取插件列表（与插件管理同一接口），请检查网络或登录态后点击刷新。"
   },
   "devices": {
     "pendingRequests": "待处理连接请求",
@@ -810,7 +819,7 @@
     "origin": "来源",
     "loaded": "已加载",
     "disabled": "未启用",
-    "error": "加载失败",
+    "error": "异常",
     "syncSuccess": "插件列表已同步",
     "fetchFailed": "获取插件列表失败",
     "noPlugins": "暂无插件数据",

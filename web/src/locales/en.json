@@ -496,7 +496,17 @@
     "orManual": "Or manually configure credentials",
     "manageAccounts": "Manage Accounts",
     "targetBot": "Target Agent",
-    "targetBotTip": "Specify which agent should respond to messages from this channel. Default is main."
+    "targetBotTip": "Specify which agent should respond to messages from this channel. Default is main.",
+    "noAccountsInChannel": "No accounts bound for this channel",
+    "pluginMissing": "Not installed",
+    "pluginDisabled": "Disabled",
+    "pluginError": "Load error",
+    "pluginUnknown": "Unknown",
+    "pluginHintMissing": "This channel plugin was not found in the plugin list. Install it first:",
+    "pluginHintDisabled": "The plugin is installed but disabled. Enable it (same as Plugin Management):",
+    "pluginHintError": "The plugin reported an error:",
+    "pluginHintErrorFooter": "Fix it in the terminal or open Plugin Management to inspect, then refresh.",
+    "pluginHintUnknown": "Could not load the plugin list (same API as Plugin Management). Check network or auth, then refresh."
   },
   "devices": {
     "pendingRequests": "Pending Connection Requests",

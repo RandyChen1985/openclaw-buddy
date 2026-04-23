@@ -91,20 +91,12 @@ var SupportedChannels = []ChannelMetadata{
 	},
 }
 
+// ChannelStatus 仅描述 openclaw channels list 中的配置/启用情况；
+// 插件是否安装、是否启用由前端调用与插件管理相同的 GET /v1/openclaw/plugins 判定。
 type ChannelStatus struct {
 	ID           string `json:"id"`
 	Configured   bool   `json:"configured"`
 	Enabled      bool   `json:"enabled"`
-	PluginStatus string `json:"pluginStatus"`
-	PluginError  string `json:"pluginError"`
-}
-
-type pluginListResponse struct {
-	Plugins []struct {
-		ID     string `json:"id"`
-		Status string `json:"status"`
-		Error  string `json:"error"`
-	} `json:"plugins"`
 }
 
 func GetChannelsStatus(configDir string) ([]ChannelStatus, error) {
@@ -131,45 +123,11 @@ func GetChannelsStatus(configDir string) ([]ChannelStatus, error) {
 
 	var results []ChannelStatus
 
-	// 尝试从缓存中获取插件状态，提升性能，不再每次调用 CLI
-	pluginStatusMap := make(map[string]string)
-	pluginErrorMap := make(map[string]string)
-	
-	cachedPlugins, _, err := GetCachedData("plugins")
-	if err == nil && cachedPlugins != nil {
-		log.Printf("DEBUG: cachedPlugins type is %T", cachedPlugins)
-		if pluginsList, ok := cachedPlugins.([]interface{}); ok {
-			for _, item := range pluginsList {
-				if pMap, ok := item.(map[string]interface{}); ok {
-					if pID, ok := pMap["id"].(string); ok {
-						if status, ok := pMap["status"].(string); ok {
-							pluginStatusMap[pID] = status
-						}
-						if pErr, ok := pMap["error"].(string); ok {
-							pluginErrorMap[pID] = pErr
-						}
-					}
-				}
-			}
-		} else {
-			log.Printf("DEBUG: cachedPlugins is not []interface{}! It is %T", cachedPlugins)
-		}
-	} else {
-		log.Printf("⚠️ Failed to get plugins from cache: %v. UI will show plugins as missing.", err)
-	}
-
 	for _, sc := range SupportedChannels {
-		pStatus := pluginStatusMap[sc.ID]
-		pError := pluginErrorMap[sc.ID]
-		if pStatus == "" {
-			pStatus = "missing"
-		}
 		results = append(results, ChannelStatus{
-			ID:           sc.ID,
-			Configured:   statusMap[sc.ID],
-			Enabled:      statusMap[sc.ID],
-			PluginStatus: pStatus,
-			PluginError:  pError,
+			ID:         sc.ID,
+			Configured: statusMap[sc.ID],
+			Enabled:    statusMap[sc.ID],
 		})
 	}
 	return results, nil

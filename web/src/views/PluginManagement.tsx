@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../api';
 
 import type { Task } from '../hooks/useTaskCenter';
+import { channelPluginUiState, hasSignificantPluginError, isPluginOperational } from '../utils/channelPlugins';
 
 interface Plugin {
   id: string;
@@ -240,9 +241,9 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
     
     let matchesStatus = true;
     if (statusFilter === 'loaded') {
-      matchesStatus = plugin.status === 'loaded' || (plugin.enabled && !plugin.error);
+      matchesStatus = isPluginOperational(plugin);
     } else if (statusFilter === 'error') {
-      matchesStatus = !!plugin.error || plugin.status === 'error';
+      matchesStatus = hasSignificantPluginError(plugin);
     } else if (statusFilter === 'disabled') {
       matchesStatus = plugin.status === 'disabled' || !plugin.enabled;
     }
@@ -251,13 +252,14 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
   });
 
   const getStatusTag = (plugin: Plugin) => {
-    if (plugin.status === 'loaded' || (plugin.enabled && !plugin.error)) {
+    const ui = channelPluginUiState(plugin);
+    if (ui === 'loaded') {
       return <Tag color="success" icon={<CheckCircle2 size={12} style={{ marginRight: 4 }} />} style={{ borderRadius: 6, padding: '2px 8px' }}>{t('plugins.loaded')}</Tag>;
     }
-    if (plugin.status === 'disabled' || !plugin.enabled) {
+    if (ui === 'disabled') {
       return <Tag color="default" icon={<XCircle size={12} style={{ marginRight: 4 }} />} style={{ borderRadius: 6, padding: '2px 8px' }}>{t('plugins.disabled')}</Tag>;
     }
-    if (plugin.error || plugin.status === 'error') {
+    if (ui === 'error') {
       return (
         <Tooltip title={plugin.error}>
           <Tag color="error" icon={<AlertCircle size={12} style={{ marginRight: 4 }} />} style={{ borderRadius: 6, cursor: 'help', padding: '2px 8px' }}>{t('plugins.error')}</Tag>
