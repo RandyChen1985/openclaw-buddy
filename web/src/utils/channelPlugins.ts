@@ -22,6 +22,8 @@ export function isBenignPluginNotice(err?: string): boolean {
   if (s.includes('disabled in config')) return true;
   if (s.startsWith('bundled') && s.includes('disabled')) return true;
   if (s.includes('not activated') && s.includes('disabled')) return true;
+  if (s.includes('stock extension') || s.includes('built-in')) return true;
+  if (s.includes('optional') || s.includes('provider plugin')) return true;
   return false;
 }
 

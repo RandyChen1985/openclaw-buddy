@@ -322,18 +322,21 @@ func readChannelCredentialSnapshots(configDir string) map[string]channelCredenti
 	}
 	chRoot, _ := root["channels"].(map[string]interface{})
 
-	// feishu
-	if fs, ok := chRoot["feishu"].(map[string]interface{}); ok {
-		appID := jsonStringish(fs["appId"])
-		secret := jsonStringish(fs["appSecret"])
-		hint := ""
-		if appID != "" {
-			hint = "AppID " + maskMiddle(appID, 6, 4)
-		}
-		out["feishu"] = channelCredentialSnapshot{
-			HasCredentials: appID != "" && secret != "",
-			ChannelEnabled: jsonBoolish(fs["enabled"]),
-			Hint:           hint,
+	// feishu / lark (支持 feishu 和 openclaw-lark 两种 ID)
+	ids := []string{"feishu", "lark", "openclaw-lark"}
+	for _, id := range ids {
+		if fs, ok := chRoot[id].(map[string]interface{}); ok {
+			appID := jsonStringish(fs["appId"])
+			secret := jsonStringish(fs["appSecret"])
+			if appID != "" && secret != "" {
+				hint := "AppID " + maskMiddle(appID, 6, 4)
+				out["feishu"] = channelCredentialSnapshot{
+					HasCredentials: true,
+					ChannelEnabled: jsonBoolish(fs["enabled"]),
+					Hint:           hint,
+				}
+				break // 只要找到一个有效的就跳出
+			}
 		}
 	}
 
@@ -367,37 +370,46 @@ func listFeishuAccounts(configDir string) ([]ChannelAccount, error) {
 	}
 
 	var accounts []ChannelAccount
-	fs, ok := channels["feishu"].(map[string]interface{})
-	if !ok {
-		return accounts, nil
-	}
+	ids := []string{"feishu", "lark", "openclaw-lark"}
+	
+	for _, id := range ids {
+		fs, ok := channels[id].(map[string]interface{})
+		if !ok {
+			continue
+		}
 
-	// 1. 检查根级全局配置
-	appID := jsonStringish(fs["appId"])
-	if appID != "" {
-		accounts = append(accounts, ChannelAccount{
-			ID:           "default",
-			Name:         "默认账号 (" + appID + ")",
-			IsConfigured: true,
-		})
-	}
-
-	// 2. 检查 accounts 映射表
-	if accs, ok := fs["accounts"].(map[string]interface{}); ok {
-		for id, val := range accs {
-			name := id
-			if m, ok := val.(map[string]interface{}); ok {
-				if n := jsonStringish(m["name"]); n != "" {
-					name = n
-				} else if aid := jsonStringish(m["appId"]); aid != "" {
-					name = id + " (" + aid + ")"
-				}
-			}
+		// 1. 检查根级全局配置
+		appID := jsonStringish(fs["appId"])
+		if appID != "" {
 			accounts = append(accounts, ChannelAccount{
-				ID:           id,
-				Name:         name,
+				ID:           "default",
+				Name:         "默认账号 (" + appID + ")",
 				IsConfigured: true,
 			})
+		}
+
+		// 2. 检查 accounts 映射表
+		if accs, ok := fs["accounts"].(map[string]interface{}); ok {
+			for accID, val := range accs {
+				name := accID
+				if m, ok := val.(map[string]interface{}); ok {
+					if n := jsonStringish(m["name"]); n != "" {
+						name = n
+					} else if aid := jsonStringish(m["appId"]); aid != "" {
+						name = accID + " (" + aid + ")"
+					}
+				}
+				accounts = append(accounts, ChannelAccount{
+					ID:           accID,
+					Name:         name,
+					IsConfigured: true,
+				})
+			}
+		}
+		
+		// 如果在当前 ID 下找到了账号，则不再继续找其他别名 ID，避免重复
+		if len(accounts) > 0 {
+			break
 		}
 	}
 
@@ -535,7 +547,7 @@ func normalizeChannelIDForBinding(raw string) string {
 		return ""
 	}
 	switch s {
-	case "lark":
+	case "lark", "openclaw-lark":
 		return "feishu"
 	case "qq":
 		return "qqbot"
@@ -643,6 +655,31 @@ func appendBindingRowsFromSlice(
 
 // listRouteBindingRowsForChannel 从 openclaw.json 读取路由：OpenClaw 实际只消费根级 bindings[]；
 // agents.list[].bindings 若存在则一并列出并提示可能不生效（与官方 listRouteBindings 不对齐）。
+// getActiveFeishuChannelID 探测当前真正启用的飞书渠道 ID。
+// 顺序：openclaw-lark > lark > feishu
+func getActiveFeishuChannelID(configDir string) string {
+	configPath := filepath.Join(configDir, "openclaw.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return "feishu"
+	}
+	var root map[string]interface{}
+	if err := json.Unmarshal(data, &root); err != nil {
+		return "feishu"
+	}
+	chRoot, _ := root["channels"].(map[string]interface{})
+
+	// 按优先级探测
+	for _, id := range []string{"openclaw-lark", "lark", "feishu"} {
+		if fs, ok := chRoot[id].(map[string]interface{}); ok {
+			if jsonBoolish(fs["enabled"]) {
+				return id
+			}
+		}
+	}
+	return "feishu"
+}
+
 func listRouteBindingRowsForChannel(configDir, channelID string) ([]channelRouteBindingRow, []string) {
 	var out []channelRouteBindingRow
 	var notices []string
@@ -844,6 +881,17 @@ func GetChannelsStatus(configDir string) ([]ChannelStatus, error) {
 	for _, sc := range SupportedChannels {
 		snap := credSnaps[sc.ID]
 		cli := statusMap[sc.ID]
+		
+		// 针对飞书/Lark 进行特殊处理：聚合别名状态
+		if sc.ID == "feishu" {
+			for _, alias := range []string{"lark", "openclaw-lark"} {
+				if statusMap[alias] {
+					cli = true
+					break
+				}
+			}
+		}
+
 		configured := cli || snap.HasCredentials
 		enabled := snap.ChannelEnabled || cli
 		results = append(results, ChannelStatus{
@@ -1097,13 +1145,15 @@ func UnbindChannelRouteFromAgent(configDir, channelID, agentID, accountID string
 // 这会在 openclaw.json 的 bindings 数组中写入：
 //   { "type":"route", "agentId":"<agentID>", "match":{"channel":"feishu"} }
 func BindFeishuToAgent(configDir, agentID string) error {
-	return BindChannelRouteToAgent(configDir, "feishu", agentID, "")
+	activeID := getActiveFeishuChannelID(configDir)
+	return BindChannelRouteToAgent(configDir, activeID, agentID, "")
 }
 
 // UnbindFeishuFromAgent 解除飞书渠道与指定 Agent 的绑定。
 // 正确命令：openclaw agents unbind --agent <agentID> --bind feishu
 func UnbindFeishuFromAgent(configDir, agentID string) error {
-	return UnbindChannelRouteFromAgent(configDir, "feishu", agentID, "")
+	activeID := getActiveFeishuChannelID(configDir)
+	return UnbindChannelRouteFromAgent(configDir, activeID, agentID, "")
 }
 
 // BindTelegramToAgent 将 Telegram 渠道绑定到指定 Agent。

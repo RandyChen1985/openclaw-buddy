@@ -163,7 +163,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
         <Menu
           mode="inline"
           selectedKeys={[activeTab]}
-          defaultOpenKeys={['grp-monitor', 'grp-assets', 'grp-binding']}
+          defaultOpenKeys={['grp-assets', 'grp-binding']}
           onClick={({ key }) => onSelect(key)}
           items={navItems}
           theme="dark"
