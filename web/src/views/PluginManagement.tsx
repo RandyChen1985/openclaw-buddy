@@ -244,8 +244,10 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
       matchesStatus = isPluginOperational(plugin);
     } else if (statusFilter === 'error') {
       matchesStatus = hasSignificantPluginError(plugin);
+    } else if (statusFilter === 'enabled') {
+      matchesStatus = !!plugin.enabled;
     } else if (statusFilter === 'disabled') {
-      matchesStatus = plugin.status === 'disabled' || !plugin.enabled;
+      matchesStatus = !plugin.enabled;
     }
     
     return matchesSearch && matchesStatus;
@@ -465,7 +467,9 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
             <Segmented
               options={[
                 { label: t('plugins.loaded'), value: 'loaded' },
+                { label: t('plugins.filterEnabled'), value: 'enabled' },
                 { label: t('common.all'), value: 'all' },
+                { label: t('plugins.filterDisabled'), value: 'disabled' },
                 { label: t('plugins.error'), value: 'error' }
               ]}
               value={statusFilter}

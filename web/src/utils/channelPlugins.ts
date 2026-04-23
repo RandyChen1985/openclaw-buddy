@@ -51,3 +51,20 @@ export function channelPluginUiState(p: PluginLike | undefined): ChannelPluginUi
   if (p.status === 'disabled' || !p.enabled) return 'disabled';
   return 'disabled';
 }
+
+/** 获取指定渠道可能对应的插件 ID 别名 */
+export function getPluginIdAliases(channelId: string): string[] {
+  const aliases = [channelId];
+  if (channelId === 'feishu') {
+    aliases.push('lark', 'openclaw-lark', '@openclaw/feishu', '@larksuite/openclaw-lark');
+  } else {
+    aliases.push(`@openclaw/${channelId}`);
+  }
+  return aliases;
+}
+
+/** 在插件列表中寻找与特定渠道匹配的插件（考虑别名） */
+export function findPluginForChannel(plugins: PluginLike[], channelId: string): PluginLike | undefined {
+  const aliases = getPluginIdAliases(channelId);
+  return plugins.find(p => p.id && aliases.includes(p.id));
+}

@@ -38,6 +38,7 @@ type ChannelMetadata struct {
 //   - feishu   (loaded, 凭证通过 config set 直接写入)
 //   - telegram (stock/disabled until installed, 凭证通过 channels add --token)
 //   - qqbot    (stock/disabled until installed, 凭证通过 channels add)
+//
 // 注意：dingtalk 不是 openclaw 的有效渠道，已移除。
 var SupportedChannels = []ChannelMetadata{
 	{
@@ -99,6 +100,7 @@ type ChannelStatus struct {
 	ID                   string `json:"id"`
 	Configured           bool   `json:"configured"`
 	Enabled              bool   `json:"enabled"`
+	Installed            bool   `json:"installed"`
 	CredentialConfigured bool   `json:"credentialConfigured"`
 	CredentialHint       string `json:"credentialHint,omitempty"`
 }
@@ -371,7 +373,7 @@ func listFeishuAccounts(configDir string) ([]ChannelAccount, error) {
 
 	var accounts []ChannelAccount
 	ids := []string{"feishu", "lark", "openclaw-lark"}
-	
+
 	for _, id := range ids {
 		fs, ok := channels[id].(map[string]interface{})
 		if !ok {
@@ -406,7 +408,7 @@ func listFeishuAccounts(configDir string) ([]ChannelAccount, error) {
 				})
 			}
 		}
-		
+
 		// 如果在当前 ID 下找到了账号，则不再继续找其他别名 ID，避免重复
 		if len(accounts) > 0 {
 			break
@@ -502,11 +504,11 @@ func listGenericAccounts(configDir, channelID string) ([]ChannelAccount, error) 
 }
 
 type agentListJSONRow struct {
-	ID             string   `json:"id"`
-	IdentityName   string   `json:"identityName"`
-	IdentityEmoji  string   `json:"identityEmoji"`
-	Routes         []string `json:"routes"`
-	Bindings       int      `json:"bindings"`
+	ID            string   `json:"id"`
+	IdentityName  string   `json:"identityName"`
+	IdentityEmoji string   `json:"identityEmoji"`
+	Routes        []string `json:"routes"`
+	Bindings      int      `json:"bindings"`
 }
 
 func listAgentsJSONWithConfig(configDir string) ([]agentListJSONRow, error) {
@@ -878,10 +880,50 @@ func GetChannelsStatus(configDir string) ([]ChannelStatus, error) {
 
 	var results []ChannelStatus
 
+	// 获取当前插件列表以判定安装状态
+	var plugins []OpenClawPlugin
+	if pData, err := GetOpenClawPlugins(configDir); err == nil {
+		if plist, ok := pData.([]OpenClawPlugin); ok {
+			plugins = plist
+		}
+	}
+
 	for _, sc := range SupportedChannels {
 		snap := credSnaps[sc.ID]
 		cli := statusMap[sc.ID]
-		
+
+		// 判定是否已安装相关插件
+		isInstalled := false
+		aliases := []string{sc.ID}
+		if sc.ID == "feishu" {
+			aliases = append(aliases, "lark", "openclaw-lark", "@openclaw/feishu", "@larksuite/openclaw-lark")
+		} else {
+			aliases = append(aliases, "@openclaw/"+sc.ID)
+		}
+
+		for _, p := range plugins {
+			match := false
+			for _, alias := range aliases {
+				if p.ID == alias {
+					match = true
+					break
+				}
+			}
+			if !match {
+				// 额外检查插件是否声明了对应的 ChannelID
+				for _, cid := range p.ChannelIds {
+					if cid == sc.ID {
+						match = true
+						break
+					}
+				}
+			}
+			if match {
+				isInstalled = true
+				break
+			}
+		}
+
 		// 针对飞书/Lark 进行特殊处理：聚合别名状态
 		if sc.ID == "feishu" {
 			for _, alias := range []string{"lark", "openclaw-lark"} {
@@ -898,6 +940,7 @@ func GetChannelsStatus(configDir string) ([]ChannelStatus, error) {
 			ID:                   sc.ID,
 			Configured:           configured,
 			Enabled:              enabled,
+			Installed:            isInstalled,
 			CredentialConfigured: snap.HasCredentials,
 			CredentialHint:       snap.Hint,
 		})
@@ -908,7 +951,7 @@ func GetChannelsStatus(configDir string) ([]ChannelStatus, error) {
 func GetGenericQRCode(channelID string) (*WeChatQRCode, error) {
 	// 针对飞书等支持交互式登录的渠道
 	log.Printf("📥 Executing: openclaw channels login --channel %s", channelID)
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
@@ -925,7 +968,7 @@ func GetGenericQRCode(channelID string) (*WeChatQRCode, error) {
 
 	var foundURL string
 	done := make(chan bool)
-	
+
 	// 不同渠道的 URL 匹配正则
 	var re *regexp.Regexp
 	if channelID == "feishu" || channelID == "lark" {
@@ -1143,7 +1186,8 @@ func UnbindChannelRouteFromAgent(configDir, channelID, agentID, accountID string
 // BindFeishuToAgent 将飞书渠道绑定到指定 Agent。
 // 正确命令：openclaw agents bind --agent <agentID> --bind feishu
 // 这会在 openclaw.json 的 bindings 数组中写入：
-//   { "type":"route", "agentId":"<agentID>", "match":{"channel":"feishu"} }
+//
+//	{ "type":"route", "agentId":"<agentID>", "match":{"channel":"feishu"} }
 func BindFeishuToAgent(configDir, agentID string) error {
 	activeID := getActiveFeishuChannelID(configDir)
 	return BindChannelRouteToAgent(configDir, activeID, agentID, "")

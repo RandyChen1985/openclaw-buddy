@@ -5,12 +5,13 @@ import { Cloud, RefreshCw, Smartphone, Trash2, Send, MessageSquare, Bell, Settin
 import api from '../api';
 
 import ChannelAccountsModal from '../components/ChannelAccountsModal';
-import { channelPluginUiState, type ChannelPluginUiState } from '../utils/channelPlugins';
+import { channelPluginUiState, findPluginForChannel, type ChannelPluginUiState } from '../utils/channelPlugins';
 
 interface ChannelStatus {
   id: string;
   configured: boolean;
   enabled: boolean;
+  installed?: boolean;
   credentialConfigured?: boolean;
   credentialHint?: string;
 }
@@ -274,7 +275,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
           {channelMetadata.map(ch => {
             const status = channelStatus.find(s => s.id === ch.id);
             const isConfigured = !!(status?.configured || status?.credentialConfigured);
-            const pluginRow = pluginsList.find((p: any) => p.id === ch.id);
+            const pluginRow = findPluginForChannel(pluginsList, ch.id);
             const pluginUi: ChannelPluginUiState = pluginsListError ? 'unknown' : channelPluginUiState(pluginRow);
             const isLoaded = pluginUi === 'loaded';
 
