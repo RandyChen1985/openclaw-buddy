@@ -25,7 +25,11 @@ type CommandResult struct {
 // 与 Buddy 的 OPENCLAW_CONFIG_DIR 及 CheckConfig 中 OPENCLAW_CONFIG_DIR 用法一致；若只设置
 // OPENCLAW_CONFIG_PATH 而部分 CLI 仍认「配置目录」，可能把变更写到默认 ~/.openclaw。
 func OpenClawConfigEnv(configDir string) ([]string, error) {
-	dir := strings.TrimSpace(configDir)
+	raw := strings.TrimSpace(configDir)
+	if raw == "" {
+		return nil, fmt.Errorf("openclaw config dir is empty")
+	}
+	dir := filepath.Clean(expandUserConfigDir(raw))
 	if dir == "" {
 		return nil, fmt.Errorf("openclaw config dir is empty")
 	}
@@ -47,6 +51,25 @@ func trimRunOutputForErr(s string, max int) string {
 		return s
 	}
 	return s[:max] + "..."
+}
+
+// expandUserConfigDir 展开 ~/ 前缀，避免 filepath.Abs("~/.openclaw") 把 ~ 当成普通目录名。
+func expandUserConfigDir(dir string) string {
+	d := strings.TrimSpace(dir)
+	if d == "" {
+		return d
+	}
+	if strings.HasPrefix(d, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, d[2:])
+		}
+	}
+	if d == "~" {
+		if home, err := os.UserHomeDir(); err == nil {
+			return home
+		}
+	}
+	return d
 }
 
 // RunCommandWithTimeout executes a command and captures its output with a timeout.
