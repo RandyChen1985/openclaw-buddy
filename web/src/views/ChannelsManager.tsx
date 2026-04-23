@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Tag, Button, Modal, message, Tooltip } from 'antd';
+import { Card, Tag, Button, Modal, message } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Cloud, RefreshCw, Smartphone, Trash2, Send, MessageSquare, Bell, Settings, LayoutGrid, AlertCircle, Copy, Users } from 'lucide-react';
 import api from '../api';
@@ -297,14 +297,6 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
               if (pluginUi === 'disabled') {
                 return <Tag color="warning" style={{ borderRadius: 4, margin: 0, border: 'none' }}>{t('channels.pluginDisabled')}</Tag>;
               }
-              if (pluginUi === 'error') {
-                const errText = (pluginRow?.error as string) || '';
-                return (
-                  <Tooltip title={errText || undefined}>
-                    <Tag color="error" style={{ borderRadius: 4, margin: 0, border: 'none' }}>{t('channels.pluginError')}</Tag>
-                  </Tooltip>
-                );
-              }
               return <Tag color="error" style={{ borderRadius: 4, margin: 0, border: 'none' }}>{t('channels.pluginMissing')}</Tag>;
             })();
 
@@ -380,14 +372,8 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                       {pluginUi === 'unknown' && t('channels.pluginHintUnknown')}
                       {pluginUi === 'missing' && t('channels.pluginHintMissing')}
                       {pluginUi === 'disabled' && t('channels.pluginHintDisabled')}
-                      {pluginUi === 'error' && t('channels.pluginHintError')}
+                      {pluginUi === 'disabled' && t('channels.pluginHintDisabled')}
                     </div>
-                    {pluginUi === 'error' && pluginRow?.error && (
-                      <div style={{ fontSize: 11, color: '#991b1b', lineHeight: 1.5, wordBreak: 'break-word' }}>{String(pluginRow.error)}</div>
-                    )}
-                    {pluginUi === 'error' && (
-                      <div style={{ fontSize: 11, color: hintColor }}>{t('channels.pluginHintErrorFooter')}</div>
-                    )}
                     {(pluginUi === 'missing' || pluginUi === 'disabled') && (
                       <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.03)', borderRadius: 6, padding: '6px 10px', gap: 8 }}>
                         <code style={{ fontSize: 11, color: '#334155', flex: 1, fontFamily: 'monospace', userSelect: 'all', wordBreak: 'break-all' }}>

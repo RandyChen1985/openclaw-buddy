@@ -285,8 +285,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ background: '#ecfdf5', padding: '8px', borderRadius: '10px' }}><Activity size={18} style={{ color: '#059669' }} /></div>
                 <div>
-                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>OpenClaw Buddy</div>
-                  <div style={{ fontSize: 14, color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    OpenClaw Buddy
                     <Tooltip title="GitHub 源码">
                       <div 
                         style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', opacity: 0.6 }}
@@ -301,6 +301,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                         </svg>
                       </div>
                     </Tooltip>
+                  </div>
+                  <div style={{ fontSize: 14, color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
                     v{APP_VERSION}
                     <Button 
                       type="text" 

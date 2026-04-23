@@ -78,6 +78,13 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
                   width: 8, height: 8, borderRadius: '50%', background: '#22c55e', 
                   animation: 'glow-pulse 2s infinite ease-in-out' 
                 }}></div>
+                <span style={{ 
+                  fontSize: 9, color: '#64748b', fontWeight: 800, 
+                  letterSpacing: '0.08em', textTransform: 'uppercase',
+                  fontFamily: 'monospace', opacity: 0.8
+                }}>
+                  REL-{APP_VERSION}
+                </span>
                 <Tooltip title="GitHub 源码">
                   <div 
                     style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', opacity: 0.6 }}
@@ -92,13 +99,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
                     </svg>
                   </div>
                 </Tooltip>
-                <span style={{ 
-                  fontSize: 9, color: '#64748b', fontWeight: 800, 
-                  letterSpacing: '0.08em', textTransform: 'uppercase',
-                  fontFamily: 'monospace', opacity: 0.8
-                }}>
-                  REL-{APP_VERSION}
-                </span>
                 {versionUpdate && hasNewVersion(versionUpdate.current, versionUpdate.latest) && (
                   <span style={{
                     fontSize: 10, padding: '0 5px', borderRadius: 4,

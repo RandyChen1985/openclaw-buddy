@@ -43,7 +43,24 @@ type ChannelMetadata struct {
 var SupportedChannels = []ChannelMetadata{
 	{
 		ID:          "feishu",
-		Name:        "飞书 (Feishu/Lark)",
+		Name:        "飞书 (Feishu)",
+		Description: "支持企业自建应用，配置 AppID 和 Secret 实现消息推送",
+		Icon:        "Lark",
+		SetupType:   "form",
+		Fields: []ChannelField{
+			{
+				Key: "appId", Label: "App ID", Placeholder: "输入飞书应用的 App ID (cli_...)", Type: "text", Required: true,
+				HelpURL: "https://open.feishu.cn/app",
+			},
+			{
+				Key: "appSecret", Label: "App Secret", Placeholder: "输入飞书应用的 App Secret", Type: "password", Required: true,
+				HelpURL: "https://open.feishu.cn/app",
+			},
+		},
+	},
+	{
+		ID:          "openclaw-lark",
+		Name:        "飞书 (Lark)",
 		Description: "支持企业自建应用，配置 AppID 和 Secret 实现消息推送",
 		Icon:        "Lark",
 		SetupType:   "form",
@@ -299,8 +316,8 @@ func qqbotCredentialFromMap(qq map[string]interface{}) (has bool, hint string) {
 
 func GetChannelAccounts(configDir, channelID string) ([]ChannelAccount, error) {
 	switch channelID {
-	case "feishu":
-		return listFeishuAccounts(configDir)
+	case "feishu", "openclaw-lark":
+		return listLarkAccounts(configDir, channelID)
 	case "qqbot":
 		return listQQBotAccounts(configDir)
 	case "telegram":
@@ -324,20 +341,20 @@ func readChannelCredentialSnapshots(configDir string) map[string]channelCredenti
 	}
 	chRoot, _ := root["channels"].(map[string]interface{})
 
-	// feishu / lark (支持 feishu 和 openclaw-lark 两种 ID)
-	ids := []string{"feishu", "lark", "openclaw-lark"}
-	for _, id := range ids {
-		if fs, ok := chRoot[id].(map[string]interface{}); ok {
-			appID := jsonStringish(fs["appId"])
-			secret := jsonStringish(fs["appSecret"])
-			if appID != "" && secret != "" {
-				hint := "AppID " + maskMiddle(appID, 6, 4)
-				out["feishu"] = channelCredentialSnapshot{
-					HasCredentials: true,
-					ChannelEnabled: jsonBoolish(fs["enabled"]),
-					Hint:           hint,
+	// 遍历 SupportedChannels 自动填充快照
+	for _, sc := range SupportedChannels {
+		if fs, ok := chRoot[sc.ID].(map[string]interface{}); ok {
+			// 如果是飞书系列
+			if sc.ID == "feishu" || sc.ID == "openclaw-lark" {
+				appID := jsonStringish(fs["appId"])
+				secret := jsonStringish(fs["appSecret"])
+				if appID != "" && secret != "" {
+					out[sc.ID] = channelCredentialSnapshot{
+						HasCredentials: true,
+						ChannelEnabled: jsonBoolish(fs["enabled"]),
+						Hint:           "AppID " + maskMiddle(appID, 6, 4),
+					}
 				}
-				break // 只要找到一个有效的就跳出
 			}
 		}
 	}
@@ -365,53 +382,44 @@ func readChannelCredentialSnapshots(configDir string) map[string]channelCredenti
 	return out
 }
 
-func listFeishuAccounts(configDir string) ([]ChannelAccount, error) {
+func listLarkAccounts(configDir string, channelID string) ([]ChannelAccount, error) {
 	channels, err := getChannelsConfig(configDir)
 	if err != nil {
 		return nil, err
 	}
 
 	var accounts []ChannelAccount
-	ids := []string{"feishu", "lark", "openclaw-lark"}
+	fs, ok := channels[channelID].(map[string]interface{})
+	if !ok {
+		return accounts, nil
+	}
 
-	for _, id := range ids {
-		fs, ok := channels[id].(map[string]interface{})
-		if !ok {
-			continue
-		}
+	// 1. 检查根级全局配置
+	appID := jsonStringish(fs["appId"])
+	if appID != "" {
+		accounts = append(accounts, ChannelAccount{
+			ID:           "default",
+			Name:         "默认账号 (" + appID + ")",
+			IsConfigured: true,
+		})
+	}
 
-		// 1. 检查根级全局配置
-		appID := jsonStringish(fs["appId"])
-		if appID != "" {
+	// 2. 检查 accounts 映射表
+	if accs, ok := fs["accounts"].(map[string]interface{}); ok {
+		for accID, val := range accs {
+			name := accID
+			if m, ok := val.(map[string]interface{}); ok {
+				if n := jsonStringish(m["name"]); n != "" {
+					name = n
+				} else if aid := jsonStringish(m["appId"]); aid != "" {
+					name = accID + " (" + aid + ")"
+				}
+			}
 			accounts = append(accounts, ChannelAccount{
-				ID:           "default",
-				Name:         "默认账号 (" + appID + ")",
+				ID:           accID,
+				Name:         name,
 				IsConfigured: true,
 			})
-		}
-
-		// 2. 检查 accounts 映射表
-		if accs, ok := fs["accounts"].(map[string]interface{}); ok {
-			for accID, val := range accs {
-				name := accID
-				if m, ok := val.(map[string]interface{}); ok {
-					if n := jsonStringish(m["name"]); n != "" {
-						name = n
-					} else if aid := jsonStringish(m["appId"]); aid != "" {
-						name = accID + " (" + aid + ")"
-					}
-				}
-				accounts = append(accounts, ChannelAccount{
-					ID:           accID,
-					Name:         name,
-					IsConfigured: true,
-				})
-			}
-		}
-
-		// 如果在当前 ID 下找到了账号，则不再继续找其他别名 ID，避免重复
-		if len(accounts) > 0 {
-			break
 		}
 	}
 
@@ -549,7 +557,7 @@ func normalizeChannelIDForBinding(raw string) string {
 		return ""
 	}
 	switch s {
-	case "lark", "openclaw-lark":
+	case "lark":
 		return "feishu"
 	case "qq":
 		return "qqbot"
@@ -971,7 +979,7 @@ func GetGenericQRCode(channelID string) (*WeChatQRCode, error) {
 
 	// 不同渠道的 URL 匹配正则
 	var re *regexp.Regexp
-	if channelID == "feishu" || channelID == "lark" {
+	if channelID == "feishu" || channelID == "lark" || channelID == "openclaw-lark" {
 		re = regexp.MustCompile(`https://(?:accounts|open)\.(?:feishu\.cn|larksuite\.com)/oauth/v1/app/registration\?[^\s\n]*`)
 	} else if channelID == "openclaw-weixin" {
 		re = regexp.MustCompile(`https://liteapp\.weixin\.qq\.com/q/[^\s\n]*`)
@@ -1026,12 +1034,12 @@ func SaveChannelSecret(configDir, channelID string, creds map[string]string) err
 	log.Printf("⚙️ Saving credentials for channel %s (config: %s)", channelID, configPath)
 
 	switch channelID {
-	case "feishu":
-		// Feishu: 如果 creds 中包含 accountId，则写入 accounts 映射表，否则写入根部。
+	case "feishu", "openclaw-lark":
+		// 如果 creds 中包含 accountId，则写入 accounts 映射表，否则写入根部。
 		if aid := creds["accountId"]; aid != "" && aid != "default" {
-			return saveFeishuAccountManual(configDir, aid, creds["appId"], creds["appSecret"])
+			return saveLarkAccountManual(configDir, channelID, aid, creds["appId"], creds["appSecret"])
 		}
-		return saveFeishuSecretManual(configDir, creds["appId"], creds["appSecret"])
+		return saveLarkSecretManual(configDir, channelID, creds["appId"], creds["appSecret"])
 	case "telegram":
 		// Telegram 支持 channels add --token
 		token := creds["token"]
@@ -1087,22 +1095,22 @@ func DeleteChannelAccount(configDir, channelID, accountID string) error {
 	})
 }
 
-func saveFeishuSecretManual(configDir, appID, appSecret string) error {
+func saveLarkSecretManual(configDir, channelID, appID, appSecret string) error {
 	return updateOpenClawConfig(configDir, func(cfg map[string]interface{}) error {
 		channels := ensureMap(cfg, "channels")
-		feishu := ensureMap(channels, "feishu")
-		feishu["appId"] = strings.TrimSpace(appID)
-		feishu["appSecret"] = strings.TrimSpace(appSecret)
-		feishu["enabled"] = true
+		ch := ensureMap(channels, channelID)
+		ch["appId"] = strings.TrimSpace(appID)
+		ch["appSecret"] = strings.TrimSpace(appSecret)
+		ch["enabled"] = true
 		return nil
 	})
 }
 
-func saveFeishuAccountManual(configDir, accountID, appID, appSecret string) error {
+func saveLarkAccountManual(configDir, channelID, accountID, appID, appSecret string) error {
 	return updateOpenClawConfig(configDir, func(cfg map[string]interface{}) error {
 		channels := ensureMap(cfg, "channels")
-		feishu := ensureMap(channels, "feishu")
-		accounts := ensureMap(feishu, "accounts")
+		ch := ensureMap(channels, channelID)
+		accounts := ensureMap(ch, "accounts")
 		acc := ensureMap(accounts, accountID)
 		acc["appId"] = strings.TrimSpace(appID)
 		acc["appSecret"] = strings.TrimSpace(appSecret)

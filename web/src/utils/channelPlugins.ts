@@ -41,14 +41,13 @@ export function isPluginOperational(p: PluginLike): boolean {
 }
 
 /**
- * 渠道卡片用：区分未安装 / 未启用(已装) / 异常 / 可用。
- * 判定顺序与 PluginManagement 的 getStatusTag 一致。
+ * 渠道卡片用：仅区分 未安装 / 已禁用(已装) / 已启用。
+ * 不再判断插件运行时的具体 Error 状态。
  */
 export function channelPluginUiState(p: PluginLike | undefined): ChannelPluginUiState {
   if (!p || !p.id) return 'missing';
-  if (hasSignificantPluginError(p)) return 'error';
-  if (isPluginOperational(p)) return 'loaded';
-  if (p.status === 'disabled' || !p.enabled) return 'disabled';
+  // 只要是 enabled 或者 status 为 loaded，均视为「已启用/已加载」
+  if (p.enabled || p.status === 'loaded') return 'loaded';
   return 'disabled';
 }
 
