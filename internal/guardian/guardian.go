@@ -77,16 +77,14 @@ func (g *Guardian) Run(ctx context.Context) {
 
 	log.Printf("🛡️ OpenClaw Buddy 监控服务巡检循环已启动. Every %d seconds.", g.config.CheckIntervalSeconds)
 
-	// 启动时检查：如果服务正常，根据开关状态决定是否备份
+	// 启动时检查：健康端口在监听即视为服务可用（不调用 openclaw health），按开关决定是否备份
 	isSelfHealingEnabled := utils.GetSetting("self_healing_enabled", "false") == "true"
 	if process.IsPortListening(g.config.HealthPort) {
-		if _, err := process.CheckHealth(); err == nil {
-			if isSelfHealingEnabled {
-				log.Printf("📦 Service is healthy on startup. Performing initial backup...")
-				g.backupConfig()
-			} else {
-				log.Printf("ℹ️ [自愈服务] 当前开关已关闭，启动时跳过配置备份流程。")
-			}
+		if isSelfHealingEnabled {
+			log.Printf("📦 Gateway port %d is listening on startup. Performing initial backup...", g.config.HealthPort)
+			g.backupConfig()
+		} else {
+			log.Printf("ℹ️ [自愈服务] 当前开关已关闭，启动时跳过配置备份流程。")
 		}
 	}
 	for {
@@ -127,27 +125,19 @@ func (g *Guardian) check() {
 			reason = "Port Down"
 			lastErr = fmt.Errorf("port %d is not listening", g.config.HealthPort)
 		} else {
-			// 2. Health Check
-			elapsed, err := process.CheckHealth()
-			responseTimeMs := int(elapsed.Milliseconds())
-			
-			if err != nil {
-				reason = "Health Check Failure"
-				lastErr = err
+			// 端口在监听即视为健康，不再执行 openclaw health（避免 CLI 退出码与网关实际可用不一致）
+			responseTimeMs := 0
+			metrics := process.GetSystemMetrics()
+			g.recordHealthCheck("Healthy", responseTimeMs, metrics.CPUUsage, metrics.MemoryUsage, "")
+			if isSelfHealingEnabled {
+				log.Printf("✅ Gateway port %d is listening (openclaw health skipped). Updating configuration backup... (CPU: %.1f%%, Mem: %.1f%%)",
+					g.config.HealthPort, metrics.CPUUsage, metrics.MemoryUsage)
+				g.backupConfig()
 			} else {
-				// Success!
-				metrics := process.GetSystemMetrics()
-				g.recordHealthCheck("Healthy", responseTimeMs, metrics.CPUUsage, metrics.MemoryUsage, "")
-				if isSelfHealingEnabled {
-					log.Printf("✅ OpenClaw is healthy (Latency: %dms, CPU: %.1f%%, Mem: %.1f%%). Updating configuration backup...", 
-						responseTimeMs, metrics.CPUUsage, metrics.MemoryUsage)
-					g.backupConfig()
-				} else {
-					log.Printf("✅ OpenClaw is healthy (Latency: %dms, CPU: %.1f%%, Mem: %.1f%%). [自愈流程已跳过]", 
-						responseTimeMs, metrics.CPUUsage, metrics.MemoryUsage)
-				}
-				return
+				log.Printf("✅ Gateway port %d is listening (openclaw health skipped). [自愈流程已跳过] (CPU: %.1f%%, Mem: %.1f%%)",
+					g.config.HealthPort, metrics.CPUUsage, metrics.MemoryUsage)
 			}
+			return
 		}
 
 		if i < g.config.MaxRetries {
@@ -341,7 +331,7 @@ func (g *Guardian) heal(reason string) {
 
 	// 4. Restart
 	_ = process.ForceStartGateway()
-	// 闭环验收：等待网关起来并通过健康检查后才视为 Success
+	// 闭环验收：等待健康端口监听即视为 Success（与巡检一致，不调用 openclaw health）
 	ok := false
 	var lastHealthErr error
 	backoffs := []time.Duration{1 * time.Second, 2 * time.Second, 3 * time.Second, 5 * time.Second, 8 * time.Second}
@@ -350,17 +340,13 @@ func (g *Guardian) heal(reason string) {
 	for i, d := range backoffs {
 		time.Sleep(d)
 		verifyAttempts = i + 1
-		// 先快速看端口，再做 health
+		// 仅验收端口是否在监听
 		if !process.IsPortListening(g.config.HealthPort) {
 			lastHealthErr = fmt.Errorf("port %d is not listening", g.config.HealthPort)
 			log.Printf("⏳ [HEAL] 网关端口仍未监听，继续等待... (%d/%d)", i+1, len(backoffs))
 			continue
 		}
-		if _, err := process.CheckHealth(); err != nil {
-			lastHealthErr = err
-			log.Printf("⏳ [HEAL] 健康检查未通过，继续等待... (%d/%d) err=%v", i+1, len(backoffs), err)
-			continue
-		}
+		// 与巡检一致：端口通即验收通过，不调用 openclaw health
 		ok = true
 		lastHealthErr = nil
 		break

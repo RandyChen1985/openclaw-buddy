@@ -49,14 +49,14 @@ func GetWeChatQRCode(force bool) (*WeChatQRCode, error) {
 
 	// 使用新命令: openclaw channels login --channel openclaw-weixin
 	log.Printf("📥 Executing: openclaw channels login --channel openclaw-weixin (Streaming Mode, Force: %v)", force)
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// 我们需要手动管理进程以在获取到 URL 后立即杀死它，因为该命令会一直等待扫码结果
 	var args []string = []string{"channels", "login", "--channel", "openclaw-weixin"}
 	cmd := exec.CommandContext(ctx, "openclaw", args...)
-	
+
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err

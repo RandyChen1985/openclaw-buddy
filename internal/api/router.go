@@ -203,6 +203,8 @@ func (s *Server) setupRoutes() {
 		{
 			channels.GET("/metadata", s.getChannelsMetadata)
 			channels.GET("/status", s.getChannelsStatus)
+			channels.GET("/:channelId/accounts", s.getChannelAccounts)
+			channels.POST("/:channelId/bind", s.bindChannelRoute)
 			channels.GET("/qrcode/:id", s.getChannelQRCode)
 			channels.POST("/setup", s.saveChannelConfig)
 			channels.DELETE("/:channelId/setup", s.unbindChannel)

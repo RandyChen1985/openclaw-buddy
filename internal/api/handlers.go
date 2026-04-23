@@ -2546,6 +2546,47 @@ func (s *Server) getChannelsStatus(c *gin.Context) {
 	s.Success(c, gin.H{"data": status})
 }
 
+// getChannelAccounts GET /v1/channels/:channelId/accounts — 凭证是否已写入（脱敏）+ 绑定该渠道的 Agent 列表
+func (s *Server) getChannelAccounts(c *gin.Context) {
+	channelID := c.Param("channelId")
+	switch channelID {
+	case "feishu", "telegram", "qqbot":
+	default:
+		s.Error(c, http.StatusBadRequest, "unsupported channelId")
+		return
+	}
+	ov, err := process.GetChannelAccountsOverview(s.cfg.OpenClawConfigDir, channelID)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"data": ov})
+}
+
+// bindChannelRoute POST /v1/channels/:channelId/bind — 根级 bindings[] 路由（openclaw agents bind）
+func (s *Server) bindChannelRoute(c *gin.Context) {
+	channelID := c.Param("channelId")
+	switch channelID {
+	case "feishu", "telegram", "qqbot":
+	default:
+		s.Error(c, http.StatusBadRequest, "unsupported channelId")
+		return
+	}
+	var req struct {
+		AgentID   string `json:"agentId" binding:"required"`
+		AccountID string `json:"accountId"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	if err := process.BindChannelRouteToAgent(s.cfg.OpenClawConfigDir, channelID, req.AgentID, req.AccountID); err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to bind route: "+err.Error())
+		return
+	}
+	s.Success(c, gin.H{"message": "Route binding added"})
+}
+
 func (s *Server) getChannelQRCode(c *gin.Context) {
 	channelID := c.Param("id")
 	if channelID == "" {
@@ -2623,28 +2664,29 @@ func (s *Server) saveChannelConfig(c *gin.Context) {
 func (s *Server) unbindChannel(c *gin.Context) {
 	channelID := c.Param("channelId")
 	agentID := c.DefaultQuery("agentId", "main")
+	accountID := strings.TrimSpace(c.Query("accountId"))
 
 	if channelID == "" {
 		s.Error(c, http.StatusBadRequest, "channelId is required")
 		return
 	}
 
-	log.Printf("🔗 Unbinding channel %s from agent %s", channelID, agentID)
+	log.Printf("🔗 Unbinding channel %s from agent %s (accountId=%q)", channelID, agentID, accountID)
 
 	var unbindErr error
 	switch channelID {
-	case "feishu":
-		unbindErr = process.UnbindFeishuFromAgent(s.cfg.OpenClawConfigDir, agentID)
-	case "telegram":
-		unbindErr = process.UnbindTelegramFromAgent(s.cfg.OpenClawConfigDir, agentID)
-	case "qqbot":
-		unbindErr = process.UnbindQQBotFromAgent(s.cfg.OpenClawConfigDir, agentID)
+	case "feishu", "telegram", "qqbot":
+		unbindErr = process.UnbindChannelRouteFromAgent(s.cfg.OpenClawConfigDir, channelID, agentID, accountID)
 	default:
 		log.Printf("⚠️ No specific unbind logic for channel: %s, falling back to basic CLI unbind", channelID)
 		configPath := filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json")
 		env := []string{"OPENCLAW_CONFIG_PATH=" + configPath}
+		bindSpec := channelID
+		if accountID != "" {
+			bindSpec = channelID + ":" + accountID
+		}
 		_, unbindErr = process.RunCommandWithEnvAndTimeout(15*time.Second, env, "openclaw", "agents", "unbind",
-			"--agent", agentID, "--bind", channelID)
+			"--agent", agentID, "--bind", bindSpec)
 	}
 
 	if unbindErr != nil {

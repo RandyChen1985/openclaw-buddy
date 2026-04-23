@@ -1,15 +1,18 @@
 import React from 'react';
 import { Card, Tag, Button, Modal, message, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Cloud, RefreshCw, Smartphone, Trash2, Send, MessageSquare, Bell, Settings, LayoutGrid, AlertCircle, Copy } from 'lucide-react';
+import { Cloud, RefreshCw, Smartphone, Trash2, Send, MessageSquare, Bell, Settings, LayoutGrid, AlertCircle, Copy, Users } from 'lucide-react';
 import api from '../api';
 import ChannelSetupModal from '../components/ChannelSetupModal';
+import ChannelAccountsModal from '../components/ChannelAccountsModal';
 import { channelPluginUiState, type ChannelPluginUiState } from '../utils/channelPlugins';
 
 interface ChannelStatus {
   id: string;
   configured: boolean;
   enabled: boolean;
+  credentialConfigured?: boolean;
+  credentialHint?: string;
 }
 
 interface ChannelsManagerProps {
@@ -65,6 +68,8 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
 
   const [activeChannelAccounts, setActiveChannelAccounts] = React.useState<any[]>([]);
   const [managementTitle, setManagementTitle] = React.useState('');
+  const [routeAccountsOpen, setRouteAccountsOpen] = React.useState(false);
+  const [routeAccountsChannel, setRouteAccountsChannel] = React.useState<any>(null);
 
   const isRefreshing = loadingBots || loadingConfig || refreshingWeixin || loadingChannels || loadingPlugins;
 
@@ -107,31 +112,6 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
     } catch (err) {
       console.error('Failed to fetch channel status');
     }
-  };
-
-  const [unbindingChannel, setUnbindingChannel] = React.useState<string | null>(null);
-
-  const handleUnbindChannel = (ch: any) => {
-    Modal.confirm({
-      title: t('common.confirmAction'),
-      content: `确定要解绑 ${ch.name} 渠道吗？解绑后该渠道将不再路由消息给 Agent。`,
-      okText: t('channels.unbind'),
-      okButtonProps: { danger: true },
-      cancelText: t('common.cancel'),
-      onOk: async () => {
-        setUnbindingChannel(ch.id);
-        try {
-          await api.delete(`/v1/channels/${ch.id}/setup`);
-          message.success(`${ch.name} 解绑成功`);
-          void Promise.all([fetchStatus(), fetchOpenClawPlugins()]);
-          onRefreshChannels();
-        } catch (err: any) {
-          message.error(`解绑失败: ${err?.response?.data?.message || err.message}`);
-        } finally {
-          setUnbindingChannel(null);
-        }
-      }
-    });
   };
 
   const onUnbindAccount = (name: string) => {
@@ -212,55 +192,88 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
 
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
           
-          <Card 
+          <Card
             styles={{ body: { padding: 16 } }}
             style={{ borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ padding: 10, background: '#f0fdf4', borderRadius: 10, flexShrink: 0 }}>
-                  <Smartphone size={24} color="#16a34a" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  <div style={{ padding: 10, background: '#f0fdf4', borderRadius: 10, flexShrink: 0 }}>
+                    <Smartphone size={24} color="#16a34a" />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 14 }}>{t('channels.weixinPlugin')}</div>
+                    <div style={{ color: '#64748b', fontSize: 11, marginTop: 2, lineHeight: 1.45 }}>
+                      {t('channels.weixinCardDescription')}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, fontFamily: 'monospace' }}>
+                      {weixinStatus?.version
+                        ? t('channels.weixinPluginVersion', { version: weixinStatus.version })
+                        : 'openclaw-weixin'}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 14 }}>微信官方插件</div>
-                  <div style={{ color: '#64748b', fontSize: 11, marginTop: 2 }}>{weixinStatus?.version ? `v${weixinStatus.version}` : 'openclaw-weixin'}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                  <Tag color={weixinStatus?.installed ? 'success' : 'default'} style={{ borderRadius: 4, margin: 0, border: 'none' }}>
+                    {weixinStatus?.installed ? t('channels.installed') : t('channels.notInstalled')}
+                  </Tag>
                 </div>
               </div>
-              <Tag color={weixinStatus?.installed ? "success" : "default"} style={{ borderRadius: 4, margin: 0, border: 'none' }}>
-                {weixinStatus?.installed ? t('channels.installed') : t('channels.notInstalled')}
-              </Tag>
-            </div>
-
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Button 
-                block 
-                size="small" 
-                icon={<Settings size={14} />} 
-                onClick={() => showManagement({ id: 'weixin', name: '微信官方插件' })}
-                style={{ borderRadius: 6, fontSize: 12 }}
-              >
-                {t('channels.manageAccounts') || '账号管理'}
-              </Button>
-              <Button 
-                block 
-                type="primary" 
-                size="small" 
-                loading={loadingWeixin}
-                icon={<RefreshCw size={14} />} 
-                onClick={() => {
-                  if (weixinStatus?.installed) onGetQRCode();
-                  else onInstallWeixin();
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  justifyContent: 'flex-end',
+                  gap: 8,
+                  paddingTop: 8,
+                  borderTop: '1px solid #f1f5f9',
                 }}
-                style={{ borderRadius: 6, fontSize: 12 }}
               >
-                {weixinStatus?.installed ? (t('channels.getLoginCode') || '获取二维码') : (t('channels.installPlugin') || '安装插件')}
-              </Button>
+                <Button
+                  size="small"
+                  icon={<Users size={13} />}
+                  onClick={() => showManagement({ id: 'weixin', name: t('channels.weixinPlugin') })}
+                  style={{ fontSize: 12, borderRadius: 6 }}
+                >
+                  {t('channels.manageAccounts')}
+                </Button>
+                {weixinStatus?.installed ? (
+                  <Button
+                    type="default"
+                    size="small"
+                    loading={loadingWeixin}
+                    icon={<RefreshCw size={14} />}
+                    onClick={() => onGetQRCode()}
+                    style={{
+                      borderRadius: 6,
+                      fontSize: 12,
+                      background: '#07C160',
+                      borderColor: '#059A54',
+                      color: '#fff',
+                    }}
+                  >
+                    {t('channels.getLoginCode')}
+                  </Button>
+                ) : (
+                  <Button
+                    type="primary"
+                    size="small"
+                    loading={loadingWeixin}
+                    icon={<RefreshCw size={14} />}
+                    onClick={() => onInstallWeixin()}
+                    style={{ borderRadius: 6, fontSize: 12 }}
+                  >
+                    {t('channels.installPlugin')}
+                  </Button>
+                )}
+              </div>
             </div>
           </Card>
 
           {channelMetadata.map(ch => {
             const status = channelStatus.find(s => s.id === ch.id);
-            const isConfigured = status?.configured || false;
+            const isConfigured = !!(status?.configured || status?.credentialConfigured);
             const pluginRow = pluginsList.find((p: any) => p.id === ch.id);
             const pluginUi: ChannelPluginUiState = pluginsListError ? 'unknown' : channelPluginUiState(pluginRow);
             const isLoaded = pluginUi === 'loaded';
@@ -307,47 +320,70 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                 styles={{ body: { padding: 16 } }}
                 style={{ borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', opacity: isLoaded ? 1 : 0.85 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ padding: 10, background: '#f8fafc', borderRadius: 10, flexShrink: 0, opacity: isLoaded ? 1 : 0.5 }}>
-                      {getIcon(ch.icon)}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                      <div style={{ padding: 10, background: '#f8fafc', borderRadius: 10, flexShrink: 0, opacity: isLoaded ? 1 : 0.5 }}>
+                        {getIcon(ch.icon)}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 14 }}>{ch.name}</div>
+                        <div style={{ color: '#64748b', fontSize: 11, marginTop: 2 }}>{ch.description}</div>
+                        {isLoaded && status?.credentialHint && (
+                          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, fontFamily: 'monospace' }}>{status.credentialHint}</div>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 14 }}>{ch.name}</div>
-                      <div style={{ color: '#64748b', fontSize: 11, marginTop: 2 }}>{ch.description}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                      {isLoaded && isConfigured && (
+                        <Tag color="success" style={{ borderRadius: 4, margin: 0, border: 'none', background: '#f0fdf4', color: '#16a34a' }}>
+                          {t('channels.configured')}
+                        </Tag>
+                      )}
+                      {!isLoaded && statusTag}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {isLoaded ? (
-                      isConfigured ? (
-                        <>
-                          <Tag color="success" style={{ borderRadius: 4, margin: 0, border: 'none', background: '#f0fdf4', color: '#16a34a' }}>
-                            {t('channels.configured')}
-                          </Tag>
-                          <Button 
-                            size="small"
-                            danger
-                            type="text"
-                            icon={<Trash2 size={13} />}
-                            loading={unbindingChannel === ch.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleUnbindChannel(ch);
-                            }}
-                            style={{ fontSize: 12 }}
-                          >
-                            {t('channels.unbind')}
-                          </Button>
-                        </>
-                      ) : (
-                        <Button type="primary" size="small" ghost style={{ borderRadius: 6, fontSize: 12 }}>
+                  {isLoaded && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        justifyContent: 'flex-end',
+                        gap: 8,
+                        paddingTop: 8,
+                        borderTop: '1px solid #f1f5f9',
+                      }}
+                    >
+                      <Button
+                        size="small"
+                        icon={<Users size={13} />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRouteAccountsChannel(ch);
+                          setRouteAccountsOpen(true);
+                        }}
+                        style={{ fontSize: 12, borderRadius: 6 }}
+                      >
+                        {t('channels.manageAccounts')}
+                      </Button>
+                      <Tooltip title={t('channels.setupTooltip')}>
+                        <Button
+                          type="primary"
+                          size="small"
+                          ghost={isConfigured}
+                          icon={<Settings size={13} />}
+                          style={{ borderRadius: 6, fontSize: 12 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedChannel(ch);
+                            setSetupVisible(true);
+                          }}
+                        >
                           {t('channels.setup')}
                         </Button>
-                      )
-                    ) : (
-                      statusTag
-                    )}
-                  </div>
+                      </Tooltip>
+                    </div>
+                  )}
                 </div>
                 
                 {!isLoaded && (
@@ -438,12 +474,25 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
           </div>
         </Modal>
 
+        <ChannelAccountsModal
+          visible={routeAccountsOpen}
+          channel={routeAccountsChannel ? { id: routeAccountsChannel.id, name: routeAccountsChannel.name } : null}
+          onClose={() => {
+            setRouteAccountsOpen(false);
+            setRouteAccountsChannel(null);
+          }}
+          onAfterChange={() => {
+            void Promise.all([fetchStatus(), fetchOpenClawPlugins()]);
+            onRefreshChannels();
+          }}
+        />
+
         <ChannelSetupModal 
           visible={setupVisible}
           channel={selectedChannel}
           onClose={() => setSetupVisible(false)}
           onSuccess={() => {
-            fetchStatus();
+            void Promise.all([fetchStatus(), fetchOpenClawPlugins()]);
             onRefreshChannels();
           }}
         />
