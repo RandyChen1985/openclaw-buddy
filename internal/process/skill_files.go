@@ -50,14 +50,16 @@ func GetBundledSkillsPath() string {
 }
 
 // VerifySkillPath checks if the given path is within any of the allowed skill directories
-func VerifySkillPath(absPath string) error {
-	if absPath == "" {
-		return fmt.Errorf("path is empty")
+// and returns the absolute, expanded path.
+func VerifySkillPath(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("path is empty")
 	}
 
-	cleanPath, err := filepath.Abs(absPath)
+	expanded := utils.ExpandPath(path)
+	cleanPath, err := filepath.Abs(expanded)
 	if err != nil {
-		return fmt.Errorf("failed to get absolute path: %v", err)
+		return "", fmt.Errorf("failed to get absolute path: %v", err)
 	}
 
 	allowedBases := GetAllowedSkillBases()
@@ -79,15 +81,16 @@ func VerifySkillPath(absPath string) error {
 	}
 
 	if !isAllowed {
-		return fmt.Errorf("access denied: path '%s' is outside allowed skill directories", absPath)
+		return "", fmt.Errorf("access denied: path '%s' is outside allowed skill directories", path)
 	}
 
-	return nil
+	return cleanPath, nil
 }
 
 // ListSkillResources returns the contents of a directory within the skill boundaries
-func ListSkillResources(absPath string) ([]FileEntry, error) {
-	if err := VerifySkillPath(absPath); err != nil {
+func ListSkillResources(path string) ([]FileEntry, error) {
+	absPath, err := VerifySkillPath(path)
+	if err != nil {
 		return nil, err
 	}
 
@@ -117,8 +120,9 @@ func ListSkillResources(absPath string) ([]FileEntry, error) {
 }
 
 // ReadSkillResource returns the content of a file within the skill boundaries
-func ReadSkillResource(absPath string) (string, error) {
-	if err := VerifySkillPath(absPath); err != nil {
+func ReadSkillResource(path string) (string, error) {
+	absPath, err := VerifySkillPath(path)
+	if err != nil {
 		return "", err
 	}
 
@@ -144,8 +148,9 @@ func ReadSkillResource(absPath string) (string, error) {
 }
 
 // SaveSkillResource writes content to a file within the skill boundaries
-func SaveSkillResource(absPath, content string) error {
-	if err := VerifySkillPath(absPath); err != nil {
+func SaveSkillResource(path, content string) error {
+	absPath, err := VerifySkillPath(path)
+	if err != nil {
 		return err
 	}
 
@@ -155,7 +160,7 @@ func SaveSkillResource(absPath, content string) error {
 	}
 
 	// Double check the parent directory as well
-	if err := VerifySkillPath(filepath.Dir(absPath)); err != nil {
+	if _, err := VerifySkillPath(filepath.Dir(absPath)); err != nil {
 		return err
 	}
 

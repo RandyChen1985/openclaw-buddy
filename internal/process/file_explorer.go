@@ -70,19 +70,21 @@ func GetAllowedExplorerPaths(configDir string) ([]string, error) {
 }
 
 // VerifyExplorerPath checks if the given path is within any allowed directories
-func VerifyExplorerPath(absPath, configDir string) error {
-	if absPath == "" {
-		return fmt.Errorf("path is empty")
+// and returns the absolute, expanded path.
+func VerifyExplorerPath(path, configDir string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("path is empty")
 	}
 
-	cleanPath, err := filepath.Abs(absPath)
+	expanded := utils.ExpandPath(path)
+	cleanPath, err := filepath.Abs(expanded)
 	if err != nil {
-		return fmt.Errorf("failed to get absolute path: %v", err)
+		return "", fmt.Errorf("failed to get absolute path: %v", err)
 	}
 
 	allowedBases, err := GetAllowedExplorerPaths(configDir)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	isAllowed := false
@@ -97,15 +99,16 @@ func VerifyExplorerPath(absPath, configDir string) error {
 	}
 
 	if !isAllowed {
-		return fmt.Errorf("access denied: path is outside allowed directories")
+		return "", fmt.Errorf("access denied: path is outside allowed directories")
 	}
 
-	return nil
+	return cleanPath, nil
 }
 
 // ListExplorerFiles returns the contents of a directory
-func ListExplorerFiles(absPath, configDir string) ([]ExplorerFileEntry, error) {
-	if err := VerifyExplorerPath(absPath, configDir); err != nil {
+func ListExplorerFiles(path, configDir string) ([]ExplorerFileEntry, error) {
+	absPath, err := VerifyExplorerPath(path, configDir)
+	if err != nil {
 		return nil, err
 	}
 
@@ -135,8 +138,9 @@ func ListExplorerFiles(absPath, configDir string) ([]ExplorerFileEntry, error) {
 }
 
 // ReadExplorerFile returns the content of a file
-func ReadExplorerFile(absPath, configDir string) (string, error) {
-	if err := VerifyExplorerPath(absPath, configDir); err != nil {
+func ReadExplorerFile(path, configDir string) (string, error) {
+	absPath, err := VerifyExplorerPath(path, configDir)
+	if err != nil {
 		return "", err
 	}
 
@@ -162,8 +166,9 @@ func ReadExplorerFile(absPath, configDir string) (string, error) {
 }
 
 // WriteExplorerFile writes content to a file
-func WriteExplorerFile(absPath, content, configDir string) error {
-	if err := VerifyExplorerPath(absPath, configDir); err != nil {
+func WriteExplorerFile(path, content, configDir string) error {
+	absPath, err := VerifyExplorerPath(path, configDir)
+	if err != nil {
 		return err
 	}
 
@@ -173,7 +178,7 @@ func WriteExplorerFile(absPath, content, configDir string) error {
 	}
 
 	// Verify parent dir
-	if err := VerifyExplorerPath(filepath.Dir(absPath), configDir); err != nil {
+	if _, err := VerifyExplorerPath(filepath.Dir(absPath), configDir); err != nil {
 		return err
 	}
 
@@ -181,8 +186,9 @@ func WriteExplorerFile(absPath, content, configDir string) error {
 }
 
 // DeleteExplorerFile deletes a file or an empty directory
-func DeleteExplorerFile(absPath, configDir string) error {
-	if err := VerifyExplorerPath(absPath, configDir); err != nil {
+func DeleteExplorerFile(path, configDir string) error {
+	absPath, err := VerifyExplorerPath(path, configDir)
+	if err != nil {
 		return err
 	}
 
