@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Row, Col, Card, DatePicker, Space, Table, Tag, Spin, Typography, Badge, Empty, Tabs, Input, Select, Modal, Radio } from 'antd';
-import { ShieldAlert, Zap, Cpu, Activity, Search, Terminal, ExternalLink } from 'lucide-react';
+import { Card, DatePicker, Space, Table, Tag, Spin, Typography, Badge, Empty, Tabs, Input, Select, Modal, Radio } from 'antd';
+import { ShieldAlert, Zap, Cpu, Activity, Search, Terminal, ExternalLink, MessageSquare } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import * as echarts from 'echarts';
 import dayjs from 'dayjs';
@@ -12,7 +12,8 @@ const { Option } = Select;
 
 const AuditDashboard: React.FC = () => {
   const { t } = useTranslation();
-  const [loading, setLoading] = useState(false);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [loadingLogs, setLoadingLogs] = useState(false);
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
     dayjs().subtract(6, 'day'),
     dayjs()
@@ -41,32 +42,40 @@ const AuditDashboard: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState('model');
 
-  const fetchData = async () => {
-    setLoading(true);
+  const sessionCount = (() => {
+    const n = Number(summary?.summary?.session_count);
+    return Number.isFinite(n) ? n : 0;
+  })();
+
+  const buildRange = () => {
     const start = dateRange[0].startOf('day').toISOString();
     const end = dateRange[1].endOf('day').toISOString();
+    return { start, end };
+  };
 
+  // 仅刷新顶部汇总/图表（不受日志过滤条件影响）
+  const fetchSummaryAndTools = async () => {
+    setLoadingSummary(true);
+    const { start, end } = buildRange();
     try {
-      const [sumRes, toolRes, logRes] = await Promise.all([
+      const [sumRes, toolRes] = await Promise.all([
         api.get(`/v1/audit/dashboard/summary?start=${start}&end=${end}&granularity=${granularity}`),
         api.get(`/v1/audit/dashboard/tools?start=${start}&end=${end}`),
-        api.get(`/v1/audit/logs?start=${start}&end=${end}&keyword=${logKeyword || ''}&level=${logLevel || ''}`)
       ]);
 
       if (sumRes.data) setSummary(sumRes.data);
       if (toolRes.data) setTools(toolRes.data);
-      if (logRes.data) setAuditLogs(logRes.data);
       setLastSync(dayjs().format('HH:mm:ss'));
     } catch (err) {
       console.error('Failed to fetch audit data:', err);
     } finally {
-      setLoading(false);
+      setLoadingSummary(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
-    const timer = setInterval(fetchData, 60000);
+    fetchSummaryAndTools();
+    const timer = setInterval(fetchSummaryAndTools, 60000);
     const handleResize = () => {
       setIsMobile(window.innerWidth < 1024);
       Object.values(charts.current).forEach(chart => chart?.resize());
@@ -77,7 +86,29 @@ const AuditDashboard: React.FC = () => {
       window.removeEventListener('resize', handleResize);
       Object.values(charts.current).forEach(chart => chart?.dispose());
     };
-  }, [dateRange, logKeyword, logLevel, granularity]);
+  }, [dateRange, granularity]);
+
+  // 仅刷新底部审计日志（过滤条件只影响此处）
+  const fetchAuditLogs = async () => {
+    setLoadingLogs(true);
+    const { start, end } = buildRange();
+    try {
+      const logRes = await api.get(
+        `/v1/audit/logs?start=${start}&end=${end}&keyword=${logKeyword || ''}&level=${logLevel || ''}`
+      );
+      if (logRes.data) setAuditLogs(logRes.data);
+    } catch (err) {
+      console.error('Failed to fetch audit logs:', err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAuditLogs();
+    const timer = setInterval(fetchAuditLogs, 60000);
+    return () => clearInterval(timer);
+  }, [dateRange, logKeyword, logLevel]);
 
   const renderTrendChart = () => {
     if (!trendChartRef.current || !summary?.trend?.length) return;
@@ -259,12 +290,12 @@ const AuditDashboard: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(renderTrendChart, 300);
     return () => clearTimeout(timer);
-  }, [summary?.trend, granularity, loading]);
+  }, [summary?.trend, granularity, loadingSummary]);
 
   useEffect(() => {
     const timer = setTimeout(renderTabCharts, 300);
     return () => clearTimeout(timer);
-  }, [summary, tools, loading, activeTab]);
+  }, [summary, tools, loadingSummary, activeTab]);
 
   const logColumns = [
     {
@@ -307,7 +338,7 @@ const AuditDashboard: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: isMobile ? '12px' : '16px', background: '#f8fafc', minHeight: '100vh' }}>
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Responsive Header */}
       <div style={{ 
         display: 'flex', 
@@ -341,34 +372,33 @@ const AuditDashboard: React.FC = () => {
         </div>
       </div>
 
-      <Spin spinning={loading}>
+      <Spin spinning={loadingSummary}>
         {/* Metric Ribbons (Compact) */}
-        <Row gutter={[12, 12]} style={{ marginBottom: '16px' }}>
+        <div className="audit-metrics-grid" style={{ marginBottom: 16 }}>
           {[
             { title: t('audit.totalTokens'), value: summary?.summary?.total_tokens, icon: <Zap size={14} color="#f59e0b" /> },
             { title: t('audit.activeAgents'), value: summary?.summary?.active_agents, icon: <Activity size={14} color="#3b82f6" /> },
+            { title: t('audit.sessionCount', { defaultValue: '会话数' }), value: sessionCount, icon: <MessageSquare size={14} color="#06b6d4" /> },
             { title: t('audit.securityHits'), value: summary?.summary?.security_hits, icon: <ShieldAlert size={14} color="#ef4444" />, isAlert: (summary?.summary?.security_hits > 0) },
             { title: t('audit.modelCoverage'), value: summary?.model_distribution?.length, icon: <Cpu size={14} color="#8b5cf6" /> },
           ].map((item, idx) => (
-            <Col xs={12} lg={6} key={idx}>
-              <Card bodyStyle={{ padding: '10px 12px' }} style={{ borderRadius: '8px', border: '1px solid #f1f5f9' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ minWidth: 0 }}>
-                    <Text type="secondary" style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 600, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</Text>
-                    <div style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 700, color: item.isAlert ? '#ef4444' : '#1e293b', marginTop: 0 }}>
-                      {item.value?.toLocaleString() || 0}
-                    </div>
+            <Card key={idx} bodyStyle={{ padding: '10px 12px' }} style={{ borderRadius: '8px', border: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ minWidth: 0 }}>
+                  <Text type="secondary" style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 600, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</Text>
+                  <div style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 700, color: item.isAlert ? '#ef4444' : '#1e293b', marginTop: 0 }}>
+                    {item.value?.toLocaleString() || 0}
                   </div>
-                  {!isMobile && <div style={{ opacity: 0.6, flexShrink: 0 }}>{item.icon}</div>}
                 </div>
-              </Card>
-            </Col>
+                {!isMobile && <div style={{ opacity: 0.6, flexShrink: 0 }}>{item.icon}</div>}
+              </div>
+            </Card>
           ))}
-        </Row>
+        </div>
 
         {/* Middle Section: Charts (Density + Integration) */}
-        <Row gutter={[12, 12]}>
-          <Col xs={24} lg={16}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: 12 }}>
+          <div>
             <Card 
               size="small"
               title={<span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>{t('audit.trendTitle')}</span>}
@@ -392,8 +422,8 @@ const AuditDashboard: React.FC = () => {
                 <Empty description={t('audit.noData')} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ marginTop: 20 }} />
               )}
             </Card>
-          </Col>
-          <Col xs={24} lg={8}>
+          </div>
+          <div>
             <Card 
               size="small"
               bodyStyle={{ padding: '0 8px 8px 8px' }}
@@ -423,8 +453,8 @@ const AuditDashboard: React.FC = () => {
                 </Tabs.TabPane>
               </Tabs>
             </Card>
-          </Col>
-        </Row>
+          </div>
+        </div>
 
         {/* Bottom Section: Logs (Flat & Compact) */}
         <Card 
@@ -462,6 +492,7 @@ const AuditDashboard: React.FC = () => {
             rowKey={(_, index) => index || ''}
             size="small"
             scroll={{ x: 'max-content' }}
+            loading={loadingLogs}
           />
         </Card>
       </Spin>
@@ -494,6 +525,9 @@ const AuditDashboard: React.FC = () => {
         .compact-tabs .ant-tabs-tab { padding: 4px 0 !important; }
         .ant-table-thead > tr > th { font-size: 10px !important; background: #fafafa !important; }
         .ant-table-cell { font-size: 10px !important; }
+        .audit-metrics-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        @media (min-width: 768px) { .audit-metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        @media (min-width: 1024px) { .audit-metrics-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
       `}} />
     </div>
   );

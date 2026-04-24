@@ -61,6 +61,7 @@ export function useV3Sessions({
   const [sessions, setSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [isUpdatingLabel, setIsUpdatingLabel] = useState(false);
+  const didAutoSelectMainRef = useRef(false);
 
   const sessionKeyRef = useRef<string | null>(null);
   useEffect(() => { sessionKeyRef.current = sessionKey; }, [sessionKey]);
@@ -104,10 +105,29 @@ export function useV3Sessions({
         return s;
       });
       setSessions(patchedList);
+
+      // 默认会话：如果首次进入且没有上次会话记录，则自动选中置顶主会话
+      if (!didAutoSelectMainRef.current && !sessionKeyRef.current) {
+        const main = patchedList.find((s: any) => s.key === 'agent:main:main');
+        if (main?.key) {
+          didAutoSelectMainRef.current = true;
+          messageOpsRef.current.resetTypingState?.(main.key);
+          setSessionKey(main.key);
+          // 订阅消息流并加载历史
+          sendRPC('sessions.messages.subscribe', { key: main.key }).catch(() => {});
+          setSessionModel(main.model || '');
+          setSelectedBot('openclaw:main');
+          const nextLabel = (main.label || '').trim();
+          if (!isUntitledSessionLabel(nextLabel)) setSessionLabel(nextLabel);
+          else setSessionLabel(null);
+          messageOpsRef.current.loadSessionHistory?.(main.key);
+          messageOpsRef.current.setHasNewMessages?.(false);
+        }
+      }
     }
 
     if (!isSilent) setLoadingSessions(false);
-  }, [sendRPC]);
+  }, [messageOpsRef, sendRPC, setSelectedBot, setSessionKey, setSessionLabel, setSessionModel]);
 
   /**
    * 统一处理网关 event（会话维度）。

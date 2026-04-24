@@ -162,6 +162,11 @@ func parseAndSaveLine(filePath string, line string) {
 		}
 	}
 
+	// 提取 sessionKey：使用文件名作为会话标识，并与 agentId 拼接避免跨 agent 冲突
+	sessionFile := filepath.Base(filePath)
+	sessionBase := strings.TrimSuffix(sessionFile, filepath.Ext(sessionFile))
+	sessionKey := agentId + ":" + sessionBase
+
 	ts, _ := time.Parse(time.RFC3339, ll.Timestamp)
 	if ts.IsZero() {
 		ts = time.Now()
@@ -184,8 +189,8 @@ func parseAndSaveLine(filePath string, line string) {
 			}
 
 			if input > 0 || output > 0 {
-				_, _ = utils.DB.Exec("INSERT INTO audit_usage (agent_id, channel_id, model_id, prompt_tokens, completion_tokens, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
-					agentId, channelId, model, input, output, tsStr)
+				_, _ = utils.DB.Exec("INSERT INTO audit_usage (session_key, agent_id, channel_id, model_id, prompt_tokens, completion_tokens, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
+					sessionKey, agentId, channelId, model, input, output, tsStr)
 			}
 		}
 
@@ -193,8 +198,8 @@ func parseAndSaveLine(filePath string, line string) {
 		for _, c := range ll.Message.Content {
 			if c.Type == "toolCall" {
 				// 记录工具调用
-				_, _ = utils.DB.Exec("INSERT INTO audit_tool_calls (agent_id, tool_name, timestamp) VALUES (?, ?, ?)",
-					agentId, c.Name, tsStr)
+				_, _ = utils.DB.Exec("INSERT INTO audit_tool_calls (session_key, agent_id, tool_name, timestamp) VALUES (?, ?, ?, ?)",
+					sessionKey, agentId, c.Name, tsStr)
 
 				// 安全审计
 				if c.Name == "exec" || c.Name == "shell" {
@@ -209,8 +214,8 @@ func parseAndSaveLine(filePath string, line string) {
 									break
 								}
 							}
-							_, _ = utils.DB.Exec("INSERT INTO audit_security_events (agent_id, command, risk_level, timestamp) VALUES (?, ?, ?, ?)",
-								agentId, cmd, riskLevel, tsStr)
+							_, _ = utils.DB.Exec("INSERT INTO audit_security_events (session_key, agent_id, command, risk_level, timestamp) VALUES (?, ?, ?, ?, ?)",
+								sessionKey, agentId, cmd, riskLevel, tsStr)
 						}
 					}
 				}

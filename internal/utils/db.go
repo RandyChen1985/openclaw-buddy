@@ -108,6 +108,7 @@ func createTables(existingToken string) (string, error) {
 		);`,
 		`CREATE TABLE IF NOT EXISTS audit_usage (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_key TEXT,
 			agent_id TEXT,
 			channel_id TEXT,
 			model_id TEXT,
@@ -117,12 +118,14 @@ func createTables(existingToken string) (string, error) {
 		);`,
 		`CREATE TABLE IF NOT EXISTS audit_tool_calls (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_key TEXT,
 			agent_id TEXT,
 			tool_name TEXT,
 			timestamp DATETIME
 		);`,
 		`CREATE TABLE IF NOT EXISTS audit_security_events (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_key TEXT,
 			agent_id TEXT,
 			command TEXT,
 			risk_level TEXT,
@@ -150,6 +153,9 @@ func createTables(existingToken string) (string, error) {
 	_, _ = DB.Exec("ALTER TABLE heal_events ADD COLUMN verify_retries INTEGER DEFAULT 0")
 	_, _ = DB.Exec("ALTER TABLE heal_events ADD COLUMN verify_duration_ms INTEGER DEFAULT 0")
 	_, _ = DB.Exec("ALTER TABLE heal_events ADD COLUMN verify_error TEXT")
+	_, _ = DB.Exec("ALTER TABLE audit_usage ADD COLUMN session_key TEXT")
+	_, _ = DB.Exec("ALTER TABLE audit_tool_calls ADD COLUMN session_key TEXT")
+	_, _ = DB.Exec("ALTER TABLE audit_security_events ADD COLUMN session_key TEXT")
 
 	// 初始化“首次启动时间”
 	firstRun := GetSetting("first_run_at", "")

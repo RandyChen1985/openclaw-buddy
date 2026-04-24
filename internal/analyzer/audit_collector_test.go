@@ -22,7 +22,7 @@ func TestParseAndSaveLine(t *testing.T) {
 	parseAndSaveLine(testFilePath, usageLine)
 
 	var count int
-	utils.DB.QueryRow("SELECT COUNT(*) FROM audit_usage WHERE agent_id = 'test-agent' AND model_id = 'gpt-4'").Scan(&count)
+	utils.DB.QueryRow("SELECT COUNT(*) FROM audit_usage WHERE agent_id = 'test-agent' AND model_id = 'gpt-4' AND session_key = 'test-agent:session1'").Scan(&count)
 	if count != 1 {
 		t.Errorf("Expected 1 usage record, got %d", count)
 	}
@@ -41,7 +41,7 @@ func TestParseAndSaveLine(t *testing.T) {
 	parseAndSaveLine(testFilePath, cmdLine)
 
 	var risk string
-	utils.DB.QueryRow("SELECT risk_level FROM audit_security_events WHERE agent_id = 'test-agent'").Scan(&risk)
+	utils.DB.QueryRow("SELECT risk_level FROM audit_security_events WHERE agent_id = 'test-agent' AND session_key = 'test-agent:session1'").Scan(&risk)
 	if risk != "high" {
 		t.Errorf("Expected high risk for rm -rf, got %s", risk)
 	}

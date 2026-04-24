@@ -4,6 +4,7 @@
     "retentionTip": "Data retained for 7 days",
     "totalTokens": "Total Token Consumption",
     "activeAgents": "Active Agents",
+    "sessionCount": "Sessions",
     "securityHits": "Security Hits",
     "modelCoverage": "Model Coverage",
     "trendTitle": "Token Usage Trend",

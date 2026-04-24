@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal, List, Button, message, Spin, Breadcrumb, Tabs, Input, Empty, Popconfirm, Tooltip } from 'antd';
-import { Folder, FileText, ChevronRight, Save, ArrowLeft, Eye, PenLine, Trash2, FolderOpen, Upload, Download } from 'lucide-react';
+import { Folder, FileText, ChevronRight, Save, ArrowLeft, Eye, PenLine, Trash2, FolderOpen, Upload, Download, Search } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -37,6 +37,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
   const [isUploading, setIsUploading] = useState(false);
+  const [filterText, setFilterText] = useState('');
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize path when modal opens
@@ -46,11 +47,13 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
       loadFiles(rootPath);
       setSelectedFile(null);
       setIsEditing(false);
+      setFilterText('');
     }
   }, [open, rootPath]);
 
   const loadFiles = async (path: string) => {
     setLoading(true);
+    setFilterText('');
     try {
       const res = await api.get(`/v1/openclaw/files/list?path=${encodeURIComponent(path)}`);
       const sortedFiles = (res.data.files || []).sort((a: FileEntry, b: FileEntry) => {
@@ -195,6 +198,13 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
     loadFiles(path);
   };
 
+  // Filtered files calculation
+  const filteredFiles = useMemo(() => {
+    if (!filterText.trim()) return files;
+    const term = filterText.toLowerCase();
+    return files.filter(f => f.name.toLowerCase().includes(term));
+  }, [files, filterText]);
+
   // Breadcrumbs calculation
   const breadcrumbs = useMemo(() => {
     if (!rootPath) return [];
@@ -297,6 +307,18 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
       />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f8fafc' }}>
+        {!isEditing && (
+          <div style={{ padding: '12px 24px', background: '#fff', borderBottom: '1px solid #f1f5f9' }}>
+            <Input
+              placeholder={t('common.searchPlaceholder', { defaultValue: '按文件名搜索...' })}
+              prefix={<Search size={16} color="#94a3b8" style={{ marginRight: 4 }} />}
+              value={filterText}
+              onChange={e => setFilterText(e.target.value)}
+              allowClear
+              style={{ borderRadius: 8, height: 38 }}
+            />
+          </div>
+        )}
         {loading && !isSaving ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Spin size="large" tip={t('common.loading')} />
@@ -384,11 +406,11 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
               )}
             </div>
           </div>
-        ) : files.length > 0 ? (
+        ) : filteredFiles.length > 0 ? (
           <List
             className="file-explorer-list"
             style={{ padding: '12px 24px', overflowY: 'auto' }}
-            dataSource={files}
+            dataSource={filteredFiles}
             renderItem={(item) => (
               <List.Item
                 style={{ 

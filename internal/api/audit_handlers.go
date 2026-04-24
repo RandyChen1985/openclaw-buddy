@@ -40,11 +40,21 @@ func (s *Server) handleGetAuditSummary(c *gin.Context) {
 		FROM audit_security_events 
 		WHERE risk_level = 'high' AND timestamp >= ? AND timestamp <= ?`, start, end).Scan(&securityHits)
 
-	var totalSessions int
+	var activeAgents int
 	_ = utils.DB.QueryRow(`
 		SELECT COUNT(DISTINCT agent_id) 
 		FROM audit_usage 
-		WHERE timestamp >= ? AND timestamp <= ?`, start, end).Scan(&totalSessions)
+		WHERE timestamp >= ? AND timestamp <= ?`, start, end).Scan(&activeAgents)
+
+	// 会话数：跨 usage/security_events 去重统计（避免只发生风险命中但无 usage 的会话缺失）
+	var sessionCount int
+	_ = utils.DB.QueryRow(`
+		SELECT COUNT(DISTINCT session_key)
+		FROM (
+			SELECT session_key FROM audit_usage WHERE timestamp >= ? AND timestamp <= ? AND session_key IS NOT NULL AND session_key != ''
+			UNION
+			SELECT session_key FROM audit_security_events WHERE timestamp >= ? AND timestamp <= ? AND session_key IS NOT NULL AND session_key != ''
+		)`, start, end, start, end).Scan(&sessionCount)
 
 	// 2. 模型分布统计
 	modelDist := []gin.H{}
@@ -125,7 +135,8 @@ func (s *Server) handleGetAuditSummary(c *gin.Context) {
 			"total_completion": totalCompletion,
 			"total_tokens":     totalPrompt + totalCompletion,
 			"security_hits":    securityHits,
-			"active_agents":    totalSessions,
+			"active_agents":    activeAgents,
+			"session_count":    sessionCount,
 		},
 		"model_distribution": modelDist,
 		"agent_distribution": agentDist,
