@@ -885,10 +885,10 @@ const Dashboard = () => {
         {
           key: 'logs',
           label: (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-              <span>{t('common.logs')}</span>
+            <span>
+              {t('common.logs')}
               {wsLogs.length > 0 && <Badge status="processing" size="small" style={{ marginLeft: 8 }} />}
-            </div>
+            </span>
           ),
           title: t('common.logs'),
           icon: <Terminal size={14} />
@@ -896,10 +896,16 @@ const Dashboard = () => {
         {
           key: 'tools',
           label: (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: 4 }}>
-              <span>{t('common.tools')}</span>
-              {healEvents.length > 0 && <Badge count={healEvents.length} size="small" styles={{ indicator: { backgroundColor: '#3b82f6' } }} />}
-            </div>
+            <span>
+              {t('common.tools')}
+              {healEvents.length > 0 && (
+                <Badge 
+                  count={healEvents.length} 
+                  size="small" 
+                  style={{ marginLeft: 8, backgroundColor: '#3b82f6' }} 
+                />
+              )}
+            </span>
           ),
           title: t('common.tools'),
           icon: <Zap size={14} />
