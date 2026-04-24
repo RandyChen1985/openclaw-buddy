@@ -385,68 +385,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
 
         {status === 'authenticated' && sessionKey && sessionMeta ? (
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-              {!isMobile && (
-                <Tooltip title={t('chat.clickToCopy', { defaultValue: '点击复制会话 ID' })}>
-                  <span
-                    style={{
-                      fontSize: 10,
-                      color: '#94a3b8',
-                      fontFamily: 'monospace',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      maxWidth: 120,
-                      lineHeight: '12px'
-                    }}
-                    className="v3-session-id-header"
-                    onClick={() => onCopy(sessionKey)}
-                  >
-                    {sessionKey}
-                  </span>
-                </Tooltip>
-              )}
-
-              {!isMobile && (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  background: 'var(--v3-source-chip-bg, rgba(79, 70, 229, 0.10))',
-                  padding: '1px 6px',
-                  borderRadius: 4,
-                  border: '1px solid var(--v3-source-chip-border, rgba(79, 70, 229, 0.22))'
-                }}>
-                  <span style={{ color: 'var(--v3-source-chip-text, var(--v3-primary, #4f46e5))', display: 'flex', alignItems: 'center' }}>
-                    {sessionMeta.isMain ? <Shield size={10} fill={'var(--v3-source-chip-text, var(--v3-primary, #4f46e5))' as any} /> : React.cloneElement(sessionMeta.sourceMeta.icon as React.ReactElement, { size: 10 })}
-                  </span>
-                  <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--v3-source-chip-text, var(--v3-primary, #4f46e5))', whiteSpace: 'nowrap' }}>
-                    {sessionMeta.sourceMeta.label}
-                  </span>
-                </div>
-              )}
-
-              {!isMobile && sessionMeta.bot && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#64748b', background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>
-                  <span>{sessionMeta.bot.identityEmoji || '🤖'}</span>
-                  <span style={{ fontWeight: 600 }}>
-                    {(() => {
-                      const botId = sessionMeta.botId || sessionMeta.bot.id;
-                      const botName = sessionMeta.bot.identityName || sessionMeta.bot.name;
-                      const botText = botName ? `${botId}（${botName}）` : botId;
-                      const userText =
-                        (sessionMeta.source || '').toLowerCase() === 'openai-user' && sessionMeta.openAIUser
-                          ? ` · ${sessionMeta.openAIUser}`
-                          : '';
-                      return `${botText}${userText}`;
-                    })()}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap', minWidth: 0 }}>
               {isEditingLabel ? (
                 <Input
                   size="small"
@@ -456,55 +395,127 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                   onBlur={() => { onUpdateLabel(editingLabelText); setIsEditingLabel(false); }}
                   onPressEnter={() => { onUpdateLabel(editingLabelText); setIsEditingLabel(false); }}
                   disabled={isUpdatingLabel}
-                  style={{ height: 20, fontSize: 12, width: isMobile ? 120 : 200 }}
+                  style={{ height: 22, fontSize: 13, width: isMobile ? 120 : 220, borderRadius: 6 }}
                 />
               ) : (
-                <>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile ? 150 : 300 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <span style={{ 
+                    fontSize: isMobile ? 13 : 14, 
+                    fontWeight: 800, 
+                    color: '#0f172a', 
+                    whiteSpace: 'nowrap', 
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis', 
+                    maxWidth: isMobile ? 140 : 400,
+                    letterSpacing: '-0.01em'
+                  }}>
                     {isMobile && sessionMeta.bot ? `${sessionMeta.bot.identityEmoji || '🤖'} ` : ''}
                     {sessionMeta.isMain ? t('chat.mainSession', { defaultValue: '主会话' }) : (sessionLabel || t('chat.noLabel', { defaultValue: '未命名会话' }))}
                   </span>
+                  
                   {!sessionMeta.isMain && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      {/* 禁用态明确的 not-allowed 光标与变灰效果（无需额外 tooltip，避免与 toast 重复） */}
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          cursor: isSummarizing ? 'not-allowed' : 'pointer',
-                          opacity: isSummarizing ? 0.55 : 1
-                        }}
-                      >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                      <Tooltip title={t('chat.autoSummarize', { defaultValue: '自动总结标题' })}>
                         <Button
                           size="small"
                           type="text"
-                          icon={isSummarizing ? <RefreshCw size={10} className="animate-spin" /> : <Wand2 size={10} />}
+                          icon={isSummarizing ? <RefreshCw size={11} className="animate-spin" /> : <Wand2 size={11} />}
                           onClick={onAutoSummarize}
-                          // 手动触发应可点击；即便本地消息为空也可由上层兜底拉历史。
                           disabled={isSummarizing}
-                          style={{
-                            padding: 0,
-                            height: 16,
-                            width: 16,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: isSummarizing ? '#94a3b8' : '#6366f1'
-                          }}
+                          style={{ padding: 0, height: 18, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isSummarizing ? '#94a3b8' : '#6366f1' }}
                         />
-                      </span>
-                      <Button
-                        size="small"
-                        type="text"
-                        icon={isUpdatingLabel ? <RefreshCw size={10} className="animate-spin" /> : <Save size={10} />}
-                        onClick={() => {
-                          setEditingLabelText(sessionLabel || '');
-                          setIsEditingLabel(true);
-                        }}
-                        style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}
-                      />
+                      </Tooltip>
+                      <Tooltip title={t('common.edit', { defaultValue: '编辑名称' })}>
+                        <Button
+                          size="small"
+                          type="text"
+                          icon={isUpdatingLabel ? <RefreshCw size={11} className="animate-spin" /> : <Save size={11} />}
+                          onClick={() => {
+                            setEditingLabelText(sessionLabel || '');
+                            setIsEditingLabel(true);
+                          }}
+                          style={{ padding: 0, height: 18, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}
+                        />
+                      </Tooltip>
                     </div>
                   )}
-                </>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, marginLeft: 2 }}>
+                    {!isMobile && (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 3,
+                        background: 'rgba(79, 70, 229, 0.08)',
+                        padding: '1px 6px',
+                        borderRadius: 6,
+                        border: '1px solid rgba(79, 70, 229, 0.15)'
+                      }}>
+                        <span style={{ color: '#4f46e5', display: 'flex', alignItems: 'center' }}>
+                          {sessionMeta.isMain ? <Shield size={10} fill="#4f46e5" /> : React.cloneElement(sessionMeta.sourceMeta.icon as React.ReactElement, { size: 10 })}
+                        </span>
+                        <span style={{ fontSize: 9, fontWeight: 700, color: '#4f46e5', whiteSpace: 'nowrap' }}>
+                          {sessionMeta.sourceMeta.label}
+                        </span>
+                      </div>
+                    )}
+
+                    {!isMobile && sessionMeta.bot && (
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 3, 
+                        fontSize: 9, 
+                        color: '#64748b', 
+                        background: '#f1f5f9', 
+                        padding: '1px 6px', 
+                        borderRadius: 6,
+                        border: '1px solid #e2e8f0'
+                      }}>
+                        <span>{sessionMeta.bot.identityEmoji || '🤖'}</span>
+                        <span style={{ fontWeight: 700 }}>
+                          {(() => {
+                            const botId = sessionMeta.botId || sessionMeta.bot.id;
+                            const botName = sessionMeta.bot.identityName || sessionMeta.bot.name;
+                            return botName ? `${botId}（${botName}）` : botId;
+                          })()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: -1 }}>
+              {!isMobile && (
+                <Tooltip title={t('chat.clickToCopy', { defaultValue: '点击复制会话 ID' })}>
+                  <span
+                    style={{
+                      fontSize: 9,
+                      color: '#94a3b8',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      maxWidth: 240,
+                      lineHeight: '12px',
+                      opacity: 0.8
+                    }}
+                    className="v3-session-id-header"
+                    onClick={() => onCopy(sessionKey)}
+                  >
+                    {sessionKey}
+                  </span>
+                </Tooltip>
+              )}
+              {/* OpenAI User Metadata if present */}
+              {!isMobile && (sessionMeta.source || '').toLowerCase() === 'openai-user' && sessionMeta.openAIUser && (
+                <div style={{ fontSize: 9, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 3 }}>
+                   <span style={{ opacity: 0.5 }}>•</span>
+                   <span>{sessionMeta.openAIUser}</span>
+                </div>
               )}
             </div>
           </div>
