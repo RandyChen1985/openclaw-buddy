@@ -149,7 +149,7 @@ cd "$DEV_ROOT"
 echo "🚀 启动服务..."
 # 显式读取 env 中的变量并导出 (也可以由 Go 代码中的 godotenv.Load("env") 处理，但 PID 检查在 Load 之前)
 export PID_FILE="./openclaw-buddy.pid"
-nohup ./openclaw-buddy-dev >> ./logs/guardian.log 2>&1 &
+nohup ./openclaw-buddy-dev > /dev/null 2>&1 &
 NEW_PID=$!
 echo $NEW_PID > "/tmp/openclaw-buddy-dev.pid"
 

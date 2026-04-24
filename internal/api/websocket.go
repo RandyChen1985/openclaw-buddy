@@ -155,6 +155,7 @@ func (s *Server) streamLogs(c *gin.Context) {
 			if err := conn.WriteMessage(websocket.TextMessage, []byte(line.Text)); err != nil {
 				return
 			}
+			// log.Printf("[WS-Debug] Sent log line: %s", line.Text)
 		case <-stopChan:
 			return
 		case <-time.After(30 * time.Second):

@@ -53,7 +53,7 @@ export const useStatusPolling = (
     
     // 频率计算：过渡态 2s，Dashboard 30s (与后端指标缓存 TTL 同步)，其他页面 60s
     const getStatusInterval = () => {
-      if (isTransitioning) return 2000;
+      if (isTransitioning) return 30000;
       return activeTab === 'dashboard' ? 30000 : 60000;
     };
 

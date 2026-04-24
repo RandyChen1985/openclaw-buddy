@@ -889,20 +889,21 @@ const Dashboard = () => {
               <span>{t('common.logs')}</span>
               {wsLogs.length > 0 && <Badge status="processing" size="small" style={{ marginLeft: 8 }} />}
             </div>
-          ), 
-          icon: <Terminal size={14} /> 
+          ),
+          title: t('common.logs'),
+          icon: <Terminal size={14} />
         },
-        { 
-          key: 'tools', 
+        {
+          key: 'tools',
           label: (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: 4 }}>
               <span>{t('common.tools')}</span>
               {healEvents.length > 0 && <Badge count={healEvents.length} size="small" styles={{ indicator: { backgroundColor: '#3b82f6' } }} />}
             </div>
-          ), 
-          icon: <Zap size={14} /> 
-        },
-        { key: 'shell', label: t('common.shell'), icon: <Terminal size={14} /> },
+          ),
+          title: t('common.tools'),
+          icon: <Zap size={14} />
+        },        { key: 'shell', label: t('common.shell'), icon: <Terminal size={14} /> },
         { key: 'security', label: t('security.title'), icon: <ShieldCheck size={14} /> },
         { key: 'cron', label: t('common.cron'), icon: <Clock size={14} /> },
       ]
