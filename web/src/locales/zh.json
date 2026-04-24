@@ -98,6 +98,8 @@
     "timeout": "请求超时",
     "connectionError": "连接失败，请检查网络或服务状态",
     "connectionClosed": "连接已关闭",
+    "fullscreen": "全屏",
+    "exitFullscreen": "退出全屏",
     "sessionClosed": "会话已关闭",
     "cron": "定时任务"
   },

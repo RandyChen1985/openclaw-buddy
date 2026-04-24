@@ -860,3 +860,19 @@ button.v3-settings-reasoning-btn:active {
 .v3-floating-btn:active {
   transform: scale(0.95); /* 点击时轻微缩放 */
 }
+
+/* --- 全屏模式 --- */
+.chat-v3-root.chat-v3-root-fullscreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 500 !important;
+  background: #fff !important;
+}
+
+/* 全屏模式下，隐藏顶部的面包屑或外部 Layout 的导航（如果有的话） */
+.chat-v3-root-fullscreen .chat-v3-header {
+  border-top: none !important;
+}

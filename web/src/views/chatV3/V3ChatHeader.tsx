@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Badge, Button, Dropdown, Input, Modal, Radio, Select, Switch, Tooltip } from 'antd';
-import { LayoutPanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2 } from 'lucide-react';
+import { LayoutPanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2, Maximize2, Minimize2 } from 'lucide-react';
 
 import type { V3ThemeMode, V3ThemePresetId, V3ThemeTokens } from '../../hooks/chatV3/useV3Theme';
 
@@ -67,6 +67,8 @@ export interface V3ChatHeaderProps {
     setCustomTokens: (updater: (prev: V3ThemeTokens) => V3ThemeTokens) => void;
     resetCustomTokens: () => void;
   };
+  isFullscreen: boolean;
+  onToggleFullscreen: () => void;
 }
 
 /**
@@ -102,7 +104,9 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     parseSessionKey,
     getSourceMeta,
     botsModels,
-    v3Theme
+    v3Theme,
+    isFullscreen,
+    onToggleFullscreen
   } = props;
 
   const [themeModalOpen, setThemeModalOpen] = useState(false);
@@ -515,6 +519,14 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
 
 
 
+
+        <Button 
+          size="small" 
+          type="text" 
+          icon={isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />} 
+          title={isFullscreen ? t('common.exitFullscreen', { defaultValue: '退出全屏' }) : t('common.fullscreen', { defaultValue: '全屏' })}
+          onClick={onToggleFullscreen}
+        />
 
         <Dropdown
           open={settingsOpen}

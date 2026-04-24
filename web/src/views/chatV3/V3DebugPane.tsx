@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { Button, Tooltip, Empty, Tag, Input, Radio } from 'antd';
+import { Button, Tooltip, Empty, Tag, Input, Radio, ConfigProvider } from 'antd';
 import { X, Trash2, ArrowUpRight, ArrowDownLeft, Terminal, Copy, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -182,16 +182,27 @@ export const V3DebugPane: React.FC<V3DebugPaneProps> = ({ t, logs, onClear, onCl
       </div>
 
       <div style={{ padding: '8px 12px', background: '#0f1727', borderBottom: '1px solid #334155', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Input 
-          size="small"
-          placeholder={t('logs.searchPlaceholder', { defaultValue: '搜索日志关键词...' })}
-          prefix={<Search size={12} color="#94a3b8" />}
-          value={searchText}
-          onChange={e => setSearchText(e.target.value)}
-          allowClear
-          variant="filled"
-          style={{ background: '#1e293b', border: '1px solid #334155', color: '#fff', '--ant-input-placeholder-color': '#e2e8f0' } as React.CSSProperties}
-        />
+        <ConfigProvider
+          theme={{
+            token: {
+              colorTextPlaceholder: 'rgba(255, 255, 255, 0.3)',
+              colorText: '#fff',
+              colorBgContainer: '#1e293b',
+              colorBorder: '#334155',
+            }
+          }}
+        >
+          <Input 
+            size="small"
+            placeholder={t('logs.searchPlaceholder', { defaultValue: '搜索日志关键词...' })}
+            prefix={<Search size={12} color="#94a3b8" />}
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            allowClear
+            variant="filled"
+            style={{ width: '100%' }}
+          />
+        </ConfigProvider>
         <div style={{ display: 'flex', gap: 4 }}>
            <Radio.Group 
              size="small" 

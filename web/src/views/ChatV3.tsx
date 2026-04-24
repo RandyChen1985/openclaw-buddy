@@ -175,6 +175,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
   const [editingMsgIndex, setEditingMsgIndex] = useState<number | null>(null);
   const [editContent, setEditContent] = useState('');
   const [sessionSearch, setSessionSearch] = useState('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
 
   useEffect(() => {
@@ -205,6 +206,11 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
       if (isMod && e.key === '\\') {
         e.preventDefault();
         setShowSider(prev => !prev);
+        return;
+      }
+      if (isMod && e.key === 'f') {
+        e.preventDefault();
+        setIsFullscreen(prev => !prev);
         return;
       }
     };
@@ -286,7 +292,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
   return (
     <>
       <div
-        className="chat-v3-root"
+        className={`chat-v3-root ${isFullscreen ? 'chat-v3-root-fullscreen' : ''}`}
         data-v3-theme={v3Theme.rootAttrs['data-v3-theme']}
         style={{
           ...(v3Theme.rootAttrs.styleVars || {}),
@@ -438,6 +444,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
             storage.setItem('v3_show_debug', val ? 'true' : 'false');
             if (!val) setWsLogs([]); // 关闭时自动清屏
           }}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
         />
   
         <V3MessagePane

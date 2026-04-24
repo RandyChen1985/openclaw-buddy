@@ -90,6 +90,8 @@
     "timeout": "Request Timeout",
     "connectionError": "Connection failed. Please check network or service status.",
     "connectionClosed": "Connection closed",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit Fullscreen",
     "sessionClosed": "Session closed",
     "cron": "Scheduled Jobs"
   },
