@@ -77,6 +77,8 @@ GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X 'openclaw-buddy/internal/con
 mkdir -p "${PKG_DIR}/lib" "${PKG_DIR}/logs" "${PKG_DIR}/reports" "${PKG_DIR}/backups" "${PKG_DIR}/data" "${PKG_DIR}/pid"
 mv "${BINARY_NAME}" "${PKG_DIR}/lib/openclaw-buddy"
 [ -f "release/README.md" ] && cp "release/README.md" "${PKG_DIR}/README.md"
+# 将版本文件打入发布包，便于产物自描述
+[ -f "VERSION" ] && cp "VERSION" "${PKG_DIR}/VERSION"
 
 # 4. 生成 Linux 默认 env 配置文件
 cat <<EOF > "${PKG_DIR}/env"

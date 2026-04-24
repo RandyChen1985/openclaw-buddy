@@ -98,6 +98,11 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# 将版本文件同步到隔离目录，便于排查与展示
+if [ -f "VERSION" ]; then
+    cp "VERSION" "$DEV_ROOT/VERSION"
+fi
+
 # 6. 生成隔离环境配置: $DEV_ROOT/env (仅在不存在时生成)
 if [ ! -f "$DEV_ROOT/env" ]; then
     echo "📝 生成隔离环境配置: $DEV_ROOT/env"
