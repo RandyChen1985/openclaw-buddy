@@ -202,3 +202,56 @@ func DeleteExplorerFile(path, configDir string) error {
 
 	return os.RemoveAll(absPath) // Be careful with RemoveAll, but VerifyExplorerPath should protect us
 }
+
+// UploadExplorerFile writes uploaded bytes to the target directory
+func UploadExplorerFile(dirPath, filename string, data []byte, configDir string) (string, error) {
+	absDir, err := VerifyExplorerPath(dirPath, configDir)
+	if err != nil {
+		return "", err
+	}
+
+	info, err := os.Stat(absDir)
+	if err != nil {
+		return "", fmt.Errorf("target directory does not exist: %v", err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("target path is not a directory")
+	}
+
+	// Sanitize filename
+	filename = filepath.Base(filename)
+	if filename == "" || filename == "." || filename == ".." {
+		return "", fmt.Errorf("invalid filename")
+	}
+
+	destPath := filepath.Join(absDir, filename)
+	if err := os.WriteFile(destPath, data, 0644); err != nil {
+		return "", err
+	}
+	return destPath, nil
+}
+
+// ReadExplorerFileBytes returns the raw bytes of a file for download
+func ReadExplorerFileBytes(path, configDir string) ([]byte, string, error) {
+	absPath, err := VerifyExplorerPath(path, configDir)
+	if err != nil {
+		return nil, "", err
+	}
+
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return nil, "", err
+	}
+	if info.IsDir() {
+		return nil, "", fmt.Errorf("cannot download a directory")
+	}
+	if info.Size() > 100*1024*1024 {
+		return nil, "", fmt.Errorf("file is too large (max 100MB)")
+	}
+
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, "", err
+	}
+	return data, filepath.Base(absPath), nil
+}

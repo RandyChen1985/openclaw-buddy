@@ -1381,6 +1381,63 @@ func (s *Server) deleteExplorerFile(c *gin.Context) {
 	s.Success(c, gin.H{"status": "success"})
 }
 
+func (s *Server) uploadExplorerFile(c *gin.Context) {
+	dirPath := c.PostForm("path")
+	if dirPath == "" {
+		s.Error(c, http.StatusBadRequest, "path is required")
+		return
+	}
+
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		s.Error(c, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+
+	data := make([]byte, header.Size)
+	if _, err := file.Read(data); err != nil {
+		s.Error(c, http.StatusInternalServerError, "failed to read file: "+err.Error())
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【上传文件】 (Dir: %s, File: %s)", dirPath, header.Filename)
+	destPath, err := process.UploadExplorerFile(dirPath, header.Filename, data, s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success", "path": destPath})
+}
+
+func (s *Server) downloadExplorerFile(c *gin.Context) {
+	path := c.Query("path")
+	if path == "" {
+		s.Error(c, http.StatusBadRequest, "path is required")
+		return
+	}
+
+	data, filename, err := process.ReadExplorerFileBytes(path, s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if filename == "" {
+		filename = filepath.Base(path)
+	}
+	if filename == "" || filename == "." {
+		filename = "download"
+	}
+
+	// 使用 URL 编码文件名以支持中文字符
+	escapedFilename := url.PathEscape(filename)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", escapedFilename, escapedFilename))
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Content-Length", fmt.Sprintf("%d", len(data)))
+	c.Data(http.StatusOK, "application/octet-stream", data)
+}
+
 func (s *Server) getOpenClawModelsConfig(c *gin.Context) {
 	providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir)
 	if err != nil {

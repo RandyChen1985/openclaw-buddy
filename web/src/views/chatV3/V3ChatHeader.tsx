@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Badge, Button, Dropdown, Input, Modal, Radio, Select, Switch, Tooltip } from 'antd';
-import { LayoutPanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2, Wifi } from 'lucide-react';
+import { LayoutPanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2 } from 'lucide-react';
+
 import type { V3ThemeMode, V3ThemePresetId, V3ThemeTokens } from '../../hooks/chatV3/useV3Theme';
 
 export interface V3ChatHeaderProps {
@@ -80,10 +81,6 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     showSider,
     onToggleSider,
     status,
-    lastHealth,
-    latencyHistory,
-    pulse,
-    onReconnect,
     sessionKey,
     sessionLabel,
     isSummarizing,
@@ -242,7 +239,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                   {t('chat.showDebugHint', { defaultValue: '仅 debug 调试用，开启可能占用 CPU' })}
                 </div>
               </div>
-              <Switch size="small" checked={showDebug} onChange={(val) => setShowDebug(val)} />
+              <Switch size="small" checked={showDebug} onChange={(val) => { setShowDebug(val); setSettingsOpen(false); }} />
             </div>
           </>
         )}
@@ -511,66 +508,13 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           !isMobile && status === 'authenticated' && null
         )}
 
-        {status === 'authenticated' && !sessionKey && !isMobile && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 8, flexShrink: 0, marginLeft: 4 }}>
-            <div style={{ height: 12, width: 1, background: '#f1f5f9', marginRight: 2 }} />
-            <span style={{ fontSize: 11, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600, marginRight: 2 }}>
-              {lastHealth?.ok === false ? t('chat.gatewayFluctuating') : t('chat.connected')}
-            </span>
-            <div
-              key={pulse}
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                background: lastHealth?.ok === false ? '#f59e0b' : (lastHealth?.ok ? '#10b981' : '#94a3b8'),
-                animation: lastHealth?.ok ? 'v3-heartbeat 0.8s ease-out' : 'none',
-                flexShrink: 0
-              }}
-            />
-            {!isMobile && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', width: 35 }}>
-                  {lastHealth ? `${lastHealth.latency}ms` : '---'}
-                </span>
-                <svg width="30" height="12" style={{ opacity: 0.6 }}>
-                  <polyline
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth="1"
-                    points={latencyHistory.map((l: any, i: any) => `${(i / 29) * 30},${12 - (Math.min(l, 200) / 200) * 12}`).join(' ')}
-                  />
-                </svg>
-              </div>
-            )}
-          </div>
-        )}
+
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 2 : 6, flexShrink: 0 }}>
-        {status === 'authenticated' && sessionKey && !isMobile && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px', background: '#f8fafc', borderRadius: 8, height: 24, marginLeft: 4 }}>
-            <span style={{ fontSize: 10, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600 }}>
-              {lastHealth?.ok === false ? t('chat.gatewayFluctuating') : t('chat.connected')}
-            </span>
-            <div
-              key={pulse}
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: lastHealth?.ok === false ? '#f59e0b' : (lastHealth?.ok ? '#10b981' : '#94a3b8'),
-                animation: lastHealth?.ok ? 'v3-heartbeat 0.8s ease-out' : 'none',
-                flexShrink: 0
-              }}
-            />
-            <span style={{ fontSize: 9, color: '#94a3b8', fontFamily: 'monospace', minWidth: 30 }}>
-              {lastHealth ? `${lastHealth.latency}ms` : '---'}
-            </span>
-          </div>
-        )}
 
-        <Button size="small" type="text" icon={<Wifi size={14} />} onClick={onReconnect} title={t('common.restart')} />
+
+
 
         <Dropdown
           open={settingsOpen}

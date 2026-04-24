@@ -13,7 +13,7 @@ import api, { getFullUrl } from '../api';
 import { getBaseURL } from '../utils/url';
 import storage from '../utils/storage';
 import { Mermaid, CodeBlock, ECharts, isEchartsCodeFenceLanguage } from '../components/ChatComponents';
-import GatewayOfflineMask from '../components/GatewayOfflineMask';
+
 
 const { Option } = Select;
 
@@ -46,13 +46,15 @@ interface OnlineChatProps {
   onRefreshBots: () => void;
   isMobile?: boolean;
   onRestartGateway?: () => Promise<void>;
-  isRunning?: boolean;
-  onNavigateToDashboard?: () => void;
 }
 
+
+
 const ChatClassic: React.FC<OnlineChatProps> = ({ 
-  botsModels, loadingBots, onRefreshBots, isMobile, onRestartGateway, isRunning, onNavigateToDashboard 
+  botsModels, loadingBots, onRefreshBots, isMobile, onRestartGateway
 }) => {
+
+
   const { t } = useTranslation();
   const [selectedBot, setSelectedBot] = useState<string>('');
   const [inputText, setInputText] = useState('');
@@ -668,7 +670,6 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
       position: 'relative',
       overflow: 'hidden'
     }}>
-      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
       {markdownStyles}
       {/* Top Bar */}
       <Card 

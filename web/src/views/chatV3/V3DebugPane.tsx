@@ -185,12 +185,12 @@ export const V3DebugPane: React.FC<V3DebugPaneProps> = ({ t, logs, onClear, onCl
         <Input 
           size="small"
           placeholder={t('logs.searchPlaceholder', { defaultValue: '搜索日志关键词...' })}
-          prefix={<Search size={12} color="#64748b" />}
+          prefix={<Search size={12} color="#94a3b8" />}
           value={searchText}
           onChange={e => setSearchText(e.target.value)}
           allowClear
           variant="filled"
-          style={{ background: '#1e293b', border: '1px solid #334155', color: '#fff' }}
+          style={{ background: '#1e293b', border: '1px solid #334155', color: '#fff', '--ant-input-placeholder-color': '#e2e8f0' } as React.CSSProperties}
         />
         <div style={{ display: 'flex', gap: 4 }}>
            <Radio.Group 
@@ -199,9 +199,9 @@ export const V3DebugPane: React.FC<V3DebugPaneProps> = ({ t, logs, onClear, onCl
              onChange={e => setDirection(e.target.value)}
              buttonStyle="solid"
            >
-             <Radio.Button value="all" style={{ fontSize: 10, background: direction === 'all' ? '#38bdf8' : '#1e293b', borderColor: '#334155', color: direction === 'all' ? '#fff' : '#94a3b8' }}>{t('common.all', { defaultValue: '全部' })}</Radio.Button>
-             <Radio.Button value="out" style={{ fontSize: 10, background: direction === 'out' ? '#38bdf8' : '#1e293b', borderColor: '#334155', color: direction === 'out' ? '#fff' : '#94a3b8' }}>OUT(发送)</Radio.Button>
-             <Radio.Button value="in" style={{ fontSize: 10, background: direction === 'in' ? '#38bdf8' : '#1e293b', borderColor: '#334155', color: direction === 'in' ? '#fff' : '#94a3b8' }}>IN(接收)</Radio.Button>
+             <Radio.Button value="all" style={{ fontSize: 10, background: direction === 'all' ? '#38bdf8' : '#1e293b', borderColor: '#334155', color: direction === 'all' ? '#fff' : '#e2e8f0' }}>{t('common.all', { defaultValue: '全部' })}</Radio.Button>
+             <Radio.Button value="out" style={{ fontSize: 10, background: direction === 'out' ? '#38bdf8' : '#1e293b', borderColor: '#334155', color: direction === 'out' ? '#fff' : '#e2e8f0' }}>OUT(发送)</Radio.Button>
+             <Radio.Button value="in" style={{ fontSize: 10, background: direction === 'in' ? '#38bdf8' : '#1e293b', borderColor: '#334155', color: direction === 'in' ? '#fff' : '#e2e8f0' }}>IN(接收)</Radio.Button>
            </Radio.Group>
         </div>
       </div>

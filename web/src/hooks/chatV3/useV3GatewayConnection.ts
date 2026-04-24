@@ -330,10 +330,12 @@ export function useV3GatewayConnection({
 
       if (data.type === 'event') {
         if (data.event === 'health') {
-          const { ok, durationMs, ts } = data.payload;
+          const { ok, durationMs, ts } = data.payload || {};
           setLastHealth({ ok, latency: durationMs || 0, ts });
           setLatencyHistory(prev => [...prev.slice(-29), durationMs || 0]);
           setPulse(p => p + 1);
+          // 依然触发 onEvent，让上层 Context 捕获完整数据
+          handlers?.onEvent?.(data, ws);
           return;
         }
         if (data.event === 'connect.challenge') {

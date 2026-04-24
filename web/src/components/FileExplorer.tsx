@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Modal, List, Button, message, Spin, Breadcrumb, Tabs, Input, Empty, Popconfirm } from 'antd';
-import { Folder, FileText, ChevronRight, Save, ArrowLeft, Eye, PenLine, Trash2, FolderOpen } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Modal, List, Button, message, Spin, Breadcrumb, Tabs, Input, Empty, Popconfirm, Tooltip } from 'antd';
+import { Folder, FileText, ChevronRight, Save, ArrowLeft, Eye, PenLine, Trash2, FolderOpen, Upload, Download } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import rehypeSanitize from 'rehype-sanitize';
-import api from '../api';
+import api, { getFullUrl } from '../api';
+import storage from '../utils/storage';
 import TokenBadge from './TokenBadge';
+
 
 interface FileEntry {
   name: string;
@@ -34,6 +36,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
+  const [isUploading, setIsUploading] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize path when modal opens
   useEffect(() => {
@@ -106,6 +110,86 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
     }
   };
 
+  const handleDownload = (file: FileEntry | null) => {
+    if (!file) {
+      message.warning('No file selected');
+      return;
+    }
+    const token = storage.getItem('guardian_token') || '';
+    const url = getFullUrl(`/v1/openclaw/files/download?path=${encodeURIComponent(file.path)}`);
+    
+    // 调试日志：检查 file 对象属性
+    console.log('Download initiated for:', file);
+
+    // 严谨提取文件名
+    let fileName = file.name;
+    if (!fileName && file.path) {
+      fileName = file.path.split(/[/\\]/).pop() || '';
+    }
+    if (!fileName) fileName = 'download';
+
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then(async r => {
+        if (!r.ok) {
+          const errorData = await r.json().catch(() => ({}));
+          throw new Error(errorData.error || `Download failed: ${r.status} ${r.statusText}`);
+        }
+        return r.blob();
+      })
+      .then(blob => {
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      })
+      .catch((err) => {
+        console.error('Download error:', err);
+        message.error(err.message || t('common.downloadFailed', { defaultValue: '下载失败' }));
+      });
+  };
+
+  const handleUploadClick = () => {
+    uploadInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = e.target.files;
+    if (!selectedFiles || selectedFiles.length === 0) return;
+
+    setIsUploading(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const file = selectedFiles[i];
+      const formData = new FormData();
+      formData.append('path', currentPath);
+      formData.append('file', file);
+      try {
+        await api.post('/v1/openclaw/files/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        successCount++;
+      } catch (err: any) {
+        failCount++;
+        message.error(`${file.name}: ${err.response?.data?.error || err.message}`);
+      }
+    }
+
+    setIsUploading(false);
+    // reset input
+    e.target.value = '';
+
+    if (successCount > 0) {
+      message.success(t('common.uploadSuccess', { defaultValue: `上传成功 ${successCount} 个文件` }));
+      loadFiles(currentPath);
+    }
+  };
+
   const handleFolderClick = (path: string) => {
     setCurrentPath(path);
     loadFiles(path);
@@ -169,7 +253,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
               />
             </div>
           </div>
-          {isEditing && (
+          {isEditing ? (
             <div style={{ display: 'flex', gap: 8 }}>
               <Button icon={<ArrowLeft size={16} />} onClick={() => setIsEditing(false)}>
                 {t('common.back')}
@@ -178,6 +262,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
                 {t('common.save')}
               </Button>
             </div>
+          ) : (
+            <Tooltip title={t('common.uploadFile', { defaultValue: '上传文件' })}>
+              <Button
+                icon={<Upload size={16} />}
+                loading={isUploading}
+                onClick={handleUploadClick}
+                style={{ borderRadius: 8 }}
+              >
+                {!isMobile && t('common.uploadFile', { defaultValue: '上传文件' })}
+              </Button>
+            </Tooltip>
           )}
         </div>
       }
@@ -192,6 +287,15 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
       centered
       destroyOnClose
     >
+      {/* Hidden file input */}
+      <input
+        ref={uploadInputRef}
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        onChange={handleFileSelected}
+      />
+
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f8fafc' }}>
         {loading && !isSaving ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -216,6 +320,14 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
                       ]}
                   />
                 )}
+                <Tooltip title={t('common.download', { defaultValue: '下载' })}>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<Download size={16} />}
+                    onClick={() => selectedFile && handleDownload(selectedFile)}
+                  />
+                </Tooltip>
                 {!isProtected(selectedFile?.name || '') && (
                   <Popconfirm
                     title={t('common.deleteConfirm', { defaultValue: '确定要删除此文件吗？' })}
@@ -311,7 +423,19 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
                       </div>
                     )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {!item.is_dir && (
+                      <Tooltip title={t('common.download', { defaultValue: '下载' })}>
+                        <Button 
+                          type="text" 
+                          size="small"
+                          icon={<Download size={14} />} 
+                          onClick={(e) => { e.stopPropagation(); handleDownload(item); }}
+                          className="download-btn-hover"
+                          style={{ color: '#0ea5e9' }}
+                        />
+                      </Tooltip>
+                    )}
                     {!isProtected(item.name) && (
                       <Popconfirm
                         title={t('common.deleteConfirm', { defaultValue: '确定要删除吗？' })}
@@ -353,7 +477,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
           background: #fdfdfd;
         }
         .delete-btn-hover { opacity: 0.3; transition: opacity 0.2s; }
+        .download-btn-hover { opacity: 0.3; transition: opacity 0.2s; }
         .file-item-hover:hover .delete-btn-hover { opacity: 1; }
+        .file-item-hover:hover .download-btn-hover { opacity: 1; }
         .markdown-body-v3 {
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
           font-size: 16px;

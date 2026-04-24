@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
@@ -37,6 +37,7 @@ import CommandPalette from './components/common/CommandPalette';
 import { useStatusPolling } from './hooks/useStatusPolling';
 import { useWebSocketLogs } from './hooks/useWebSocketLogs';
 import { useTaskCenter, type Task } from './hooks/useTaskCenter';
+import { V3GatewayProvider, useV3Gateway } from './context/V3GatewayContext';
 
 const { Content, Sider, Header } = Layout;
 
@@ -120,13 +121,24 @@ const Dashboard = () => {
 
   // Hooks
   const { tasks: activeTasks, updateTask: baseUpdateTask, loading: tasksLoading, fetchActiveTasks } = useTaskCenter();
-  const { status, history, fetching, refreshCountdown, fetchData } = useStatusPolling(
+  const { status, history, fetching, fetchData } = useStatusPolling(
     isTransitioning, targetStatus, activeTab, () => {
       setIsTransitioning(false);
       setTargetStatus(null);
       setTransitionSeconds(0);
     }
   );
+
+  const { status: v3Status, lastHealth } = useV3Gateway();
+
+  // 核心：合并状态机。
+  // WS health payload 不含 cpu/memory（验证过），所以 metrics 仍由 HTTP 提供。
+  // gateway.status 不再使用（isRunning 基于 v3Status），此处仅保留结构完整性。
+  const mergedStatus = useMemo(() => {
+    if (!status) return null;
+    return status;
+  }, [status]);
+
 
   const processedTaskIds = useRef<Set<string>>(new Set());
   const isInitialProcessed = useRef(false);
@@ -855,7 +867,9 @@ const Dashboard = () => {
     }
   };
 
-  const isRunning = status?.gateway?.status?.toLowerCase() === 'running';
+  // 网关运行状态：完全基于 WebSocket 连接判断，不再使用 HTTP 轮询值
+  const isRunning = v3Status === 'authenticated';
+
 
   // --- Menu Configuration ---
   const disabledFeatures = versionUpdate?.gui_disable_features?.split(',') || [];
@@ -961,7 +975,7 @@ const Dashboard = () => {
     const viewMap: Record<string, React.ReactNode> = {
       'dashboard': (
         <DashboardOverview
-          status={status}
+          status={mergedStatus}
           history={history}
  
           wsLogs={wsLogs} 
@@ -1179,6 +1193,8 @@ const Dashboard = () => {
     </div>
   );
 
+
+
   const headerEl = (onMenuClick?: () => void) => (
     <Header style={{
       background: '#fff', height: 56, padding: isMobile ? '0 12px' : '0 24px', borderBottom: '1px solid #e2e8f0',
@@ -1216,11 +1232,19 @@ const Dashboard = () => {
         />
         <LanguageSwitcher isMobile={isMobile} />
         <Badge
-          status={isRunning ? 'success' : 'error'}
+          status={
+            isRunning ? 'success' : 
+            (['challenging', 'authorizing'].includes(v3Status) ? 'processing' : 'error')
+          }
           text={
             <span style={{ color: '#64748b', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>
-              {!isMobile && 'Gateway '}{isRunning ? t('dashboard.running') : t('dashboard.stopped')}
-              {isRunning && <span style={{ color: '#3b82f6', marginLeft: 4 }}>({refreshCountdown}s)</span>}
+              {!isMobile && 'Gateway '}
+              {isRunning ? t('dashboard.running') : t('dashboard.stopped')}
+              {isRunning && lastHealth?.latency !== undefined && (
+                <span style={{ color: '#10b981', marginLeft: 4, fontWeight: 700 }}>
+                  ({lastHealth.latency}ms)
+                </span>
+              )}
             </span>
           }
         />
@@ -1509,7 +1533,13 @@ export default function App() {
         },
       },
     }}>
-      {token ? <Dashboard /> : <LoginView onLoginSuccess={setToken} />}
+      {token ? (
+        <V3GatewayProvider>
+          <Dashboard />
+        </V3GatewayProvider>
+      ) : (
+        <LoginView onLoginSuccess={setToken} />
+      )}
     </ConfigProvider>
   );
 }

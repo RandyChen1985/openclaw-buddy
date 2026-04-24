@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 // antd message 已下沉到子模块（sessions/messages/summarize）内部处理
-import * as nacl from 'tweetnacl';
 import storage from '../utils/storage';
-import { useV3GatewayConnection } from './chatV3/useV3GatewayConnection';
+import { useV3Gateway } from '../context/V3GatewayContext';
 import { useV3Messages } from './chatV3/useV3Messages';
 import { useV3AutoSummarize } from './chatV3/useV3AutoSummarize';
 import { useV3Sessions } from './chatV3/useV3Sessions';
@@ -39,8 +38,6 @@ export interface Message {
 }
 
 interface UseChatV3WebSocketProps {
-  keyPair: nacl.BoxKeyPair | null;
-  deviceId: string;
   selectedBot: string;
   setSelectedBot: (bot: string) => void;
   botsModels: any;
@@ -54,8 +51,6 @@ interface UseChatV3WebSocketProps {
 }
 
 export const useChatV3WebSocket = ({
-  keyPair,
-  deviceId,
   selectedBot,
   setSelectedBot,
   botsModels,
@@ -66,6 +61,16 @@ export const useChatV3WebSocket = ({
   showThinkingRef,
   onLog
 }: UseChatV3WebSocketProps) => {
+  const {
+    status,
+    connect,
+    sendRPC,
+    lastHealth,
+    latencyHistory,
+    pulse,
+    registerHandlers,
+    unregisterHandlers
+  } = useV3Gateway();
   // --- States ---
   const [sessionKey, setSessionKey] = useState<string | null>(() => storage.getItem('v3_current_session_key'));
   const [sessionLabel, setSessionLabel] = useState<string | null>(() => storage.getItem('v3_current_session_label'));
@@ -107,18 +112,10 @@ export const useChatV3WebSocket = ({
     onLog
   }), [onLog]);
 
-  const {
-    status,
-    connect,
-    sendRPC,
-    lastHealth,
-    latencyHistory,
-    pulse
-  } = useV3GatewayConnection({
-    keyPair,
-    deviceId,
-    handlers
-  });
+  useEffect(() => {
+    registerHandlers('chat-v3-view', handlers);
+    return () => unregisterHandlers('chat-v3-view');
+  }, [handlers, registerHandlers, unregisterHandlers]);
 
   const {
     sessions,

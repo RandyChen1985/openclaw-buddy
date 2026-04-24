@@ -4,10 +4,8 @@ import { message, Modal } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Monitor, MessageCircle, Send, Globe, Clock, Zap, Sparkles, Settings } from 'lucide-react';
 import 'katex/dist/katex.min.css';
-import * as nacl from 'tweetnacl';
-import { sha256 } from 'js-sha256';
 import storage from '../utils/storage';
-import GatewayOfflineMask from '../components/GatewayOfflineMask';
+
 import V3SessionList from '../components/Chat/V3SessionList';
 import type { InputAreaHandle } from '../components/Chat/V3InputArea';
 import ChatV3Auth from '../components/Chat/ChatV3Auth';
@@ -54,23 +52,18 @@ const SourceConfig: Record<string, { icon: any; color: string; labelKey: string;
   'fallback': { icon: <Globe size={12} />, color: '#94a3b8', labelKey: 'chat.source.fallback', defaultLabel: '其他渠道' }
 };
 
-// --- Types ---
 interface ChatV3Props {
   botsModels: any;
   loadingBots: boolean;
   onRefreshBots: () => void;
   isMobile?: boolean;
-  isRunning?: boolean;
-  onNavigateToDashboard?: () => void;
 }
 
-// --- Utils ---
-const hexToUint8Array = (hex: string): Uint8Array => {
-  const matched = hex.match(/.{1,2}/g);
-  return new Uint8Array(matched ? matched.map(byte => parseInt(byte, 16)) : []);
-};
 
-const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRunning, onNavigateToDashboard }) => {
+// --- Utils ---
+
+const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) => {
+
   const { t } = useTranslation();
   const v3Theme = useV3Theme();
 
@@ -98,8 +91,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   
   // Local UI States
   const [selectedBot, setSelectedBot] = useState<string>('');
-  const [keyPair, setKeyPair] = useState<nacl.BoxKeyPair | null>(null);
-  const [deviceId, setDeviceId] = useState<string>('');
   const [showThinking, setShowThinking] = useState<boolean>(() => storage.getItem('v3_show_thinking') !== 'false');
   const showThinkingRef = useRef(showThinking);
   showThinkingRef.current = showThinking;
@@ -163,8 +154,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     connect,
     showScrollBtnRef
   } = useChatV3WebSocket({
-    keyPair,
-    deviceId,
     selectedBot,
     setSelectedBot: handleSetSelectedBot,
     botsModels,
@@ -187,30 +176,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [editContent, setEditContent] = useState('');
   const [sessionSearch, setSessionSearch] = useState('');
 
-
-  useEffect(() => {
-    const initKeys = async () => {
-      let seedHex = storage.getItem('openclaw_v3_seed');
-      let seed: Uint8Array;
-      if (!seedHex) {
-        seed = nacl.randomBytes(32);
-        storage.setItem('openclaw_v3_seed', Array.from(seed).map(b => b.toString(16).padStart(2, '0')).join(''));
-      } else {
-        seed = hexToUint8Array(seedHex);
-      }
-      const kp = nacl.sign.keyPair.fromSeed(seed);
-      setKeyPair(kp as any);
-      let hashArray: number[];
-      if (typeof crypto !== 'undefined' && crypto.subtle) {
-        const hashBuffer = await crypto.subtle.digest('SHA-256', kp.publicKey.buffer as ArrayBuffer);
-        hashArray = Array.from(new Uint8Array(hashBuffer));
-      } else {
-        hashArray = Array.from(hexToUint8Array(sha256(kp.publicKey)));
-      }
-      setDeviceId(hashArray.map(b => b.toString(16).padStart(2, '0')).join(''));
-    };
-    initKeys();
-  }, []);
 
   useEffect(() => {
     if (!selectedBot && botsModels?.data?.bots?.length > 0) {
@@ -320,7 +285,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
   return (
     <>
-      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
       <div
         className="chat-v3-root"
         data-v3-theme={v3Theme.rootAttrs['data-v3-theme']}

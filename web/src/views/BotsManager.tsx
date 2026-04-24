@@ -991,7 +991,20 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                             )}
                                           </div>
                                         </Tooltip>
-                                        <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', opacity: 0.8 }}>ID: {m.id}</div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', opacity: 0.8 }}>
+                                          <span>ID: {m.id}</span>
+                                          <Button
+                                            type="text"
+                                            size="small"
+                                            icon={<Copy size={10} />}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              navigator.clipboard.writeText(m.id);
+                                              message.success(t('common.copySuccess'));
+                                            }}
+                                            style={{ color: '#cbd5e1', padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 16 }}
+                                          />
+                                        </div>
                                       </div>
                                     </div>
     
