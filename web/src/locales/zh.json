@@ -63,6 +63,10 @@
     "deleteConfirm": "确定要删除吗？",
     "deleteSuccess": "删除成功",
     "deleteFailed": "删除失败",
+    "directory": "目录树",
+    "searchPlaceholder": "搜索文件...",
+    "uploadFile": "上传文件",
+    "download": "下载",
     "name": "名称",
     "time": "时间",
     "size": "大小",
@@ -863,7 +867,8 @@
     },
     "path": "路径",
     "resources": "资源",
-    "resourceExplorer": "资源浏览器"
+    "resourceExplorer": "资源浏览器",
+    "loadFailed": "加载失败"
   },
   "plugins": {
     "title": "插件管理",

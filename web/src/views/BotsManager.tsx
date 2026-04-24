@@ -577,10 +577,10 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 {botsModels.data.bots.map((bot: any, index: number) => {
                   const color = cardColors[index % cardColors.length];
                   return (
-                    <Col xs={24} sm={12} md={12} lg={8} xl={6} key={bot.id}>
+                    <Col xs={24} sm={12} md={8} lg={8} xl={8} key={bot.id}>
                       <Card
                         hoverable
-                        styles={{ body: { padding: 24 } }}
+                        styles={{ body: { padding: '16px 20px' } }}
                         style={{ 
                           borderRadius: 24, 
                           border: `1px solid ${color.border}`,
@@ -606,7 +606,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                         )}
                         <div style={{ position: 'absolute', top: 0, right: 0, width: 80, height: 80, background: `linear-gradient(135deg, transparent 50%, ${color.bg} 100%)`, opacity: 0.5, zIndex: 0 }}></div>
                         
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, position: 'relative', zIndex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, position: 'relative', zIndex: 1 }}>
                            <div style={{ 
                              width: 52, height: 52, borderRadius: 16, 
                              background: '#ffffff', display: 'flex', 
@@ -653,7 +653,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                             </div>
                           </div>
                           
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, marginTop: 10 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, marginTop: 4 }}>
                             <div style={{ display: 'flex', gap: 8 }}>
                               <Tooltip title={t('bots.editSoul')}>
                                 <Button 
@@ -724,62 +724,54 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                 />
                               </Tooltip>
                             </div>
-
-
                           </div>
                           
-                          <div style={{ background: 'rgba(255, 255, 255, 0.5)', backdropFilter: 'blur(8px)', padding: '14px', borderRadius: 18, border: `1px solid ${color.border}60` }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                              <div>
-                                <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, fontWeight: 800 }}>
+                          <div style={{ background: 'rgba(255, 255, 255, 0.5)', backdropFilter: 'blur(8px)', padding: '10px 14px', borderRadius: 18, border: `1px solid ${color.border}60` }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800, flexShrink: 0 }}>
                                   {t('bots.currentModel')}
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <div style={{ padding: 4, background: `${color.theme}15`, borderRadius: 6 }}>
-                                      <Cpu size={12} color={color.theme} />
-                                  </div>
-                                  <span style={{ fontSize: 12, fontWeight: 700, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: '65%', overflow: 'hidden' }}>
+                                  <Cpu size={12} color={color.theme} style={{ flexShrink: 0 }} />
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                     {bot.model}
                                   </span>
                                 </div>
                               </div>
-                              <div style={{ paddingTop: 10, borderTop: `1px dashed ${color.border}`, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-                                <div style={{ flex: 1, overflow: 'hidden' }}>
-                                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, fontWeight: 800 }}>
-                                    {t('bots.workspace')}
-                                  </div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <div style={{ padding: 4, background: '#f1f5f9', borderRadius: 6 }}>
-                                        <FolderOpen size={12} color="#64748b" />
-                                    </div>
-                                    <Tooltip title={bot.workspace}>
-                                      <span 
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          if (bot.workspace) {
-                                            setExplorerPath(bot.workspace);
-                                            setExplorerTitle(`${bot.name} ${t('bots.workspace')}`);
-                                            setExplorerOpen(true);
-                                          }
-                                        }}
-                                        style={{ 
-                                          fontSize: 12, 
-                                          fontWeight: 700, 
-                                          color: '#0ea5e9', 
-                                          overflow: 'hidden', 
-                                          textOverflow: 'ellipsis', 
-                                          whiteSpace: 'nowrap', 
-                                          flex: 1, 
-                                          fontFamily: 'monospace',
-                                          cursor: 'pointer',
-                                          textDecoration: 'underline',
-                                          textDecorationStyle: 'dotted'
-                                        }}
-                                      >
-                                        {bot.workspace?.length > 24 ? bot.workspace.substring(0, 10) + '...' + bot.workspace.substring(bot.workspace.length - 10) : bot.workspace}
-                                      </span>
-                                    </Tooltip>
-                                  </div>
+                              <div style={{ height: 1, borderTop: `1px dashed ${color.border}40`, margin: '0' }}></div>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800, flexShrink: 0 }}>
+                                  {t('bots.workspace')}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: '65%', overflow: 'hidden' }}>
+                                  <FolderOpen size={12} color="#64748b" style={{ flexShrink: 0 }} />
+                                  <Tooltip title={bot.workspace}>
+                                    <span 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (bot.workspace) {
+                                          setExplorerPath(bot.workspace);
+                                          setExplorerTitle(`${bot.name} ${t('bots.workspace')}`);
+                                          setExplorerOpen(true);
+                                        }
+                                      }}
+                                      style={{ 
+                                        fontSize: 11, 
+                                        fontWeight: 700, 
+                                        color: '#0ea5e9', 
+                                        overflow: 'hidden', 
+                                        textOverflow: 'ellipsis', 
+                                        whiteSpace: 'nowrap', 
+                                        fontFamily: 'monospace',
+                                        cursor: 'pointer',
+                                        textDecoration: 'underline',
+                                        textDecorationStyle: 'dotted'
+                                      }}
+                                    >
+                                      {bot.workspace?.length > 18 ? bot.workspace.substring(0, 8) + '...' + bot.workspace.substring(bot.workspace.length - 8) : bot.workspace}
+                                    </span>
+                                  </Tooltip>
                                 </div>
                               </div>
                             </div>
@@ -929,7 +921,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                               const color = cardColors[mIdx % cardColors.length];
                               
                               return (
-                                <Col xs={24} sm={12} md={12} lg={8} xl={6} key={m.id}>
+                                <Col xs={24} sm={12} md={8} lg={8} xl={8} key={m.id}>
                                   <div style={{
                                     background: isDefault 
                                       ? `linear-gradient(135deg, #f5f3ff 0%, #ffffff 100%)` 
