@@ -440,44 +440,59 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, marginLeft: 2 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, marginLeft: 4 }}>
                     {!isMobile && (
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 3,
-                        background: 'rgba(79, 70, 229, 0.08)',
-                        padding: '1px 6px',
-                        borderRadius: 6,
-                        border: '1px solid rgba(79, 70, 229, 0.15)'
-                      }}>
-                        <span style={{ color: '#4f46e5', display: 'flex', alignItems: 'center' }}>
+                      <div 
+                        className="v3-header-tag-source"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          background: 'rgba(79, 70, 229, 0.08)',
+                          padding: '1px 8px',
+                          borderRadius: 999,
+                          border: '1px solid rgba(79, 70, 229, 0.12)',
+                          transition: 'all 0.2s ease',
+                          cursor: 'default'
+                        }}
+                      >
+                        <span style={{ color: '#4f46e5', display: 'flex', alignItems: 'center', opacity: 0.85 }}>
                           {sessionMeta.isMain ? <Shield size={10} fill="#4f46e5" /> : React.cloneElement(sessionMeta.sourceMeta.icon as React.ReactElement, { size: 10 })}
                         </span>
-                        <span style={{ fontSize: 9, fontWeight: 700, color: '#4f46e5', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: 9, fontWeight: 800, color: '#4f46e5', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>
                           {sessionMeta.sourceMeta.label}
                         </span>
                       </div>
                     )}
 
                     {!isMobile && sessionMeta.bot && (
-                      <div style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: 3, 
-                        fontSize: 9, 
-                        color: '#64748b', 
-                        background: '#f1f5f9', 
-                        padding: '1px 6px', 
-                        borderRadius: 6,
-                        border: '1px solid #e2e8f0'
-                      }}>
-                        <span>{sessionMeta.bot.identityEmoji || '🤖'}</span>
-                        <span style={{ fontWeight: 700 }}>
+                      <div 
+                        className="v3-header-tag-bot"
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: 4, 
+                          fontSize: 9, 
+                          color: '#475569', 
+                          background: '#f1f5f9', 
+                          padding: '1px 8px', 
+                          borderRadius: 999,
+                          border: '1px solid #e2e8f0',
+                          transition: 'all 0.2s ease',
+                          cursor: 'default'
+                        }}>
+                        <span style={{ opacity: 0.9 }}>{sessionMeta.bot.identityEmoji || '🤖'}</span>
+                        <span style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}>
                           {(() => {
                             const botId = sessionMeta.botId || sessionMeta.bot.id;
                             const botName = sessionMeta.bot.identityName || sessionMeta.bot.name;
-                            return botName ? `${botId}（${botName}）` : botId;
+                            return botName ? (
+                              <>
+                                <span style={{ opacity: 0.6 }}>{botId}</span>
+                                <span style={{ opacity: 0.4, fontWeight: 400 }}>·</span>
+                                <span>{botName}</span>
+                              </>
+                            ) : botId;
                           })()}
                         </span>
                       </div>
@@ -487,7 +502,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
               )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: -1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 1 }}>
               {!isMobile && (
                 <Tooltip title={t('chat.clickToCopy', { defaultValue: '点击复制会话 ID' })}>
                   <span

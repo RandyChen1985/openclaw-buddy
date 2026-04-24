@@ -876,3 +876,14 @@ button.v3-settings-reasoning-btn:active {
 .chat-v3-root-fullscreen .chat-v3-header {
   border-top: none !important;
 }
+
+/* 顶部标签悬浮效果 */
+.v3-header-tag-source:hover {
+  background: rgba(79, 70, 229, 0.12) !important;
+  border-color: rgba(79, 70, 229, 0.2) !important;
+}
+
+.v3-header-tag-bot:hover {
+  background: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
+}
