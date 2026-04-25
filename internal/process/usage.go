@@ -69,7 +69,7 @@ func GetUsageCost(days int, force bool) (*UsageCostResult, error) {
 	args := []string{"gateway", "usage-cost", "--json", "--days", fmt.Sprintf("%d", days)}
 	
 	log.Printf("📊 [Usage] 缓存失效或强制刷新，执行命令: %s %v", bin, args)
-	res, err := RunCommandWithTimeout(15*time.Second, bin, args...)
+	res, err := RunCommandWithTimeout(60*time.Second, bin, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute usage-cost command: %v", err)
 	}

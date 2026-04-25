@@ -49,14 +49,14 @@ func GetWeChatQRCode(force bool) (*WeChatQRCode, error) {
 
 	// 使用新命令: openclaw channels login --channel openclaw-weixin
 	log.Printf("📥 Executing: openclaw channels login --channel openclaw-weixin (Streaming Mode, Force: %v)", force)
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// 我们需要手动管理进程以在获取到 URL 后立即杀死它，因为该命令会一直等待扫码结果
 	var args []string = []string{"channels", "login", "--channel", "openclaw-weixin"}
 	cmd := exec.CommandContext(ctx, "openclaw", args...)
-	
+
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
@@ -151,7 +151,7 @@ func GetWeChatPluginStatus(force bool) (*WeChatPluginStatus, error) {
 
 	// 3. 执行物理检测: openclaw plugins list
 	log.Printf("🔍 Executing: openclaw plugins list (Detecting WeChat Plugin Status, Force: %v)", force)
-	res, _ := RunCommandWithTimeout(15*time.Second, "openclaw", "plugins", "list")
+	res, _ := RunCommandWithTimeout(30*time.Second, "openclaw", "plugins", "list")
 	
 	status := &WeChatPluginStatus{
 		Installed: false,
@@ -202,7 +202,7 @@ type ChatChannel struct {
 
 func GetChatChannels() ([]ChatChannel, error) {
 	log.Printf("🔍 Executing: openclaw channels list (Detecting Configured Channels)")
-	res, _ := RunCommandWithTimeout(20*time.Second, "openclaw", "channels", "list")
+	res, _ := RunCommandWithTimeout(45*time.Second, "openclaw", "channels", "list")
 
 	var channels []ChatChannel
 	lines := strings.Split(res.Output, "\n")
@@ -246,7 +246,7 @@ func InstallWeChatPlugin() error {
 
 	// 2. 启用插件
 	log.Printf("⚙️ Enabling WeChat plugin in config...")
-	_, err = RunCommandWithTimeout(10*time.Second, GetOpenClawBinary(), "config", "set", "plugins.entries.openclaw-weixin.enabled", "true")
+	_, err = RunCommandWithTimeout(30*time.Second, GetOpenClawBinary(), "config", "set", "plugins.entries.openclaw-weixin.enabled", "true")
 	return err
 }
 func UnbindWeChatAccount(configDir string, accountID string) error {

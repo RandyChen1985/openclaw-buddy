@@ -51,10 +51,10 @@ export const useStatusPolling = (
   useEffect(() => {
     let timer: any;
     
-    // 频率计算：过渡态 2s，Dashboard 5s，其他页面 15s
+    // 频率计算：过渡态 2s，Dashboard 30s (与后端指标缓存 TTL 同步)，其他页面 60s
     const getStatusInterval = () => {
-      if (isTransitioning) return 2000;
-      return activeTab === 'dashboard' ? 5000 : 15000;
+      if (isTransitioning) return 30000;
+      return activeTab === 'dashboard' ? 30000 : 60000;
     };
 
     const interval = getStatusInterval();

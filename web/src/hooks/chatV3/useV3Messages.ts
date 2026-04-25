@@ -727,7 +727,7 @@ export function useV3Messages({
 
     let prefix = '';
     if (topThought) {
-      prefix = `> :::thinking\n> ${String(topThought).replace(/\n/g, '\n> ')}\n> :::\n\n`;
+      prefix = `> :::thinking\n> \n> ${String(topThought).replace(/\n/g, '\n> ')}\n> \n> :::\n\n`;
     }
 
     let body = '';
@@ -751,14 +751,14 @@ export function useV3Messages({
         let thinkingPart = '';
         if (c.thinking || c.thought || c.reasoning || c.type === 'thinking') {
           const thought = c.thinking || c.thought || c.reasoning || c.content || '';
-          thinkingPart = `> :::thinking\n> ${String(thought).replace(/\n/g, '\n> ')}\n> :::\n\n`;
+          thinkingPart = `> :::thinking\n> \n> ${String(thought).replace(/\n/g, '\n> ')}\n> \n> :::\n\n`;
           matched = true;
         }
 
         let planPart = '';
         if (c.type === 'plan' || c.plan) {
           const plan = c.plan || c.content || '';
-          planPart = `> :::plan\n> ${String(plan).replace(/\n/g, '\n> ')}\n> :::\n\n`;
+          planPart = `> :::plan\n> \n> ${String(plan).replace(/\n/g, '\n> ')}\n> \n> :::\n\n`;
           matched = true;
         }
 
@@ -1528,10 +1528,11 @@ export function useV3Messages({
       return;
     }
     if (evt === 'sessions.changed') {
-      const { key: evtKey, data: sessionData } = data.payload || {};
+      const payload = data.payload || {};
+      const evtKey = payload.sessionKey || payload.key || payload.session?.key;
       if (evtKey) {
         const oldStatus = sessionStatusMapRef.current.get(evtKey);
-        const newStatus = sessionData?.status;
+        const newStatus = payload.status || payload.session?.status || payload.data?.status;
         sessionStatusMapRef.current.set(evtKey, newStatus);
 
         // 如果状态变更为 done/error，且当前会话无活跃运行中 run，尝试触发延时解锁。
@@ -2090,7 +2091,7 @@ export function useV3Messages({
         currentKey = res.payload.key;
         setSessionKey(currentKey);
         // 兼容：部分网关版本只认 key 字段
-        sendRPC('sessions.messages.subscribe', { key: currentKey, sessionKey: currentKey }).catch(() => {});
+        sendRPC('sessions.messages.subscribe', { key: currentKey }).catch(() => {});
         // 不在此处 await patch：否则会拖住首条消息的 setMessages，会话区体感「卡住」。
         void sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel }).catch(() => {});
         // 静默刷新列表，避免 setLoadingSessions(true) + 300ms 最短 loading 与首屏消息抢同一帧
@@ -2508,14 +2509,25 @@ export function useV3Messages({
     }
   }, [status, clearStallTimer]);
 
+  const lastAutoSyncedKeyRef = useRef<string | null>(null);
   const prevStatusRef = useRef(status);
   useEffect(() => {
     const prev = prevStatusRef.current;
     prevStatusRef.current = status;
-    if (status !== 'authenticated' || prev === 'authenticated') return;
-    // 重连后同步：检查当前会话是否有中断的流式生成
     const key = sessionKeyRef.current;
-    if (!key) return;
+
+    // 状态从非 authenticated 变为 authenticated 时，重置同步锁
+    if (status === 'authenticated' && prev !== 'authenticated') {
+      lastAutoSyncedKeyRef.current = null;
+    }
+
+    if (status !== 'authenticated' || !key) {
+      lastAutoSyncedKeyRef.current = null;
+      return;
+    }
+
+    // 💡 核心保护：如果在当前认证会话中，该 Key 已经自动同步过历史，则不再重复触发
+    if (lastAutoSyncedKeyRef.current === key) return;
 
     const cache = sessionCacheRef.current.get(key);
     if (cache && cache.isTyping) {
@@ -2526,6 +2538,9 @@ export function useV3Messages({
       streamingAssistantIndexRef.current = null;
       markSessionTyping(key, false);
     }
+    
+    // 标记已同步，防止死循环
+    lastAutoSyncedKeyRef.current = key;
     // 无论如何都重新加载历史，确保与服务端状态一致
     loadSessionHistory(key);
   }, [status, loadSessionHistory, markSessionTyping]);

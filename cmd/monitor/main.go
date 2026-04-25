@@ -12,6 +12,7 @@ import (
 	"openclaw-buddy/internal/config"
 	"openclaw-buddy/internal/guardian"
 	"openclaw-buddy/internal/process"
+	"openclaw-buddy/internal/analyzer"
 	"openclaw-buddy/internal/utils"
 	"runtime"
 
@@ -70,7 +71,10 @@ func main() {
 	}
 	log.Printf("📦 Database initialized at %s", cfg.DBFile)
 
-	// 5. Environment Check
+	// 5. Start Audit Collector (Background)
+	analyzer.StartAuditCollector(cfg.OpenClawConfigDir)
+
+	// 6. Environment Check
 	if _, err := process.CheckBinaryInPath("openclaw"); err != nil {
 		log.Fatalf("❌ %v", err)
 	}

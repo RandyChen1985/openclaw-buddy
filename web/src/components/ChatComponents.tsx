@@ -7,6 +7,12 @@ import * as echarts from 'echarts';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
+/** Markdown 围栏语言：识别为 ECharts option（与网关/模型常用 ` ```chart ` 对齐） */
+export function isEchartsCodeFenceLanguage(language: string): boolean {
+  const l = (language || '').toLowerCase();
+  return l === 'echarts' || l === 'chart';
+}
+
 // --- ECharts Component ---
 export const ECharts = ({ optionStr, isTyping }: { optionStr: string, isTyping?: boolean }) => {
   const chartRef = useRef<HTMLDivElement>(null);

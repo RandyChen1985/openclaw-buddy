@@ -550,9 +550,9 @@ button.v3-settings-reasoning-btn:active {
   margin-top: -12px !important; /* 抵消大部分间距 */
 }
 
-/* 隐藏特殊的容器标记文本 */
-.v3-meta-content p:first-child {
-   display: none;
+/* 结构化块内元素的基础间距微调 */
+.v3-meta-content p {
+   margin: 4px 0 !important;
 }
 
 .v3-meta-content blockquote {
@@ -561,12 +561,40 @@ button.v3-settings-reasoning-btn:active {
    margin: 0 !important;
    font-style: normal !important;
    color: inherit !important;
+   background: transparent !important;
 }
 
 /* --- 4. Markdown 增强样式 --- */
 .markdown-body-v3 { line-height: 1.6; font-size: 14px; }
 .markdown-body-v3 a { color: var(--v3-link); text-decoration: none; }
 .markdown-body-v3 a:hover { text-decoration: underline; }
+.v3-quick-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  color: #4f46e5;
+  cursor: pointer;
+  font-size: 0.9em;
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  margin: 2px 4px 2px 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  vertical-align: middle;
+  line-height: 1.4;
+}
+.v3-quick-link:hover {
+  background: #4f46e5;
+  color: #ffffff !important;
+  border-color: #4f46e5;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+  transform: translateY(-1px);
+}
+.v3-quick-link:active {
+  transform: translateY(0) scale(0.98);
+}
 .markdown-body-v3 h1, .markdown-body-v3 h2, .markdown-body-v3 h3 { margin-top: 16px; margin-bottom: 8px; font-weight: 700; color: inherit; }
 .markdown-body-v3 h1 { font-size: 1.5em; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
 .markdown-body-v3 h2 { font-size: 1.3em; }
@@ -579,6 +607,64 @@ button.v3-settings-reasoning-btn:active {
 .markdown-body-v3 th, .markdown-body-v3 td { border: 1px solid #e2e8f0; padding: 6px 10px; }
 .markdown-body-v3 th { background: #f8fafc; font-weight: 700; }
 .markdown-body-v3 blockquote:not([class]) { border-left: 4px solid #cbd5e1; padding-left: 12px; color: #64748b; margin: 10px 0; font-style: italic; }
+
+/* Soul 编辑器 Drawer：Tabs 占满剩余高度，tab 内可滚动 */
+.v3-soul-tabs.ant-tabs {
+  flex: 1;
+  min-height: 0;
+}
+.v3-soul-tabs .ant-tabs-content-holder {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.v3-soul-tabs .ant-tabs-content,
+.v3-soul-tabs .ant-tabs-content-top {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.v3-soul-tabs .ant-tabs-tabpane:not(.ant-tabs-tabpane-hidden) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Soul 预览：代码块与行内 code（与消息区 markdown-body-v3 互补） */
+.v3-soul-preview-md pre {
+  margin: 12px 0;
+  padding: 12px 14px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.v3-soul-preview-md pre code {
+  background: transparent !important;
+  color: inherit !important;
+  padding: 0 !important;
+  font-size: inherit;
+}
+.v3-soul-preview-md :not(pre) > code {
+  background: #f1f5f9;
+  color: #0f172a;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+/* Drawer 挂在 body 上时不在 .chat-v3-root 内，链接不依赖 --v3-link */
+.v3-soul-preview-md.markdown-body-v3 a {
+  color: #2563eb;
+}
 
 /* Command Output：终端深色区，覆盖 .markdown-body-v3 下 strong/table/pre 等浅色主题，避免浅底浅字 */
 .markdown-body-v3 .v3-command-output-shell,
@@ -773,4 +859,31 @@ button.v3-settings-reasoning-btn:active {
 
 .v3-floating-btn:active {
   transform: scale(0.95); /* 点击时轻微缩放 */
+}
+
+/* --- 全屏模式 --- */
+.chat-v3-root.chat-v3-root-fullscreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 500 !important;
+  background: #fff !important;
+}
+
+/* 全屏模式下，隐藏顶部的面包屑或外部 Layout 的导航（如果有的话） */
+.chat-v3-root-fullscreen .chat-v3-header {
+  border-top: none !important;
+}
+
+/* 顶部标签悬浮效果 */
+.v3-header-tag-source:hover {
+  background: rgba(79, 70, 229, 0.12) !important;
+  border-color: rgba(79, 70, 229, 0.2) !important;
+}
+
+.v3-header-tag-bot:hover {
+  background: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
 }

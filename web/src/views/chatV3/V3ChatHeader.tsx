@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Badge, Button, Dropdown, Input, Modal, Radio, Select, Switch, Tooltip } from 'antd';
-import { LayoutPanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2, Wifi } from 'lucide-react';
+import { LayoutPanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2, Maximize2, Minimize2 } from 'lucide-react';
+
 import type { V3ThemeMode, V3ThemePresetId, V3ThemeTokens } from '../../hooks/chatV3/useV3Theme';
 
 export interface V3ChatHeaderProps {
@@ -39,11 +40,15 @@ export interface V3ChatHeaderProps {
   thinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   onThinkingLevelChange: (val: any) => void;
 
+  // debug logging
+  showDebug: boolean;
+  setShowDebug: (val: boolean) => void;
+
   /** 发送 `/reasoning …` 等用户消息（需在已连接且非生成中时由父组件校验） */
   onSendReasoningCommand?: (text: string) => void;
 
   // source meta helper
-  parseSessionKey: (key: string) => { botId: string; source: string };
+  parseSessionKey: (key: string) => { botId: string; source: string; openAIUser?: string };
   getSourceMeta: (source: string) => { icon: any; color: string; label: string };
 
   // bots for showing identity chip
@@ -62,6 +67,8 @@ export interface V3ChatHeaderProps {
     setCustomTokens: (updater: (prev: V3ThemeTokens) => V3ThemeTokens) => void;
     resetCustomTokens: () => void;
   };
+  isFullscreen: boolean;
+  onToggleFullscreen: () => void;
 }
 
 /**
@@ -76,10 +83,6 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     showSider,
     onToggleSider,
     status,
-    lastHealth,
-    latencyHistory,
-    pulse,
-    onReconnect,
     sessionKey,
     sessionLabel,
     isSummarizing,
@@ -95,11 +98,15 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     setShowThinking,
     thinkingLevel,
     onThinkingLevelChange,
+    showDebug,
+    setShowDebug,
     onSendReasoningCommand,
     parseSessionKey,
     getSourceMeta,
     botsModels,
-    v3Theme
+    v3Theme,
+    isFullscreen,
+    onToggleFullscreen
   } = props;
 
   const [themeModalOpen, setThemeModalOpen] = useState(false);
@@ -146,11 +153,11 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
 
   const sessionMeta = useMemo(() => {
     if (!sessionKey) return null;
-    const { botId, source } = parseSessionKey(sessionKey);
+    const { botId, source, openAIUser } = parseSessionKey(sessionKey);
     const sourceMeta = getSourceMeta(source);
     const isMain = sessionKey === 'agent:main:main';
     const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
-    return { botId, sourceMeta, isMain, bot };
+    return { botId, sourceMeta, isMain, bot, source, openAIUser };
   }, [botsModels, getSourceMeta, parseSessionKey, sessionKey]);
 
   /**
@@ -222,6 +229,24 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           </div>
           <Switch size="small" checked={showThinking} onChange={(val) => setShowThinking(val)} />
         </div>
+
+        {!isMobile && (
+          <>
+            <div style={{ height: 1, background: '#f1f5f9' }} />
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <div>
+                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+                  {t('chat.showDebug', { defaultValue: '显示推送日志' })}
+                </div>
+                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+                  {t('chat.showDebugHint', { defaultValue: '仅 debug 调试用，开启可能占用 CPU' })}
+                </div>
+              </div>
+              <Switch size="small" checked={showDebug} onChange={(val) => { setShowDebug(val); setSettingsOpen(false); }} />
+            </div>
+          </>
+        )}
 
         <div style={{ height: 1, background: '#f1f5f9' }} />
 
@@ -360,57 +385,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
 
         {status === 'authenticated' && sessionKey && sessionMeta ? (
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-              {!isMobile && (
-                <Tooltip title={t('chat.clickToCopy', { defaultValue: '点击复制会话 ID' })}>
-                  <span
-                    style={{
-                      fontSize: 10,
-                      color: '#94a3b8',
-                      fontFamily: 'monospace',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      maxWidth: 120,
-                      lineHeight: '12px'
-                    }}
-                    className="v3-session-id-header"
-                    onClick={() => onCopy(sessionKey)}
-                  >
-                    {sessionKey}
-                  </span>
-                </Tooltip>
-              )}
-
-              {!isMobile && (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  background: 'var(--v3-source-chip-bg, rgba(79, 70, 229, 0.10))',
-                  padding: '1px 6px',
-                  borderRadius: 4,
-                  border: '1px solid var(--v3-source-chip-border, rgba(79, 70, 229, 0.22))'
-                }}>
-                  <span style={{ color: 'var(--v3-source-chip-text, var(--v3-primary, #4f46e5))', display: 'flex', alignItems: 'center' }}>
-                    {sessionMeta.isMain ? <Shield size={10} fill={'var(--v3-source-chip-text, var(--v3-primary, #4f46e5))' as any} /> : React.cloneElement(sessionMeta.sourceMeta.icon as React.ReactElement, { size: 10 })}
-                  </span>
-                  <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--v3-source-chip-text, var(--v3-primary, #4f46e5))', whiteSpace: 'nowrap' }}>
-                    {sessionMeta.sourceMeta.label}
-                  </span>
-                </div>
-              )}
-
-              {!isMobile && sessionMeta.bot && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#64748b', background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>
-                  <span>{sessionMeta.bot.identityEmoji || '🤖'}</span>
-                  <span style={{ fontWeight: 600 }}>{sessionMeta.bot.identityName || sessionMeta.bot.id}</span>
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap', minWidth: 0 }}>
               {isEditingLabel ? (
                 <Input
                   size="small"
@@ -420,55 +395,142 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                   onBlur={() => { onUpdateLabel(editingLabelText); setIsEditingLabel(false); }}
                   onPressEnter={() => { onUpdateLabel(editingLabelText); setIsEditingLabel(false); }}
                   disabled={isUpdatingLabel}
-                  style={{ height: 20, fontSize: 12, width: isMobile ? 120 : 200 }}
+                  style={{ height: 22, fontSize: 13, width: isMobile ? 120 : 220, borderRadius: 6 }}
                 />
               ) : (
-                <>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile ? 150 : 300 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <span style={{ 
+                    fontSize: isMobile ? 13 : 14, 
+                    fontWeight: 800, 
+                    color: '#0f172a', 
+                    whiteSpace: 'nowrap', 
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis', 
+                    maxWidth: isMobile ? 140 : 400,
+                    letterSpacing: '-0.01em'
+                  }}>
                     {isMobile && sessionMeta.bot ? `${sessionMeta.bot.identityEmoji || '🤖'} ` : ''}
                     {sessionMeta.isMain ? t('chat.mainSession', { defaultValue: '主会话' }) : (sessionLabel || t('chat.noLabel', { defaultValue: '未命名会话' }))}
                   </span>
+                  
                   {!sessionMeta.isMain && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      {/* 禁用态明确的 not-allowed 光标与变灰效果（无需额外 tooltip，避免与 toast 重复） */}
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          cursor: isSummarizing ? 'not-allowed' : 'pointer',
-                          opacity: isSummarizing ? 0.55 : 1
-                        }}
-                      >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                      <Tooltip title={t('chat.autoSummarize', { defaultValue: '自动总结标题' })}>
                         <Button
                           size="small"
                           type="text"
-                          icon={isSummarizing ? <RefreshCw size={10} className="animate-spin" /> : <Wand2 size={10} />}
+                          icon={isSummarizing ? <RefreshCw size={11} className="animate-spin" /> : <Wand2 size={11} />}
                           onClick={onAutoSummarize}
-                          // 手动触发应可点击；即便本地消息为空也可由上层兜底拉历史。
                           disabled={isSummarizing}
-                          style={{
-                            padding: 0,
-                            height: 16,
-                            width: 16,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: isSummarizing ? '#94a3b8' : '#6366f1'
-                          }}
+                          style={{ padding: 0, height: 18, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isSummarizing ? '#94a3b8' : '#6366f1' }}
                         />
-                      </span>
-                      <Button
-                        size="small"
-                        type="text"
-                        icon={isUpdatingLabel ? <RefreshCw size={10} className="animate-spin" /> : <Save size={10} />}
-                        onClick={() => {
-                          setEditingLabelText(sessionLabel || '');
-                          setIsEditingLabel(true);
-                        }}
-                        style={{ padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}
-                      />
+                      </Tooltip>
+                      <Tooltip title={t('common.edit', { defaultValue: '编辑名称' })}>
+                        <Button
+                          size="small"
+                          type="text"
+                          icon={isUpdatingLabel ? <RefreshCw size={11} className="animate-spin" /> : <Save size={11} />}
+                          onClick={() => {
+                            setEditingLabelText(sessionLabel || '');
+                            setIsEditingLabel(true);
+                          }}
+                          style={{ padding: 0, height: 18, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}
+                        />
+                      </Tooltip>
                     </div>
                   )}
-                </>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, marginLeft: 4 }}>
+                    {!isMobile && (
+                      <div 
+                        className="v3-header-tag-source"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          background: 'rgba(79, 70, 229, 0.08)',
+                          padding: '1px 8px',
+                          borderRadius: 999,
+                          border: '1px solid rgba(79, 70, 229, 0.12)',
+                          transition: 'all 0.2s ease',
+                          cursor: 'default'
+                        }}
+                      >
+                        <span style={{ color: '#4f46e5', display: 'flex', alignItems: 'center', opacity: 0.85 }}>
+                          {sessionMeta.isMain ? <Shield size={10} fill="#4f46e5" /> : React.cloneElement(sessionMeta.sourceMeta.icon as React.ReactElement, { size: 10 })}
+                        </span>
+                        <span style={{ fontSize: 9, fontWeight: 800, color: '#4f46e5', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>
+                          {sessionMeta.sourceMeta.label}
+                        </span>
+                      </div>
+                    )}
+
+                    {!isMobile && sessionMeta.bot && (
+                      <div 
+                        className="v3-header-tag-bot"
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: 4, 
+                          fontSize: 9, 
+                          color: '#475569', 
+                          background: '#f1f5f9', 
+                          padding: '1px 8px', 
+                          borderRadius: 999,
+                          border: '1px solid #e2e8f0',
+                          transition: 'all 0.2s ease',
+                          cursor: 'default'
+                        }}>
+                        <span style={{ opacity: 0.9 }}>{sessionMeta.bot.identityEmoji || '🤖'}</span>
+                        <span style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}>
+                          {(() => {
+                            const botId = sessionMeta.botId || sessionMeta.bot.id;
+                            const botName = sessionMeta.bot.identityName || sessionMeta.bot.name;
+                            return botName ? (
+                              <>
+                                <span style={{ opacity: 0.6 }}>{botId}</span>
+                                <span style={{ opacity: 0.4, fontWeight: 400 }}>·</span>
+                                <span>{botName}</span>
+                              </>
+                            ) : botId;
+                          })()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 1 }}>
+              {!isMobile && (
+                <Tooltip title={t('chat.clickToCopy', { defaultValue: '点击复制会话 ID' })}>
+                  <span
+                    style={{
+                      fontSize: 9,
+                      color: '#94a3b8',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      maxWidth: 240,
+                      lineHeight: '12px',
+                      opacity: 0.8
+                    }}
+                    className="v3-session-id-header"
+                    onClick={() => onCopy(sessionKey)}
+                  >
+                    {sessionKey}
+                  </span>
+                </Tooltip>
+              )}
+              {/* OpenAI User Metadata if present */}
+              {!isMobile && (sessionMeta.source || '').toLowerCase() === 'openai-user' && sessionMeta.openAIUser && (
+                <div style={{ fontSize: 9, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 3 }}>
+                   <span style={{ opacity: 0.5 }}>•</span>
+                   <span>{sessionMeta.openAIUser}</span>
+                </div>
               )}
             </div>
           </div>
@@ -476,66 +538,21 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           !isMobile && status === 'authenticated' && null
         )}
 
-        {status === 'authenticated' && !sessionKey && !isMobile && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 8, flexShrink: 0, marginLeft: 4 }}>
-            <div style={{ height: 12, width: 1, background: '#f1f5f9', marginRight: 2 }} />
-            <span style={{ fontSize: 11, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600, marginRight: 2 }}>
-              {lastHealth?.ok === false ? t('chat.gatewayFluctuating') : t('chat.connected')}
-            </span>
-            <div
-              key={pulse}
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                background: lastHealth?.ok === false ? '#f59e0b' : (lastHealth?.ok ? '#10b981' : '#94a3b8'),
-                animation: lastHealth?.ok ? 'v3-heartbeat 0.8s ease-out' : 'none',
-                flexShrink: 0
-              }}
-            />
-            {!isMobile && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', width: 35 }}>
-                  {lastHealth ? `${lastHealth.latency}ms` : '---'}
-                </span>
-                <svg width="30" height="12" style={{ opacity: 0.6 }}>
-                  <polyline
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth="1"
-                    points={latencyHistory.map((l: any, i: any) => `${(i / 29) * 30},${12 - (Math.min(l, 200) / 200) * 12}`).join(' ')}
-                  />
-                </svg>
-              </div>
-            )}
-          </div>
-        )}
+
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 2 : 6, flexShrink: 0 }}>
-        {status === 'authenticated' && sessionKey && !isMobile && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px', background: '#f8fafc', borderRadius: 8, height: 24, marginLeft: 4 }}>
-            <span style={{ fontSize: 10, color: lastHealth?.ok === false ? '#f59e0b' : '#10b981', fontWeight: 600 }}>
-              {lastHealth?.ok === false ? t('chat.gatewayFluctuating') : t('chat.connected')}
-            </span>
-            <div
-              key={pulse}
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: lastHealth?.ok === false ? '#f59e0b' : (lastHealth?.ok ? '#10b981' : '#94a3b8'),
-                animation: lastHealth?.ok ? 'v3-heartbeat 0.8s ease-out' : 'none',
-                flexShrink: 0
-              }}
-            />
-            <span style={{ fontSize: 9, color: '#94a3b8', fontFamily: 'monospace', minWidth: 30 }}>
-              {lastHealth ? `${lastHealth.latency}ms` : '---'}
-            </span>
-          </div>
-        )}
 
-        <Button size="small" type="text" icon={<Wifi size={14} />} onClick={onReconnect} title={t('common.restart')} />
+
+
+
+        <Button 
+          size="small" 
+          type="text" 
+          icon={isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />} 
+          title={isFullscreen ? t('common.exitFullscreen', { defaultValue: '退出全屏' }) : t('common.fullscreen', { defaultValue: '全屏' })}
+          onClick={onToggleFullscreen}
+        />
 
         <Dropdown
           open={settingsOpen}

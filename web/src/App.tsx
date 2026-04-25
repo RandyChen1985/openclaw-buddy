@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
   Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone, Rocket,
-  ShieldCheck, Clock
+  ShieldCheck, Clock, Activity
 } from 'lucide-react';
 import api from './api';
 import storage from './utils/storage';
@@ -13,6 +13,7 @@ import storage from './utils/storage';
 import LoginView from './views/LoginView';
 import Sidebar from './components/layout/Sidebar';
 import DashboardOverview from './views/DashboardOverview';
+import AuditDashboard from './views/AuditDashboard';
 import BotsManager from './views/BotsManager';
 import ChannelsManager from './views/ChannelsManager';
 import DeviceManager from './views/DeviceManager';
@@ -36,6 +37,7 @@ import CommandPalette from './components/common/CommandPalette';
 import { useStatusPolling } from './hooks/useStatusPolling';
 import { useWebSocketLogs } from './hooks/useWebSocketLogs';
 import { useTaskCenter, type Task } from './hooks/useTaskCenter';
+import { V3GatewayProvider, useV3Gateway } from './context/V3GatewayContext';
 
 const { Content, Sider, Header } = Layout;
 
@@ -119,13 +121,24 @@ const Dashboard = () => {
 
   // Hooks
   const { tasks: activeTasks, updateTask: baseUpdateTask, loading: tasksLoading, fetchActiveTasks } = useTaskCenter();
-  const { status, history, fetching, refreshCountdown, fetchData } = useStatusPolling(
+  const { status, history, fetching, fetchData } = useStatusPolling(
     isTransitioning, targetStatus, activeTab, () => {
       setIsTransitioning(false);
       setTargetStatus(null);
       setTransitionSeconds(0);
     }
   );
+
+  const { status: v3Status, lastHealth } = useV3Gateway();
+
+  // 核心：合并状态机。
+  // WS health payload 不含 cpu/memory（验证过），所以 metrics 仍由 HTTP 提供。
+  // gateway.status 不再使用（isRunning 基于 v3Status），此处仅保留结构完整性。
+  const mergedStatus = useMemo(() => {
+    if (!status) return null;
+    return status;
+  }, [status]);
+
 
   const processedTaskIds = useRef<Set<string>>(new Set());
   const isInitialProcessed = useRef(false);
@@ -157,7 +170,7 @@ const Dashboard = () => {
           fetchPlugins();
         } else if (task.module === 'bots') {
           // 如果是模型相关变更（添加、删除、设置默认、新增渠道），触发物理对账
-          const modelActions = ['delete-model', 'add-model', 'add-provider', 'set-default-model', 'clone-expert', 'add', 'update'];
+          const modelActions = ['delete-model', 'add-model', 'add-provider', 'delete-provider', 'update-provider', 'set-default-model', 'clone-expert', 'add', 'update'];
           if (modelActions.includes(task.action || '')) {
             console.log(`🔄 [Task Observer] 机器人/模型变更任务 (${task.action}) 完成，将在延迟后物理刷新...`);
             
@@ -854,7 +867,9 @@ const Dashboard = () => {
     }
   };
 
-  const isRunning = status?.gateway?.status?.toLowerCase() === 'running';
+  // 网关运行状态：完全基于 WebSocket 连接判断，不再使用 HTTP 轮询值
+  const isRunning = v3Status === 'authenticated';
+
 
   // --- Menu Configuration ---
   const disabledFeatures = versionUpdate?.gui_disable_features?.split(',') || [];
@@ -862,31 +877,39 @@ const Dashboard = () => {
   const rawMenuItems = [
     {
       key: 'grp-monitor',
-      label: t('common.monitor_center'),
-      type: 'group',
+      label: t('common.monitor'),
+      icon: <Activity size={16} />,
       children: [
         { key: 'dashboard', label: t('common.dashboard'), icon: <LayoutDashboard size={14} /> },
-        { 
-          key: 'logs', 
+        { key: 'audit', label: t('audit.title'), icon: <ShieldCheck size={14} /> },
+        {
+          key: 'logs',
           label: (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-              <span>{t('common.logs')}</span>
+            <span>
+              {t('common.logs')}
               {wsLogs.length > 0 && <Badge status="processing" size="small" style={{ marginLeft: 8 }} />}
-            </div>
-          ), 
-          icon: <Terminal size={14} /> 
+            </span>
+          ),
+          title: t('common.logs'),
+          icon: <Terminal size={14} />
         },
-        { 
-          key: 'tools', 
+        {
+          key: 'tools',
           label: (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: 4 }}>
-              <span>{t('common.tools')}</span>
-              {healEvents.length > 0 && <Badge count={healEvents.length} size="small" styles={{ indicator: { backgroundColor: '#3b82f6' } }} />}
-            </div>
-          ), 
-          icon: <Zap size={14} /> 
-        },
-        { key: 'shell', label: t('common.shell'), icon: <Terminal size={14} /> },
+            <span>
+              {t('common.tools')}
+              {healEvents.length > 0 && (
+                <Badge 
+                  count={healEvents.length} 
+                  size="small" 
+                  style={{ marginLeft: 8, backgroundColor: '#3b82f6' }} 
+                />
+              )}
+            </span>
+          ),
+          title: t('common.tools'),
+          icon: <Zap size={14} />
+        },        { key: 'shell', label: t('common.shell'), icon: <Terminal size={14} /> },
         { key: 'security', label: t('security.title'), icon: <ShieldCheck size={14} /> },
         { key: 'cron', label: t('common.cron'), icon: <Clock size={14} /> },
       ]
@@ -894,7 +917,7 @@ const Dashboard = () => {
     {
       key: 'grp-assets',
       label: t('common.assets'),
-      type: 'group',
+      icon: <Boxes size={16} />,
       children: [
         { key: 'chat', label: t('common.chat'), icon: <MessageSquare size={14} /> },
         { key: 'tui', label: t('common.tuiChat'), icon: <Terminal size={14} /> },
@@ -907,7 +930,7 @@ const Dashboard = () => {
     {
       key: 'grp-binding',
       label: t('common.binding'),
-      type: 'group',
+      icon: <ToyBrick size={16} />,
       children: [
         { key: 'components', label: t('common.channels'), icon: <ToyBrick size={14} /> },
         { key: 'devices', label: t('common.devices'), icon: <Smartphone size={14} /> },
@@ -916,7 +939,7 @@ const Dashboard = () => {
     {
       key: 'grp-external',
       label: t('common.external'),
-      type: 'group',
+      icon: <ExternalLink size={16} />,
       children: [
         { key: 'lobster-panel', label: t('common.lobsterPanel'), icon: <ExternalLink size={14} /> },
       ]
@@ -959,7 +982,7 @@ const Dashboard = () => {
     const viewMap: Record<string, React.ReactNode> = {
       'dashboard': (
         <DashboardOverview
-          status={status}
+          status={mergedStatus}
           history={history}
  
           wsLogs={wsLogs} 
@@ -975,11 +998,11 @@ const Dashboard = () => {
           onRefreshVersion={checkVersionUpdate}
           onUpgrade={handleUpgrade}
           onRestart={handleRestart}
-        />
-      ),
-      'bots-models': (
-        <BotsManager 
-          modelsConfig={modelsConfig}
+          />
+          ),
+          'audit': <AuditDashboard />,
+          'bots-models': (
+          <BotsManager          modelsConfig={modelsConfig}
           loadingConfig={loadingModelsConfig}
           onRefresh={fetchModelsConfig}
           botsModels={botsModels} 
@@ -1177,6 +1200,8 @@ const Dashboard = () => {
     </div>
   );
 
+
+
   const headerEl = (onMenuClick?: () => void) => (
     <Header style={{
       background: '#fff', height: 56, padding: isMobile ? '0 12px' : '0 24px', borderBottom: '1px solid #e2e8f0',
@@ -1214,11 +1239,19 @@ const Dashboard = () => {
         />
         <LanguageSwitcher isMobile={isMobile} />
         <Badge
-          status={isRunning ? 'success' : 'error'}
+          status={
+            isRunning ? 'success' : 
+            (['challenging', 'authorizing'].includes(v3Status) ? 'processing' : 'error')
+          }
           text={
             <span style={{ color: '#64748b', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>
-              {!isMobile && 'Gateway '}{isRunning ? t('dashboard.running') : t('dashboard.stopped')}
-              {isRunning && <span style={{ color: '#3b82f6', marginLeft: 4 }}>({refreshCountdown}s)</span>}
+              {!isMobile && 'Gateway '}
+              {isRunning ? t('dashboard.running') : t('dashboard.stopped')}
+              {isRunning && lastHealth?.latency !== undefined && (
+                <span style={{ color: '#10b981', marginLeft: 4, fontWeight: 700 }}>
+                  ({lastHealth.latency}ms)
+                </span>
+              )}
             </span>
           }
         />
@@ -1507,7 +1540,13 @@ export default function App() {
         },
       },
     }}>
-      {token ? <Dashboard /> : <LoginView onLoginSuccess={setToken} />}
+      {token ? (
+        <V3GatewayProvider>
+          <Dashboard />
+        </V3GatewayProvider>
+      ) : (
+        <LoginView onLoginSuccess={setToken} />
+      )}
     </ConfigProvider>
   );
 }

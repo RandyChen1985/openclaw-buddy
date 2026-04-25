@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { RefreshCw, Search, Zap, CheckCircle2, XCircle, AlertCircle, Info, ShieldCheck, Globe, ChevronDown, ChevronUp, Trash2, ArrowUpCircle, Settings2 } from 'lucide-react';
+import { RefreshCw, Search, Zap, CheckCircle2, XCircle, Info, ShieldCheck, Globe, ChevronDown, ChevronUp, Trash2, ArrowUpCircle, Settings2 } from 'lucide-react';
 import { Card, Table, Tag, Button, Input, Tooltip, Typography, Segmented, message, Popconfirm, Switch } from 'antd';
 import { useTranslation } from 'react-i18next';
 import api from '../api';
 
 import type { Task } from '../hooks/useTaskCenter';
+import { channelPluginUiState, isPluginOperational } from '../utils/channelPlugins';
 
 interface Plugin {
   id: string;
@@ -240,29 +241,23 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
     
     let matchesStatus = true;
     if (statusFilter === 'loaded') {
-      matchesStatus = plugin.status === 'loaded' || (plugin.enabled && !plugin.error);
-    } else if (statusFilter === 'error') {
-      matchesStatus = !!plugin.error || plugin.status === 'error';
+      matchesStatus = isPluginOperational(plugin);
+    } else if (statusFilter === 'enabled') {
+      matchesStatus = !!plugin.enabled;
     } else if (statusFilter === 'disabled') {
-      matchesStatus = plugin.status === 'disabled' || !plugin.enabled;
+      matchesStatus = !plugin.enabled;
     }
     
     return matchesSearch && matchesStatus;
   });
 
   const getStatusTag = (plugin: Plugin) => {
-    if (plugin.status === 'loaded' || (plugin.enabled && !plugin.error)) {
+    const ui = channelPluginUiState(plugin);
+    if (ui === 'loaded') {
       return <Tag color="success" icon={<CheckCircle2 size={12} style={{ marginRight: 4 }} />} style={{ borderRadius: 6, padding: '2px 8px' }}>{t('plugins.loaded')}</Tag>;
     }
-    if (plugin.status === 'disabled' || !plugin.enabled) {
+    if (ui === 'disabled') {
       return <Tag color="default" icon={<XCircle size={12} style={{ marginRight: 4 }} />} style={{ borderRadius: 6, padding: '2px 8px' }}>{t('plugins.disabled')}</Tag>;
-    }
-    if (plugin.error || plugin.status === 'error') {
-      return (
-        <Tooltip title={plugin.error}>
-          <Tag color="error" icon={<AlertCircle size={12} style={{ marginRight: 4 }} />} style={{ borderRadius: 6, cursor: 'help', padding: '2px 8px' }}>{t('plugins.error')}</Tag>
-        </Tooltip>
-      );
     }
     return <Tag color="processing" style={{ borderRadius: 6, padding: '2px 8px' }}>{plugin.status}</Tag>;
   };
@@ -463,8 +458,9 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
             <Segmented
               options={[
                 { label: t('plugins.loaded'), value: 'loaded' },
+                { label: t('plugins.filterEnabled'), value: 'enabled' },
                 { label: t('common.all'), value: 'all' },
-                { label: t('plugins.error'), value: 'error' }
+                { label: t('plugins.filterDisabled'), value: 'disabled' }
               ]}
               value={statusFilter}
               onChange={(value) => setStatusFilter(value)}

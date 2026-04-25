@@ -10,6 +10,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import api from '../api';
+import TokenBadge from '../components/TokenBadge';
 
 interface Expert {
   id: string;
@@ -519,16 +520,19 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
                         ),
                         children: (
                           <Form.Item name="identity_md" style={{ marginBottom: 0 }}>
-                            <Input.TextArea 
-                              onChange={(e) => setIdTokens(estimateTokens(e.target.value))}
-                              style={{ 
-                                height: 380, borderRadius: '0 0 12px 12px', 
-                                fontFamily: 'monospace', fontSize: 13, 
-                                background: '#f8fafc', border: '1px solid #e2e8f0', 
-                                borderTop: 'none', resize: 'none', padding: '16px 20px',
-                                lineHeight: 1.7, overflowY: 'auto'
-                              }} 
-                            />
+                            <div style={{ position: 'relative', height: 380 }}>
+                              <TokenBadge text={form.getFieldValue('identity_md') || ''} />
+                              <Input.TextArea 
+                                onChange={(e) => setIdTokens(estimateTokens(e.target.value))}
+                                style={{ 
+                                  height: '100%', borderRadius: '0 0 12px 12px', 
+                                  fontFamily: 'monospace', fontSize: 13, 
+                                  background: '#f8fafc', border: '1px solid #e2e8f0', 
+                                  borderTop: 'none', resize: 'none', padding: '16px 20px',
+                                  lineHeight: 1.7, overflowY: 'auto'
+                                }} 
+                              />
+                            </div>
                           </Form.Item>
                         )
                       },
@@ -545,16 +549,19 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
                         ),
                         children: (
                           <Form.Item name="soul" style={{ marginBottom: 0 }}>
-                            <Input.TextArea 
-                              onChange={(e) => setSoulTokens(estimateTokens(e.target.value))}
-                              style={{ 
-                                height: 380, borderRadius: '0 0 12px 12px', 
-                                fontFamily: 'monospace', fontSize: 13, 
-                                background: '#f8fafc', border: '1px solid #e2e8f0', 
-                                borderTop: 'none', resize: 'none', padding: '16px 20px',
-                                lineHeight: 1.7, overflowY: 'auto'
-                              }} 
-                            />
+                            <div style={{ position: 'relative', height: 380 }}>
+                              <TokenBadge text={form.getFieldValue('soul') || ''} />
+                              <Input.TextArea 
+                                onChange={(e) => setSoulTokens(estimateTokens(e.target.value))}
+                                style={{ 
+                                  height: '100%', borderRadius: '0 0 12px 12px', 
+                                  fontFamily: 'monospace', fontSize: 13, 
+                                  background: '#f8fafc', border: '1px solid #e2e8f0', 
+                                  borderTop: 'none', resize: 'none', padding: '16px 20px',
+                                  lineHeight: 1.7, overflowY: 'auto'
+                                }} 
+                              />
+                            </div>
                           </Form.Item>
                         )
                       }

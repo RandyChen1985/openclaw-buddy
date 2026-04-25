@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox, Segmented, Empty } from 'antd';
+import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox, Segmented, Empty, Tabs, List as AntList, Popconfirm, Alert } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { 
   Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star, 
   ChevronDown, ChevronUp, Activity, ZapOff, Bot, LayoutGrid, List, FolderOpen,
-  Eye, Save, Brain, Edit3
+  Eye, Save, Brain, Edit3, BrainCircuit, Copy, Heart, Users
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import dayjs from 'dayjs';
 import api from '../api';
 import { message } from 'antd';
+import TokenBadge from '../components/TokenBadge';
+import FileExplorer from '../components/FileExplorer';
 
 interface BotsManagerProps {
   botsModels: any; 
@@ -32,7 +34,8 @@ interface BotsManagerProps {
 const BotsManager: React.FC<BotsManagerProps> = ({ 
   botsModels, loadingBots, isMobile, onRefresh, onRefreshBots, modelsConfig, loadingConfig,
   onAddBot, onUpdateBot, onDeleteBot, onSetDefaultModel,
-  activeTasks = [] 
+  activeTasks = [],
+  onNavigateToDashboard
 }) => {
   const { t } = useTranslation();
   const cardColors = [
@@ -99,7 +102,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const isModelProcessing = (modelFullId: string) => {
     return activeTasks.some(t => 
       t.module === 'bots' && 
-      (t.action === 'set-default-model' || t.action === 'delete-model') && 
+      (t.action === 'set-default-model' || t.action === 'delete-model' || t.action === 'add-model') && 
       t.target === modelFullId && 
       t.status === 'Running'
     );
@@ -108,7 +111,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const isProviderProcessing = (providerName: string) => {
     return activeTasks.some(t => 
       t.module === 'bots' && 
-      (t.action === 'add-provider' || t.action === 'add-model') && 
+      (t.action === 'add-provider' || t.action === 'add-model' || t.action === 'delete-provider' || t.action === 'update-provider') && 
       t.target === providerName && 
       t.status === 'Running'
     );
@@ -117,11 +120,22 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   // --- 自动刷新闭环：监测后台任务完成情况 ---
 
   const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [editorType, setEditorType] = useState<'soul' | 'identity'>('soul');
+  const [editorType, setEditorType] = useState<'soul' | 'identity' | 'memory' | 'heartbeat' | 'agents'>('soul');
   const [editorContent, setEditorContent] = useState('');
   const [editorBotId, setEditorBotId] = useState('');
   const [isEditorLoading, setIsEditorLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Memory management states
+  const [memoryFiles, setMemoryFiles] = useState<string[]>([]);
+  const [activeMemoryTab, setActiveMemoryTab] = useState<'long' | 'daily'>('long');
+  const [selectedMemoryFile, setSelectedMemoryFile] = useState<string | null>(null);
+  const [loadingMemoryList, setLoadingMemoryList] = useState(false);
+  const [editorViewMode, setEditorViewMode] = useState<'code' | 'preview'>('code');
+
+  const [explorerOpen, setExplorerOpen] = useState(false);
+  const [explorerPath, setExplorerPath] = useState('');
+  const [explorerTitle, setExplorerTitle] = useState('');
 
 
   const fetchSessions = async (force = false) => {
@@ -276,6 +290,24 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     });
   };
 
+  const handleDeleteProvider = (name: string) => {
+    Modal.confirm({
+      title: t('bots.removeProviderTitle', { name }),
+      content: t('bots.removeProviderWarning', { name }),
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await api.delete(`/v1/openclaw/models/provider/${name}`);
+          message.success(t('common.waitingGateway'));
+        } catch (err: any) {
+          message.error(t('bots.deleteFailed') + ': ' + (err.response?.data?.error || err.message));
+        }
+      }
+    });
+  };
+
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
@@ -335,18 +367,34 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     }
   };
 
-  const handleOpenFileEditor = async (botId: string, type: 'soul' | 'identity') => {
+  const handleOpenFileEditor = async (botId: string, type: 'soul' | 'identity' | 'memory' | 'heartbeat' | 'agents', filename?: string, tabOverride?: 'long' | 'daily') => {
     try {
       setEditorBotId(botId);
-      setEditorType(type);
+      setEditorType(type as any);
       setEditorContent('');
       setIsEditorLoading(true);
       setIsEditorOpen(true);
+      setEditorViewMode('code');
       
       const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
       const workspaceParam = bot?.workspace ? `&workspace=${encodeURIComponent(bot.workspace)}` : '';
       
-      const res = await api.get(`/v1/openclaw/bots/file?id=${botId}&type=${type}${workspaceParam}`);
+      const currentTab = tabOverride || activeMemoryTab;
+      
+      let url = `/v1/openclaw/bots/file?id=${botId}&type=${type}${workspaceParam}`;
+      if (type === 'memory' && currentTab === 'daily' && filename) {
+        url = `/v1/openclaw/bots/file?id=${botId}&type=memory_file&filename=${encodeURIComponent(filename)}${workspaceParam}`;
+        setSelectedMemoryFile(filename);
+      } else if (type === 'memory' && currentTab === 'long') {
+        setSelectedMemoryFile(null);
+      } else if (type === 'memory' && currentTab === 'daily' && !filename) {
+          // 如果没传文件名且处于日期记忆 Tab，先拉列表
+          fetchMemoryList(botId, bot?.workspace);
+          setIsEditorLoading(false);
+          return;
+      }
+
+      const res = await api.get(url);
       setEditorContent(res.data.content || '');
     } catch (err: any) {
       if (isEditorOpen) {
@@ -357,19 +405,60 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     }
   };
 
+  const fetchMemoryList = async (botId: string, workspace?: string) => {
+    setLoadingMemoryList(true);
+    try {
+      const workspaceParam = workspace ? `&workspace=${encodeURIComponent(workspace)}` : '';
+      const res = await api.get(`/v1/openclaw/bots/memory/list?id=${botId}${workspaceParam}`);
+      setMemoryFiles(res.data.files || []);
+    } catch (err: any) {
+      message.error(t('common.loadFailed') + ': ' + (err.response?.data?.error || err.message));
+    } finally {
+      setLoadingMemoryList(false);
+    }
+  };
+
+  const handleDeleteMemoryFile = async (botId: string, filename: string, workspace?: string) => {
+    try {
+      const workspaceParam = workspace ? `&workspace=${encodeURIComponent(workspace)}` : '';
+      await api.delete(`/v1/openclaw/bots/memory/file?id=${botId}&filename=${encodeURIComponent(filename)}${workspaceParam}`);
+      message.success(t('common.success'));
+      fetchMemoryList(botId, workspace);
+      if (selectedMemoryFile === filename) {
+        setEditorContent('');
+        setSelectedMemoryFile(null);
+      }
+    } catch (err: any) {
+      message.error(t('common.error') + ': ' + (err.response?.data?.error || err.message));
+    }
+  };
+
   const handleSaveFileContent = async () => {
     try {
       setIsSaving(true);
       
       const bot = botsModels?.data?.bots?.find((b: any) => b.id === editorBotId);
-      await api.post('/v1/openclaw/bots/file', {
+      
+      const params: any = {
         id: editorBotId,
-        type: editorType,
+        type: editorType === 'memory' ? (activeMemoryTab === 'long' ? 'memory' : 'memory_file') : editorType,
         content: editorContent,
         workspace: bot?.workspace
-      });
+      };
+
+      if (editorType === 'memory' && activeMemoryTab === 'daily' && selectedMemoryFile) {
+        params.filename = selectedMemoryFile;
+      }
+
+      await api.post('/v1/openclaw/bots/file', params);
       message.success(t('bots.saveSuccess'));
-      setIsEditorOpen(false); // 隐藏对话框
+      
+      if (editorType === 'memory' && activeMemoryTab === 'daily') {
+          // 仅刷新列表，不关闭 Modal 以便继续操作
+          fetchMemoryList(editorBotId, bot?.workspace);
+      } else {
+          setIsEditorOpen(false);
+      }
     } catch (err: any) {
       message.error(t('bots.saveFailed') + ': ' + (err.response?.data?.error || err.message));
     } finally {
@@ -460,15 +549,38 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       ) : (
         <Row gutter={[20, 20]}>
           <Col span={24}>
-            {(botsViewMode === 'card' || isMobile) ? (
+            {(!botsModels?.data?.bots || botsModels.data.bots.length === 0) ? (
+              <div style={{ padding: '20px 0' }}>
+                <Alert
+                  message={
+                    <span style={{ fontWeight: 600 }}>{t('bots.noBotsWarning')}</span>
+                  }
+                  type="warning"
+                  showIcon
+                  icon={<Activity size={20} />}
+                  style={{ borderRadius: 12, border: '1px solid #fed7aa', backgroundColor: '#fff7ed' }}
+                  action={
+                    <Button 
+                      size="small" 
+                      type="primary" 
+                      ghost 
+                      onClick={onNavigateToDashboard}
+                      style={{ borderRadius: 6, fontSize: 12 }}
+                    >
+                      {t('common.dashboard')}
+                    </Button>
+                  }
+                />
+              </div>
+            ) : (botsViewMode === 'card' || isMobile) ? (
               <Row gutter={[20, 20]}>
-                {botsModels?.data?.bots?.map((bot: any, index: number) => {
+                {botsModels.data.bots.map((bot: any, index: number) => {
                   const color = cardColors[index % cardColors.length];
                   return (
-                    <Col xs={24} sm={12} md={12} lg={8} xl={6} key={bot.id}>
+                    <Col xs={24} sm={12} md={8} lg={8} xl={8} key={bot.id}>
                       <Card
                         hoverable
-                        styles={{ body: { padding: 24 } }}
+                        styles={{ body: { padding: '16px 20px' } }}
                         style={{ 
                           borderRadius: 24, 
                           border: `1px solid ${color.border}`,
@@ -494,7 +606,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                         )}
                         <div style={{ position: 'absolute', top: 0, right: 0, width: 80, height: 80, background: `linear-gradient(135deg, transparent 50%, ${color.bg} 100%)`, opacity: 0.5, zIndex: 0 }}></div>
                         
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, position: 'relative', zIndex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, position: 'relative', zIndex: 1 }}>
                            <div style={{ 
                              width: 52, height: 52, borderRadius: 16, 
                              background: '#ffffff', display: 'flex', 
@@ -517,12 +629,32 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                         </div>
 
                         <div style={{ position: 'relative', zIndex: 1 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', marginBottom: 4 }}>
-                            <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.5px' }}>{bot.name || bot.id}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                            <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.5px' }}>{bot.displayName || bot.name || bot.id}</div>
                             <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', border: '2px solid #fff', boxShadow: '0 0 10px rgba(34, 197, 94, 0.4)', flexShrink: 0 }} className="status-pulse" />
-                            
-                            {/* 基于用户图片更新的图标组 - 靠右对齐 */}
-                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                            <div 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(bot.id);
+                                message.success(t('common.copySuccess'));
+                              }}
+                              style={{ 
+                                display: 'inline-flex', alignItems: 'center', gap: 6, 
+                                padding: '2px 8px', background: '#f1f5f9', border: '1px solid #e2e8f0',
+                                borderRadius: 6, cursor: 'pointer', transition: 'all 0.2s',
+                                fontSize: 11, color: '#64748b', fontFamily: 'monospace', fontWeight: 600,
+                                marginLeft: 4
+                              }}
+                              className="id-copy-tag"
+                            >
+                              <span style={{ opacity: 0.7 }}>#</span>
+                              {bot.id}
+                              <Copy size={10} style={{ opacity: 0.5 }} />
+                            </div>
+                          </div>
+                          
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, marginTop: 4 }}>
+                            <div style={{ display: 'flex', gap: 8 }}>
                               <Tooltip title={t('bots.editSoul')}>
                                 <Button 
                                   type="text" 
@@ -549,40 +681,97 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                   }}
                                 />
                               </Tooltip>
+                              <Tooltip title={t('bots.editMemory')}>
+                                <Button 
+                                  type="text" 
+                                  size="small" 
+                                  icon={<BrainCircuit size={16} color="#059669" />} 
+                                  onClick={() => {
+                                    setActiveMemoryTab('long');
+                                    handleOpenFileEditor(bot.id, 'memory');
+                                  }}
+                                  style={{ 
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 28, height: 28, borderRadius: 8, background: '#ecfdf5', 
+                                    border: '1px solid #d1fae5'
+                                  }}
+                                />
+                              </Tooltip>
+                              <Tooltip title={t('bots.editHeartbeat')}>
+                                <Button 
+                                  type="text" 
+                                  size="small" 
+                                  icon={<Heart size={16} color="#f97316" />} 
+                                  onClick={() => handleOpenFileEditor(bot.id, 'heartbeat')}
+                                  style={{ 
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 28, height: 28, borderRadius: 8, background: '#fff7ed', 
+                                    border: '1px solid #ffedd5'
+                                  }}
+                                />
+                              </Tooltip>
+                              <Tooltip title={t('bots.editAgents')}>
+                                <Button 
+                                  type="text" 
+                                  size="small" 
+                                  icon={<Users size={16} color="#0891b2" />} 
+                                  onClick={() => handleOpenFileEditor(bot.id, 'agents')}
+                                  style={{ 
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 28, height: 28, borderRadius: 8, background: '#ecfeff', 
+                                    border: '1px solid #cffafe'
+                                  }}
+                                />
+                              </Tooltip>
                             </div>
                           </div>
-                          <div style={{ fontSize: 12, color: '#94a3b8', fontFamily: 'monospace', marginBottom: 16 }}>ID: {bot.id}</div>
                           
-                          <div style={{ background: 'rgba(255, 255, 255, 0.5)', backdropFilter: 'blur(8px)', padding: '14px', borderRadius: 18, border: `1px solid ${color.border}60` }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                              <div>
-                                <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, fontWeight: 800 }}>
+                          <div style={{ background: 'rgba(255, 255, 255, 0.5)', backdropFilter: 'blur(8px)', padding: '10px 14px', borderRadius: 18, border: `1px solid ${color.border}60` }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800, flexShrink: 0 }}>
                                   {t('bots.currentModel')}
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <div style={{ padding: 4, background: `${color.theme}15`, borderRadius: 6 }}>
-                                      <Cpu size={12} color={color.theme} />
-                                  </div>
-                                  <span style={{ fontSize: 12, fontWeight: 700, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: '65%', overflow: 'hidden' }}>
+                                  <Cpu size={12} color={color.theme} style={{ flexShrink: 0 }} />
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                     {bot.model}
                                   </span>
                                 </div>
                               </div>
-                              <div style={{ paddingTop: 10, borderTop: `1px dashed ${color.border}`, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-                                <div style={{ flex: 1, overflow: 'hidden' }}>
-                                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, fontWeight: 800 }}>
-                                    {t('bots.workspace')}
-                                  </div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <div style={{ padding: 4, background: '#f1f5f9', borderRadius: 6 }}>
-                                        <FolderOpen size={12} color="#64748b" />
-                                    </div>
-                                    <Tooltip title={bot.workspace}>
-                                      <span style={{ fontSize: 12, fontWeight: 700, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontFamily: 'monospace' }}>
-                                        {bot.workspace?.length > 24 ? bot.workspace.substring(0, 10) + '...' + bot.workspace.substring(bot.workspace.length - 10) : bot.workspace}
-                                      </span>
-                                    </Tooltip>
-                                  </div>
+                              <div style={{ height: 1, borderTop: `1px dashed ${color.border}40`, margin: '0' }}></div>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800, flexShrink: 0 }}>
+                                  {t('bots.workspace')}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: '65%', overflow: 'hidden' }}>
+                                  <FolderOpen size={12} color="#64748b" style={{ flexShrink: 0 }} />
+                                  <Tooltip title={bot.workspace}>
+                                    <span 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (bot.workspace) {
+                                          setExplorerPath(bot.workspace);
+                                          setExplorerTitle(`${bot.name} ${t('bots.workspace')}`);
+                                          setExplorerOpen(true);
+                                        }
+                                      }}
+                                      style={{ 
+                                        fontSize: 11, 
+                                        fontWeight: 700, 
+                                        color: '#0ea5e9', 
+                                        overflow: 'hidden', 
+                                        textOverflow: 'ellipsis', 
+                                        whiteSpace: 'nowrap', 
+                                        fontFamily: 'monospace',
+                                        cursor: 'pointer',
+                                        textDecoration: 'underline',
+                                        textDecorationStyle: 'dotted'
+                                      }}
+                                    >
+                                      {bot.workspace?.length > 18 ? bot.workspace.substring(0, 8) + '...' + bot.workspace.substring(bot.workspace.length - 8) : bot.workspace}
+                                    </span>
+                                  </Tooltip>
                                 </div>
                               </div>
                             </div>
@@ -676,7 +865,6 @@ const BotsManager: React.FC<BotsManagerProps> = ({
               ) : modelsConfig ? (
                 Object.entries(modelsConfig).map(([providerName, providerData]: [string, any]) => {
                   const providerModels = (providerData.models || []);
-                  if (providerModels.length === 0) return null;
 
                   return (
                     <div key={providerName} style={{ marginBottom: 28 }}>
@@ -708,18 +896,32 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                           }}
                           style={{ color: '#94a3b8', padding: 0, height: 18, width: 18, marginLeft: -4 }}
                         />
+                        <Button 
+                          type="text" 
+                          size="small" 
+                          danger
+                          icon={<Trash2 size={12} />} 
+                          disabled={isProviderProcessing(providerName)}
+                          loading={isProviderProcessing(providerName)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteProvider(providerName);
+                          }}
+                          style={{ color: '#ef4444', padding: 0, height: 18, width: 18, marginLeft: 4 }}
+                        />
                         {collapsedProviders.has(providerName) ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
                         <div style={{ height: 1, flex: 1, background: '#f1f5f9', marginLeft: 8 }}></div>
                       </div>
                       {!collapsedProviders.has(providerName) && (
-                        (modelsViewMode === 'card' || isMobile) ? (
-                          <Row gutter={[16, 16]}>
+                        providerModels.length > 0 ? (
+                          (modelsViewMode === 'card' || isMobile) ? (
+                            <Row gutter={[16, 16]}>
                             {providerModels.map((m: any, mIdx: number) => {
                               const isDefault = botsModels?.data?.models?.find((dm: any) => dm.id === `${providerName}/${m.id}`)?.isDefault;
                               const color = cardColors[mIdx % cardColors.length];
                               
                               return (
-                                <Col xs={24} sm={12} md={12} lg={8} xl={6} key={m.id}>
+                                <Col xs={24} sm={12} md={8} lg={8} xl={8} key={m.id}>
                                   <div style={{
                                     background: isDefault 
                                       ? `linear-gradient(135deg, #f5f3ff 0%, #ffffff 100%)` 
@@ -781,7 +983,20 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                             )}
                                           </div>
                                         </Tooltip>
-                                        <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', opacity: 0.8 }}>ID: {m.id}</div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', opacity: 0.8 }}>
+                                          <span>ID: {m.id}</span>
+                                          <Button
+                                            type="text"
+                                            size="small"
+                                            icon={<Copy size={10} />}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              navigator.clipboard.writeText(m.id);
+                                              message.success(t('common.copySuccess'));
+                                            }}
+                                            style={{ color: '#cbd5e1', padding: 0, height: 16, width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 16 }}
+                                          />
+                                        </div>
                                       </div>
                                     </div>
     
@@ -866,7 +1081,12 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                             ]}
                           />
                         )
-                      )}
+                      ) : (
+                        <div style={{ textAlign: 'center', padding: '20px', background: '#f8fafc', borderRadius: 12, border: '1px dashed #e2e8f0', marginBottom: 28 }}>
+                          <Empty description={t('common.noContent')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                        </div>
+                      )
+                    )}
                     </div>
                   );
                 })
@@ -1303,26 +1523,65 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         </div>
       </Modal>
 
-      {/* 机器人核心人格/身份编辑器 (分屏预览模式) */}
+      {/* 机器人核心人格/身份/记忆编辑器 (分屏预览模式) */}
       <Modal
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ 
               padding: 8, 
-              background: editorType === 'soul' ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' : 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)', 
+              background: editorType === 'soul' ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' : 
+                         editorType === 'identity' ? 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)' : 
+                         editorType === 'heartbeat' ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' :
+                         editorType === 'agents' ? 'linear-gradient(135deg, #0891b2 0%, #0e7490 100%)' :
+                         'linear-gradient(135deg, #059669 0%, #10b981 100%)', 
               borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
               boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
             }}>
-              {editorType === 'soul' ? <Brain size={18} color="#fff" /> : <ShieldCheck size={18} color="#fff" />}
+              {editorType === 'soul' ? <Brain size={18} color="#fff" /> : 
+               editorType === 'identity' ? <ShieldCheck size={18} color="#fff" /> : 
+               editorType === 'heartbeat' ? <Heart size={18} color="#fff" /> :
+               editorType === 'agents' ? <Users size={18} color="#fff" /> :
+               <BrainCircuit size={18} color="#fff" />}
             </div>
-            <div>
+            <div style={{ flex: 1 }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b', marginBottom: 2 }}>
-                {editorType === 'soul' ? t('bots.editSoul') : t('bots.editIdentity')}
+                {editorType === 'soul' ? t('bots.editSoul') : 
+                 editorType === 'identity' ? t('bots.editIdentity') : 
+                 editorType === 'heartbeat' ? t('bots.editHeartbeat') :
+                 editorType === 'agents' ? t('bots.editAgents') :
+                 t('bots.editMemory')}
               </div>
               <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
-                {editorBotId} · {editorType === 'soul' ? 'SOUL.md' : 'IDENTITY.md'}
+                {editorBotId} · {editorType === 'soul' ? 'SOUL.md' : 
+                              editorType === 'identity' ? 'IDENTITY.md' : 
+                              editorType === 'heartbeat' ? 'HEARTBEAT.md' :
+                              editorType === 'agents' ? 'AGENTS.md' :
+                              (selectedMemoryFile || 'MEMORY.md')}
               </div>
             </div>
+            {editorType === 'memory' && (
+              <Tabs 
+                size="small" 
+                activeKey={activeMemoryTab} 
+                onChange={(key: any) => {
+                  setActiveMemoryTab(key);
+                  if (key === 'long') {
+                    handleOpenFileEditor(editorBotId, 'memory', undefined, 'long');
+                  } else {
+                    const bot = botsModels?.data?.bots?.find((b: any) => b.id === editorBotId);
+                    fetchMemoryList(editorBotId, bot?.workspace);
+                    setEditorContent('');
+                    setSelectedMemoryFile(null);
+                  }
+                }}
+                className="memory-tabs"
+                style={{ marginBottom: -16, marginRight: 24 }}
+                items={[
+                  { key: 'long', label: t('bots.longTermMemory') },
+                  { key: 'daily', label: t('bots.dailyMemory') }
+                ]}
+              />
+            )}
           </div>
         }
         open={isEditorOpen}
@@ -1337,12 +1596,17 @@ const BotsManager: React.FC<BotsManagerProps> = ({
             loading={isSaving} 
             icon={<Save size={14} />} 
             onClick={handleSaveFileContent} 
-            style={{ borderRadius: 8, background: editorType === 'soul' ? '#8b5cf6' : '#2563eb', border: 'none' }}
+            disabled={editorType === 'memory' && activeMemoryTab === 'daily' && !selectedMemoryFile}
+            style={{ 
+              borderRadius: 8, 
+              background: editorType === 'soul' ? '#8b5cf6' : (editorType === 'identity' ? '#2563eb' : '#059669'), 
+              border: 'none' 
+            }}
           >
             {t('common.save')}
           </Button>
         ]}
-        width={isMobile ? '100%' : 1100}
+        width={isMobile ? '100%' : (editorType === 'memory' && activeMemoryTab === 'daily' ? 1200 : 1000)}
         centered
         bodyStyle={{ padding: '0', height: isMobile ? 'calc(100vh - 120px)' : '75vh', overflow: 'hidden' }}
       >
@@ -1352,53 +1616,160 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           style={{ height: '100%' }}
           wrapperClassName="bot-editor-spin-wrapper"
         >
-          {isEditorLoading ? (
-            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
-              <div style={{ marginTop: 16, color: '#94a3b8', fontSize: 14 }}>{t('common.loading')}</div>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', height: '100%', flexDirection: isMobile ? 'column' : 'row' }}>
-              {/* 左侧编辑器 */}
-              <div style={{ flex: 1, borderRight: isMobile ? 'none' : '1px solid #f1f5f9', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#f8fafc' }}>
-                  <Edit3 size={14} color="#64748b" />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{t('bots.markdownSource')}</span>
+          <div style={{ display: 'flex', height: '100%', flexDirection: isMobile ? 'column' : 'row' }}>
+            {/* 记忆文件列表 (仅在日期记忆 Tab 显示) */}
+            {editorType === 'memory' && activeMemoryTab === 'daily' && (
+              <div style={{ width: 240, borderRight: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: '#475569' }}>{t('bots.dailyMemory')}</span>
+                  <Tooltip title={t('bots.addMemoryFile')}>
+                    <Button 
+                      size="small" 
+                      type="text" 
+                      icon={<Plus size={14} />} 
+                      onClick={() => {
+                        const bot = botsModels?.data?.bots?.find((b: any) => b.id === editorBotId);
+                        const today = dayjs().format('YYYY-MM-DD');
+                        Modal.confirm({
+                          title: t('bots.addMemoryFile'),
+                          content: (
+                            <div style={{ marginTop: 16 }}>
+                              <Input id="new-memory-filename" defaultValue={`${today}.md`} placeholder="YYYY-MM-DD.md" />
+                            </div>
+                          ),
+                          onOk: async () => {
+                            const filename = (document.getElementById('new-memory-filename') as HTMLInputElement).value;
+                            if (filename) {
+                              setSelectedMemoryFile(filename);
+                              setEditorContent('');
+                              // 自动触发一次保存来创建文件
+                              await api.post('/v1/openclaw/bots/file', {
+                                id: editorBotId,
+                                type: 'memory_file',
+                                filename: filename,
+                                content: '# ' + filename.replace('.md', ''),
+                                workspace: bot?.workspace
+                              });
+                              fetchMemoryList(editorBotId, bot?.workspace);
+                              handleOpenFileEditor(editorBotId, 'memory', filename);
+                            }
+                          }
+                        });
+                      }} 
+                    />
+                  </Tooltip>
                 </div>
-                <div style={{ flex: 1, padding: 0, position: 'relative', overflow: 'hidden' }}>
-                  <Input.TextArea
-                    value={editorContent}
-                    onChange={(e) => setEditorContent(e.target.value)}
-                    placeholder={editorType === 'soul' ? t('experts.soulPlaceholder') : t('experts.identityPlaceholder')}
-                    className="bot-editor-textarea"
-                    style={{ 
-                      height: '100%', border: 'none', background: 'transparent',
-                      padding: '24px', resize: 'none', fontSize: 14, fontFamily: 'monospace',
-                      lineHeight: 1.7, borderRadius: 0, overflowY: 'auto'
-                    }}
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                  <AntList
+                    loading={loadingMemoryList}
+                    dataSource={memoryFiles}
+                    renderItem={item => (
+                      <AntList.Item 
+                        onClick={() => handleOpenFileEditor(editorBotId, 'memory', item)}
+                        style={{ 
+                          padding: '10px 16px', 
+                          cursor: 'pointer',
+                          background: selectedMemoryFile === item ? '#fff' : 'transparent',
+                          borderLeft: selectedMemoryFile === item ? '3px solid #10b981' : '3px solid transparent',
+                          transition: 'all 0.2s'
+                        }}
+                        className="memory-list-item"
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                          <span style={{ fontSize: 13, color: selectedMemoryFile === item ? '#059669' : '#64748b', fontWeight: selectedMemoryFile === item ? 700 : 500 }}>{item}</span>
+                          <Popconfirm
+                            title={t('bots.confirmDeleteMemory')}
+                            onConfirm={(e) => {
+                              e?.stopPropagation();
+                              const bot = botsModels?.data?.bots?.find((b: any) => b.id === editorBotId);
+                              handleDeleteMemoryFile(editorBotId, item, bot?.workspace);
+                            }}
+                            onCancel={(e) => e?.stopPropagation()}
+                          >
+                            <Button size="small" type="text" icon={<Trash2 size={12} />} onClick={e => e.stopPropagation()} style={{ color: '#94a3b8' }} />
+                          </Popconfirm>
+                        </div>
+                      </AntList.Item>
+                    )}
                   />
                 </div>
               </div>
+            )}
 
-              {/* 右侧预览 */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa' }}>
-                <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#fff' }}>
-                  <Eye size={14} color="#64748b" />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{t('experts.preview')}</span>
+            {isEditorLoading ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
+                <Spin tip={t('common.loading')} />
+              </div>
+            ) : (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+                {/* Tab 切换控制栏 */}
+                <div style={{ 
+                  padding: '12px 20px', 
+                  borderBottom: '1px solid #f1f5f9', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  background: '#f8fafc' 
+                }}>
+                  <Segmented
+                    value={editorViewMode}
+                    onChange={(value: any) => setEditorViewMode(value)}
+                    options={[
+                      { label: <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Edit3 size={14} />{t('bots.markdownSource')}</div>, value: 'code' },
+                      { label: <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Eye size={14} />{t('experts.preview')}</div>, value: 'preview' }
+                    ]}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                     <Tooltip title={t('common.refresh')}>
+                      <Button 
+                        size="small" 
+                        type="text" 
+                        icon={<RefreshCw size={14} className={isEditorLoading ? 'animate-spin' : ''} />} 
+                        onClick={() => handleOpenFileEditor(editorBotId, editorType, selectedMemoryFile || undefined)} 
+                        style={{ color: '#94a3b8' }}
+                      />
+                    </Tooltip>
+                  </div>
                 </div>
-                <div style={{ flex: 1, padding: 30, overflowY: 'auto', backgroundColor: '#fff' }}>
-                  {editorContent ? (
-                    <div className="markdown-body" style={{ fontSize: 15 }}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+
+                {/* 内容区 */}
+                <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                  {editorViewMode === 'code' ? (
+                    <div style={{ flex: 1, padding: 0, position: 'relative', overflow: 'hidden' }}>
+                      <TokenBadge text={editorContent} />
+                      <Input.TextArea
+                        value={editorContent}
+                        onChange={(e) => setEditorContent(e.target.value)}
+                        placeholder={editorType === 'soul' ? t('experts.soulPlaceholder') : 
+                                     editorType === 'identity' ? t('experts.identityPlaceholder') : 
+                                     editorType === 'heartbeat' ? 'HEARTBEAT.md configuration...' :
+                                     editorType === 'agents' ? 'AGENTS.md configuration...' :
+                                     t('bots.memoryPlaceholder')}
+                        className="bot-editor-textarea"
+                        style={{ 
+                          height: '100%', border: 'none', background: 'transparent',
+                          padding: '24px', resize: 'none', fontSize: 14, fontFamily: 'monospace',
+                          lineHeight: 1.7, borderRadius: 0, overflowY: 'auto'
+                        }}
+                      />
                     </div>
                   ) : (
-                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>
-                      <Empty description={t('common.noContent')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                    <div style={{ flex: 1, padding: '30px 40px', overflowY: 'auto', backgroundColor: '#fff' }}>
+                      {editorContent ? (
+                        <div className="markdown-body" style={{ fontSize: 15, maxWidth: '900px', margin: '0 auto' }}>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>
+                          <Empty description={t('common.noContent')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </Spin>
       </Modal>
       </div>
@@ -1411,6 +1782,10 @@ const BotsManager: React.FC<BotsManagerProps> = ({
         .markdown-body li { margin-bottom: 6px; color: #475569; }
         .markdown-body code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; color: #2563eb; }
         .markdown-body blockquote { border-left: 4px solid #e2e8f0; padding-left: 16px; color: #64748b; font-style: italic; margin: 16px 0; }
+        .markdown-body table { display: block; width: 100%; overflow-x: auto; border-collapse: collapse; margin-bottom: 16px; }
+        .markdown-body table th, .markdown-body table td { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; }
+        .markdown-body table th { background: #f8fafc; font-weight: 700; color: #475569; }
+        .markdown-body table td { color: #64748b; }
         @keyframes pulse-green {
           0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
           70% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
@@ -1433,7 +1808,26 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           overflow-y: auto !important;
           padding: 24px !important;
         }
+        .memory-tabs .ant-tabs-nav::before {
+          border-bottom: none !important;
+        }
+        .memory-list-item:hover {
+          background: #f1f5f9 !important;
+        }
+        .id-copy-tag:hover {
+          background: #e2e8f0 !important;
+          border-color: #cbd5e1 !important;
+          color: #1e293b !important;
+        }
       ` }} />
+      <FileExplorer 
+        open={explorerOpen}
+        onClose={() => setExplorerOpen(false)}
+        rootPath={explorerPath}
+        title={explorerTitle}
+        t={t}
+        isMobile={isMobile}
+      />
     </div>
   );
 };

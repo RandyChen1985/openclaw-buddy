@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { VirtuosoHandle } from 'react-virtuoso';
-import { message } from 'antd';
+import { message, Modal } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Monitor, MessageCircle, Send, Globe, Clock, Zap, Sparkles, Settings } from 'lucide-react';
 import 'katex/dist/katex.min.css';
-import * as nacl from 'tweetnacl';
-import { sha256 } from 'js-sha256';
 import storage from '../utils/storage';
-import GatewayOfflineMask from '../components/GatewayOfflineMask';
+
 import V3SessionList from '../components/Chat/V3SessionList';
 import type { InputAreaHandle } from '../components/Chat/V3InputArea';
 import ChatV3Auth from '../components/Chat/ChatV3Auth';
@@ -18,17 +16,28 @@ import { V3ChatHeader } from './chatV3/V3ChatHeader';
 import { V3FloatingButtons } from './chatV3/V3FloatingButtons';
 import { V3MessagePane } from './chatV3/V3MessagePane';
 import { V3ComposerBar } from './chatV3/V3ComposerBar';
+import { V3DebugPane } from './chatV3/V3DebugPane';
 import { useV3Theme } from '../hooks/chatV3/useV3Theme';
 import '../styles/ChatV3.css';
 
 // --- Utils & Config ---
 const parseSessionKey = (key: string) => {
-  if (!key || !key.startsWith('agent:')) return { botId: 'main', source: 'dashboard' };
+  if (!key || !key.startsWith('agent:')) return { botId: 'main', source: 'dashboard' as const, openAIUser: undefined as string | undefined };
   const parts = key.split(':');
-  return {
-    botId: parts[1] || 'main',
-    source: parts[2] || 'dashboard'
-  };
+  const botId = parts[1] || 'main';
+  const source = parts[2] || 'dashboard';
+
+  // openai-user: agent:{botId}:openai-user:{username}-{uuid}
+  let openAIUser: string | undefined;
+  if ((source || '').toLowerCase() === 'openai-user') {
+    const raw = (parts[3] || '').trim();
+    if (raw) {
+      // 约定：用户名不包含 "-"；uuid 会包含多个 "-"
+      openAIUser = raw.split('-')[0] || raw;
+    }
+  }
+
+  return { botId, source, openAIUser };
 };
 
 const SourceConfig: Record<string, { icon: any; color: string; labelKey: string; defaultLabel: string }> = {
@@ -43,23 +52,18 @@ const SourceConfig: Record<string, { icon: any; color: string; labelKey: string;
   'fallback': { icon: <Globe size={12} />, color: '#94a3b8', labelKey: 'chat.source.fallback', defaultLabel: '其他渠道' }
 };
 
-// --- Types ---
 interface ChatV3Props {
   botsModels: any;
   loadingBots: boolean;
   onRefreshBots: () => void;
   isMobile?: boolean;
-  isRunning?: boolean;
-  onNavigateToDashboard?: () => void;
 }
 
-// --- Utils ---
-const hexToUint8Array = (hex: string): Uint8Array => {
-  const matched = hex.match(/.{1,2}/g);
-  return new Uint8Array(matched ? matched.map(byte => parseInt(byte, 16)) : []);
-};
 
-const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRunning, onNavigateToDashboard }) => {
+// --- Utils ---
+
+const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) => {
+
   const { t } = useTranslation();
   const v3Theme = useV3Theme();
 
@@ -87,11 +91,20 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   
   // Local UI States
   const [selectedBot, setSelectedBot] = useState<string>('');
-  const [keyPair, setKeyPair] = useState<nacl.BoxKeyPair | null>(null);
-  const [deviceId, setDeviceId] = useState<string>('');
-  const [showThinking, setShowThinking] = useState<boolean>(() => storage.getItem('v3_show_thinking') === 'true');
+  const [showThinking, setShowThinking] = useState<boolean>(() => storage.getItem('v3_show_thinking') !== 'false');
   const showThinkingRef = useRef(showThinking);
   showThinkingRef.current = showThinking;
+
+  // Debug Logs
+  const [showDebug, setShowDebug] = useState(() => storage.getItem('v3_show_debug') === 'true');
+  const [wsLogs, setWsLogs] = useState<any[]>([]);
+
+  const handleAddLog = useCallback((log: any) => {
+    // 💡 只有开启调试模式且非心跳包时才记录，防止内存溢出与性能损耗
+    if (!storage.getItem('v3_show_debug')) return;
+    if (log.data?.event === 'health') return; 
+    setWsLogs(prev => [...prev.slice(-99), log]);
+  }, []);
 
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -99,6 +112,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const inputAreaRef = useRef<InputAreaHandle>(null);
 
   // Hook usage
+  const handleSetSelectedBot = React.useCallback((bot: string) => setSelectedBot(bot), []);
+
   const {
     messages, setMessages,
     status,
@@ -139,16 +154,15 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     connect,
     showScrollBtnRef
   } = useChatV3WebSocket({
-    keyPair,
-    deviceId,
     selectedBot,
-    setSelectedBot: (bot: string) => setSelectedBot(bot),
+    setSelectedBot: handleSetSelectedBot,
     botsModels,
     t,
     inputAreaRef,
     virtuosoRef,
     scrollRef,
-    showThinkingRef
+    showThinkingRef,
+    onLog: handleAddLog
   });
 
   // Local UI States
@@ -161,31 +175,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
   const [editingMsgIndex, setEditingMsgIndex] = useState<number | null>(null);
   const [editContent, setEditContent] = useState('');
   const [sessionSearch, setSessionSearch] = useState('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
-
-  useEffect(() => {
-    const initKeys = async () => {
-      let seedHex = storage.getItem('openclaw_v3_seed');
-      let seed: Uint8Array;
-      if (!seedHex) {
-        seed = nacl.randomBytes(32);
-        storage.setItem('openclaw_v3_seed', Array.from(seed).map(b => b.toString(16).padStart(2, '0')).join(''));
-      } else {
-        seed = hexToUint8Array(seedHex);
-      }
-      const kp = nacl.sign.keyPair.fromSeed(seed);
-      setKeyPair(kp as any);
-      let hashArray: number[];
-      if (typeof crypto !== 'undefined' && crypto.subtle) {
-        const hashBuffer = await crypto.subtle.digest('SHA-256', kp.publicKey.buffer as ArrayBuffer);
-        hashArray = Array.from(new Uint8Array(hashBuffer));
-      } else {
-        hashArray = Array.from(hexToUint8Array(sha256(kp.publicKey)));
-      }
-      setDeviceId(hashArray.map(b => b.toString(16).padStart(2, '0')).join(''));
-    };
-    initKeys();
-  }, []);
 
   useEffect(() => {
     if (!selectedBot && botsModels?.data?.bots?.length > 0) {
@@ -215,6 +206,11 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
       if (isMod && e.key === '\\') {
         e.preventDefault();
         setShowSider(prev => !prev);
+        return;
+      }
+      if (isMod && e.key === 'f') {
+        e.preventDefault();
+        setIsFullscreen(prev => !prev);
         return;
       }
     };
@@ -248,11 +244,55 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
     [status, isTyping, isCreatingNewSession, handleSend, t]
   );
 
+  const currentSessionBotId = React.useMemo(() => {
+    if (!sessionKey) return null;
+    return parseSessionKey(sessionKey).botId;
+  }, [sessionKey]);
+
+  const handleRequestNewSessionWithBot = React.useCallback((botValue: string) => {
+    const nextBot = (botValue || '').trim();
+    if (!nextBot) return;
+
+    // 没有会话时允许直接切换 bot（用于首次进入/准备阶段）
+    if (!sessionKey) {
+      setSelectedBot(nextBot);
+      return;
+    }
+
+    if (status !== 'authenticated') {
+      message.warning(t('chat.v3Connecting'));
+      return;
+    }
+    if (isTyping) {
+      message.info(t('chat.refreshWaitReply', { defaultValue: '请等待当前回复结束后再切换' }));
+      return;
+    }
+    if (isCreatingNewSession) return;
+
+    const agentId = nextBot.replace(/^openclaw:/, '').trim();
+    const bot = botsModels?.data?.bots?.find((b: any) => b.id === agentId);
+    const botName = bot?.name || agentId;
+
+    Modal.confirm({
+      title: t('chat.confirmCreateNewSessionTitle', { defaultValue: '确认创建新会话？' }),
+      content: t('chat.confirmCreateNewSessionContent', {
+        defaultValue: `将以「${botName}」创建一个新的会话。当前会话不会被覆盖。`,
+        botName
+      }),
+      okText: t('common.confirm', { defaultValue: '确定' }),
+      cancelText: t('common.cancel', { defaultValue: '取消' }),
+      onOk: async () => {
+        // 先更新下拉选择的显示，再创建新会话
+        setSelectedBot(nextBot);
+        startNewSession(agentId);
+      }
+    });
+  }, [botsModels, isCreatingNewSession, isTyping, sessionKey, startNewSession, status, t]);
+
   return (
     <>
-      {!isRunning && <GatewayOfflineMask onNavigateToDashboard={onNavigateToDashboard} />}
       <div
-        className="chat-v3-root"
+        className={`chat-v3-root ${isFullscreen ? 'chat-v3-root-fullscreen' : ''}`}
         data-v3-theme={v3Theme.rootAttrs['data-v3-theme']}
         style={{
           ...(v3Theme.rootAttrs.styleVars || {}),
@@ -398,6 +438,14 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
           getSourceMeta={getSourceMeta}
           botsModels={botsModels}
           v3Theme={v3Theme}
+          showDebug={showDebug}
+          setShowDebug={(val) => {
+            setShowDebug(val);
+            storage.setItem('v3_show_debug', val ? 'true' : 'false');
+            if (!val) setWsLogs([]); // 关闭时自动清屏
+          }}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
         />
   
         <V3MessagePane
@@ -493,7 +541,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
               }}
               loadingBots={loadingBots}
               selectedBot={selectedBot}
-              setSelectedBot={setSelectedBot}
+              onRequestNewSessionWithBot={handleRequestNewSessionWithBot}
+              currentSessionBotId={currentSessionBotId}
               botsModels={botsModels}
               sessionModel={sessionModel}
               onSessionModelChange={handleModelChange}
@@ -506,6 +555,18 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isRu
 
           </div>
         </div>
+        {showDebug && !isMobile && (
+          <V3DebugPane 
+            t={t} 
+            logs={wsLogs} 
+            onClear={() => setWsLogs([])} 
+            onClose={() => {
+              setShowDebug(false);
+              storage.setItem('v3_show_debug', 'false');
+              setWsLogs([]);
+            }} 
+          />
+        )}
         <ChatV3Auth 
           status={status} 
           isMobile={!!isMobile} 

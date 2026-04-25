@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Drawer, Input, Spin, Tabs, Button, message } from 'antd';
 import { Brain, Eye, PenLine, Save, X } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import TokenBadge from '../../components/TokenBadge';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
+import rehypeSanitize from 'rehype-sanitize';
 
 export interface V3SoulEditorDrawerProps {
   t: any;
@@ -134,7 +139,14 @@ export function V3SoulEditorDrawer({ t, isMobile, selectedBot, botsModels, statu
         }
         styles={{
           header: { borderBottom: '1px solid #f1f5f9', padding: '16px 24px' },
-          body: { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }
+          body: {
+            padding: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            flex: 1,
+            minHeight: 0
+          }
         }}
         closable={false}
       >
@@ -146,13 +158,13 @@ export function V3SoulEditorDrawer({ t, isMobile, selectedBot, botsModels, statu
             </div>
           </div>
         ) : (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
             <Tabs
               activeKey={activeTab}
               onChange={(k) => setActiveTab(k as any)}
               centered
               className="v3-soul-tabs"
-              style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+              style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
               tabBarStyle={{ marginBottom: 0, padding: '0 16px', borderBottom: '1px solid #f1f5f9', background: '#fff' }}
               items={[
                 {
@@ -164,27 +176,31 @@ export function V3SoulEditorDrawer({ t, isMobile, selectedBot, botsModels, statu
                     </div>
                   ),
                   children: (
-                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 'calc(100vh - 250px)' }}>
-                      <div style={{ padding: '8px 16px', background: '#f8fafc', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                      <div style={{ padding: '8px 16px', background: '#f8fafc', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, flexShrink: 0 }}>
                         {t('chat.soulEditorSourceTitle', { defaultValue: '灵魂内容 (Markdown)' })}
                       </div>
-                      <Input.TextArea
-                        value={soulContent}
-                        onChange={e => setSoulContent(e.target.value)}
-                        placeholder={t('chat.soulEditorPlaceholder', { defaultValue: '请输入专家灵魂（提示词）...' })}
-                        style={{
-                          flex: 1,
-                          border: 'none',
-                          borderRadius: 0,
-                          resize: 'none',
-                          fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                          fontSize: 13,
-                          padding: 20,
-                          background: '#fff',
-                          lineHeight: 1.6,
-                          minHeight: 400
-                        }}
-                      />
+                      <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                        <TokenBadge text={soulContent} />
+                        <Input.TextArea
+                          value={soulContent}
+                          onChange={e => setSoulContent(e.target.value)}
+                          placeholder={t('chat.soulEditorPlaceholder', { defaultValue: '请输入专家灵魂（提示词）...' })}
+                          style={{
+                            flex: 1,
+                            minHeight: 0,
+                            border: 'none',
+                            borderRadius: 0,
+                            resize: 'none',
+                            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                            fontSize: 13,
+                            padding: 20,
+                            background: '#fff',
+                            lineHeight: 1.6,
+                            overflowY: 'auto'
+                          }}
+                        />
+                      </div>
                     </div>
                   )
                 },
@@ -197,15 +213,21 @@ export function V3SoulEditorDrawer({ t, isMobile, selectedBot, botsModels, statu
                     </div>
                   ),
                   children: (
-                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 'calc(100vh - 250px)', background: '#fafafa' }}>
-                      <div style={{ padding: '8px 16px', background: '#f1f5f9', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', background: '#fafafa' }}>
+                      <div style={{ padding: '8px 16px', background: '#f1f5f9', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, flexShrink: 0 }}>
                         {t('chat.soulEditorLivePreviewTitle', { defaultValue: '实时预览' })}
                       </div>
-                      <div style={{ flex: 1, padding: 20, overflowY: 'auto' }}>
-                        <div style={{ maxWidth: 800, margin: '0 auto', background: '#fff', padding: 24, borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.02)', minHeight: '100%' }}>
-                          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" }}>
-                            {soulContent || t('common.noContent')}
-                          </pre>
+                      <div style={{ flex: 1, minHeight: 0, padding: 20, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                        <div style={{ maxWidth: 800, margin: '0 auto', background: '#fff', padding: 24, borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                          {soulContent.trim() ? (
+                            <div className="markdown-body-v3 v3-soul-preview-md" style={{ fontSize: 14, color: '#334155' }}>
+                              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeSanitize]}>
+                                {soulContent}
+                              </ReactMarkdown>
+                            </div>
+                          ) : (
+                            <div style={{ color: '#94a3b8', fontSize: 14 }}>{t('common.noContent')}</div>
+                          )}
                         </div>
                       </div>
                     </div>

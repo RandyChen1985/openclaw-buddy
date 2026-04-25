@@ -98,6 +98,11 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# 将版本文件同步到隔离目录，便于排查与展示
+if [ -f "VERSION" ]; then
+    cp "VERSION" "$DEV_ROOT/VERSION"
+fi
+
 # 6. 生成隔离环境配置: $DEV_ROOT/env (仅在不存在时生成)
 if [ ! -f "$DEV_ROOT/env" ]; then
     echo "📝 生成隔离环境配置: $DEV_ROOT/env"
@@ -149,7 +154,7 @@ cd "$DEV_ROOT"
 echo "🚀 启动服务..."
 # 显式读取 env 中的变量并导出 (也可以由 Go 代码中的 godotenv.Load("env") 处理，但 PID 检查在 Load 之前)
 export PID_FILE="./openclaw-buddy.pid"
-nohup ./openclaw-buddy-dev >> ./logs/guardian.log 2>&1 &
+nohup ./openclaw-buddy-dev > /dev/null 2>&1 &
 NEW_PID=$!
 echo $NEW_PID > "/tmp/openclaw-buddy-dev.pid"
 

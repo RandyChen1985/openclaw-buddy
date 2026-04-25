@@ -3,6 +3,7 @@ package process
 import (
 	"encoding/json"
 	"log"
+	"runtime"
 	"sync"
 	"time"
 	"openclaw-buddy/internal/utils"
@@ -10,12 +11,27 @@ import (
 
 // SyncAll 刷所有缓存 (并发模式)
 func SyncAll(configDir string) {
-	log.Println("🔄 [Cache] 开始全量并发同步业务数据...")
-	
-	start := time.Now()
-	var wg sync.WaitGroup
+	SyncAllWithConcurrency(configDir, 0)
+}
 
-	// 定义并发任务列表
+// SyncAllWithConcurrency 刷所有缓存（带并发上限）。
+// 启动阶段如果并发启动过多 openclaw CLI 子进程，会造成 CPU 峰值，因此提供并发限流。
+func SyncAllWithConcurrency(configDir string, concurrency int) {
+	if concurrency <= 0 {
+		concurrency = 2
+	}
+	if concurrency > 8 {
+		concurrency = 8
+	}
+	if runtime.GOMAXPROCS(0) == 1 && concurrency > 1 {
+		concurrency = 1
+	}
+
+	log.Printf("🔄 [Cache] 开始全量同步业务数据 (并发上限=%d)...", concurrency)
+
+	start := time.Now()
+
+	// 定义任务列表（每个任务通常会触发一次或多次 openclaw CLI 调用）
 	tasks := []struct {
 		key string
 		fn  func() (any, error)
@@ -24,24 +40,37 @@ func SyncAll(configDir string) {
 		{"chat_channels", func() (any, error) { return GetChatChannels() }},
 		{"devices", func() (any, error) { return GetOpenClawDevices() }},
 		{"skills", func() (any, error) { return GetOpenClawSkills() }},
-		{"plugins", func() (any, error) { return GetOpenClawPlugins() }},
+		{"plugins", func() (any, error) { return GetOpenClawPlugins(configDir) }},
 		{"cron_jobs", func() (any, error) { return GetOpenClawCronJobs() }},
 		{"sessions", func() (any, error) { return GetOpenClawSessions() }},
 		{"ranking", func() (any, error) { return GetBotRanking(configDir) }},
 		{"security_status", func() (any, error) { return GetSecurityStatusData() }},
 	}
 
-	wg.Add(len(tasks))
-	for _, t := range tasks {
-		go func(key string, fetcher func() (any, error)) {
-			defer wg.Done()
-			syncKey(key, fetcher)
-		}(t.key, t.fn)
+	type job struct {
+		key string
+		fn  func() (any, error)
 	}
 
-	// 等待所有同步协程完成
+	jobs := make(chan job, len(tasks))
+	for _, t := range tasks {
+		jobs <- job{key: t.key, fn: t.fn}
+	}
+	close(jobs)
+
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			defer wg.Done()
+			for j := range jobs {
+				syncKey(j.key, j.fn)
+			}
+		}()
+	}
+
 	wg.Wait()
-	log.Printf("✅ [Cache] 全量并发同步完成，总耗时 %v。", time.Since(start))
+	log.Printf("✅ [Cache] 全量同步完成，总耗时 %v。", time.Since(start))
 }
 
 // SyncKeySingle 同步单个 Key
@@ -57,7 +86,7 @@ func SyncKeySingle(key string, configDir string) error {
 	case "skills":
 		fetcher = func() (any, error) { return GetOpenClawSkills() }
 	case "plugins":
-		fetcher = func() (any, error) { return GetOpenClawPlugins() }
+		fetcher = func() (any, error) { return GetOpenClawPlugins(configDir) }
 	case "cron_jobs":
 		fetcher = func() (any, error) { return GetOpenClawCronJobs() }
 	case "sessions":

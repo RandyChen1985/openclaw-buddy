@@ -25,12 +25,19 @@ export interface V3SessionListProps {
 
 // --- Utils & Config ---
 const parseSessionKey = (key: string) => {
-  if (!key || !key.startsWith('agent:')) return { botId: 'main', source: 'dashboard' };
+  if (!key || !key.startsWith('agent:')) return { botId: 'main', source: 'dashboard' as const, openAIUser: undefined as string | undefined };
   const parts = key.split(':');
-  return {
-    botId: parts[1] || 'main',
-    source: parts[2] || 'dashboard'
-  };
+  const botId = parts[1] || 'main';
+  const source = parts[2] || 'dashboard';
+
+  // openai-user: agent:{botId}:openai-user:{username}-{uuid}
+  let openAIUser: string | undefined;
+  if ((source || '').toLowerCase() === 'openai-user') {
+    const raw = (parts[3] || '').trim();
+    if (raw) openAIUser = raw.split('-')[0] || raw;
+  }
+
+  return { botId, source, openAIUser };
 };
 
 const SourceConfig: Record<string, { icon: any, color: string, labelKey: string, defaultLabel: string }> = {
@@ -257,7 +264,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                   </div>
                   {items.map((s: any) => {
                     const isActive = sessionKey === s.key;
-                    const { source } = parseSessionKey(s.key);
+                    const { source, openAIUser } = parseSessionKey(s.key);
                     const sourceMeta = getSourceMeta(source);
                     const sourceLabel = t(sourceMeta.labelKey, { defaultValue: sourceMeta.defaultLabel });
                     
@@ -337,7 +344,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                   <span>{new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                   <span>•</span>
                                   <span style={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                                    {sourceLabel}
+                                    {sourceLabel}{openAIUser ? `（${openAIUser}）` : ''}
                                   </span>
                                   {s.model && (
                                     <>

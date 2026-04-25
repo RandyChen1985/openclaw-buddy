@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, Search, CheckCircle2, AlertCircle, Puzzle, Trash2, HelpCircle, ExternalLink } from 'lucide-react';
+import SkillFileExplorer from '../components/SkillFileExplorer';
 import { Card, Table, Tag, Button, Input, message, Tooltip, Segmented, Modal, Steps, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
@@ -19,6 +20,7 @@ interface Skill {
     config: string[];
     os: string[];
   };
+  path?: string;
 }
 
 interface SkillManagementProps {
@@ -41,6 +43,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
   const [searchText, setSearchText] = useState('');
   const [updatedAt, setUpdatedAt] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | number>('ready');
+  const [typeFilter, setTypeFilter] = useState<string | number>('all');
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [processingNames, setProcessingNames] = useState<Set<string>>(new Set());
   const processingRef = React.useRef(new Set<string>());
@@ -117,7 +120,8 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
     const matchesSearch = skill.name.toLowerCase().includes(searchText.toLowerCase()) || 
                          skill.description.toLowerCase().includes(searchText.toLowerCase());
     const matchesStatus = statusFilter === 'all' || (statusFilter === 'ready' && skill.eligible);
-    return matchesSearch && matchesStatus;
+    const matchesType = typeFilter === 'all' || (typeFilter === 'builtin' && skill.bundled) || (typeFilter === 'external' && !skill.bundled);
+    return matchesSearch && matchesStatus && matchesType;
   });
 
   const handleUninstall = (name: string, e?: React.BaseSyntheticEvent) => {
@@ -129,7 +133,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
     
     // 2. [同步哨兵] 秒级拦截，防止穿透，并检查全局任务
     if (processingRef.current.has(name) || now - lastTime < 1000 || hasActiveTask(name, 'uninstall')) {
-      message.warning(t('common.taskAlreadyRunning') || '已有相同任务正在进行中，请耐心等待');
+      message.warning(t('common.taskAlreadyRunning'));
       return;
     }
 
@@ -172,16 +176,39 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
     });
   };
 
+  const [explorerOpen, setExplorerOpen] = useState(false);
+  const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
+
   const columns = [
     {
       title: t('skills.skillName'),
       dataIndex: 'name',
       key: 'name',
       render: (text: string, record: Skill) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div 
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 10, 
+            cursor: record.path ? 'pointer' : 'default',
+            transition: 'all 0.2s'
+          }}
+          className={record.path ? 'skill-name-clickable' : ''}
+          onClick={() => {
+            if (record.path) {
+              setSelectedSkill(record);
+              setExplorerOpen(true);
+            }
+          }}
+        >
           <span style={{ fontSize: 20 }}>{record.emoji || '🧩'}</span>
           <div>
-            <div style={{ fontWeight: 600, color: '#1e293b' }}>{text}</div>
+            <div style={{ 
+              fontWeight: 600, 
+              color: record.path ? '#2563eb' : '#1e293b',
+              textDecoration: record.path ? 'underline transparent' : 'none',
+              transition: 'all 0.2s'
+            }} className="skill-title-text">{text}</div>
             <div style={{ fontSize: 11, color: '#94a3b8' }}>{record.source}</div>
           </div>
         </div>
@@ -227,6 +254,17 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
       render: (record: Skill) => (
         <Tag style={{ borderRadius: 4 }}>{record.bundled ? t('skills.builtin') : t('skills.external')}</Tag>
       )
+    },
+    {
+      title: t('skills.path'),
+      dataIndex: 'path',
+      key: 'path',
+      ellipsis: true,
+      render: (text: string) => (
+        <Tooltip title={text}>
+          <span style={{ color: '#94a3b8', fontSize: 11, fontFamily: 'monospace' }}>{text || '-'}</span>
+        </Tooltip>
+      ),
     },
     {
       title: t('skills.actions'),
@@ -320,7 +358,17 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
             )}
           </div>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end', flexWrap: 'wrap' }}>
+            <Segmented
+              options={[
+                { label: t('skills.all'), value: 'all' },
+                { label: t('skills.builtin'), value: 'builtin' },
+                { label: t('skills.external'), value: 'external' }
+              ]}
+              value={typeFilter}
+              onChange={(value) => setTypeFilter(value)}
+              style={{ background: '#f1f5f9', borderRadius: 8, padding: 2 }}
+            />
             <Segmented
               options={[
                 { label: t('skills.ready'), value: 'ready' },
@@ -377,6 +425,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
                         </div>
                         <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.5 }}>{skill.description}</div>
                         <div style={{ fontSize: 11, color: '#94a3b8' }}>{t('skills.source')}: {skill.source}</div>
+                        {skill.path && <div style={{ fontSize: 10, color: '#cbd5e1', fontFamily: 'monospace', wordBreak: 'break-all', marginTop: 4 }}>{skill.path}</div>}
                     </div>
                 ))
             )}
@@ -456,6 +505,27 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
         />
       </Modal>
       </div>
+
+      {selectedSkill && (
+        <SkillFileExplorer
+          open={explorerOpen}
+          onClose={() => setExplorerOpen(false)}
+          rootPath={selectedSkill.path || ''}
+          skillName={selectedSkill.name}
+          t={t}
+          isMobile={!!isMobile}
+        />
+      )}
+
+      <style>{`
+        .skill-name-clickable:hover .skill-title-text {
+          color: #1d4ed8 !important;
+          text-decoration: underline !important;
+        }
+        .hover-bg-slate:hover {
+          background: #f1f5f9;
+        }
+      `}</style>
     </div>
   );
 };

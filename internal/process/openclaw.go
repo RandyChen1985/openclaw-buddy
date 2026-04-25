@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 	"openclaw-buddy/internal/utils"
 )
 
@@ -46,6 +47,23 @@ type OpenClawSession struct {
 	ContextTokens int    `json:"contextTokens"`
 	SessionID     string `json:"sessionId"`
 	UpdatedAt     int64  `json:"updatedAt"`
+}
+
+type OpenClawSkill struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Emoji       string `json:"emoji,omitempty"`
+	Eligible    bool   `json:"eligible"`
+	Disabled    bool   `json:"disabled"`
+	Source      string `json:"source"`
+	Bundled     bool   `json:"bundled"`
+	Path        string `json:"path"` // 绝对路径
+	Missing     *struct {
+		Bins   []string `json:"bins"`
+		Env    []string `json:"env"`
+		Config []string `json:"config"`
+		OS     []string `json:"os"`
+	} `json:"missing,omitempty"`
 }
 
 type OpenClawBotsModelsResponse struct {
@@ -418,7 +436,7 @@ func SetOpenClawDefaultModel(modelID string) error {
 	return nil
 }
 
-func GetOpenClawBotFileContent(configDir, id, fileType, workspace string) (string, error) {
+func GetOpenClawBotFileContent(configDir, id, fileType, filename, workspace string) (string, error) {
 	// 如果 workspace 已经传入，直接使用，避免执行耗时的 openclaw agents list
 	botWorkspace := workspace
 	if botWorkspace == "" {
@@ -442,27 +460,39 @@ func GetOpenClawBotFileContent(configDir, id, fileType, workspace string) (strin
 
 	botWorkspace = utils.ExpandPath(botWorkspace)
 
-
-	fileName := ""
+	filePath := ""
 	switch strings.ToLower(fileType) {
 	case "soul":
-		fileName = "SOUL.md"
+		filePath = filepath.Join(botWorkspace, "SOUL.md")
 	case "identity":
-		fileName = "IDENTITY.md"
+		filePath = filepath.Join(botWorkspace, "IDENTITY.md")
 	case "tools":
-		fileName = "TOOLS.md"
+		filePath = filepath.Join(botWorkspace, "TOOLS.md")
 	case "user":
-		fileName = "USER.md"
+		filePath = filepath.Join(botWorkspace, "USER.md")
+	case "memory":
+		filePath = filepath.Join(botWorkspace, "MEMORY.md")
+	case "heartbeat":
+		filePath = filepath.Join(botWorkspace, "HEARTBEAT.md")
+	case "agents":
+		filePath = filepath.Join(botWorkspace, "AGENTS.md")
+	case "memory_file":
+		if filename == "" {
+			return "", fmt.Errorf("filename is required for memory_file type")
+		}
+		filePath = filepath.Join(botWorkspace, "memory", filename)
 	default:
 		return "", fmt.Errorf("unsupported file type: %s", fileType)
 	}
 
-	filePath := filepath.Join(botWorkspace, fileName)
-	// 尝试探测大小写
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		lowerPath := filepath.Join(botWorkspace, strings.ToLower(fileName))
-		if _, err := os.Stat(lowerPath); err == nil {
-			filePath = lowerPath
+	// 尝试探测大小写（针对根目录固定命名的文件）
+	if fileType != "memory_file" {
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			dir, name := filepath.Split(filePath)
+			lowerPath := filepath.Join(dir, strings.ToLower(name))
+			if _, err := os.Stat(lowerPath); err == nil {
+				filePath = lowerPath
+			}
 		}
 	}
 
@@ -478,7 +508,7 @@ func GetOpenClawBotFileContent(configDir, id, fileType, workspace string) (strin
 }
 
 // SaveOpenClawBotFileContent 保存机器人工作区文件的内容
-func SaveOpenClawBotFileContent(configDir, id, fileType, content, workspace string) error {
+func SaveOpenClawBotFileContent(configDir, id, fileType, filename, content, workspace string) error {
 	// 如果 workspace 已经传入，直接使用
 	botWorkspace := workspace
 	if botWorkspace == "" {
@@ -501,27 +531,43 @@ func SaveOpenClawBotFileContent(configDir, id, fileType, content, workspace stri
 
 	botWorkspace = utils.ExpandPath(botWorkspace)
 
-
-	fileName := ""
+	filePath := ""
 	switch strings.ToLower(fileType) {
 	case "soul":
-		fileName = "SOUL.md"
+		filePath = filepath.Join(botWorkspace, "SOUL.md")
 	case "identity":
-		fileName = "IDENTITY.md"
+		filePath = filepath.Join(botWorkspace, "IDENTITY.md")
 	case "tools":
-		fileName = "TOOLS.md"
+		filePath = filepath.Join(botWorkspace, "TOOLS.md")
 	case "user":
-		fileName = "USER.md"
+		filePath = filepath.Join(botWorkspace, "USER.md")
+	case "memory":
+		filePath = filepath.Join(botWorkspace, "MEMORY.md")
+	case "heartbeat":
+		filePath = filepath.Join(botWorkspace, "HEARTBEAT.md")
+	case "agents":
+		filePath = filepath.Join(botWorkspace, "AGENTS.md")
+	case "memory_file":
+		if filename == "" {
+			return fmt.Errorf("filename is required for memory_file type")
+		}
+		memoryDir := filepath.Join(botWorkspace, "memory")
+		if err := os.MkdirAll(memoryDir, 0755); err != nil {
+			return fmt.Errorf("failed to create memory directory: %w", err)
+		}
+		filePath = filepath.Join(memoryDir, filename)
 	default:
 		return fmt.Errorf("unsupported file type: %s", fileType)
 	}
 
-	filePath := filepath.Join(botWorkspace, fileName)
-	// 如果存在小写形式，则遵循原有命名进行覆盖
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		lowerPath := filepath.Join(botWorkspace, strings.ToLower(fileName))
-		if _, err := os.Stat(lowerPath); err == nil {
-			filePath = lowerPath
+	// 如果存在小写形式（针对根目录固定命名的文件），则遵循原有命名进行覆盖
+	if fileType != "memory_file" {
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			dir, name := filepath.Split(filePath)
+			lowerPath := filepath.Join(dir, strings.ToLower(name))
+			if _, err := os.Stat(lowerPath); err == nil {
+				filePath = lowerPath
+			}
 		}
 	}
 
@@ -533,6 +579,79 @@ func SaveOpenClawBotFileContent(configDir, id, fileType, content, workspace stri
 	// 异步触发同步逻辑，避免阻塞 API 响应
 	go SyncKeySingle("bots_models", configDir)
 	return nil
+}
+
+// ListOpenClawBotMemoryFiles 获取机器人记忆目录下的文件列表
+func ListOpenClawBotMemoryFiles(configDir, id, workspace string) ([]string, error) {
+	botWorkspace := workspace
+	if botWorkspace == "" {
+		res, err := GetOpenClawBotsModels(configDir)
+		if err != nil {
+			return nil, err
+		}
+		for _, bot := range res.Bots {
+			if bot.ID == id {
+				botWorkspace = bot.Workspace
+				break
+			}
+		}
+	}
+
+	if botWorkspace == "" {
+		return nil, fmt.Errorf("bot %s not found and no workspace provided", id)
+	}
+
+	memoryDir := filepath.Join(utils.ExpandPath(botWorkspace), "memory")
+	if _, err := os.Stat(memoryDir); os.IsNotExist(err) {
+		return []string{}, nil
+	}
+
+	entries, err := os.ReadDir(memoryDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var files []string
+	for _, entry := range entries {
+		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".md") || strings.HasSuffix(entry.Name(), ".txt")) {
+			files = append(files, entry.Name())
+		}
+	}
+
+	// 倒序排列，通常最新的日期排在前面
+	for i, j := 0, len(files)-1; i < j; i, j = i+1, j-1 {
+		files[i], files[j] = files[j], files[i]
+	}
+
+	return files, nil
+}
+
+// DeleteOpenClawBotMemoryFile 删除机器人记忆目录下的指定文件
+func DeleteOpenClawBotMemoryFile(configDir, id, filename, workspace string) error {
+	if filename == "" {
+		return fmt.Errorf("filename is required")
+	}
+
+	botWorkspace := workspace
+	if botWorkspace == "" {
+		res, err := GetOpenClawBotsModels(configDir)
+		if err != nil {
+			return err
+		}
+		for _, bot := range res.Bots {
+			if bot.ID == id {
+				botWorkspace = bot.Workspace
+				break
+			}
+		}
+	}
+
+	if botWorkspace == "" {
+		return fmt.Errorf("bot %s not found and no workspace provided", id)
+	}
+
+	filePath := filepath.Join(utils.ExpandPath(botWorkspace), "memory", filename)
+	return os.Remove(filePath)
 }
 
 func SetOpenClawBotModel(configDir, botID, modelID string) error {
@@ -791,15 +910,19 @@ func RemoveOpenClawCronJob(id string) error {
 	return nil
 }
 
-func GetOpenClawPlugins() (any, error) {
-	cmd := exec.Command("openclaw", "plugins", "list", "--json")
-	out, err := cmd.CombinedOutput()
+// GetOpenClawPlugins 列出插件；configDir 为 OpenClaw 配置目录（内含 openclaw.json），与渠道命令一致注入 OpenClawConfigEnv，避免 CLI 写到默认目录导致与网关不一致。
+func GetOpenClawPlugins(configDir string) (any, error) {
+	env, err := OpenClawConfigEnv(configDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list plugins: %v. Output: %s", err, string(out))
+		return nil, err
+	}
+	res, err := RunCommandWithEnvAndTimeout(45*time.Second, env, GetOpenClawBinary(), "plugins", "list", "--json")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list plugins: %w", err)
 	}
 
 	// 清理 ANSI 颜色代码
-	cleanOut := StripANSI(string(out))
+	cleanOut := StripANSI(res.Output)
 	if jsonStr, ok := ExtractFirstJSONValue(cleanOut); ok {
 		cleanOut = jsonStr
 	} else {
@@ -873,12 +996,42 @@ func GetOpenClawSkills() (any, error) {
 	cleanOut := StripANSI(string(out))
 	cleanOut = ExtractJSON(cleanOut)
 
-	var skills interface{}
+	var data struct {
+		Skills []OpenClawSkill `json:"skills"`
+	}
 	decoder := json.NewDecoder(strings.NewReader(cleanOut))
-	if err := decoder.Decode(&skills); err != nil {
+	if err := decoder.Decode(&data); err != nil {
 		return nil, fmt.Errorf("failed to parse skills json: %v", err)
 	}
-	return skills, nil
+
+	skills := data.Skills
+
+	// 补全绝对路径
+	searchDirs := []string{
+		"~/.openclaw/skills",
+		"~/.openclaw/workspace/skills",
+		"~/.agents/skills",
+		"~/.openclaw/lib/skills",
+	}
+
+	// Add bundled skills path if detected
+	if bundledPath := GetBundledSkillsPath(); bundledPath != "" {
+		searchDirs = append(searchDirs, bundledPath)
+	}
+
+	for i := range skills {
+		name := skills[i].Name
+		for _, dir := range searchDirs {
+			absDir := utils.ExpandPath(dir)
+			skillPath := filepath.Join(absDir, name)
+			if info, err := os.Stat(skillPath); err == nil && info.IsDir() {
+				skills[i].Path = skillPath
+				break
+			}
+		}
+	}
+
+	return map[string]any{"skills": skills}, nil
 }
 
 func UninstallOpenClawSkill(name string) error {
@@ -1202,6 +1355,64 @@ func DeleteOpenClawModelFromProvider(configDir, providerName, modelID string) er
 
 	return os.WriteFile(configPath, newData, 0644)
 }
+
+func DeleteOpenClawProvider(configDir, providerName string) error {
+	configPath := filepath.Join(configDir, "openclaw.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+
+	var fullCfg map[string]interface{}
+	if err := json.Unmarshal(data, &fullCfg); err != nil {
+		return err
+	}
+
+	// 1. 从 models.providers 中移除
+	models, ok := fullCfg["models"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("models section not found")
+	}
+
+	providers, ok := models["providers"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("providers section not found")
+	}
+
+	if _, ok := providers[providerName]; !ok {
+		return fmt.Errorf("provider %s not found", providerName)
+	}
+
+	delete(providers, providerName)
+
+	// 2. 从 agents.defaults.models 中移除该渠道下的所有模型注册
+	agents, ok := fullCfg["agents"].(map[string]interface{})
+	if ok {
+		defaults, ok := agents["defaults"].(map[string]interface{})
+		if ok {
+			registeredModels, ok := defaults["models"].(map[string]interface{})
+			if ok {
+				prefix := providerName + "/"
+				for key := range registeredModels {
+					if strings.HasPrefix(key, prefix) {
+						delete(registeredModels, key)
+					}
+				}
+				defaults["models"] = registeredModels
+			}
+			agents["defaults"] = defaults
+		}
+		fullCfg["agents"] = agents
+	}
+
+	newData, err := json.MarshalIndent(fullCfg, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(configPath, newData, 0644)
+}
+
 
 func GetOpenClawExperts() ([]Expert, error) {
 	files, err := expertTemplates.ReadDir("experts")

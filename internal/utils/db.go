@@ -29,6 +29,9 @@ func InitDB(dbPath string, existingToken string) (string, error) {
 		return "", fmt.Errorf("failed to open database: %v", err)
 	}
 
+	// 开启 WAL 模式提高并发性能
+	_, _ = DB.Exec("PRAGMA journal_mode=WAL;")
+
 	if err = DB.Ping(); err != nil {
 		return "", fmt.Errorf("failed to ping database: %v", err)
 	}
@@ -103,6 +106,36 @@ func createTables(existingToken string) (string, error) {
 			start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
 			end_time DATETIME
 		);`,
+		`CREATE TABLE IF NOT EXISTS audit_usage (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_key TEXT,
+			agent_id TEXT,
+			channel_id TEXT,
+			model_id TEXT,
+			prompt_tokens INTEGER,
+			completion_tokens INTEGER,
+			timestamp DATETIME
+		);`,
+		`CREATE TABLE IF NOT EXISTS audit_tool_calls (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_key TEXT,
+			agent_id TEXT,
+			tool_name TEXT,
+			timestamp DATETIME
+		);`,
+		`CREATE TABLE IF NOT EXISTS audit_security_events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_key TEXT,
+			agent_id TEXT,
+			command TEXT,
+			risk_level TEXT,
+			timestamp DATETIME
+		);`,
+		`CREATE TABLE IF NOT EXISTS audit_log_offsets (
+			file_path TEXT PRIMARY KEY,
+			last_offset INTEGER,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);`,
 	}
 
 	for _, query := range queries {
@@ -120,6 +153,9 @@ func createTables(existingToken string) (string, error) {
 	_, _ = DB.Exec("ALTER TABLE heal_events ADD COLUMN verify_retries INTEGER DEFAULT 0")
 	_, _ = DB.Exec("ALTER TABLE heal_events ADD COLUMN verify_duration_ms INTEGER DEFAULT 0")
 	_, _ = DB.Exec("ALTER TABLE heal_events ADD COLUMN verify_error TEXT")
+	_, _ = DB.Exec("ALTER TABLE audit_usage ADD COLUMN session_key TEXT")
+	_, _ = DB.Exec("ALTER TABLE audit_tool_calls ADD COLUMN session_key TEXT")
+	_, _ = DB.Exec("ALTER TABLE audit_security_events ADD COLUMN session_key TEXT")
 
 	// 初始化“首次启动时间”
 	firstRun := GetSetting("first_run_at", "")
@@ -228,18 +264,31 @@ func CleanupOldData(days int) (int64, error) {
 		return 0, fmt.Errorf("database not initialized")
 	}
 
-	query := fmt.Sprintf("DELETE FROM health_checks WHERE timestamp < datetime('now', '-%d days')", days)
-	res, err := DB.Exec(query)
-	if err != nil {
-		return 0, err
+	var totalAffected int64
+
+	tables := []struct {
+		name string
+		col  string
+	}{
+		{"health_checks", "timestamp"},
+		{"heal_events", "timestamp"},
+		{"system_events", "timestamp"},
+		{"tasks", "start_time"},
+		{"audit_usage", "timestamp"},
+		{"audit_tool_calls", "timestamp"},
+		{"audit_security_events", "timestamp"},
 	}
-	rowsAffected, _ := res.RowsAffected()
 
-	_, _ = DB.Exec(fmt.Sprintf("DELETE FROM heal_events WHERE timestamp < datetime('now', '-%d days')", days))
-	_, _ = DB.Exec(fmt.Sprintf("DELETE FROM system_events WHERE timestamp < datetime('now', '-%d days')", days))
-	_, _ = DB.Exec(fmt.Sprintf("DELETE FROM tasks WHERE start_time < datetime('now', '-%d days')", days))
+	for _, t := range tables {
+		query := fmt.Sprintf("DELETE FROM %s WHERE %s < datetime('now', '-%d days')", t.name, t.col, days)
+		res, err := DB.Exec(query)
+		if err == nil {
+			rows, _ := res.RowsAffected()
+			totalAffected += rows
+		}
+	}
 
-	return rowsAffected, nil
+	return totalAffected, nil
 }
 
 func RecordSystemEvent(eventType, message string) {

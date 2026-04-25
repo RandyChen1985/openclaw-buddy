@@ -133,10 +133,13 @@ func (s *Server) setupRoutes() {
 			oc.GET("/bots/top", s.getTopBots)
 			oc.GET("/bots/file", s.getOpenClawBotFile)
 			oc.POST("/bots/file", s.updateOpenClawBotFile)
+			oc.GET("/bots/memory/list", s.listOpenClawBotMemoryFiles)
+			oc.DELETE("/bots/memory/file", s.deleteOpenClawBotMemoryFile)
 			oc.POST("/models/set-default", s.setDefaultModel)
 			oc.GET("/models/config", s.getOpenClawModelsConfig)
 			oc.POST("/models/test-direct", s.testOpenClawModelDirect)
 			oc.POST("/models/provider", s.addOpenClawProvider)
+			oc.DELETE("/models/provider/:provider", s.deleteOpenClawProvider)
 			oc.POST("/models/provider/model", s.addOpenClawModelToProvider)
 			oc.DELETE("/models/provider/:provider/model/:id", s.deleteOpenClawModelFromProvider)
 			oc.DELETE("/models/provider/model", s.deleteOpenClawModelFromProvider)
@@ -152,6 +155,18 @@ func (s *Server) setupRoutes() {
 			oc.GET("/skills", s.getOpenClawSkills)
 			oc.DELETE("/skills/:name", s.uninstallSkill)
 			oc.POST("/skills/reload", s.reloadSkills)
+			oc.GET("/skills/files/list", s.getSkillFilesList)
+			oc.GET("/skills/files/get", s.getSkillFileContent)
+			oc.POST("/skills/files/save", s.saveSkillFileContent)
+			
+			// Generic File Explorer
+			oc.GET("/files/list", s.getExplorerFilesList)
+			oc.GET("/files/get", s.getExplorerFileContent)
+			oc.POST("/files/save", s.saveExplorerFileContent)
+			oc.DELETE("/files/delete", s.deleteExplorerFile)
+			oc.POST("/files/upload", s.uploadExplorerFile)
+			oc.GET("/files/download", s.downloadExplorerFile)
+
 			oc.GET("/plugins", s.getOpenClawPlugins)
 			oc.POST("/plugins/reload", s.reloadPlugins)
 			oc.POST("/plugins/enable", s.enablePlugin)
@@ -185,6 +200,25 @@ func (s *Server) setupRoutes() {
 
 		v1.GET("/stats/health", s.getHealthStats)
 		v1.GET("/wechat/qrcode", s.getWeChatQRCode)
+		
+		audit := v1.Group("/audit")
+		{
+			audit.GET("/dashboard/summary", s.handleGetAuditSummary)
+			audit.GET("/dashboard/tools", s.handleGetAuditTools)
+			audit.GET("/logs", s.handleGetAuditLogs)
+		}
+		
+		channels := v1.Group("/channels")
+		{
+			channels.GET("/metadata", s.getChannelsMetadata)
+			channels.GET("/status", s.getChannelsStatus)
+			channels.GET("/:channelId/accounts", s.getChannelAccounts)
+			channels.DELETE("/:channelId/accounts/:accountId", s.deleteChannelAccount) // 新增：删除子账号凭证
+			channels.POST("/:channelId/bind", s.bindChannelRoute)
+			channels.GET("/qrcode/:id", s.getChannelQRCode)
+			channels.POST("/setup", s.saveChannelConfig)
+			channels.DELETE("/:channelId/setup", s.unbindChannel)
+		}
 		v1.GET("/wechat/plugin/status", s.checkWeChatPlugin)
 		v1.GET("/wechat/config/status", s.getWeChatConfigStatus)
 		v1.POST("/wechat/install", s.installWeChatPlugin)

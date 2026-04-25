@@ -61,6 +61,7 @@ export function useV3Sessions({
   const [sessions, setSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [isUpdatingLabel, setIsUpdatingLabel] = useState(false);
+  const didAutoSelectMainRef = useRef(false);
 
   const sessionKeyRef = useRef<string | null>(null);
   useEffect(() => { sessionKeyRef.current = sessionKey; }, [sessionKey]);
@@ -104,10 +105,29 @@ export function useV3Sessions({
         return s;
       });
       setSessions(patchedList);
+
+      // 默认会话：如果首次进入且没有上次会话记录，则自动选中置顶主会话
+      if (!didAutoSelectMainRef.current && !sessionKeyRef.current) {
+        const main = patchedList.find((s: any) => s.key === 'agent:main:main');
+        if (main?.key) {
+          didAutoSelectMainRef.current = true;
+          messageOpsRef.current.resetTypingState?.(main.key);
+          setSessionKey(main.key);
+          // 订阅消息流并加载历史
+          sendRPC('sessions.messages.subscribe', { key: main.key }).catch(() => {});
+          setSessionModel(main.model || '');
+          setSelectedBot('openclaw:main');
+          const nextLabel = (main.label || '').trim();
+          if (!isUntitledSessionLabel(nextLabel)) setSessionLabel(nextLabel);
+          else setSessionLabel(null);
+          messageOpsRef.current.loadSessionHistory?.(main.key);
+          messageOpsRef.current.setHasNewMessages?.(false);
+        }
+      }
     }
 
     if (!isSilent) setLoadingSessions(false);
-  }, [sendRPC]);
+  }, [messageOpsRef, sendRPC, setSelectedBot, setSessionKey, setSessionLabel, setSessionModel]);
 
   /**
    * 统一处理网关 event（会话维度）。
@@ -131,11 +151,9 @@ export function useV3Sessions({
 
     // 取消订阅旧会话的消息推送，订阅新会话
     if (sessionKey) {
-      // 兼容：部分网关版本只认 key 字段
-      sendRPC('sessions.messages.unsubscribe', { key: sessionKey, sessionKey }).catch(() => {});
+      sendRPC('sessions.messages.unsubscribe', { key: sessionKey }).catch(() => {});
     }
-    // 兼容：部分网关版本只认 key 字段
-    sendRPC('sessions.messages.subscribe', { key, sessionKey: key }).catch(() => {});
+    sendRPC('sessions.messages.subscribe', { key }).catch(() => {});
 
     setSessionKey(key);
 
@@ -163,13 +181,13 @@ export function useV3Sessions({
    * 开始新会话：立即在网关创建空白会话并写入 sessionKey，顶部与会话列表立刻可显示；
    * 消息区保持空，首条发送时不再走 sessions.create。
    */
-  const startNewSession = useCallback(() => {
+  const startNewSession = useCallback((agentIdOverride?: string) => {
     if (creatingNewSessionRef.current) return;
     creatingNewSessionRef.current = true;
     setIsCreatingNewSession(true);
     messageOpsRef.current.resetTypingState?.('');
     if (sessionKey) {
-      sendRPC('sessions.messages.unsubscribe', { key: sessionKey, sessionKey }).catch(() => {});
+      sendRPC('sessions.messages.unsubscribe', { key: sessionKey }).catch(() => {});
     }
     messageOpsRef.current.setMessages?.([]);
     setSessionLabel(null);
@@ -182,7 +200,7 @@ export function useV3Sessions({
           antdMessage.warning(t('chat.gatewayConnecting'));
           return;
         }
-        const agentId = (selectedBot || '').replace(/^openclaw:/, '').trim();
+        const agentId = (agentIdOverride || (selectedBot || '').replace(/^openclaw:/, '')).trim();
         if (!agentId) {
           setSessionKey(null);
           antdMessage.warning(t('chat.selectBot'));
@@ -197,7 +215,7 @@ export function useV3Sessions({
         }
         const currentKey = (res.payload?.key as string) || key;
         setSessionKey(currentKey);
-        sendRPC('sessions.messages.subscribe', { key: currentKey, sessionKey: currentKey }).catch(() => {});
+        sendRPC('sessions.messages.subscribe', { key: currentKey }).catch(() => {});
         void sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel }).catch(() => {});
         setSessions(prev => {
           if (prev.some((s: any) => s.key === currentKey)) return prev;
@@ -216,6 +234,7 @@ export function useV3Sessions({
 
     void run();
   }, [
+    // agentIdOverride is an argument
     fetchSessions,
     inputAreaRef,
     messageOpsRef,
@@ -268,8 +287,7 @@ export function useV3Sessions({
 
           if (res.ok) {
             antdMessage.success({ content: t('common.success'), key: 'deletingSession' });
-            // 兼容：部分网关版本只认 key 字段
-            sendRPC('sessions.messages.unsubscribe', { key, sessionKey: key }).catch(() => {});
+            sendRPC('sessions.messages.unsubscribe', { key }).catch(() => {});
             if (sessionKey === key) {
               setSessionKey(null);
               messageOpsRef.current.setMessages?.([]);
@@ -316,8 +334,7 @@ export function useV3Sessions({
           antdMessage.success({ content: t('common.success'), key: 'clearingGroup' });
 
           if (sessionKey && sessionKeys.includes(sessionKey)) {
-            // 兼容：部分网关版本只认 key 字段
-            sendRPC('sessions.messages.unsubscribe', { key: sessionKey, sessionKey }).catch(() => {});
+            sendRPC('sessions.messages.unsubscribe', { key: sessionKey }).catch(() => {});
             setSessionKey(null);
             messageOpsRef.current.setMessages?.([]);
             setSessionLabel(null);
@@ -350,8 +367,7 @@ export function useV3Sessions({
           antdMessage.success({ content: t('chat.clearAllSuccess'), key: 'clearingAll' });
 
           if (sessionKeyRef.current) {
-            // 兼容：部分网关版本只认 key 字段
-            sendRPC('sessions.messages.unsubscribe', { key: sessionKeyRef.current, sessionKey: sessionKeyRef.current }).catch(() => {});
+            sendRPC('sessions.messages.unsubscribe', { key: sessionKeyRef.current }).catch(() => {});
           }
           setSessionKey(null);
           messageOpsRef.current.setMessages?.([]);
@@ -421,7 +437,7 @@ export function useV3Sessions({
 
     // 2. 如果已有会话，并行订阅消息流并加载历史
     if (currentKey) {
-      void sendRPC('sessions.messages.subscribe', { key: currentKey, sessionKey: currentKey }).catch(() => {});
+      void sendRPC('sessions.messages.subscribe', { key: currentKey }).catch(() => {});
       
       const count = messageOpsRef.current.getMessagesCount?.() ?? 0;
       if (count === 0) {
