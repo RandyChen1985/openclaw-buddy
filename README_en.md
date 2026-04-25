@@ -17,13 +17,13 @@ Facing risks of "disconnection" caused by configuration errors or plugin conflic
 
 ## 📸 Feature Preview
 
-|          **System Dashboard**          |    **Streaming Login (Get QR)**    |
-| :------------------------------------: | :--------------------------------: |
-| ![Dashboard](docs/images/overview.png) |  ![GetQR](docs/images/getqr.png)   |
-|        **Secure Login (Auth)**         |    **Scan to Login (Show QR)**     |
-|    ![Login](docs/images/login.png)     | ![ShowQR](docs/images/showqr.png)  |
-|           **Bots & Models**            | **Conversation Lab (Online Chat)** |
-|     ![Bots](docs/images/bots.png)      |   ![Chat](docs/images/chat.png)    |
+|        **System Dashboard**        |       **Audit Monitoring**       |
+| :--------------------------------: | :--------------------------------: |
+| ![Dashboard](docs/images/overview.png) |   ![Audit](docs/images/audit.png)   |
+|      **Expert Templates**       |       **Channel Binding**        |
+| ![Template](docs/images/template.png) | ![Channel](docs/images/channel.png) |
+|         **Bots & Models**          |        **Conversation Lab**        |
+|    ![Bots](docs/images/bots.png)     |    ![Chat](docs/images/chat.png)    |
 
 ---
 

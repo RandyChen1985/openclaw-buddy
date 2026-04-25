@@ -17,12 +17,12 @@
 
 ## 📸 功能预览
 
-|    **系统概览 (Dashboard)**    |    **流式登录 (Get QR)**    |
-| :----------------------------------: | :--------------------------------: |
-| ![Dashboard](docs/images/overview.png) |   ![GetQR](docs/images/getqr.png)   |
-|      **安全登录 (Auth)**      |    **扫码登录 (Show QR)**    |
-|    ![Login](docs/images/login.png)    |  ![ShowQR](docs/images/showqr.png)  |
-|  **虾兵蟹将 (Bots & Models)**  | **对话实验室 (Online Chat)** |
+|    **系统概览 (Dashboard)**    |    **审计大屏 (Audit)**    |
+| :----------------------------------: | :-------------------------------: |
+| ![Dashboard](docs/images/overview.png) |   ![Audit](docs/images/audit.png)   |
+|    **专家模板( Template)**    |    **渠道绑定(Channel)**    |
+| ![Template](docs/images/template.png) | ![Channel](docs/images/channel.png) |
+|  **虾兵蟹将 (Bots & Models)**  | **对话聊天 (Online Chat)** |
 |     ![Bots](docs/images/bots.png)     |    ![Chat](docs/images/chat.png)    |
 
 ---
@@ -149,7 +149,7 @@ OpenClaw Buddy 提供了一套标准的 RESTful API 供外部系统集成或移�
 | `/v1/tasks/status`           | GET  | 查询异步任务执行进度 (Query:`?taskId=...`)                  |
 | `/v1/stats/health`           | GET  | 获取近 24 小时心跳延迟统计数据                                |
 | `/v1/system/info`            | GET  | 获取服务器 CPU、内存、磁盘负载及系统信息                      |
-| `/v1/system/events`          | GET  | 获取 Buddy 系统级审计日志与操作事件                          |
+| `/v1/system/events`          | GET  | 获取 Buddy 系统级审计日志与操作事件                           |
 
 #### 💬 在线聊天 (Online Chat)
 
@@ -163,43 +163,43 @@ OpenClaw Buddy 提供了一套标准的 RESTful API 供外部系统集成或移�
 
 #### 🤖 虾兵蟹将 (Bots & Models)
 
-| 路径                                   | 方法     | 功能说明                                             |
-| :------------------------------------- | :------- | :--------------------------------------------------- |
-| `/v1/openclaw/bots-models`           | GET      | 获取机器人/模型资产清单 (`?refresh=true` 强制同步) |
-| `/v1/openclaw/bots/add`              | POST     | 在线创建并初始化新的小龙虾机器人 (隔离工作区)        |
-| `/v1/openclaw/bots/update`           | POST     | 批量更新现有机器人的详细配置参数                     |
-| `/v1/openclaw/bots/delete`           | POST     | 彻底移除机器人并清理相关数据目录                     |
-| `/v1/openclaw/bots/top`              | GET      | 获取当前活跃度最高的机器人排行清单                   |
-| `/v1/openclaw/bots/set-identity`     | POST     | 修改机器人的显示名称 (Identity Name)                 |
-| `/v1/openclaw/bots/set-model`        | POST     | 在线修改并覆盖指定机器人的默认模型分配               |
-| `/v1/openclaw/bots/file`             | GET/POST | **直接读写** 机器人的原始配置文件内容 (`.json`)    |
-| `/v1/openclaw/experts`               | GET      | 访问专家市场，获取官方预设的 Bot 模板                |
-| `/v1/openclaw/bots/template`         | POST     | 基于专家模板快速克隆并创建一个新 Bot                 |
-| `/v1/openclaw/models/config`         | GET      | 获取当前所有已配置的模型渠道及其详情                 |
-| `/v1/openclaw/models/test-direct`    | POST     | **连通性测试**：后端直连模型渠道测试延迟 (TTFT)      |
-| `/v1/openclaw/models/provider`       | POST     | 动态添加 API 提供商配置 (BaseURL/ApiKey/API型)       |
-| `/v1/openclaw/models/provider/model` | POST/DEL | 向特定渠道追加或删除模型定义                         |
-| `/v1/openclaw/models/set-default`    | POST     | 设定系统全局默认模型                                 |
+| 路径                                   | 方法     | 功能说明                                                |
+| :------------------------------------- | :------- | :------------------------------------------------------ |
+| `/v1/openclaw/bots-models`           | GET      | 获取机器人/模型资产清单 (`?refresh=true` 强制同步)    |
+| `/v1/openclaw/bots/add`              | POST     | 在线创建并初始化新的小龙虾机器人 (隔离工作区)           |
+| `/v1/openclaw/bots/update`           | POST     | 批量更新现有机器人的详细配置参数                        |
+| `/v1/openclaw/bots/delete`           | POST     | 彻底移除机器人并清理相关数据目录                        |
+| `/v1/openclaw/bots/top`              | GET      | 获取当前活跃度最高的机器人排行清单                      |
+| `/v1/openclaw/bots/set-identity`     | POST     | 修改机器人的显示名称 (Identity Name)                    |
+| `/v1/openclaw/bots/set-model`        | POST     | 在线修改并覆盖指定机器人的默认模型分配                  |
+| `/v1/openclaw/bots/file`             | GET/POST | **直接读写** 机器人的原始配置文件内容 (`.json`) |
+| `/v1/openclaw/experts`               | GET      | 访问专家市场，获取官方预设的 Bot 模板                   |
+| `/v1/openclaw/bots/template`         | POST     | 基于专家模板快速克隆并创建一个新 Bot                    |
+| `/v1/openclaw/models/config`         | GET      | 获取当前所有已配置的模型渠道及其详情                    |
+| `/v1/openclaw/models/test-direct`    | POST     | **连通性测试**：后端直连模型渠道测试延迟 (TTFT)   |
+| `/v1/openclaw/models/provider`       | POST     | 动态添加 API 提供商配置 (BaseURL/ApiKey/API型)          |
+| `/v1/openclaw/models/provider/model` | POST/DEL | 向特定渠道追加或删除模型定义                            |
+| `/v1/openclaw/models/set-default`    | POST     | 设定系统全局默认模型                                    |
 
 #### 🕹️ 技能与插件 (Skills & Plugins)
 
-| 路径                           | 方法     | 功能说明                                            |
-| :----------------------------- | :------- | :-------------------------------------------------- |
-| `/v1/openclaw/skills`        | GET      | 获取已安装的技能列表与详情 (`?refresh=true` 同步) |
-| `/v1/openclaw/skills/:name`  | DELETE   | 卸载特定的小龙虾技能插件                            |
-| `/v1/openclaw/skills/reload` | POST     | 重新加载系统规则与所有技能插件                      |
-| `/v1/openclaw/plugins`       | GET      | 获取底层功能插件 (如 WeChat, Telegram) 状态清单     |
-| `/v1/openclaw/plugins/enable` | POST     | 启用特定的底层功能插件                              |
-| `/v1/openclaw/plugins/reload` | POST     | 热重载插件配置而无需重启网关                        |
-| `/v1/openclaw/plugins/:id`    | DELETE   | 卸载或禁用指定的底层插件                            |
+| 路径                            | 方法   | 功能说明                                            |
+| :------------------------------ | :----- | :-------------------------------------------------- |
+| `/v1/openclaw/skills`         | GET    | 获取已安装的技能列表与详情 (`?refresh=true` 同步) |
+| `/v1/openclaw/skills/:name`   | DELETE | 卸载特定的小龙虾技能插件                            |
+| `/v1/openclaw/skills/reload`  | POST   | 重新加载系统规则与所有技能插件                      |
+| `/v1/openclaw/plugins`        | GET    | 获取底层功能插件 (如 WeChat, Telegram) 状态清单     |
+| `/v1/openclaw/plugins/enable` | POST   | 启用特定的底层功能插件                              |
+| `/v1/openclaw/plugins/reload` | POST   | 热重载插件配置而无需重启网关                        |
+| `/v1/openclaw/plugins/:id`    | DELETE | 卸载或禁用指定的底层插件                            |
 
 #### 🔌 渠道绑定与实时流 (Channels & Streams)
 
-| 路径                         | 方法 | 功能说明                                             |
-| :--------------------------- | :--- | :--------------------------------------------------- |
-| `/v1/wechat/config/status` | GET  | 获取当前微信渠道的绑定状态与配置                     |
-| `/v1/wechat/install`       | POST | 触发微信控制插件的自动化下载与安装                   |
-| `/v1/wechat/qrcode`        | GET  | **流式获取** 微信插件登录二维码 (支持实时捕获) |
+| 路径                         | 方法 | 功能说明                                                 |
+| :--------------------------- | :--- | :------------------------------------------------------- |
+| `/v1/wechat/config/status` | GET  | 获取当前微信渠道的绑定状态与配置                         |
+| `/v1/wechat/install`       | POST | 触发微信控制插件的自动化下载与安装                       |
+| `/v1/wechat/qrcode`        | GET  | **流式获取** 微信插件登录二维码 (支持实时捕获)     |
 | `/v1/ws/logs`              | WS   | **WebSocket 日志流**：实时追踪系统运行日志 (Xterm) |
 | `/v1/ws/tui`               | WS   | **远程终端 (PTY)**：接管网关交互式控制台交互       |
 | `/v1/proxy/*path`          | Any  | **反向代理**：透传并解开原生 UI 的安全策略限制     |
