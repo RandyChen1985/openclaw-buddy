@@ -746,32 +746,30 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: '65%', overflow: 'hidden' }}>
                                   <FolderOpen size={12} color="#64748b" style={{ flexShrink: 0 }} />
-                                  <Tooltip title={bot.workspace}>
-                                    <span 
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (bot.workspace) {
-                                          setExplorerPath(bot.workspace);
-                                          setExplorerTitle(`${bot.name} ${t('bots.workspace')}`);
-                                          setExplorerOpen(true);
-                                        }
-                                      }}
-                                      style={{ 
-                                        fontSize: 11, 
-                                        fontWeight: 700, 
-                                        color: '#0ea5e9', 
-                                        overflow: 'hidden', 
-                                        textOverflow: 'ellipsis', 
-                                        whiteSpace: 'nowrap', 
-                                        fontFamily: 'monospace',
-                                        cursor: 'pointer',
-                                        textDecoration: 'underline',
-                                        textDecorationStyle: 'dotted'
-                                      }}
-                                    >
-                                      {bot.workspace?.length > 18 ? bot.workspace.substring(0, 8) + '...' + bot.workspace.substring(bot.workspace.length - 8) : bot.workspace}
-                                    </span>
-                                  </Tooltip>
+                                  <span 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (bot.workspace) {
+                                        setExplorerPath(bot.workspace);
+                                        setExplorerTitle(`${bot.name} ${t('bots.workspace')}`);
+                                        setExplorerOpen(true);
+                                      }
+                                    }}
+                                    style={{ 
+                                      fontSize: 11, 
+                                      fontWeight: 700, 
+                                      color: '#0ea5e9', 
+                                      overflow: 'hidden', 
+                                      textOverflow: 'ellipsis', 
+                                      whiteSpace: 'nowrap', 
+                                      fontFamily: 'monospace',
+                                      cursor: 'pointer',
+                                      textDecoration: 'underline',
+                                      textDecorationStyle: 'dotted'
+                                    }}
+                                  >
+                                    {bot.workspace?.length > 18 ? bot.workspace.substring(0, 8) + '...' + bot.workspace.substring(bot.workspace.length - 8) : bot.workspace}
+                                  </span>
                                 </div>
                               </div>
                             </div>

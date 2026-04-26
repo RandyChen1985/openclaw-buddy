@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Modal, List, Button, message, Spin, Breadcrumb, Tabs, Input, Empty, Tree } from 'antd';
 import { 
-  Folder, FileText, ChevronRight, Save, Eye, PenLine, FileCode, Search, 
+  Folder, FileText, ChevronRight, ChevronLeft, Save, Eye, PenLine, FileCode, Search, 
   LayoutList, Maximize2, Minimize2, 
   FileJson, FileCode2, Image as ImageIcon, Monitor, Terminal, File
 } from 'lucide-react';
@@ -207,44 +207,83 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
     const parts = relativePath.split('/').filter(Boolean);
     const crumbs = [{ name: skillName, path: rootPath }];
     let currentFullPath = rootPath;
-    parts.forEach(part => { currentFullPath = `${currentFullPath}/${part}`; crumbs.push({ name: part, path: currentFullPath }); });
+    parts.forEach(part => { 
+      currentFullPath = currentFullPath.endsWith('/') ? `${currentFullPath}${part}` : `${currentFullPath}/${part}`; 
+      crumbs.push({ name: part, path: currentFullPath }); 
+    });
     return crumbs;
   }, [currentPath, rootPath, skillName]);
 
   const filteredFiles = useMemo(() => {
-    if (!filterText.trim()) return files;
-    const term = filterText.toLowerCase();
-    return files.filter(f => f.name.toLowerCase().includes(term));
-  }, [files, filterText]);
+    let result = files;
+    if (filterText.trim()) {
+      const term = filterText.toLowerCase();
+      result = files.filter(f => f.name.toLowerCase().includes(term));
+    }
+    
+    if (currentPath !== rootPath && !filterText) {
+      const parts = currentPath.split('/').filter(Boolean);
+      parts.pop();
+      const parentPath = currentPath.startsWith('/') ? '/' + parts.join('/') : parts.join('/');
+      
+      return [
+        { name: '..', path: parentPath || rootPath, is_dir: true, size: 0, mod_time: '' },
+        ...result
+      ];
+    }
+    return result;
+  }, [files, filterText, currentPath, rootPath]);
 
   const isMarkdown = selectedFile?.name.endsWith('.md');
 
   return (
     <Modal
       title={
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: 32 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ background: '#eff6ff', padding: 8, borderRadius: 10 }}>
-              <FileCode size={20} color="#2563eb" />
-            </div>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>{skillName} {t('skills.resourceExplorer')}</div>
-              <Breadcrumb
-                style={{ fontSize: 11, marginTop: 2 }}
-                items={breadcrumbs.map((crumb, idx) => ({
-                  title: (
-                    <span 
-                      style={{ 
-                        cursor: idx < breadcrumbs.length - 1 ? 'pointer' : 'default',
-                        color: idx < breadcrumbs.length - 1 ? '#3b82f6' : '#94a3b8'
-                      }}
-                      onClick={() => idx < breadcrumbs.length - 1 && handleFolderClick(crumb.path)}
-                    >
-                      {crumb.name}
-                    </span>
-                  )
-                }))}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: isMobile ? 8 : 32 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12 }}>
+            {(isEditing || (isMobile && currentPath !== rootPath)) && (
+              <Button 
+                type="text" 
+                icon={<ChevronLeft size={isMobile ? 18 : 20} />} 
+                onClick={() => {
+                  if (isEditing) {
+                    setIsEditing(false);
+                    setSelectedFile(null);
+                  } else if (isMobile && currentPath !== rootPath) {
+                    const parts = currentPath.split('/').filter(Boolean);
+                    parts.pop();
+                    const parentPath = currentPath.startsWith('/') ? '/' + parts.join('/') : parts.join('/');
+                    handleFolderClick(parentPath || rootPath);
+                  }
+                }}
+                style={{ padding: 0, width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               />
+            )}
+            {!isMobile && (
+              <div style={{ background: '#eff6ff', padding: 8, borderRadius: 10 }}>
+                <FileCode size={20} color="#2563eb" />
+              </div>
+            )}
+            <div>
+              <div style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, lineHeight: 1.2 }}>{skillName} {t('skills.resourceExplorer')}</div>
+              {!isMobile && (
+                <Breadcrumb
+                  style={{ fontSize: 11, marginTop: 2 }}
+                  items={breadcrumbs.map((crumb, idx) => ({
+                    title: (
+                      <span 
+                        style={{ 
+                          cursor: idx < breadcrumbs.length - 1 ? 'pointer' : 'default',
+                          color: idx < breadcrumbs.length - 1 ? '#3b82f6' : '#94a3b8'
+                        }}
+                        onClick={() => idx < breadcrumbs.length - 1 && handleFolderClick(crumb.path)}
+                      >
+                        {crumb.name}
+                      </span>
+                    )
+                  }))}
+                />
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

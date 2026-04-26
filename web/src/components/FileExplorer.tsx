@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal, List, Button, message, Spin, Breadcrumb, Tabs, Input, Empty, Popconfirm, Tooltip, Tree } from 'antd';
 import { 
-  Folder, FileText, ChevronRight, Save, Eye, PenLine, Trash2, FolderOpen, 
+  Folder, FileText, ChevronRight, ChevronLeft, Save, Eye, PenLine, Trash2, FolderOpen, 
   Upload, Download, Search, LayoutList, Maximize2, Minimize2, 
   FileJson, FileCode2, Image as ImageIcon, Monitor, Terminal, File
 } from 'lucide-react';
@@ -299,10 +299,25 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
   };
 
   const filteredFiles = useMemo(() => {
-    if (!filterText.trim()) return files;
-    const term = filterText.toLowerCase();
-    return files.filter(f => f.name.toLowerCase().includes(term));
-  }, [files, filterText]);
+    let result = files;
+    if (filterText.trim()) {
+      const term = filterText.toLowerCase();
+      result = files.filter(f => f.name.toLowerCase().includes(term));
+    }
+    
+    if (currentPath !== rootPath && !filterText) {
+      // Find parent path
+      const parts = currentPath.split(/[/\\]/).filter(Boolean);
+      parts.pop();
+      const parentPath = currentPath.startsWith('/') ? '/' + parts.join('/') : parts.join('/');
+      
+      return [
+        { name: '..', path: parentPath || rootPath, is_dir: true, size: 0, mod_time: '' },
+        ...result
+      ];
+    }
+    return result;
+  }, [files, filterText, currentPath, rootPath]);
 
   const breadcrumbs = useMemo(() => {
     if (!rootPath) return [];
@@ -328,29 +343,52 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
   return (
     <Modal
       title={
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: 32 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ background: '#f0f9ff', padding: 8, borderRadius: 10 }}>
-              <FolderOpen size={20} color="#0ea5e9" />
-            </div>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>{title}</div>
-              <Breadcrumb
-                style={{ fontSize: 11, marginTop: 2 }}
-                items={breadcrumbs.map((crumb, idx) => ({
-                  title: (
-                    <span 
-                      style={{ 
-                        cursor: idx < breadcrumbs.length - 1 ? 'pointer' : 'default',
-                        color: idx < breadcrumbs.length - 1 ? '#0ea5e9' : '#94a3b8'
-                      }}
-                      onClick={() => idx < breadcrumbs.length - 1 && handleFolderClick(crumb.path)}
-                    >
-                      {crumb.name}
-                    </span>
-                  )
-                }))}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: isMobile ? 8 : 32 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12 }}>
+            {(isEditing || (isMobile && currentPath !== rootPath)) && (
+              <Button 
+                type="text" 
+                icon={<ChevronLeft size={isMobile ? 18 : 20} />} 
+                onClick={() => {
+                  if (isEditing) {
+                    setIsEditing(false);
+                    setSelectedFile(null);
+                  } else if (isMobile && currentPath !== rootPath) {
+                    // Go up one level
+                    const parts = currentPath.split(/[/\\]/).filter(Boolean);
+                    parts.pop();
+                    const parentPath = currentPath.startsWith('/') ? '/' + parts.join('/') : parts.join('/');
+                    handleFolderClick(parentPath || rootPath);
+                  }
+                }}
+                style={{ padding: 0, width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               />
+            )}
+            {!isMobile && (
+              <div style={{ background: '#f0f9ff', padding: 8, borderRadius: 10 }}>
+                <FolderOpen size={20} color="#0ea5e9" />
+              </div>
+            )}
+            <div>
+              <div style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, lineHeight: 1.2 }}>{title}</div>
+              {!isMobile && (
+                <Breadcrumb
+                  style={{ fontSize: 11, marginTop: 2 }}
+                  items={breadcrumbs.map((crumb, idx) => ({
+                    title: (
+                      <span 
+                        style={{ 
+                          cursor: idx < breadcrumbs.length - 1 ? 'pointer' : 'default',
+                          color: idx < breadcrumbs.length - 1 ? '#0ea5e9' : '#94a3b8'
+                        }}
+                        onClick={() => idx < breadcrumbs.length - 1 && handleFolderClick(crumb.path)}
+                      >
+                        {crumb.name}
+                      </span>
+                    )
+                  }))}
+                />
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -521,7 +559,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
                             <Button type="text" size="small" icon={<Download size={14} />} onClick={(e) => { e.stopPropagation(); handleDownload(item); }} className="action-btn-hover" style={{ color: '#0ea5e9' }} />
                           </Tooltip>
                         )}
-                        {!isProtected(item.name) && (
+                        {item.name !== '..' && !isProtected(item.name) && (
                           <Popconfirm title={t('common.deleteConfirm')} onConfirm={(e) => { e?.stopPropagation(); handleDelete(item); }} onCancel={(e) => e?.stopPropagation()} okButtonProps={{ danger: true }}>
                             <Button type="text" size="small" danger icon={<Trash2 size={14} />} onClick={(e) => e.stopPropagation()} className="action-btn-hover" />
                           </Popconfirm>
