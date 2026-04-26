@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Badge, Button, Dropdown, Input, Modal, Radio, Select, Switch, Tooltip } from 'antd';
-import { LayoutPanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2, Maximize2, Minimize2 } from 'lucide-react';
+import { PanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2, Maximize2, Minimize2 } from 'lucide-react';
 
 import type { V3ThemeMode, V3ThemePresetId, V3ThemeTokens } from '../../hooks/chatV3/useV3Theme';
 
@@ -369,9 +369,19 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 10, minWidth: 0, flex: 1 }}>
         <Button
           type="text"
-          icon={<LayoutPanelLeft size={18} />}
+          icon={<PanelLeft size={18} />}
           onClick={onToggleSider}
-          style={{ marginLeft: -6, color: showSider ? 'var(--v3-primary, #4f46e5)' : 'var(--v3-text-muted, #64748b)', flexShrink: 0 }}
+          style={{ 
+            marginLeft: -6, 
+            color: showSider ? 'var(--v3-primary, #4f46e5)' : 'var(--v3-text-muted, #64748b)', 
+            flexShrink: 0,
+            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '8px'
+          }}
+          className="v3-sidebar-toggle-btn"
         />
 
         {status !== 'authenticated' && (

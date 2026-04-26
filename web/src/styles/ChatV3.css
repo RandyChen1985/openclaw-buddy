@@ -887,3 +887,13 @@ button.v3-settings-reasoning-btn:active {
   background: #e2e8f0 !important;
   border-color: #cbd5e1 !important;
 }
+
+/* 侧边栏折叠按钮交互优化 */
+.v3-sidebar-toggle-btn:hover {
+  background: rgba(79, 70, 229, 0.08) !important;
+  transform: scale(1.05);
+}
+
+.v3-sidebar-toggle-btn:active {
+  transform: scale(0.95);
+}
