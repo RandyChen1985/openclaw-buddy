@@ -121,7 +121,7 @@ func (s *Scheduler) run(req TaskRequest) {
 		close(done)
 	}()
 
-	// 任务执行超时保护 (遵循原有的 3 分钟限制)
+	// 任务执行超时保护 (遵循原有的 6 分钟限制)
 	select {
 	case <-done:
 		if err != nil {
@@ -131,9 +131,9 @@ func (s *Scheduler) run(req TaskRequest) {
 			log.Printf("✅ [Scheduler] 任务完成: %s, Result: %s", req.Task.Name, result)
 			process.UpdateTaskStatus(req.Task.ID, process.TaskStatusCompleted, result, "")
 		}
-	case <-time.After(3 * time.Minute):
+	case <-time.After(6 * time.Minute):
 		log.Printf("⏰ [Scheduler] 任务超时: %s", req.Task.Name)
-		process.UpdateTaskStatus(req.Task.ID, process.TaskStatusTimeout, "", "任务执行超时 (3分钟)")
+		process.UpdateTaskStatus(req.Task.ID, process.TaskStatusTimeout, "", "任务执行超时 (6分钟)")
 		// 超时后显式发送取消信号；并等待执行体实际退出后再解锁模块，避免串行语义被破坏。
 		cancel()
 		<-done
