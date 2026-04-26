@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Avatar, Tooltip, Button, Input, message } from 'antd';
 import { 
   User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, 
-  FileText, ChevronRight, ChevronDown, ShieldAlert, ShieldCheck, ListTodo, Loader2, Layers
+  FileText, ChevronRight, ChevronDown, ShieldAlert, ShieldCheck, ListTodo, Loader2, Layers, Search
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -181,6 +181,11 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       }
     }
 
+    // 2. 自动为分析/思考等容器标签补齐 '>' 引用符号（如果缺失），确保进入 blockquote 渲染器
+    content = content.replace(/(?:^|\n)(:::(?:analysis|thinking|plan|toolCall|commandOutput|approval|warning)[\s\S]*?:::)/g, (_match: string, p1: string) => {
+      return '\n> ' + p1.replace(/\n/g, '\n> ');
+    });
+
     return content.trim();
   }, [msg.content, showThinking]);
 
@@ -291,6 +296,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
             text === ':::commandOutput' || 
             text === ':::approval' || 
             text === ':::warning' || 
+            text === ':::analysis' || 
             text === ':::' ||
             /^:::warning\s+/.test(text)
           ) {
@@ -310,6 +316,9 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       }
       if (fullText.includes(':::toolCall')) {
         return <CollapsibleMeta title={t('chat.systemTool', { defaultValue: '系统工具' })} icon={Terminal} defaultExpanded={false}>{cleanChildren}</CollapsibleMeta>;
+      }
+      if (fullText.includes(':::analysis')) {
+        return <CollapsibleMeta title={t('chat.analysisProcess', { defaultValue: '分析过程' })} icon={Search} defaultExpanded={false}>{cleanChildren}</CollapsibleMeta>;
       }
       if (fullText.includes(':::commandOutput')) {
         const titleMatch = fullText.match(/^\s*:::commandOutput\s*\n+\s*\*\*([^*\n]+)\*\*/);

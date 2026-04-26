@@ -544,6 +544,7 @@ button.v3-settings-reasoning-btn:active {
 .v3-meta-collapsible:has(.lucide-cpu) { border-left: 3px solid #6366f1; }
 .v3-meta-collapsible:has(.lucide-terminal) { border-left: 3px solid #1e293b; background: #f1f5f9; }
 .v3-meta-collapsible:has(.lucide-check-circle) { border-left: 3px solid #10b981; background: #f0fdf4; }
+.v3-meta-collapsible:has(.lucide-search) { border-left: 3px solid #0891b2; background: #f0f9ff; }
 
 /* 连发消息模式样式 */
 .message-in.threaded {
