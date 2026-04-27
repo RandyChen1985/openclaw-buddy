@@ -121,6 +121,7 @@ func RunCommandWithTimeout(timeout time.Duration, name string, args ...string) (
 
 // RunCommandWithEnvAndTimeout executes a command with custom environment variables and captures its output with a timeout.
 func RunCommandWithEnvAndTimeout(timeout time.Duration, env []string, name string, args ...string) (*CommandResult, error) {
+	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -155,7 +156,8 @@ func RunCommandWithEnvAndTimeout(timeout time.Duration, env []string, name strin
 		if result.Error == "" {
 			result.Error = "Command timed out"
 		}
-		return result, fmt.Errorf("%s: %w (%s)", name, ctx.Err(), trimRunOutputForErr(combinedOutput, 800))
+		duration := time.Since(start)
+		return result, fmt.Errorf("%s: %w (took %v) (%s)", name, ctx.Err(), duration.Round(time.Millisecond), trimRunOutputForErr(combinedOutput, 800))
 	}
 
 	if err != nil {

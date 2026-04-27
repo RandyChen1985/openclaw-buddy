@@ -343,8 +343,16 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
   return (
     <Modal
       title={
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: isMobile ? 8 : 32 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12 }}>
+        <div style={{ 
+          display: 'flex', 
+          flexDirection: isMobile ? 'column' : 'row',
+          alignItems: isMobile ? 'flex-start' : 'center', 
+          justifyContent: 'space-between', 
+          width: '100%', 
+          paddingRight: isMobile ? 0 : 32,
+          gap: isMobile ? 12 : 0
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, width: isMobile ? '100%' : 'auto' }}>
             {(isEditing || (isMobile && currentPath !== rootPath)) && (
               <Button 
                 type="text" 
@@ -369,42 +377,77 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
                 <FolderOpen size={20} color="#0ea5e9" />
               </div>
             )}
-            <div>
+            <div style={{ flex: isMobile ? 1 : 'none' }}>
               <div style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, lineHeight: 1.2 }}>{title}</div>
-              {!isMobile && (
-                <Breadcrumb
-                  style={{ fontSize: 11, marginTop: 2 }}
-                  items={breadcrumbs.map((crumb, idx) => ({
-                    title: (
-                      <span 
-                        style={{ 
-                          cursor: idx < breadcrumbs.length - 1 ? 'pointer' : 'default',
-                          color: idx < breadcrumbs.length - 1 ? '#0ea5e9' : '#94a3b8'
-                        }}
-                        onClick={() => idx < breadcrumbs.length - 1 && handleFolderClick(crumb.path)}
-                      >
-                        {crumb.name}
-                      </span>
-                    )
-                  }))}
-                />
-              )}
+              <Breadcrumb
+                style={{ fontSize: isMobile ? 10 : 11, marginTop: isMobile ? 1 : 2 }}
+                items={breadcrumbs.map((crumb, idx) => ({
+                  title: (
+                    <span 
+                      style={{ 
+                        cursor: idx < breadcrumbs.length - 1 ? 'pointer' : 'default',
+                        color: idx < breadcrumbs.length - 1 ? '#0ea5e9' : '#94a3b8'
+                      }}
+                      onClick={() => idx < breadcrumbs.length - 1 && handleFolderClick(crumb.path)}
+                    >
+                      {crumb.name}
+                    </span>
+                  )
+                }))}
+              />
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ 
+            display: 'flex', 
+            gap: isMobile ? 4 : 8, 
+            alignItems: 'center', 
+            width: isMobile ? '100%' : 'auto',
+            justifyContent: isMobile ? 'flex-end' : 'flex-start',
+            marginTop: isMobile ? 4 : 0
+          }}>
+            {!isEditing && (
+              <Input
+                placeholder={t('common.searchPlaceholder')}
+                prefix={<Search size={isMobile ? 14 : 16} color="#94a3b8" style={{ marginRight: 4 }} />}
+                value={filterText}
+                onChange={e => setFilterText(e.target.value)}
+                allowClear
+                style={{ 
+                  borderRadius: 8, 
+                  height: isMobile ? 28 : 32, 
+                  flex: isMobile ? 1 : 'none',
+                  width: isMobile ? 'auto' : 200,
+                  marginRight: isMobile ? 4 : 8
+                }}
+              />
+            )}
             <Button 
               type="text"
-              icon={isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+              size={isMobile ? 'small' : undefined}
+              icon={isFullscreen ? <Minimize2 size={isMobile ? 16 : 18} /> : <Maximize2 size={isMobile ? 16 : 18} />}
               onClick={() => setIsFullscreen(!isFullscreen)}
               style={{ color: '#64748b' }}
             />
             {isEditing && (
-              <Button type="primary" icon={<Save size={16} />} loading={isSaving} onClick={handleSave} style={{ background: '#0ea5e9', border: 'none' }}>
+              <Button 
+                type="primary" 
+                size={isMobile ? 'small' : undefined}
+                icon={<Save size={14} />} 
+                loading={isSaving} 
+                onClick={handleSave} 
+                style={{ background: '#0ea5e9', border: 'none' }}
+              >
                 {t('common.save')}
               </Button>
             )}
             <Tooltip title={t('common.uploadFile')}>
-              <Button icon={<Upload size={16} />} loading={isUploading} onClick={handleUploadClick} style={{ borderRadius: 8 }}>
+              <Button 
+                size={isMobile ? 'small' : undefined}
+                icon={<Upload size={14} />} 
+                loading={isUploading} 
+                onClick={handleUploadClick} 
+                style={{ borderRadius: 8 }}
+              >
                 {!isMobile && t('common.uploadFile')}
               </Button>
             </Tooltip>
@@ -418,7 +461,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
       footer={null}
       styles={{ 
         body: { padding: 0, height: isFullscreen ? 'calc(100vh - 110px)' : (isMobile ? 'calc(100vh - 120px)' : 550), display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-        header: { padding: '16px 24px', borderBottom: '1px solid #f1f5f9' }
+        header: { padding: isMobile ? '12px 12px' : '16px 24px', borderBottom: '1px solid #f1f5f9' }
       }}
       centered={!isFullscreen}
       destroyOnClose
@@ -449,18 +492,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
         )}
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f8fafc' }}>
-          {!isEditing && (
-            <div style={{ padding: '12px 24px', background: '#fff', borderBottom: '1px solid #f1f5f9' }}>
-              <Input
-                placeholder={t('common.searchPlaceholder')}
-                prefix={<Search size={16} color="#94a3b8" style={{ marginRight: 4 }} />}
-                value={filterText}
-                onChange={e => setFilterText(e.target.value)}
-                allowClear
-                style={{ borderRadius: 8, height: 36 }}
-              />
-            </div>
-          )}
+
 
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             {loading && !isSaving ? (
@@ -527,7 +559,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
             ) : filteredFiles.length > 0 ? (
               <List
                 className="file-explorer-list"
-                style={{ padding: '12px 24px', overflowY: 'auto' }}
+                style={{ padding: isMobile ? '12px 12px' : '12px 24px', overflowY: 'auto' }}
                 dataSource={filteredFiles}
                 renderItem={(item) => (
                   <List.Item
