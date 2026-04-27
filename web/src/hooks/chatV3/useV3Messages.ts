@@ -1411,7 +1411,8 @@ export function useV3Messages({
         role: (msg.role === 'toolResult' || isExecCompletionTemplate || isSenderMetadataTemplate || isApprovalConfirm || isApproveCommand) ? 'assistant' : msg.role,
         content,
         timestamp: new Date(rawTs).toLocaleTimeString(),
-        _sortTs: rawTs
+        _sortTs: rawTs,
+        senderLabel: msg.senderLabel || payload.senderLabel
       } as Message;
       const merged = mergeTrailingThinkingIntoPreviousAssistant(prev, newMsg);
       if (merged) return merged;
@@ -1940,7 +1941,8 @@ export function useV3Messages({
         content: content || '',
         timestamp: new Date(rawTs).toLocaleTimeString(),
         metrics: item.metrics,
-        _sortTs: rawTs
+        _sortTs: rawTs,
+        senderLabel: item.senderLabel
       } as Message;
     }).filter((msg: any) => msg.content && msg.content.trim() !== '');
     compactAssistantThinkingAfterToolInPlace(history);

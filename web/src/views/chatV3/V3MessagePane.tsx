@@ -96,28 +96,60 @@ export function V3MessagePane({
       
       // 2. 过滤系统注入的提示词 (role: user)
       if (m.role === 'user') {
-        // 匹配 "System:" 或 "System (untrusted):" 等前缀
-        if (/^System\s*(\(.*\))?:/.test(content)) return false;
+        const sl = (m.senderLabel || '').toLowerCase();
+        // 💡 关键修复：放行所有正常的物理渠道消息，仅拦截明确的系统背景提示词
+        if (sl === 'system' || sl === 'heartbeat') return false;
         
-        // 匹配心跳指令
-        if (content.includes('Read HEARTBEAT.md if it exists')) return false;
-        
-        // 匹配异步命令完成提示
-        if (content.includes('An async command you ran earlier has completed')) return false;
-
-        // 匹配纯时间戳提示行
-        if (content.startsWith('Current time:')) return false;
+        // 如果是空的 label，且内容符合系统注入特征（如 System: 或者是心跳检测），则隐藏
+        if (!sl) {
+          if (/^System\s*(\(.*\))?:/.test(content)) return false;
+          if (content.includes('Read HEARTBEAT.md if it exists')) return false;
+        }
       }
 
-      // 3. 过滤系统心跳确认 (role: assistant)
+      // 3. 过滤系统心跳确认与纯工具回执 (role: assistant)
       if (m.role === 'assistant') {
         if (content === 'HEARTBEAT_OK') return false;
+        
+        // 如果开启了“显示思考/工具”，则保留所有助手消息
+        // 如果关闭了，则过滤掉那些“只有工具回执、没有正文”的骨架消息
+        if (!showThinking && isAssistantSkeletonContent(content)) {
+          return false;
+        }
       }
 
       return true;
     }),
-    [messages],
+    [messages, showThinking],
   );
+
+  /** 识别那些只有元数据（思考、工具、计划）而没有实际正文回复的消息 */
+  function isAssistantSkeletonContent(content: string): boolean {
+    const t = (content || '').trim();
+    if (!t) return false;
+    
+    // 如果内容看起来像是一个或多个元数据块的叠加
+    const hasMetadata = t.includes(':::thinking') || t.includes(':::plan') || t.includes(':::commandOutput') || t.includes(':::toolCall') || t.includes(':::toolResult') || t.includes('🔧') || t.includes('✅') || t.includes('❌');
+    if (!hasMetadata) return false;
+    
+    // 移除所有元数据块后看是否还有剩余正文
+    const rest = t
+      .replace(/> :::thinking[\s\S]*?:::\s*/g, '')
+      .replace(/> :::plan[\s\S]*?:::\s*/g, '')
+      .replace(/> :::commandOutput[\s\S]*?:::\n*/g, '')
+      .replace(/> :::toolCall[\s\S]*?:::\n*/g, '')
+      .replace(/> :::toolResult[\s\S]*?:::\n*/g, '')
+      .replace(/<(anti-hallucination-guardrails|ephemeral_message|available_skills|relevant[-_]memories|thought|think|thought_process|reasoning|system_instruction)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+      .replace(/\[(search|coding)-mode|Bootstrap truncation warning|Queued user message that arrived while the previous turn was still active\][\s\S]*?(?=\n\n|\n\s*\[|\n\s*<|$)/gi, '')
+      .replace(/^(?:System \(untrusted\):|System:).*?(?:\n|$)/gm, '')
+      .replace(/(?:^|\n)\s*\[(?:[A-Z][a-z]{2} )?\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})? GMT[+-]\d+\]\s*/g, '\n')
+      .replace(/>\s*[🔧✅❌⚠️]\s*`[^`]+`\s*(?:执行中(?:…|\.{3})|完成|失败|错误)(?:\s*<!--[\s\S]*?-->)?/g, '')
+      .replace(/<!--\s*tool:[^>]*-->/g, '')
+      .replace(/[.\s…]+$/g, '') // 移除末尾的点和空白
+      .trim();
+      
+    return rest.length === 0;
+  }
 
   // 按 runId 聚合 meta 气泡 content（showThinking 关闭时不传，实现整体隐藏）
   const metaContentByRunId = useMemo(() => {

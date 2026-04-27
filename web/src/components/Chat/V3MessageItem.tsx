@@ -2,7 +2,8 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Avatar, Tooltip, Button, Input, message } from 'antd';
 import { 
   User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, 
-  FileText, ChevronRight, ChevronDown, ShieldAlert, ShieldCheck, ListTodo, Loader2, Layers, Search
+  FileText, ChevronRight, ChevronDown, ShieldAlert, ShieldCheck, ListTodo, Loader2, Layers, Search, GitBranch,
+  Smartphone, MessageSquare, Send
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -124,11 +125,52 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   const processedContent = useMemo(() => {
     let content = (msg.content || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-    // 0. 清掉 agent 流写入的 itemId HTML 注释（仅用于内部 upsert 定位，不应展示）
+    // 💡 针对 User 消息的特殊历史数据清洗逻辑
+    if (msg.role === 'user') {
+      // 1. 寻找最后一个时间戳标记 [Mon 2026-04-27 10:56 GMT+8]
+      const timestampRegex = /\[(?:[A-Z][a-z]{2} )?\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})? GMT[+-]\d+\]/g;
+      let lastMatch;
+      let match;
+      while ((match = timestampRegex.exec(content)) !== null) {
+        lastMatch = match;
+      }
+
+      if (lastMatch) {
+        // 1. 截取最后一个时间戳之后的所有内容
+        content = content.substring(lastMatch.index + lastMatch[0].length);
+      }
+
+      // 2. 即使没有时间戳，也强制清洗掉常见的系统指令标签块
+      content = content.replace(/<(anti-hallucination-guardrails|system_instruction|thought|think)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+
+      // 3. 寻找并删除 [Bootstrap truncation warning] 及其之后的所有内容
+      const bootstrapWarningIdx = content.indexOf('[Bootstrap truncation warning]');
+      if (bootstrapWarningIdx !== -1) {
+        content = content.substring(0, bootstrapWarningIdx);
+      }
+
+      return content.trim();
+    }
+
+    // --- 以下是 Assistant 消息的重度过滤逻辑 ---
+    // 0. 清掉 agent 流注入的 itemId HTML 注释（仅用于内部 upsert 定位，不应展示）
     content = content.replace(/(?:^|\n)\s*>\s*<!--agentItem:[^>]*-->\s*/g, '\n');
 
-    // 1. :::toolResult 物理隐藏
-    content = content.replace(/> :::toolResult[\s\S]*?:::\n*/g, '');
+    // 0.1 过滤系统级标签块 (XML tags)
+    content = content.replace(/<(anti-hallucination-guardrails|ephemeral_message|available_skills|relevant[-_]memories|thought|think|thought_process|reasoning|system_instruction)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+    
+    // 0.1.1 过滤模式标识与警告指令块 (Inline markers with multi-line descriptions)
+    const systemBlockRe = /\[(search|coding)-mode|Bootstrap truncation warning|Queued user message that arrived while the previous turn was still active\][\s\S]*?(?=\n\n|\n\s*\[|\n\s*<|$)/gi;
+    content = content.replace(systemBlockRe, '');
+    
+    // 0.1.2 过滤系统日志行 (e.g., System (untrusted): ...)
+    content = content.replace(/^(?:System \(untrusted\):|System:).*?(?:\n|$)/gm, '');
+
+    // 0.2 过滤自动注入的消息头时间戳 (e.g., [Mon 2026-04-27 10:01 GMT+8])
+    content = content.replace(/(?:^|\n)\s*\[(?:[A-Z][a-z]{2} )?\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})? GMT[+-]\d+\]\s*/g, '\n');
+
+    // 1. :::toolResult 物理隐藏 (增强：处理可能不带 > 前缀的情况)
+    content = content.replace(/(?:^|\n)\s*(?:>\s*)?:::toolResult[\s\S]*?:::\n*/g, '\n');
 
     // 审批卡片：保留 :::approval 标记（blockquote 渲染器依赖），但剔除元信息行
     content = content.replace(
@@ -157,12 +199,18 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         /(?:^|\n)\s*(?:>\s*)?[🔧✅❌]\s*`[^`]+`\s*(?:执行中(?:…|\.\.\.)|完成|失败)(?:\s*<!--[\s\S]*?-->)?/g;
       content = content
         .replace(/(?:>\s*)?:::thinking[\s\S]*?(?::::|$)\n*/g, '')
+        .replace(/> :::toolResult[\s\S]*?:::\n*/g, '')
+        .replace(/(?:^|\n)\s*\[(?:[A-Z][a-z]{2} )?\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})? GMT[+-]\d+\]\s*/g, '\n')
+        .replace(/\[(search|coding)-mode|Bootstrap truncation warning|Queued user message that arrived while the previous turn was still active\][\s\S]*?(?=\n\n|\n\s*\[|\n\s*<|$)/gi, '')
+        .replace(/^(?:System \(untrusted\):|System:).*?(?:\n|$)/gm, '')
+        .replace(/>\s*[🔧✅❌⚠️]\s*`[^`]+`\s*(?:执行中(?:…|\.{3})|完成|失败|错误)(?:\s*<!--[\s\S]*?-->)?/g, '')
+        .replace(toolStatusLineRe, '')
         .replace(/(?:>\s*)?:::toolCall[\s\S]*?(?::::|$)\n*/g, '')
         .replace(/(?:>\s*)?:::plan[\s\S]*?(?::::|$)\n*/g, '')
         .replace(/(?:>\s*)?:::commandOutput[\s\S]*?(?::::|$)\n*/g, '')
-        .replace(toolStatusLineRe, '')
         // 仅去掉 session.tool 注入的 marker，避免残留 HTML 注释单独成条
         .replace(/<!--\s*tool:[^>]*-->/g, '')
+        .replace(/^[.\s…]+$/g, '') // 如果关闭了思考显示，则把残留的纯点/空白也清掉
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 
@@ -187,11 +235,27 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
     });
 
     return content.trim();
-  }, [msg.content, showThinking]);
+  }, [msg.content, msg.role, showThinking]);
 
   const isUser = msg.role === 'user';
   const isMetaOnly = !!(msg as any)._uiMetaOnly;
   const hasApproval = msg.content.includes(':::approval');
+
+  const senderLabel = msg.senderLabel || '';
+  const isSubAgent = !isUser && senderLabel.includes(':subagent:');
+  const subAgentId = isSubAgent ? (senderLabel.split(':').pop() || '').substring(0, 8) : null;
+
+  // 物理渠道解析 (微信、飞书、钉钉、Buddy等)
+  const channelSource = useMemo(() => {
+    const sl = senderLabel.toLowerCase();
+    if (sl === 'openclaw-control-ui') return { type: 'buddy', label: 'Buddy', icon: <Cpu size={10} /> };
+    if (sl.includes('weixin')) return { type: 'weixin', label: '微信', icon: <Smartphone size={10} /> };
+    if (sl.includes('feishu') || sl.includes('lark')) return { type: 'feishu', label: '飞书', icon: <MessageSquare size={10} /> };
+    if (sl.includes('dingtalk')) return { type: 'dingtalk', label: '钉钉', icon: <Layers size={10} /> };
+    if (sl.includes('telegram')) return { type: 'telegram', label: 'TG', icon: <Send size={10} /> };
+    if (sl.includes(':subagent:')) return { type: 'subagent', label: '子代理', icon: <GitBranch size={10} /> };
+    return null;
+  }, [senderLabel]);
 
   // metaContent 只做轻量预处理：清掉内部 upsert 用的 itemId 注释即可，
   // 保留所有 :::thinking / :::plan / :::toolCall / :::commandOutput 块供 blockquote 渲染器展开为 CollapsibleMeta
@@ -250,6 +314,19 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   const isDeepThinking = rawIsDeepThinking && showThinking;
   const isThinkingState = msg.content === t('chat.thinking') || rawIsDeepThinking || (!processedContent && isTyping && isLast && !isUser);
 
+  const thinkingLabel = useMemo(() => {
+    if (isDeepThinking) return t('chat.deepThinking', { defaultValue: '深度思考中...' });
+    const content = msg.content || '';
+    const hasTool = content.includes(':::toolCall') || content.includes('🔧');
+    const hasThinking = content.includes(':::thinking') || content.includes(':::analysis');
+    
+    if (hasTool && hasThinking) return t('chat.processing', { defaultValue: '正在处理中...' });
+    if (hasTool) return t('chat.toolCalling', { defaultValue: '工具调用中...' });
+    if (hasThinking) return t('chat.thinkingProcessLabel', { defaultValue: '正在思考中...' });
+    
+    return t('chat.thinking');
+  }, [isDeepThinking, msg.content, t]);
+
   useEffect(() => {
     let interval: any;
     if (isThinkingState) {
@@ -262,7 +339,8 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
     return () => clearInterval(interval);
   }, [isThinkingState]);
 
-  if (!processedContent && !(isTyping && isLast && !isUser) && !hasApproval && !hasEmbeddedMeta) return null;
+  // 💡 关键修复：确保用户消息永远显示，不被空内容判断拦截
+  if (!processedContent && !isUser && !(isTyping && isLast && !isUser) && !hasApproval && !hasEmbeddedMeta) return null;
 
   // ReactMarkdown 的 components 配置，抽出来是为了在主气泡和嵌入式 meta 折叠区里复用同一套渲染器。
   const markdownComponents = {
@@ -425,15 +503,66 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       }}
     >
       {isUser ? (
-        <Avatar icon={<User size={18} />} style={{ background: '#1e293b', flexShrink: 0, marginTop: 4, visibility: 'visible' }} />
+        <div style={{ flexShrink: 0, marginTop: 4, visibility: 'visible', position: 'relative' }}>
+          <Avatar icon={<User size={18} />} style={{ background: '#1e293b', flexShrink: 0 }} />
+          {channelSource && (
+            <div 
+              title={channelSource.label}
+              style={{ 
+                position: 'absolute', bottom: -2, right: -4, 
+                width: 16, height: 16, borderRadius: '50%', 
+                background: '#fff', border: '1px solid #e2e8f0',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                zIndex: 2, color: channelSource.type === 'buddy' ? '#6366f1' : (channelSource.type === 'subagent' ? '#0d9488' : '#16a34a')
+              }}
+            >
+              {channelSource.icon}
+            </div>
+          )}
+        </div>
       ) : isMetaOnly ? (
         // 思考信息附录气泡：不占头像位，保留尺寸以与主气泡对齐
         <div style={{ flexShrink: 0, marginTop: 4, width: isMobile ? 32 : 36, height: isMobile ? 32 : 36 }} />
       ) : (
-        <div style={{ flexShrink: 0, marginTop: 4, visibility: 'visible' }}>
-          <div style={{ width: isMobile ? 32 : 36, height: isMobile ? 32 : 36, borderRadius: '50%', background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #c7d2fe' }}>
-            <Bot size={isMobile ? 22 : 25} color="var(--v3-primary, #6366f1)" />
+        <div style={{ flexShrink: 0, marginTop: 4, visibility: 'visible', position: 'relative' }}>
+          <div style={{ 
+            width: isMobile ? 32 : 36, height: isMobile ? 32 : 36, borderRadius: '50%', 
+            background: isSubAgent ? '#f0fdfa' : '#eef2ff', 
+            display: 'flex', alignItems: 'center', justifyContent: 'center', 
+            border: isSubAgent ? '1px solid #99f6e4' : '1px solid #c7d2fe' 
+          }}>
+            {isSubAgent ? (
+              <GitBranch size={isMobile ? 18 : 20} color="#0d9488" />
+            ) : (
+              <Bot size={isMobile ? 22 : 25} color="var(--v3-primary, #6366f1)" />
+            )}
           </div>
+          {channelSource && !isSubAgent && (
+            <div 
+              title={channelSource.label}
+              style={{ 
+                position: 'absolute', bottom: -2, right: -4, 
+                width: 16, height: 16, borderRadius: '50%', 
+                background: '#fff', border: '1px solid #e2e8f0',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                zIndex: 2, color: channelSource.type === 'buddy' ? '#6366f1' : (channelSource.type === 'subagent' ? '#0d9488' : '#16a34a')
+              }}
+            >
+              {channelSource.icon}
+            </div>
+          )}
+          {isSubAgent && subAgentId && (
+            <div style={{ 
+              position: 'absolute', bottom: -12, left: '50%', transform: 'translateX(-50%)',
+              fontSize: 9, color: '#0d9488', background: '#f0fdfa', padding: '0 4px', 
+              borderRadius: 4, border: '1px solid #99f6e4', whiteSpace: 'nowrap',
+              fontWeight: 600
+            }}>
+              Sub:{subAgentId}
+            </div>
+          )}
         </div>
       )}
       
@@ -506,7 +635,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
           isThinkingState && !hasEmbeddedMeta ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 13, color: isDeepThinking ? '#7c3aed' : '#64748b', fontWeight: isDeepThinking ? 600 : 400 }}>
-                {isDeepThinking ? t('chat.deepThinking', { defaultValue: '深度思考中...' }) : t('chat.thinking')}
+                {thinkingLabel}
                 {thinkingSeconds > 0 ? ` (${thinkingSeconds}s)` : ''}
               </span>
               <Loader2

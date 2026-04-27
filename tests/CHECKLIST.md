@@ -342,6 +342,7 @@
 - [x] **V3 极客风格认证 UI**: 验证明亮科技感风格的认证界面，包含动态网格、扫描线及亚克力玻璃质感。
 - [x] **V3 调试日志备注**: 验证“显示推送日志”下方已添加“仅 debug 调试用，开启可能占用 CPU”备注。 `2026-04-21`
 - [ ] **V3 提问引导链接 (Quick Link)**: 验证 `[🙋 问题](quick:查询)` 格式的链接按钮渲染正常，点击后能触发消息发送。 `2026-04-21`
+- [x] **系统元标签过滤**: 验证聊天界面已物理隐藏 `<anti-hallucination-guardrails>`、`<ephemeral_message>`、`<available_skills>`、`[search-mode]`、`[coding-mode]`、`[Bootstrap truncation warning]`、`[Queued user message...]`、`System (untrusted):` 标签及带时间戳的自动注入消息头。 `2026-04-27`
 
 - [x] **V3 历史消息加载**: 验证 `chat.history` 返回的内容块数组能被正确解析为文本，且支持分页加载（offset/limit）。
 - [x] **历史思考过程解析**: 验证从历史记录加载的消息能正确提取并展示 `:::thinking` 块内容，且标识符已过滤。 `2026-04-21`

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Input, Button, Spin, Tooltip, Avatar, Badge as AntBadge } from 'antd';
-import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe, Clock, PenLine, Sparkles, Settings } from 'lucide-react';
+import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe, Clock, PenLine, Sparkles, Settings, GitBranch } from 'lucide-react';
 
 export interface V3SessionListProps {
   sessions: any[];
@@ -48,6 +48,7 @@ const SourceConfig: Record<string, { icon: any, color: string, labelKey: string,
   'weixin': { icon: <MessageCircle size={14} />, color: '#07c160', labelKey: 'chat.source.weixin', defaultLabel: '微信' },
   'feishu': { icon: <Send size={14} />, color: '#3370ff', labelKey: 'chat.source.feishu', defaultLabel: '飞书' },
   'telegram': { icon: <Send size={14} />, color: '#24A1DE', labelKey: 'chat.source.telegram', defaultLabel: 'Telegram' },
+  'subagent': { icon: <GitBranch size={14} />, color: '#0d9488', labelKey: 'chat.source.subagent', defaultLabel: '子代理' },
   'cron': { icon: <Clock size={14} />, color: '#8b5cf6', labelKey: 'chat.source.cron', defaultLabel: '定时任务' },
   'openai-user': { icon: <Zap size={14} />, color: '#f59e0b', labelKey: 'chat.source.openaiUser', defaultLabel: 'OpenAI API' },
   'fallback': { icon: <Globe size={14} />, color: '#94a3b8', labelKey: 'chat.source.fallback', defaultLabel: '其他渠道' }
@@ -343,7 +344,8 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                               <div className="session-id-container" style={{ fontSize: 9, color: '#94a3b8', marginTop: 1, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
                                   <span>{new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                   <span>•</span>
-                                  <span style={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                  <span style={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    {sourceMeta.icon && React.cloneElement(sourceMeta.icon as React.ReactElement, { size: 10, style: { opacity: 0.7 } })}
                                     {sourceLabel}{openAIUser ? `（${openAIUser}）` : ''}
                                   </span>
                                   {s.model && (

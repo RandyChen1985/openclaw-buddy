@@ -385,10 +385,21 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
         />
 
         {status !== 'authenticated' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <Badge status={status === 'error' ? 'error' : 'processing'} />
+          <div style={{ 
+            display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
+            animation: 'v3-fade-in 0.5s ease',
+            opacity: (status === 'disconnected' || status === 'connecting') ? 0.7 : 1
+          }}>
+            <Badge 
+              status={status === 'error' ? 'error' : (status === 'disconnected' ? 'default' : 'processing')} 
+              style={{ filter: status === 'disconnected' ? 'grayscale(1)' : 'none' }}
+            />
             <span style={{ fontSize: 11, color: status === 'error' ? '#ef4444' : '#94a3b8', fontWeight: 500 }}>
-              {status === 'error' ? t('chat.gatewayConnectFailed') : t('chat.gatewayConnecting')}
+              {status === 'error' 
+                ? t('chat.gatewayConnectFailed') 
+                : status === 'disconnected' 
+                  ? t('chat.gatewayDisconnected', { defaultValue: '网关未连接' })
+                  : t('chat.gatewayConnecting')}
             </span>
           </div>
         )}
