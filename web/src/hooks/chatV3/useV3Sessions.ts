@@ -59,6 +59,9 @@ export function useV3Sessions({
   inputAreaRef
 }: UseV3SessionsParams) {
   const [sessions, setSessions] = useState<any[]>([]);
+  // 实时同步 sessions 到 ref，供 fetchSessions 内部在闭包里读取最新快照（避免竞态保护失效）
+  const sessionsRef = useRef<any[]>([]);
+  useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [isUpdatingLabel, setIsUpdatingLabel] = useState(false);
   const didAutoSelectMainRef = useRef(false);
@@ -94,13 +97,20 @@ export function useV3Sessions({
 
     const res = await sendRPC('sessions.list', { limit: 50 });
 
-    // 已移除：以前为了防止 Loading 动画闪烁硬编码了 300ms 延迟，现在为了极致响应速度将其移除
-
     if (res.ok) {
       const list = res.payload?.items || res.payload?.sessions || (Array.isArray(res.payload) ? res.payload : []);
       const patchedList = list.map((s: any) => {
+        // 保护当前会话：优先使用本地 sessionLabel（已被 sessionLabelRef 实时同步）
         if (s.key === sessionKeyRef.current && (!s.label || s.label.trim() === '') && sessionLabelRef.current) {
           return { ...s, label: sessionLabelRef.current };
+        }
+        // 🐛 Fix: 保护所有会话——若服务器返回空 label，但本地 sessions 里已记录了非空标题，
+        // 说明服务端本次响应存在竞态/压缩丢失，应以本地缓存为准，防止触发意外的 AI 重命名。
+        if (!s.label || s.label.trim() === '') {
+          const staleSession = sessionsRef.current.find((es: any) => es.key === s.key);
+          if (staleSession?.label && !isUntitledSessionLabel(staleSession.label)) {
+            return { ...s, label: staleSession.label };
+          }
         }
         return s;
       });

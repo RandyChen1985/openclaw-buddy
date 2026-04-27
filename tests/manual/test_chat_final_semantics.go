@@ -252,7 +252,7 @@ func main() {
 	drainDone := false
 
 	for time.Now().Before(deadline) {
-		_ = conn.SetReadDeadline(time.Now().Add(3 * time.Minute))
+		_ = conn.SetReadDeadline(time.Now().Add(6 * time.Minute))
 		_, msg, rerr := conn.ReadMessage()
 		if rerr != nil {
 			log.Fatal("读消息失败:", rerr)

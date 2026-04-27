@@ -31,6 +31,11 @@ export function useV3AutoSummarize({
   const [isSummarizing, setIsSummarizing] = useState(false);
   const summarizingSessionsRef = useRef<Set<string>>(new Set());
   const lastSummarizedAtRef = useRef<Map<string, number>>(new Map());
+  /**
+   * 已确认有名称的会话缓存——每当我们在 sessions 列表中见到某个会话有非空标题，就把它记入。
+   * 后台扫描器在判断是否有名时，优先查询此缓存，防止 sessions.list 竞态返回空字段导致误判。
+   */
+  const confirmedNamesRef = useRef<Map<string, string>>(new Map());
 
   const handleAutoSummarize = useCallback(async (
     messagesOverride?: Message[],
@@ -45,9 +50,17 @@ export function useV3AutoSummarize({
     if (activeKey === 'agent:main:main') return;
 
     const existing = sessions.find(s => s.key === activeKey);
+
+    // 🗄️ 将当前 sessions 列表里所有已确认有名称的会话写入缓存，供后续保护判断
+    sessions.forEach(s => {
+      if (s?.key && s.label && !isUntitledSessionLabel(s.label)) {
+        confirmedNamesRef.current.set(s.key, s.label);
+      }
+    });
+
     /**
      * 当前会话优先用 state 里的 sessionLabel；若仍为「未命名」但列表里已有标题
-     * （例如仅恢复了 sessionKey、列表后到），应用列表值，避免误触发生成覆盖。
+     * （例如仅恢复了 sessionKey、列表后到），应用列表値，避免误触发生成覆盖。
      */
     let currentLabel: string | null | undefined;
     if (activeKey === sessionKey) {
@@ -59,7 +72,15 @@ export function useV3AutoSummarize({
           ? fromList
           : (fromState ?? fromList);
     } else {
-      currentLabel = existing?.label;
+      // 🐛 Fix: 对于非当前会话，同时查询 confirmedNamesRef 缓存和 sessions 列表。
+      // sessions.list 可能因竞态返回空 label，而缓存里存着我们之前確认过的真实名称。
+      const confirmedLabel = confirmedNamesRef.current.get(activeKey);
+      const fromList = existing?.label;
+      currentLabel = !isUntitledSessionLabel(confirmedLabel)
+        ? confirmedLabel
+        : !isUntitledSessionLabel(fromList)
+          ? fromList
+          : fromList;
     }
     if (!force && !isUntitledSessionLabel(currentLabel)) {
       return;
@@ -102,6 +123,7 @@ export function useV3AutoSummarize({
         const res = await sendRPC('sessions.patch', { key: activeKey, label: newTitle });
         if (res.ok) {
           lastSummarizedAtRef.current.set(activeKey, Date.now());
+          confirmedNamesRef.current.set(activeKey, newTitle); // 记入已确认名称缓存
           onLocalLabelPatched?.(activeKey, newTitle);
           if (!silent) {
             antdMessage.success({ content: t('chat.titleSummarized'), key: `summarizing-${activeKey}` });

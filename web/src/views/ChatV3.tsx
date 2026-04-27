@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { VirtuosoHandle } from 'react-virtuoso';
 import { message, Modal } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Monitor, MessageCircle, Send, Globe, Clock, Zap, Sparkles, Settings } from 'lucide-react';
+import { Monitor, MessageCircle, Send, Globe, Clock, Zap, Sparkles, Settings, GitBranch } from 'lucide-react';
 import 'katex/dist/katex.min.css';
 import storage from '../utils/storage';
 
@@ -47,6 +47,7 @@ const SourceConfig: Record<string, { icon: any; color: string; labelKey: string;
   'weixin': { icon: <MessageCircle size={12} />, color: '#07c160', labelKey: 'chat.source.weixin', defaultLabel: '微信' },
   'feishu': { icon: <Send size={12} />, color: '#3370ff', labelKey: 'chat.source.feishu', defaultLabel: '飞书' },
   'telegram': { icon: <Send size={12} />, color: '#24A1DE', labelKey: 'chat.source.telegram', defaultLabel: 'Telegram' },
+  'subagent': { icon: <GitBranch size={12} />, color: '#0d9488', labelKey: 'chat.source.subagent', defaultLabel: '子代理' },
   'cron': { icon: <Clock size={12} />, color: '#8b5cf6', labelKey: 'chat.source.cron', defaultLabel: '定时任务' },
   'openai-user': { icon: <Zap size={12} />, color: '#f59e0b', labelKey: 'chat.source.openaiUser', defaultLabel: 'OpenAI API' },
   'fallback': { icon: <Globe size={12} />, color: '#94a3b8', labelKey: 'chat.source.fallback', defaultLabel: '其他渠道' }

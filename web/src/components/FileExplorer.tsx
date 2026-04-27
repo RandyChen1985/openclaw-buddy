@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal, List, Button, message, Spin, Breadcrumb, Tabs, Input, Empty, Popconfirm, Tooltip, Tree } from 'antd';
 import { 
-  Folder, FileText, ChevronRight, Save, Eye, PenLine, Trash2, FolderOpen, 
+  Folder, FileText, ChevronRight, ChevronLeft, Save, Eye, PenLine, Trash2, FolderOpen, 
   Upload, Download, Search, LayoutList, Maximize2, Minimize2, 
   FileJson, FileCode2, Image as ImageIcon, Monitor, Terminal, File
 } from 'lucide-react';
@@ -76,6 +76,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
   const [isUploading, setIsUploading] = useState(false);
   const [filterText, setFilterText] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [treeData, setTreeData] = useState<TreeDataItem[]>([]);
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([]);
@@ -169,6 +170,31 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
     });
 
   const loadFileContent = async (file: FileEntry) => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    const isImg = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext || '');
+    
+    if (isImg) {
+      setSelectedFile(file);
+      setIsEditing(true);
+      setActiveTab('preview');
+      setSelectedKeys([file.path]);
+      
+      // Load image as blob for preview
+      try {
+        const token = storage.getItem('guardian_token') || '';
+        const url = getFullUrl(`/v1/openclaw/files/download?path=${encodeURIComponent(file.path)}`);
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+          const blob = await res.blob();
+          if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+          setImagePreviewUrl(URL.createObjectURL(blob));
+        }
+      } catch (err) {
+        console.error('Failed to load image preview:', err);
+      }
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await api.get(`/v1/openclaw/files/get?path=${encodeURIComponent(file.path)}`);
@@ -177,6 +203,10 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
       setIsEditing(true);
       setActiveTab(file.name.endsWith('.md') ? 'preview' : 'edit');
       setSelectedKeys([file.path]);
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+        setImagePreviewUrl(null);
+      }
     } catch (err: any) {
       message.error(err.response?.data?.error || err.message || t('common.loadFailed'));
     } finally {
@@ -299,10 +329,25 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
   };
 
   const filteredFiles = useMemo(() => {
-    if (!filterText.trim()) return files;
-    const term = filterText.toLowerCase();
-    return files.filter(f => f.name.toLowerCase().includes(term));
-  }, [files, filterText]);
+    let result = files;
+    if (filterText.trim()) {
+      const term = filterText.toLowerCase();
+      result = files.filter(f => f.name.toLowerCase().includes(term));
+    }
+    
+    if (currentPath !== rootPath && !filterText) {
+      // Find parent path
+      const parts = currentPath.split(/[/\\]/).filter(Boolean);
+      parts.pop();
+      const parentPath = currentPath.startsWith('/') ? '/' + parts.join('/') : parts.join('/');
+      
+      return [
+        { name: '..', path: parentPath || rootPath, is_dir: true, size: 0, mod_time: '' },
+        ...result
+      ];
+    }
+    return result;
+  }, [files, filterText, currentPath, rootPath]);
 
   const breadcrumbs = useMemo(() => {
     if (!rootPath) return [];
@@ -320,7 +365,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
 
   const isMarkdown = selectedFile?.name.endsWith('.md');
   const isHTML = selectedFile?.name.endsWith('.html') || selectedFile?.name.endsWith('.htm');
-  const hasPreview = isMarkdown || isHTML;
+  const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'];
+  const isImage = imageExts.includes(selectedFile?.name.split('.').pop()?.toLowerCase() || '');
+  const hasPreview = isMarkdown || isHTML || isImage;
 
   const protectedFiles = ['soul.md', 'agent.md', 'agents.md', 'identity.md', 'identify.md', 'user.md', 'tools.md', 'heartbeat.md'];
   const isProtected = (name: string) => protectedFiles.includes(name.toLowerCase());
@@ -328,15 +375,44 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
   return (
     <Modal
       title={
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: 32 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ background: '#f0f9ff', padding: 8, borderRadius: 10 }}>
-              <FolderOpen size={20} color="#0ea5e9" />
-            </div>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>{title}</div>
+        <div style={{ 
+          display: 'flex', 
+          flexDirection: isMobile ? 'column' : 'row',
+          alignItems: isMobile ? 'flex-start' : 'center', 
+          justifyContent: 'space-between', 
+          width: '100%', 
+          paddingRight: isMobile ? 0 : 32,
+          gap: isMobile ? 12 : 0
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, width: isMobile ? '100%' : 'auto' }}>
+            {(isEditing || (isMobile && currentPath !== rootPath)) && (
+              <Button 
+                type="text" 
+                icon={<ChevronLeft size={isMobile ? 18 : 20} />} 
+                onClick={() => {
+                  if (isEditing) {
+                    setIsEditing(false);
+                    setSelectedFile(null);
+                  } else if (isMobile && currentPath !== rootPath) {
+                    // Go up one level
+                    const parts = currentPath.split(/[/\\]/).filter(Boolean);
+                    parts.pop();
+                    const parentPath = currentPath.startsWith('/') ? '/' + parts.join('/') : parts.join('/');
+                    handleFolderClick(parentPath || rootPath);
+                  }
+                }}
+                style={{ padding: 0, width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              />
+            )}
+            {!isMobile && (
+              <div style={{ background: '#f0f9ff', padding: 8, borderRadius: 10 }}>
+                <FolderOpen size={20} color="#0ea5e9" />
+              </div>
+            )}
+            <div style={{ flex: isMobile ? 1 : 'none' }}>
+              <div style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, lineHeight: 1.2 }}>{title}</div>
               <Breadcrumb
-                style={{ fontSize: 11, marginTop: 2 }}
+                style={{ fontSize: isMobile ? 10 : 11, marginTop: isMobile ? 1 : 2 }}
                 items={breadcrumbs.map((crumb, idx) => ({
                   title: (
                     <span 
@@ -353,20 +429,57 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
               />
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ 
+            display: 'flex', 
+            gap: isMobile ? 4 : 8, 
+            alignItems: 'center', 
+            width: isMobile ? '100%' : 'auto',
+            justifyContent: isMobile ? 'flex-end' : 'flex-start',
+            marginTop: isMobile ? 4 : 0
+          }}>
+            {!isEditing && (
+              <Input
+                placeholder={t('common.searchPlaceholder')}
+                prefix={<Search size={isMobile ? 14 : 16} color="#94a3b8" style={{ marginRight: 4 }} />}
+                value={filterText}
+                onChange={e => setFilterText(e.target.value)}
+                allowClear
+                style={{ 
+                  borderRadius: 8, 
+                  height: isMobile ? 28 : 32, 
+                  flex: isMobile ? 1 : 'none',
+                  width: isMobile ? 'auto' : 200,
+                  marginRight: isMobile ? 4 : 8
+                }}
+              />
+            )}
             <Button 
               type="text"
-              icon={isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+              size={isMobile ? 'small' : undefined}
+              icon={isFullscreen ? <Minimize2 size={isMobile ? 16 : 18} /> : <Maximize2 size={isMobile ? 16 : 18} />}
               onClick={() => setIsFullscreen(!isFullscreen)}
               style={{ color: '#64748b' }}
             />
             {isEditing && (
-              <Button type="primary" icon={<Save size={16} />} loading={isSaving} onClick={handleSave} style={{ background: '#0ea5e9', border: 'none' }}>
+              <Button 
+                type="primary" 
+                size={isMobile ? 'small' : undefined}
+                icon={<Save size={14} />} 
+                loading={isSaving} 
+                onClick={handleSave} 
+                style={{ background: '#0ea5e9', border: 'none' }}
+              >
                 {t('common.save')}
               </Button>
             )}
             <Tooltip title={t('common.uploadFile')}>
-              <Button icon={<Upload size={16} />} loading={isUploading} onClick={handleUploadClick} style={{ borderRadius: 8 }}>
+              <Button 
+                size={isMobile ? 'small' : undefined}
+                icon={<Upload size={14} />} 
+                loading={isUploading} 
+                onClick={handleUploadClick} 
+                style={{ borderRadius: 8 }}
+              >
                 {!isMobile && t('common.uploadFile')}
               </Button>
             </Tooltip>
@@ -380,7 +493,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
       footer={null}
       styles={{ 
         body: { padding: 0, height: isFullscreen ? 'calc(100vh - 110px)' : (isMobile ? 'calc(100vh - 120px)' : 550), display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-        header: { padding: '16px 24px', borderBottom: '1px solid #f1f5f9' }
+        header: { padding: isMobile ? '12px 12px' : '16px 24px', borderBottom: '1px solid #f1f5f9' }
       }}
       centered={!isFullscreen}
       destroyOnClose
@@ -411,18 +524,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
         )}
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f8fafc' }}>
-          {!isEditing && (
-            <div style={{ padding: '12px 24px', background: '#fff', borderBottom: '1px solid #f1f5f9' }}>
-              <Input
-                placeholder={t('common.searchPlaceholder')}
-                prefix={<Search size={16} color="#94a3b8" style={{ marginRight: 4 }} />}
-                value={filterText}
-                onChange={e => setFilterText(e.target.value)}
-                allowClear
-                style={{ borderRadius: 8, height: 36 }}
-              />
-            </div>
-          )}
+
 
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             {loading && !isSaving ? (
@@ -441,9 +543,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
                       <Tabs 
                         size="small" activeKey={activeTab} onChange={(k) => setActiveTab(k as any)}
                         items={[
-                          { key: 'edit', label: <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><PenLine size={14}/>{t('common.edit')}</div> },
+                          !isImage && { key: 'edit', label: <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><PenLine size={14}/>{t('common.edit')}</div> },
                           { key: 'preview', label: <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Eye size={14}/>{t('common.preview')}</div> }
-                        ]}
+                        ].filter(Boolean) as any}
                         style={{ marginBottom: -12 }}
                       />
                     )}
@@ -470,6 +572,18 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
                     </div>
                   ) : activeTab === 'preview' && isHTML ? (
                     <iframe srcDoc={fileContent} style={{ width: '100%', height: '100%', border: 'none' }} title="HTML Preview" sandbox="allow-scripts" />
+                  ) : activeTab === 'preview' && isImage ? (
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', padding: 20 }}>
+                      {imagePreviewUrl ? (
+                        <img 
+                          src={imagePreviewUrl} 
+                          alt={selectedFile?.name} 
+                          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', borderRadius: 4, background: '#fff' }} 
+                        />
+                      ) : (
+                        <Spin />
+                      )}
+                    </div>
                   ) : (
                     <div style={{ position: 'relative', height: '100%' }}>
                       <TokenBadge text={fileContent} />
@@ -489,7 +603,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
             ) : filteredFiles.length > 0 ? (
               <List
                 className="file-explorer-list"
-                style={{ padding: '12px 24px', overflowY: 'auto' }}
+                style={{ padding: isMobile ? '12px 12px' : '12px 24px', overflowY: 'auto' }}
                 dataSource={filteredFiles}
                 renderItem={(item) => (
                   <List.Item
@@ -521,7 +635,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
                             <Button type="text" size="small" icon={<Download size={14} />} onClick={(e) => { e.stopPropagation(); handleDownload(item); }} className="action-btn-hover" style={{ color: '#0ea5e9' }} />
                           </Tooltip>
                         )}
-                        {!isProtected(item.name) && (
+                        {item.name !== '..' && !isProtected(item.name) && (
                           <Popconfirm title={t('common.deleteConfirm')} onConfirm={(e) => { e?.stopPropagation(); handleDelete(item); }} onCancel={(e) => e?.stopPropagation()} okButtonProps={{ danger: true }}>
                             <Button type="text" size="small" danger icon={<Trash2 size={14} />} onClick={(e) => e.stopPropagation()} className="action-btn-hover" />
                           </Popconfirm>

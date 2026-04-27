@@ -399,6 +399,7 @@
     "metaFoldExpandLiveTool": "工具调用生成中",
     "metaFoldThinkingShort": "思考中…",
     "metaFoldCollapse": "点击折叠本次思考或工具调用",
+    "analysisProcess": "分析过程",
     "streamStalledHint": "AI 还在思考中，请稍等一下...",
     "today": "今天",
     "yesterday": "昨天",

@@ -35,6 +35,7 @@ export interface Message {
     duration?: number;
     tps?: number;
   };
+  senderLabel?: string;
 }
 
 interface UseChatV3WebSocketProps {

@@ -789,11 +789,11 @@ func (s *Server) chatProxy(c *gin.Context) {
 		req.Header.Set("Accept", "text/event-stream")
 	}
 
-	// 4. 执行请求 (增加 3 分钟显式超时保护)
+	// 4. 执行请求 (增加 6 分钟显式超时保护)
 	startTime := time.Now()
 	
 	// 设置带超时的上下文，防止后端网关长时间挂起占用资源
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 6*time.Minute)
 	defer cancel()
 	
 	req = req.WithContext(ctx)
