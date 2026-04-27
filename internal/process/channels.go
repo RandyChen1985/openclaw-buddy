@@ -881,7 +881,7 @@ func GetChannelsStatus(configDir string) ([]ChannelStatus, error) {
 		res = &CommandResult{Output: ""}
 	} else {
 		var err error
-		res, err = RunCommandWithEnvAndTimeout(45*time.Second, env, "openclaw", "channels", "list")
+		res, err = RunCommandWithEnvAndTimeout(120*time.Second, env, "openclaw", "channels", "list")
 		if err != nil {
 			log.Printf("⚠️ openclaw channels list failed: %v", err)
 		}

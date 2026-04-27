@@ -50,7 +50,7 @@ func GetWeChatQRCode(force bool) (*WeChatQRCode, error) {
 	// 使用新命令: openclaw channels login --channel openclaw-weixin
 	log.Printf("📥 Executing: openclaw channels login --channel openclaw-weixin (Streaming Mode, Force: %v)", force)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	// 我们需要手动管理进程以在获取到 URL 后立即杀死它，因为该命令会一直等待扫码结果
@@ -202,7 +202,7 @@ type ChatChannel struct {
 
 func GetChatChannels() ([]ChatChannel, error) {
 	log.Printf("🔍 Executing: openclaw channels list (Detecting Configured Channels)")
-	res, _ := RunCommandWithTimeout(45*time.Second, "openclaw", "channels", "list")
+	res, _ := RunCommandWithTimeout(120*time.Second, "openclaw", "channels", "list")
 
 	var channels []ChatChannel
 	lines := strings.Split(res.Output, "\n")

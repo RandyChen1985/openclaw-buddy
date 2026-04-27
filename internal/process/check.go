@@ -176,7 +176,7 @@ func CheckConfig(configDir string) (bool, string, error) {
 
 func GetDashboardURL(ctx context.Context, externalPrefix string) (string, error) {
 	// 将外部 Context 与 30 秒超时控制合并，支持前端主动中断及后端安全超时
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	bin := GetOpenClawBinary()
