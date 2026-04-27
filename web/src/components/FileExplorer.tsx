@@ -103,6 +103,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
   const [contextMenuVisible, setContextMenuVisible] = useState(false);
   const [contextPath, setContextPath] = useState('');
   const [contextIsFile, setContextIsFile] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
@@ -406,11 +407,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
     });
   };
 
-  const handleRightClick = (event: React.MouseEvent, key: string, isDir: boolean) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const handleRightClick = (event: any, key: string, isDir: boolean) => {
+    if (event.preventDefault) event.preventDefault();
+    if (event.stopPropagation) event.stopPropagation();
+    
+    // Support both React.MouseEvent and antd's event wrapper
+    const clientX = event.clientX || (event.nativeEvent && event.nativeEvent.clientX);
+    const clientY = event.clientY || (event.nativeEvent && event.nativeEvent.clientY);
+    
     setContextPath(key);
     setContextIsFile(!isDir);
+    setMenuPosition({ x: clientX, y: clientY });
     setContextMenuVisible(true);
   };
 
@@ -672,8 +679,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', fontSize: 12, fontWeight: 700, color: '#64748b', display: 'flex', alignItems: 'center', gap: 8 }}>
               <LayoutList size={14} /> {t('common.directory')}
             </div>
-            <Dropdown menu={{ items: contextMenuItems }} trigger={['contextMenu']} open={contextMenuVisible} onOpenChange={(visible) => setContextMenuVisible(visible)}>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '12px 8px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 8px' }}>
                 <DirectoryTree
                   loadData={onLoadData}
                   treeData={treeData}
@@ -688,7 +694,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
                   className="custom-directory-tree"
                 />
               </div>
-            </Dropdown>
           </div>
         )}
 
@@ -825,60 +830,85 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
                 </div>
               </div>
             ) : filteredFiles.length > 0 ? (
-              <List
-                className="file-explorer-list"
-                style={{ padding: isMobile ? '12px 12px' : '12px 24px', overflowY: 'auto' }}
-                dataSource={filteredFiles}
-                renderItem={(item) => (
-                  <List.Item
-                    style={{ 
-                      cursor: 'pointer', borderRadius: 12, border: 'none', padding: '10px 16px', marginBottom: 8,
-                      transition: 'all 0.2s', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                    }}
-                    className="file-item-hover"
-                    onClick={() => item.is_dir ? handleFolderClick(item.path) : loadFileContent(item)}
-                    onContextMenu={(e) => handleRightClick(e, item.path, item.is_dir)}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
-                      <div style={{ 
-                        background: item.is_dir ? '#e0f2fe' : '#f8fafc', padding: 8, borderRadius: 8,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
-                      }}>
-                        {getFileIcon(item.name, item.is_dir)}
+              <div 
+                style={{ flex: 1, overflowY: 'auto' }}
+                onContextMenu={(e) => handleRightClick(e, currentPath, true)}
+              >
+                <List
+                  className="file-explorer-list"
+                  style={{ padding: isMobile ? '12px 12px' : '12px 24px' }}
+                  dataSource={filteredFiles}
+                  renderItem={(item) => (
+                    <List.Item
+                      style={{ 
+                        cursor: 'pointer', borderRadius: 12, border: 'none', padding: '10px 16px', marginBottom: 8,
+                        transition: 'all 0.2s', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                      }}
+                      className="file-item-hover"
+                      onClick={() => item.is_dir ? handleFolderClick(item.path) : loadFileContent(item)}
+                      onContextMenu={(e) => handleRightClick(e, item.path, item.is_dir)}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
+                        <div style={{ 
+                          background: item.is_dir ? '#e0f2fe' : '#f8fafc', padding: 8, borderRadius: 8,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                          {getFileIcon(item.name, item.is_dir)}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 14, color: '#1e293b', fontWeight: 600 }}>{item.name}</div>
+                          {!item.is_dir && (
+                            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                              {(item.size / 1024).toFixed(1)} KB · {item.mod_time}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {!item.is_dir && (
+                            <Tooltip title={t('common.download')}>
+                              <Button type="text" size="small" icon={<Download size={14} />} onClick={(e) => { e.stopPropagation(); handleDownload(item); }} className="action-btn-hover" style={{ color: '#0ea5e9' }} />
+                            </Tooltip>
+                          )}
+                          {item.name !== '..' && !isProtected(item.name) && (
+                            <Popconfirm title={t('common.deleteConfirm')} onConfirm={(e) => { e?.stopPropagation(); handleDelete(item); }} onCancel={(e) => e?.stopPropagation()} okButtonProps={{ danger: true }}>
+                              <Button type="text" size="small" danger icon={<Trash2 size={14} />} onClick={(e) => e.stopPropagation()} className="action-btn-hover" />
+                            </Popconfirm>
+                          )}
+                          <ChevronRight size={18} color="#cbd5e1" />
+                        </div>
                       </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, color: '#1e293b', fontWeight: 600 }}>{item.name}</div>
-                        {!item.is_dir && (
-                          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
-                            {(item.size / 1024).toFixed(1)} KB · {item.mod_time}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        {!item.is_dir && (
-                          <Tooltip title={t('common.download')}>
-                            <Button type="text" size="small" icon={<Download size={14} />} onClick={(e) => { e.stopPropagation(); handleDownload(item); }} className="action-btn-hover" style={{ color: '#0ea5e9' }} />
-                          </Tooltip>
-                        )}
-                        {item.name !== '..' && !isProtected(item.name) && (
-                          <Popconfirm title={t('common.deleteConfirm')} onConfirm={(e) => { e?.stopPropagation(); handleDelete(item); }} onCancel={(e) => e?.stopPropagation()} okButtonProps={{ danger: true }}>
-                            <Button type="text" size="small" danger icon={<Trash2 size={14} />} onClick={(e) => e.stopPropagation()} className="action-btn-hover" />
-                          </Popconfirm>
-                        )}
-                        <ChevronRight size={18} color="#cbd5e1" />
-                      </div>
-                    </div>
-                  </List.Item>
-                )}
-              />
+                    </List.Item>
+                  )}
+                />
+              </div>
             ) : (
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div 
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onContextMenu={(e) => handleRightClick(e, currentPath, true)}
+              >
                 <Empty description={t('common.noContent')} />
               </div>
             )}
           </div>
         </div>
       </div>
+
+      <Dropdown
+        menu={{ items: contextMenuItems }}
+        trigger={['contextMenu']}
+        open={contextMenuVisible}
+        onOpenChange={(visible) => setContextMenuVisible(visible)}
+      >
+        <div style={{ 
+          position: 'fixed', 
+          left: menuPosition.x, 
+          top: menuPosition.y,
+          width: 1,
+          height: 1,
+          visibility: 'hidden',
+          pointerEvents: 'none'
+        }} />
+      </Dropdown>
       <style>{`
         .file-item-hover:hover {
           transform: scale(1.005);
