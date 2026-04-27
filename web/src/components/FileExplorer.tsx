@@ -76,6 +76,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
   const [isUploading, setIsUploading] = useState(false);
   const [filterText, setFilterText] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [treeData, setTreeData] = useState<TreeDataItem[]>([]);
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([]);
@@ -169,6 +170,31 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
     });
 
   const loadFileContent = async (file: FileEntry) => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    const isImg = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext || '');
+    
+    if (isImg) {
+      setSelectedFile(file);
+      setIsEditing(true);
+      setActiveTab('preview');
+      setSelectedKeys([file.path]);
+      
+      // Load image as blob for preview
+      try {
+        const token = storage.getItem('guardian_token') || '';
+        const url = getFullUrl(`/v1/openclaw/files/download?path=${encodeURIComponent(file.path)}`);
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+          const blob = await res.blob();
+          if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+          setImagePreviewUrl(URL.createObjectURL(blob));
+        }
+      } catch (err) {
+        console.error('Failed to load image preview:', err);
+      }
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await api.get(`/v1/openclaw/files/get?path=${encodeURIComponent(file.path)}`);
@@ -177,6 +203,10 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
       setIsEditing(true);
       setActiveTab(file.name.endsWith('.md') ? 'preview' : 'edit');
       setSelectedKeys([file.path]);
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+        setImagePreviewUrl(null);
+      }
     } catch (err: any) {
       message.error(err.response?.data?.error || err.message || t('common.loadFailed'));
     } finally {
@@ -335,7 +365,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
 
   const isMarkdown = selectedFile?.name.endsWith('.md');
   const isHTML = selectedFile?.name.endsWith('.html') || selectedFile?.name.endsWith('.htm');
-  const hasPreview = isMarkdown || isHTML;
+  const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'];
+  const isImage = imageExts.includes(selectedFile?.name.split('.').pop()?.toLowerCase() || '');
+  const hasPreview = isMarkdown || isHTML || isImage;
 
   const protectedFiles = ['soul.md', 'agent.md', 'agents.md', 'identity.md', 'identify.md', 'user.md', 'tools.md', 'heartbeat.md'];
   const isProtected = (name: string) => protectedFiles.includes(name.toLowerCase());
@@ -511,9 +543,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
                       <Tabs 
                         size="small" activeKey={activeTab} onChange={(k) => setActiveTab(k as any)}
                         items={[
-                          { key: 'edit', label: <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><PenLine size={14}/>{t('common.edit')}</div> },
+                          !isImage && { key: 'edit', label: <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><PenLine size={14}/>{t('common.edit')}</div> },
                           { key: 'preview', label: <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Eye size={14}/>{t('common.preview')}</div> }
-                        ]}
+                        ].filter(Boolean) as any}
                         style={{ marginBottom: -12 }}
                       />
                     )}
@@ -540,6 +572,18 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
                     </div>
                   ) : activeTab === 'preview' && isHTML ? (
                     <iframe srcDoc={fileContent} style={{ width: '100%', height: '100%', border: 'none' }} title="HTML Preview" sandbox="allow-scripts" />
+                  ) : activeTab === 'preview' && isImage ? (
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', padding: 20 }}>
+                      {imagePreviewUrl ? (
+                        <img 
+                          src={imagePreviewUrl} 
+                          alt={selectedFile?.name} 
+                          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', borderRadius: 4, background: '#fff' }} 
+                        />
+                      ) : (
+                        <Spin />
+                      )}
+                    </div>
                   ) : (
                     <div style={{ position: 'relative', height: '100%' }}>
                       <TokenBadge text={fileContent} />
