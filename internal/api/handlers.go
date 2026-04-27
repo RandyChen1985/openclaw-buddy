@@ -1438,6 +1438,44 @@ func (s *Server) downloadExplorerFile(c *gin.Context) {
 	c.Data(http.StatusOK, "application/octet-stream", data)
 }
 
+func (s *Server) createExplorerFile(c *gin.Context) {
+	var req struct {
+		Path     string `json:"path" binding:"required"`
+		Filename string `json:"filename" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "path and filename are required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【新建文件】 (Dir: %s, Name: %s)", req.Path, req.Filename)
+	destPath, err := process.CreateExplorerFile(req.Path, req.Filename, s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success", "path": destPath})
+}
+
+func (s *Server) createExplorerDir(c *gin.Context) {
+	var req struct {
+		Path    string `json:"path" binding:"required"`
+		Dirname string `json:"dirname" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "path and dirname are required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【新建文件夹】 (Dir: %s, Name: %s)", req.Path, req.Dirname)
+	destPath, err := process.CreateExplorerDir(req.Path, req.Dirname, s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success", "path": destPath})
+}
+
 func (s *Server) getOpenClawModelsConfig(c *gin.Context) {
 	providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir)
 	if err != nil {

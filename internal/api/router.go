@@ -166,6 +166,8 @@ func (s *Server) setupRoutes() {
 			oc.DELETE("/files/delete", s.deleteExplorerFile)
 			oc.POST("/files/upload", s.uploadExplorerFile)
 			oc.GET("/files/download", s.downloadExplorerFile)
+			oc.POST("/files/create", s.createExplorerFile)
+			oc.POST("/files/mkdir", s.createExplorerDir)
 
 			oc.GET("/plugins", s.getOpenClawPlugins)
 			oc.POST("/plugins/reload", s.reloadPlugins)
