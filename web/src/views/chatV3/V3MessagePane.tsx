@@ -86,9 +86,36 @@ export function V3MessagePane({
   const dragCounterRef = useRef(0);
 
   // _uiMetaOnly 气泡不再作为独立消息渲染，改为嵌入到同 runId 主气泡的底部。
-  // 这里统一过滤掉，主气泡通过 metaContentByRunId 拿到它的 content。
+  // 同时过滤掉系统自动生成的哨兵提示词、心跳提示词以及对应的 HEARTBEAT_OK 回复。
   const visibleMessages = useMemo(
-    () => messages.filter(m => !(m as any)._uiMetaOnly),
+    () => messages.filter(m => {
+      // 1. 过滤内部 meta 消息
+      if ((m as any)._uiMetaOnly) return false;
+
+      const content = (m.content || '').trim();
+      
+      // 2. 过滤系统注入的提示词 (role: user)
+      if (m.role === 'user') {
+        // 匹配 "System:" 或 "System (untrusted):" 等前缀
+        if (/^System\s*(\(.*\))?:/.test(content)) return false;
+        
+        // 匹配心跳指令
+        if (content.includes('Read HEARTBEAT.md if it exists')) return false;
+        
+        // 匹配异步命令完成提示
+        if (content.includes('An async command you ran earlier has completed')) return false;
+
+        // 匹配纯时间戳提示行
+        if (content.startsWith('Current time:')) return false;
+      }
+
+      // 3. 过滤系统心跳确认 (role: assistant)
+      if (m.role === 'assistant') {
+        if (content === 'HEARTBEAT_OK') return false;
+      }
+
+      return true;
+    }),
     [messages],
   );
 
