@@ -4,7 +4,7 @@ import {
   Folder, FileText, ChevronRight, ChevronLeft, Save, Eye, PenLine, Trash2, FolderOpen, 
   Upload, Download, Search, LayoutList, Maximize2, Minimize2, 
   FileJson, FileCode2, Image as ImageIcon, Monitor, Terminal, File,
-  FolderPlus, FilePlus
+  FolderPlus, FilePlus, Copy
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -102,6 +102,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
   // Context Menu States
   const [contextMenuVisible, setContextMenuVisible] = useState(false);
   const [contextPath, setContextPath] = useState('');
+  const [contextIsFile, setContextIsFile] = useState(false);
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
@@ -395,17 +396,43 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
     }
   };
 
-  const handleRightClick = ({ event, node }: any) => {
-    if (!node.isDir) return;
+  const copyToClipboard = (text: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      message.success(t('common.copySuccess', { defaultValue: '复制成功' }));
+    }).catch(err => {
+      console.error('Failed to copy:', err);
+      message.error(t('common.copyFailed', { defaultValue: '复制失败' }));
+    });
+  };
+
+  const handleRightClick = (event: React.MouseEvent, key: string, isDir: boolean) => {
     event.preventDefault();
-    setContextPath(node.key);
+    event.stopPropagation();
+    setContextPath(key);
+    setContextIsFile(!isDir);
     setContextMenuVisible(true);
   };
 
-  const contextMenuItems: MenuProps['items'] = [
-    { key: 'newFile', icon: <FilePlus size={14} />, label: t('common.newFile'), onClick: () => handleCreateFile(contextPath) },
-    { key: 'newFolder', icon: <FolderPlus size={14} />, label: t('common.newFolder'), onClick: () => handleCreateDir(contextPath) },
-  ];
+
+  const contextMenuItems: MenuProps['items'] = useMemo(() => {
+    const items: MenuProps['items'] = [];
+    
+    if (!contextIsFile) {
+      items.push({ key: 'newFile', icon: <FilePlus size={14} />, label: t('common.newFile'), onClick: () => handleCreateFile(contextPath) });
+      items.push({ key: 'newFolder', icon: <FolderPlus size={14} />, label: t('common.newFolder'), onClick: () => handleCreateDir(contextPath) });
+      items.push({ type: 'divider' });
+    }
+    
+    items.push({ 
+      key: 'copyPath', 
+      icon: <Copy size={14} />, 
+      label: t('common.copyPath', { defaultValue: '复制绝对路径' }), 
+      onClick: () => copyToClipboard(contextPath) 
+    });
+    
+    return items;
+  }, [contextPath, contextIsFile, t]);
 
   const handleFolderClick = (path: string) => {
     setCurrentPath(path);
@@ -651,7 +678,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
                   loadData={onLoadData}
                   treeData={treeData}
                   onSelect={onTreeSelect}
-                  onRightClick={handleRightClick}
+                  onRightClick={({ event, node }: any) => handleRightClick(event, node.key, !node.isLeaf)}
                   expandedKeys={expandedKeys}
                   onExpand={handleExpand}
                   selectedKeys={selectedKeys}
@@ -810,6 +837,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
                     }}
                     className="file-item-hover"
                     onClick={() => item.is_dir ? handleFolderClick(item.path) : loadFileContent(item)}
+                    onContextMenu={(e) => handleRightClick(e, item.path, item.is_dir)}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
                       <div style={{ 

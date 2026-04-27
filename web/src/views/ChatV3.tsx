@@ -17,6 +17,7 @@ import { V3FloatingButtons } from './chatV3/V3FloatingButtons';
 import { V3MessagePane } from './chatV3/V3MessagePane';
 import { V3ComposerBar } from './chatV3/V3ComposerBar';
 import { V3DebugPane } from './chatV3/V3DebugPane';
+import FileExplorer from '../components/FileExplorer';
 import { useV3Theme } from '../hooks/chatV3/useV3Theme';
 import '../styles/ChatV3.css';
 
@@ -177,6 +178,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
   const [editContent, setEditContent] = useState('');
   const [sessionSearch, setSessionSearch] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [explorerOpen, setExplorerOpen] = useState(false);
+  const [explorerPath, setExplorerPath] = useState('');
+  const [explorerTitle, setExplorerTitle] = useState('');
 
 
   useEffect(() => {
@@ -249,6 +253,17 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
     if (!sessionKey) return null;
     return parseSessionKey(sessionKey).botId;
   }, [sessionKey]);
+
+  const handleOpenWorkspace = useCallback(() => {
+    if (!sessionKey) return;
+    const { botId } = parseSessionKey(sessionKey);
+    const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
+    if (bot?.workspace) {
+      setExplorerPath(bot.workspace);
+      setExplorerTitle(`${bot.name || bot.id} ${t('bots.workspace', { defaultValue: '工作区' })}`);
+      setExplorerOpen(true);
+    }
+  }, [sessionKey, botsModels, t]);
 
   const handleRequestNewSessionWithBot = React.useCallback((botValue: string) => {
     const nextBot = (botValue || '').trim();
@@ -447,6 +462,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           }}
           isFullscreen={isFullscreen}
           onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+          onOpenWorkspace={handleOpenWorkspace}
         />
   
         <V3MessagePane
@@ -576,6 +592,14 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         />
       </div>
 
+      <FileExplorer
+        open={explorerOpen}
+        onClose={() => setExplorerOpen(false)}
+        rootPath={explorerPath}
+        title={explorerTitle}
+        t={t}
+        isMobile={!!isMobile}
+      />
     </>
   );
 };

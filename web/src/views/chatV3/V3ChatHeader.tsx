@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Badge, Button, Dropdown, Input, Modal, Radio, Select, Switch, Tooltip } from 'antd';
-import { PanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2, Maximize2, Minimize2 } from 'lucide-react';
+import { PanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2, Maximize2, Minimize2, Folder } from 'lucide-react';
 
 import type { V3ThemeMode, V3ThemePresetId, V3ThemeTokens } from '../../hooks/chatV3/useV3Theme';
 
@@ -69,6 +69,7 @@ export interface V3ChatHeaderProps {
   };
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
+  onOpenWorkspace?: () => void;
 }
 
 /**
@@ -106,7 +107,8 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     botsModels,
     v3Theme,
     isFullscreen,
-    onToggleFullscreen
+    onToggleFullscreen,
+    onOpenWorkspace
   } = props;
 
   const [themeModalOpen, setThemeModalOpen] = useState(false);
@@ -563,16 +565,25 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 2 : 6, flexShrink: 0 }}>
-
-
-
-
         <Button 
           size="small" 
           type="text" 
           icon={isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />} 
           title={isFullscreen ? t('common.exitFullscreen', { defaultValue: '退出全屏' }) : t('common.fullscreen', { defaultValue: '全屏' })}
           onClick={onToggleFullscreen}
+        />
+
+        <Button 
+          size="small" 
+          type="text" 
+          icon={<Folder size={14} />} 
+          title={t('bots.workspace', { defaultValue: '工作区' })}
+          onClick={onOpenWorkspace}
+          disabled={!sessionMeta?.bot?.workspace}
+          style={{ 
+            color: !sessionMeta?.bot?.workspace ? '#cbd5e1' : 'var(--v3-primary, #4f46e5)',
+            opacity: !sessionMeta?.bot?.workspace ? 0.5 : 1
+          }}
         />
 
         <Dropdown
@@ -739,4 +750,3 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     </div>
   );
 }
-
