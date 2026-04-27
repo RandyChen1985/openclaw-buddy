@@ -20,6 +20,7 @@ function autoFixOptionStr(str: string): string {
   let openBrackets = 0;
   let inString = false;
   let escape = false;
+  let stringChar = '';
 
   for (let i = 0; i < str.length; i++) {
     const char = str[i];
@@ -31,8 +32,15 @@ function autoFixOptionStr(str: string): string {
       escape = true;
       continue;
     }
-    if (char === '"') {
-      inString = !inString;
+    // 处理各种引号的闭合
+    if ((char === '"' || char === "'" || char === "`") && (!inString || char === stringChar)) {
+      if (!inString) {
+        inString = true;
+        stringChar = char;
+      } else {
+        inString = false;
+        stringChar = '';
+      }
       continue;
     }
     if (!inString) {
@@ -44,7 +52,7 @@ function autoFixOptionStr(str: string): string {
   }
 
   let fixed = str;
-  if (inString) fixed += '"';
+  if (inString) fixed += stringChar; // 补全字符串
   // 按照闭合顺序反向补全
   if (openBrackets > 0) fixed += ']'.repeat(openBrackets);
   if (openBraces > 0) fixed += '}'.repeat(openBraces);
@@ -98,23 +106,45 @@ export const ECharts = ({ optionStr, isTyping }: { optionStr: string, isTyping?:
 
     // 尝试解析，如果失败则尝试补全后再解析
     const tryParse = (s: string) => {
+      let content = s.trim();
+      
+      // 1. 尝试直接 JSON 解析
       try {
-        return JSON.parse(s);
-      } catch (e) {
-        try {
-          const wrappedStr = s.startsWith('{') ? `return (${s})` : `return ${s}`;
-          const fn = new Function(wrappedStr);
-          return fn();
-        } catch (e2) {
-          return null;
+        return JSON.parse(content);
+      } catch (e) {}
+
+      // 2. 预处理：剥离常见的 JS 前缀 (LLM 经常会多吐这些)
+      content = content.replace(/^(export\s+default\s+|module\.exports\s*=\s*|(const|let|var)\s+\w+\s*=\s*)/, '');
+      content = content.replace(/;$/, '');
+
+      // 3. 尝试使用 Function 解析（处理带注释、单引号、无引号 Key 等）
+      try {
+        const wrappedStr = (content.startsWith('{') || content.startsWith('[')) ? `return (${content})` : `return ${content}`;
+        const fn = new Function(wrappedStr);
+        return fn();
+      } catch (e2) {
+        // 4. 提取：如果包含多余文本，尝试提取第一个 { 或 [ 到最后一个 } 或 ] 之间的内容
+        const firstIdx = Math.min(
+          content.indexOf('{') === -1 ? Infinity : content.indexOf('{'),
+          content.indexOf('[') === -1 ? Infinity : content.indexOf('[')
+        );
+        const lastIdx = Math.max(content.lastIndexOf('}'), content.lastIndexOf(']'));
+        
+        if (firstIdx !== Infinity && lastIdx !== -1 && lastIdx > firstIdx) {
+          const extracted = content.substring(firstIdx, lastIdx + 1);
+          try {
+            const fn2 = new Function(`return (${extracted})`);
+            return fn2();
+          } catch (e3) {}
         }
+        return null;
       }
     };
 
     let option = tryParse(trimmedStr);
     
-    // 如果直接解析失败且正在输入，尝试补全
-    if (!option && isTyping) {
+    // 如果直接解析失败，尝试补全（即使非正在输入状态，最后的输出也可能由于 token 截断导致不完整）
+    if (!option) {
       const fixedStr = autoFixOptionStr(trimmedStr);
       if (fixedStr !== trimmedStr) {
         option = tryParse(fixedStr);
