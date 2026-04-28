@@ -89,7 +89,31 @@ export const summarizeSession = async (messages: any[], modelID?: string): Promi
     const response = await api.post('/v1/openclaw/chat/summarize', { messages, modelID });
     return response.data.title;
   } catch (err) {
-    console.error('Failed to summarize session:', err);
+    const anyErr = err as any;
+    const status = anyErr?.response?.status;
+    const url = anyErr?.config?.url;
+
+    // 兼容某些反代场景：前端挂在子路径 (WebRoot)，但 API 实际挂在根路径 /v1/...
+    // 此时 request interceptor 会把 /v1/... 前缀化为 `${WebRoot}/v1/...`，导致 404。
+    // 这里在检测到 404 时，自动回退到根路径重试一次。
+    if (status === 404 && typeof window !== 'undefined') {
+      try {
+        const token = storage.getItem('guardian_token');
+        const fullUrl = `${window.location.origin}/v1/openclaw/chat/summarize`;
+        const retryRes = await axios.post(
+          fullUrl,
+          { messages, modelID },
+          token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+        );
+        // 复用响应拦截器语义：此处直接返回 data.title（后端是标准 {code,data}，但重试不走 api 实例）
+        return retryRes?.data?.data?.title ?? retryRes?.data?.title ?? null;
+      } catch (retryErr) {
+        console.error('Failed to summarize session (retry root /v1):', retryErr, { originalUrl: url });
+        return null;
+      }
+    }
+
+    console.error('Failed to summarize session:', err, { url });
     return null;
   }
 };
