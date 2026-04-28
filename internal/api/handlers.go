@@ -2497,17 +2497,19 @@ func (s *Server) handleChatUpload(c *gin.Context) {
 		return
 	}
 
-	// 3.1 如果是图片，生成缩略图 (同步生成)
+	// 3.1 临时测试：不生成缩略图，直接使用原图地址作为预览图地址
 	thumbName := ""
+	/* 暂时注释掉缩略图生成逻辑
 	if strings.HasPrefix(c.Request.Header.Get("Content-Type"), "image/") || 
 	   matchExt(ext, ".jpg", ".jpeg", ".png", ".webp", ".gif") {
 		thumbName = uniqueName + ".thumb.jpg"
 		err := generateThumbnail(filePath, filepath.Join(uploadDir, thumbName))
 		if err != nil {
 			log.Printf("⚠️ [Upload] 生成缩略图失败: %v", err)
-			thumbName = "" // 失败则清空，前端会自动降级到原图
+			thumbName = "" 
 		}
 	}
+	*/
 
 	// 获取绝对路径，方便专家直接调用
 	absPath, _ := filepath.Abs(filePath)
@@ -2596,14 +2598,10 @@ func (s *Server) handleGetChatFile(c *gin.Context) {
 	// 1. 确定物理路径
 	uploadDir := "./data/uploads"
 	if botId != "" && botId != "default" {
-		botsData, err := process.GetOpenClawBotsModels(s.cfg.OpenClawConfigDir)
-		if err == nil {
-			for _, bot := range botsData.Bots {
-				if bot.ID == botId && bot.Workspace != "" {
-					uploadDir = filepath.Join(utils.ExpandPath(bot.Workspace), "uploads")
-					break
-				}
-			}
+		// 优化：使用轻量级方法获取路径，避免加载沉重的模型能力对账
+		workspace, err := process.GetBotWorkspace(s.cfg.OpenClawConfigDir, botId)
+		if err == nil && workspace != "" {
+			uploadDir = filepath.Join(workspace, "uploads")
 		}
 	}
 
