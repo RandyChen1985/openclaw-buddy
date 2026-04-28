@@ -4,7 +4,7 @@ import {
   Folder, FileText, ChevronRight, ChevronLeft, Save, Eye, PenLine, Trash2, FolderOpen, 
   Upload, Download, Search, LayoutList, Maximize2, Minimize2, 
   FileJson, FileCode2, Image as ImageIcon, Monitor, Terminal, File,
-  FolderPlus, FilePlus, Copy
+  FolderPlus, FilePlus, Copy, PanelLeftOpen, PanelLeftClose
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -92,6 +92,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [excelData, setExcelData] = useState<{ columns: any[], dataSource: any[] } | null>(null);
   const [wordHtml, setWordHtml] = useState<string | null>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   // Create Modal States
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -538,6 +539,15 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
           gap: isMobile ? 12 : 0
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, width: isMobile ? '100%' : 'auto' }}>
+            {!isMobile && (
+              <Button
+                type="text"
+                size="small"
+                icon={isSidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                style={{ color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              />
+            )}
             {(isEditing || (isMobile && currentPath !== rootPath)) && (
               <Button 
                 type="text" 
@@ -675,11 +685,21 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: '#fff' }}>
         {!isMobile && (
-          <div style={{ width: 280, display: 'flex', flexDirection: 'column', background: '#fcfdfe', borderRight: '1px solid #f1f5f9' }}>
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', fontSize: 12, fontWeight: 700, color: '#64748b', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ 
+            width: isSidebarCollapsed ? 0 : 280, 
+            display: 'flex', 
+            flexDirection: 'column', 
+            background: '#fcfdfe', 
+            borderRight: isSidebarCollapsed ? 'none' : '1px solid #f1f5f9',
+            transition: 'all 0.3s ease-in-out',
+            overflow: 'hidden',
+            opacity: isSidebarCollapsed ? 0 : 1,
+            pointerEvents: isSidebarCollapsed ? 'none' : 'auto'
+          }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', fontSize: 12, fontWeight: 700, color: '#64748b', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
               <LayoutList size={14} /> {t('common.directory')}
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 8px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 8px', minWidth: 280 }}>
                 <DirectoryTree
                   loadData={onLoadData}
                   treeData={treeData}
