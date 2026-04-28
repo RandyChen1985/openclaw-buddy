@@ -34,10 +34,11 @@ interface V3InputAreaProps {
   isFocused: boolean;
   setIsFocused: (val: boolean) => void;
   selectedBot: string;
+  supportsImage?: boolean;
 }
 
 const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputAreaProps> = ({ 
-  status, isMobile, isTyping, sessionComposeBlocked = false, onSend, onStop, t, isComposing, setIsComposing, isFocused, setIsFocused, selectedBot
+  status, isMobile, isTyping, sessionComposeBlocked = false, onSend, onStop, t, isComposing, setIsComposing, isFocused, setIsFocused, selectedBot, supportsImage = false
 }, ref) => {
   const inputLocked = isTyping || sessionComposeBlocked;
   const [text, setText] = useState('');
@@ -102,12 +103,20 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
   };
 
   // 优化 2 & 3: 提取状态逻辑，减少渲染开销
+  const hasImages = useMemo(() => files.some(f => f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)), [files]);
+
   const canSend = useMemo(() => {
-    return status === 'authenticated' && (isTyping || text.trim().length > 0 || files.length > 0) && !uploading && !sessionComposeBlocked;
-  }, [status, isTyping, text, files, uploading, sessionComposeBlocked]);
+    const baseConditions = status === 'authenticated' && (isTyping || text.trim().length > 0 || files.length > 0) && !uploading && !sessionComposeBlocked;
+    if (isTyping) return baseConditions; // 正在生成时，「停止」按钮必须可用
+    
+    // 如果包含图片，但当前模型不支持图片能力，则锁定发送
+    if (hasImages && !supportsImage) return false;
+    
+    return baseConditions;
+  }, [status, isTyping, text, files, uploading, sessionComposeBlocked, hasImages, supportsImage]);
 
   const buttonStyle = useMemo(() => {
-    const disabled = status !== 'authenticated' || (!isTyping && !text.trim() && files.length === 0) || uploading || sessionComposeBlocked;
+    const disabled = !canSend;
     if (disabled) {
       return {
         width: isMobile ? 36 : 40, height: isMobile ? 36 : 40, borderRadius: 12,
@@ -130,6 +139,26 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
 
   return (
     <div className={`v3-input-wrapper ${isFocused ? 'focused' : ''}`} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 0, position: 'relative' }}>
+      {/* 图像能力告警 */}
+      {files.some(f => f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) && !supportsImage && (
+        <div style={{ 
+          background: '#fff7ed', 
+          borderTop: '1px solid #ffedd5', 
+          padding: '6px 16px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 8,
+          animation: 'fadeIn 0.3s'
+        }}>
+          <div style={{ background: '#f59e0b', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <X size={10} color="#fff" />
+          </div>
+          <span style={{ fontSize: 11, color: '#9a3412', fontWeight: 500 }}>
+            {t('chat.modelNoImageSupport', { defaultValue: '当前模型不支持图片，请切换到“图片型”模型后再发送。' })}
+          </span>
+        </div>
+      )}
+      
       {/* 文件预览区域 */}
       {(files.length > 0 || uploading) && (
         <div style={{ 
@@ -293,7 +322,8 @@ const V3InputArea = React.memo(forwardRef(V3InputAreaInner), (prev, next) => {
          prev.sessionComposeBlocked === next.sessionComposeBlocked &&
          prev.isComposing === next.isComposing &&
          prev.isFocused === next.isFocused &&
-         prev.selectedBot === next.selectedBot;
+         prev.selectedBot === next.selectedBot &&
+         prev.supportsImage === next.supportsImage;
 });
 
 export default V3InputArea;

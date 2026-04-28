@@ -18,21 +18,25 @@ import (
 var expertTemplates embed.FS
 
 type OpenClawBot struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Model        string `json:"model"`
-	Emoji        string `json:"emoji"`
-	Workspace    string `json:"workspace"`
-	AgentDir     string `json:"agentDir"`
-	RoutingRules string `json:"routingRules"`
-	Routing      string `json:"routing"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Model        string   `json:"model"`
+	Emoji        string   `json:"emoji"`
+	Workspace    string   `json:"workspace"`
+	AgentDir     string   `json:"agentDir"`
+	RoutingRules string   `json:"routingRules"`
+	Routing      string   `json:"routing"`
+	Capabilities []string `json:"capabilities"`
+	Input        []string `json:"input"`
 }
 
 type OpenClawModel struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Provider  string `json:"provider"`
-	IsDefault bool   `json:"isDefault"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Provider     string   `json:"provider"`
+	IsDefault    bool     `json:"isDefault"`
+	Capabilities []string `json:"capabilities"`
+	Input        []string `json:"input"`
 }
 
 type OpenClawSession struct {
@@ -384,6 +388,92 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 						IsDefault: isDefault,
 					})
 				}
+			}
+		}
+	}
+
+	// --- 3. 合并物理配置中的能力标识 (以用户填写为准) ---
+	providers, _ := GetOpenClawModelsConfig(configDir)
+	modelCaps := make(map[string][]string)
+	for _, p := range providers {
+		if pMap, ok := p.(map[string]interface{}); ok {
+			if ms, ok := pMap["models"].([]interface{}); ok {
+				for _, m := range ms {
+					if mMap, ok := m.(map[string]interface{}); ok {
+						if id, ok := mMap["id"].(string); ok {
+							// 优先读取 input 数组 (对应前端「支持的能力」)
+							if caps, ok := mMap["input"].([]interface{}); ok {
+								strCaps := []string{}
+								for _, c := range caps {
+									if s, ok := c.(string); ok {
+										strCaps = append(strCaps, s)
+									}
+								}
+								modelCaps[id] = strCaps
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 辅助函数：判断是否包含
+	contains := func(slice []string, val string) bool {
+		for _, item := range slice {
+			if item == val {
+				return true
+			}
+		}
+		return false
+	}
+
+	// 启发式函数：基于名称判断 Vision 能力
+	isVisionModel := func(id string) bool {
+		id = strings.ToLower(id)
+		return strings.Contains(id, "vision") ||
+			strings.Contains(id, "gpt-4o") ||
+			strings.Contains(id, "gpt-4-turbo") ||
+			strings.Contains(id, "claude-3") ||
+			strings.Contains(id, "gemini") ||
+			strings.Contains(id, "vl-") ||
+			strings.HasSuffix(id, "-vl") ||
+			strings.Contains(id, "llava") ||
+			strings.Contains(id, "qwen-vl")
+	}
+
+	// 注入模型能力
+	for i := range res.Models {
+		m := &res.Models[i]
+		
+		// 优先从物理配置匹配
+		idParts := strings.Split(m.ID, "/")
+		baseID := idParts[len(idParts)-1]
+		
+		if caps, ok := modelCaps[m.ID]; ok {
+			m.Capabilities = caps
+		} else if caps, ok := modelCaps[baseID]; ok {
+			m.Capabilities = caps
+		}
+		
+		// 兼容旧字段
+		m.Input = m.Capabilities
+		
+		// 如果物理配置没填，应用启发式规则
+		if !contains(m.Capabilities, "image") && isVisionModel(m.ID) {
+			m.Capabilities = append(m.Capabilities, "image")
+			m.Input = m.Capabilities
+		}
+	}
+
+	// 注入机器人能力 (基于其当前绑定的模型)
+	for i := range res.Bots {
+		b := &res.Bots[i]
+		for _, m := range res.Models {
+			if m.ID == b.Model {
+				b.Capabilities = m.Capabilities
+				b.Input = m.Input
+				break
 			}
 		}
 	}

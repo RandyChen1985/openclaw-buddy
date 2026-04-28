@@ -2501,17 +2501,18 @@ func (s *Server) handleChatUpload(c *gin.Context) {
 		return
 	}
 
-	// 3.1 如果是图片，生成缩略图
+	// 3.1 如果是图片，异步生成缩略图 (不阻塞上传响应)
 	thumbName := ""
 	if strings.HasPrefix(c.Request.Header.Get("Content-Type"), "image/") || 
 	   matchExt(ext, ".jpg", ".jpeg", ".png", ".webp", ".gif") {
-		// 统一缩略图后缀为 .thumb.jpg，方便辨认
 		thumbName = uniqueName + ".thumb.jpg"
-		err := generateThumbnail(filePath, filepath.Join(uploadDir, thumbName))
-		if err != nil {
-			log.Printf("⚠️ [Upload] 生成缩略图失败: %v", err)
-			thumbName = "" // 失败则清空，前端会自动降级到原图
-		}
+		// 使用 Goroutine 异步生成，接口秒回
+		go func(src, dst string) {
+			err := generateThumbnail(src, dst)
+			if err != nil {
+				log.Printf("⚠️ [Upload] 异步生成缩略图失败: %v", err)
+			}
+		}(filePath, filepath.Join(uploadDir, thumbName))
 	}
 
 	// 获取绝对路径，方便专家直接调用
@@ -2566,6 +2567,11 @@ func generateThumbnail(srcPath, dstPath string) error {
 	bounds := img.Bounds()
 	width := bounds.Dx()
 	height := bounds.Dy()
+	
+	// 如果原图宽度已经小于等于 200px，没必要生成缩略图，直接返回
+	if width <= 200 {
+		return nil
+	}
 	
 	newWidth := 200
 	if width < 200 { newWidth = width } // 如果原图就很小，保持原宽
