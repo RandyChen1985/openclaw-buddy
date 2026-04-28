@@ -77,7 +77,15 @@ const Sparkline = ({ data }: { data: number[] }) => {
   );
 };
 
-const CollapsibleMeta = ({ title, icon: Icon, children, defaultExpanded = false }: any) => {
+const CollapsibleMeta = ({
+  title,
+  icon: Icon,
+  children,
+  defaultExpanded = false,
+  copyText,
+  onCopy,
+  copyLabel,
+}: any) => {
   const [isExpanded, setIsExpanded] = React.useState(defaultExpanded);
 
   React.useEffect(() => {
@@ -98,11 +106,36 @@ const CollapsibleMeta = ({ title, icon: Icon, children, defaultExpanded = false 
           }
         }}
       >
-        <div style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-          <ChevronRight size={14} strokeWidth={2} />
+        <div className="v3-meta-header-left">
+          <div style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <ChevronRight size={14} strokeWidth={2} />
+          </div>
+          <Icon size={14} strokeWidth={2} style={{ flexShrink: 0 }} />
+          <span className="v3-meta-header-title">{title}</span>
         </div>
-        <Icon size={14} strokeWidth={2} style={{ flexShrink: 0 }} />
-        <span style={{ flex: 1, minWidth: 0, lineHeight: 1.4 }}>{title}</span>
+        {!!copyText && (
+          <div
+            className="v3-meta-header-actions"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onKeyDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <Tooltip title={copyLabel}>
+              <Button
+                type="text"
+                size="small"
+                className="v3-meta-copy-btn"
+                icon={<Copy size={14} strokeWidth={2} />}
+                onClick={() => onCopy?.(copyText)}
+              />
+            </Tooltip>
+          </div>
+        )}
       </div>
       {isExpanded && (
         <div className="v3-meta-content" style={{ animation: 'v3-fade-in 0.3s' }}>
@@ -154,6 +187,25 @@ const stripToolResultWrapper = (fullText: string) => {
     if (/^:::\s*$/.test(plain.trim())) break;
     // 跳过工具名行：**xxx**
     if (/^\*\*[^*\n]+\*\*\s*$/.test(plain.trim())) continue;
+    out.push(plain);
+  }
+  return out.join('\n').trim();
+};
+
+const stripContainerWrapper = (fullText: string, kind: string) => {
+  const lines = String(fullText || '').split('\n');
+  const out: string[] = [];
+  let started = false;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const plain = l.replace(/^\s*>\s?/, '').trimEnd();
+    if (!started) {
+      if (new RegExp(`^:::\\s*${kind}\\b`, 'i').test(plain.trim())) {
+        started = true;
+      }
+      continue;
+    }
+    if (/^:::\s*$/.test(plain.trim())) break;
     out.push(plain);
   }
   return out.join('\n').trim();
@@ -454,7 +506,19 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         );
       }
       if (fullText.includes(':::analysis')) {
-        return <CollapsibleMeta title={t('chat.analysisProcess', { defaultValue: '分析过程' })} icon={Search} defaultExpanded={false}>{cleanChildren}</CollapsibleMeta>;
+        const analysisCopyText = stripContainerWrapper(fullText, 'analysis') || '';
+        return (
+          <CollapsibleMeta
+            title={t('chat.analysisProcess', { defaultValue: '分析过程' })}
+            icon={Search}
+            defaultExpanded={true}
+            copyText={analysisCopyText}
+            onCopy={(txt: string) => copyToClipboard(txt)}
+            copyLabel={t('chat.copy', { defaultValue: '复制' })}
+          >
+            {cleanChildren}
+          </CollapsibleMeta>
+        );
       }
       if (fullText.includes(':::commandOutput')) {
         const titleMatch = fullText.match(/^\s*:::commandOutput\s*\n+\s*\*\*([^*\n]+)\*\*/);

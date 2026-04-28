@@ -411,6 +411,45 @@ button.v3-settings-reasoning-btn:active {
   transition: background 0.2s ease, color 0.2s ease;
 }
 
+.v3-meta-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.v3-meta-header-title {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v3-meta-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.v3-meta-copy-btn.ant-btn.ant-btn-text.ant-btn-sm {
+  height: 26px;
+  width: 26px;
+  min-width: 26px;
+  padding: 0;
+  border-radius: 8px;
+  color: #475569;
+}
+
+.v3-meta-copy-btn.ant-btn.ant-btn-text.ant-btn-sm:hover {
+  color: #1e293b;
+  background: rgba(99, 102, 241, 0.10) !important;
+}
+
 .v3-meta-collapsible.collapsed .v3-meta-header {
   border-bottom-color: transparent;
 }
