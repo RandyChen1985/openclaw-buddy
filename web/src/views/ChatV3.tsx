@@ -203,12 +203,22 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         const botId = quickChatBot.replace('openclaw:', '');
         setSelectedBot(quickChatBot);
         startNewSession(botId);
-      } else if (!selectedBot) {
+      } else if (!selectedBot && !sessionKey) {
         const firstBot = botsModels.data.bots[0];
         setSelectedBot(`openclaw:${firstBot.id}`);
       }
     }
-  }, [botsModels, selectedBot, startNewSession]);
+  }, [botsModels, selectedBot, sessionKey, startNewSession]);
+
+  // 首次进入/刷新：若已恢复 sessionKey，则强制将 bot 下拉与会话 key 对齐，避免“默认选中第一个 bot”造成错配
+  useEffect(() => {
+    if (!sessionKey) return;
+    const { botId } = parseSessionKey(sessionKey);
+    const desired = `openclaw:${botId}`;
+    if (desired && desired !== selectedBot) {
+      setSelectedBot(desired);
+    }
+  }, [sessionKey, selectedBot]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
