@@ -211,6 +211,57 @@ const stripContainerWrapper = (fullText: string, kind: string) => {
   return out.join('\n').trim();
 };
 
+/**
+ * 提取并清洗用于引用的内容，移除思考过程、工具调用等元数据。
+ */
+const getCleanQuoteContent = (content: string, role: string) => {
+  if (!content) return '';
+  let res = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // 1. 如果是用户消息，执行清洗逻辑
+  if (role === 'user') {
+    const timestampRegex = /\[(?:[A-Z][a-z]{2} )?\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})? GMT[+-]\d+\]/g;
+    let lastMatch;
+    let match;
+    while ((match = timestampRegex.exec(res)) !== null) {
+      lastMatch = match;
+    }
+    if (lastMatch) {
+      res = res.substring(lastMatch.index + lastMatch[0].length);
+    }
+    res = res.replace(/<(anti-hallucination-guardrails|system_instruction|thought|think)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+    const bootstrapWarningIdx = res.indexOf('[Bootstrap truncation warning]');
+    if (bootstrapWarningIdx !== -1) {
+      res = res.substring(0, bootstrapWarningIdx);
+    }
+    return res.trim();
+  }
+
+  // 2. 如果是助手消息，强力清洗所有元数据块
+  res = res
+    // 移除 HTML 注释
+    .replace(/(?:^|\n)\s*>\s*<!--agentItem:[^>]*-->\s*/g, '\n')
+    .replace(/<!--\s*tool:[^>]*-->/g, '')
+    // 移除 XML 标签块 (如 <think>...</think>)
+    .replace(/<(anti-hallucination-guardrails|ephemeral_message|available_skills|relevant[-_]memories|thought|think|thought_process|reasoning|system_instruction)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+    // 移除 ::: 容器块 (:::thinking, :::toolCall 等)
+    .replace(/(?:^|\n)\s*(?:>\s*)?:::(?:thinking|plan|toolCall|toolResult|commandOutput|analysis|approval|warning)[\s\S]*?((?:^|\n)\s*(?:>\s*)?:::|$)/gi, '\n')
+    // 移除系统标识与警告
+    .replace(/\[(search|coding)-mode|Bootstrap truncation warning|Queued user message that arrived while the previous turn was still active\][\s\S]*?(?=\n\n|\n\s*\[|\n\s*<|$)/gi, '')
+    // 移除系统日志行
+    .replace(/^(?:System \(untrusted\):|System:).*?(?:\n|$)/gm, '')
+    // 移除时间戳
+    .replace(/(?:^|\n)\s*\[(?:[A-Z][a-z]{2} )?\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})? GMT[+-]\d+\]\s*/g, '\n')
+    // 移除工具状态行
+    .replace(/(?:^|\n)\s*(?:>\s*)?[🔧✅❌⚠️]\s*`[^`]+`\s*(?:执行中(?:…|\.{3})|完成|失败|错误)(?:\s*<!--[\s\S]*?-->)?/g, '\n')
+    // 移除多余的转圈/思考占位
+    .replace(/^[.\s…]+$/g, '')
+    // 压缩连续换行
+    .replace(/\n{3,}/g, '\n\n');
+
+  return res.trim();
+};
+
 const V3MessageItem: React.FC<V3MessageItemProps> = ({ 
   msg, index, isMobile, showThinking,
   editingMsgIndex, editContent, setEditContent,
@@ -843,7 +894,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                 {!(isTyping && isLast) && (
                   <div style={{ display: 'flex', gap: 2 }}>
                     <Tooltip title={t('chat.copy')}><Button type="text" size="small" icon={<Copy size={11} />} onClick={() => copyToClipboard(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
-                    <Tooltip title={t('chat.reply')}><Button type="text" size="small" icon={<Quote size={11} />} onClick={() => onQuote(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
+                    <Tooltip title={t('chat.reply')}><Button type="text" size="small" icon={<Quote size={11} />} onClick={() => onQuote(getCleanQuoteContent(msg.content, msg.role))} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
                     {!isUser && onSaveToWorkspace && (
                       <Tooltip title={t('chat.saveToWorkspace', { defaultValue: '保存到工作区' })}>
                         <Button type="text" size="small" icon={<Save size={11} />} onClick={() => onSaveToWorkspace(msg.content)} style={{ color: '#64748b' }} />
