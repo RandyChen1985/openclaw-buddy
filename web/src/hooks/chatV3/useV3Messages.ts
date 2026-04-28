@@ -2125,7 +2125,7 @@ export function useV3Messages({
           ? `\n![${f.filename}](${f.thumbUrl || f.url} \"${f.url}\")\n(File path: ${f.path})`
           : `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
       }).join('');
-      finalContent += fileLinks + `\n\n**System Note for Expert:** The user has uploaded files. Access them via absolute \"File path\" provided.`;
+      finalContent += fileLinks + `\n\n**System Note for Expert:** The user has uploaded files. Access them via absolute \"File path\" provided. Please analyze the content and respond in Chinese.`;
     }
 
     const now = Date.now();
