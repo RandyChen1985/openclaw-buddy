@@ -20,6 +20,7 @@ export interface V3SessionListProps {
   isMobile: boolean;
   setShowSider: (show: boolean) => void;
   copyToClipboard: (text: string) => void;
+  botsModels?: any; // 💡 注入机器人列表，用于根据 botId 查询名称
   t: any;
 }
 
@@ -85,7 +86,7 @@ const SessionStatusIcon = ({ status, t }: { status: string, t: any }) => {
 const V3SessionList: React.FC<V3SessionListProps> = ({
   sessions, sessionKey, loadingSessions, sessionSearch, setSessionSearch,
   onSelectSession, onNewSession, onDeleteSession, onDeleteGroup, onClearAll, fetchSessions,
-  isMobile, setShowSider, copyToClipboard, t,
+  isMobile, setShowSider, copyToClipboard, botsModels, t,
   typingSessionKeys = [],
   newSessionBusy = false
 }) => {
@@ -360,15 +361,22 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                               {/* Token 水位线 */}
                               {s.contextTokens > 0 && (
                                 <div style={{ marginTop: 6, width: '100%' }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, fontSize: 9, fontWeight: 600 }}>
-                                     <span style={{ color: '#94a3b8', transform: 'scale(0.9)', transformOrigin: 'left' }}>CONTEXT</span>
-                                     <span style={{ 
-                                       color: (s.totalTokens / s.contextTokens) > 0.8 ? '#ef4444' : (isActive ? '#4f46e5' : '#64748b'),
-                                       opacity: 0.8
-                                     }}>
-                                       {Math.round((s.totalTokens / s.contextTokens) * 100)}%
-                                     </span>
-                                  </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, fontSize: 9, fontWeight: 600 }}>
+                                       <span style={{ color: isActive ? '#4f46e5' : '#94a3b8', transform: 'scale(0.9)', transformOrigin: 'left', fontWeight: 800, textTransform: 'uppercase' }}>
+                                         {(() => {
+                                           const { botId } = parseSessionKey(s.key);
+                                           const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
+                                           return bot?.name || botId;
+                                         })()}
+                                       </span>
+                                       <span style={{ 
+                                         color: (s.totalTokens / s.contextTokens) > 0.8 ? '#ef4444' : (isActive ? '#4f46e5' : '#64748b'),
+                                         opacity: 0.8
+                                       }}>
+                                         <span style={{ opacity: 0.6, marginRight: 4, fontWeight: 400 }}>CONTEXT</span>
+                                         {Math.round((s.totalTokens / s.contextTokens) * 100)}%
+                                       </span>
+                                    </div>
                                   <div style={{ height: 3, width: '100%', background: isActive ? 'rgba(79, 70, 229, 0.1)' : '#f1f5f9', borderRadius: 2, overflow: 'hidden' }}>
                                     <div style={{ 
                                       height: '100%', 
@@ -478,11 +486,17 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                 {mainSession.contextTokens > 0 && (
                                     <div style={{ marginTop: 6, width: '100%' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, fontSize: 9, fontWeight: 700 }}>
-                                        <span style={{ color: 'var(--v3-primary, #6366f1)', opacity: 0.7, transform: 'scale(0.9)', transformOrigin: 'left' }}>CONTEXT</span>
+                                        <span style={{ color: 'var(--v3-primary, #6366f1)', opacity: 0.8, transform: 'scale(0.9)', transformOrigin: 'left', fontWeight: 900 }}>
+                                          {(() => {
+                                            const bot = botsModels?.data?.bots?.find((b: any) => b.id === 'main');
+                                            return bot?.name || t('chat.mainBotName', { defaultValue: '系统主机器人' });
+                                          })()}
+                                        </span>
                                         <span style={{ 
                                             color: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : 'var(--v3-primary, #4f46e5)',
                                             opacity: 0.8
                                         }}>
+                                            <span style={{ opacity: 0.6, marginRight: 4, fontWeight: 400 }}>CONTEXT</span>
                                             {Math.round((mainSession.totalTokens / mainSession.contextTokens) * 100)}%
                                         </span>
                                     </div>

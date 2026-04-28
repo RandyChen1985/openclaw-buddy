@@ -250,6 +250,24 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
                 handleInnerSend();
               }
             }}
+            onPaste={async (e) => {
+              const items = e.clipboardData?.items;
+              if (!items) return;
+              
+              const imageFiles: File[] = [];
+              for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                  const file = items[i].getAsFile();
+                  if (file) imageFiles.push(file);
+                }
+              }
+              
+              if (imageFiles.length > 0) {
+                // 💡 发现图片，阻止默认粘贴行为（避免在文本框出现 [object File] 或重复文本），触发自动上传
+                e.preventDefault();
+                await uploadRawFiles(imageFiles);
+              }
+            }}
             disabled={status !== 'authenticated' || inputLocked || uploading}
             variant="borderless"
             style={{ padding: '4px 0', fontSize: 13, opacity: inputLocked ? 0.6 : 1, minHeight: 32 }}

@@ -36,6 +36,7 @@ export interface Message {
     tps?: number;
   };
   senderLabel?: string;
+  _thinkStartedAt?: number; // 💡 记录思考开始时间戳，用于 UI 跨组件重绘时保持计时器不重置
 }
 
 interface UseChatV3WebSocketProps {

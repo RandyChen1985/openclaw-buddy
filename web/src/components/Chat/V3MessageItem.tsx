@@ -32,6 +32,7 @@ const katexSanitizeSchema: typeof defaultSchema = {
   ]
 };
 import { Mermaid, CodeBlock, ECharts, isEchartsCodeFenceLanguage } from '../ChatComponents';
+import { isAssistantUiThinkingPlaceholder } from '../../hooks/chatV3/useV3Messages';
 
 interface V3MessageItemProps {
   msg: any;
@@ -222,7 +223,20 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   const [approvalClicked, setApprovalClicked] = useState<Record<string, boolean>>({});
 
   const processedContent = useMemo(() => {
-    let content = (msg.content || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    let content = String(msg.content || '');
+    const x = content.trim();
+
+    // 💡 优化：如果关闭了“显示思考”，且该消息看起来只是个占位符，则不显示正文（避免用户看到重复的“思考中...”）
+    const looksLikePlaceholder = isAssistantUiThinkingPlaceholder(x, t('chat.thinking'), t('chat.deepThinking', { defaultValue: '深度思考中...' }))
+      || x.includes('正在思考回复中')
+      || x.includes('Lobster 正在思考')
+      || x === '正在思考中...';
+
+    if (!showThinking && looksLikePlaceholder) {
+      return '';
+    }
+
+    content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
     // 💡 针对 User 消息的特殊历史数据清洗逻辑
     if (msg.role === 'user') {
@@ -341,30 +355,32 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   const isSubAgent = !isUser && senderLabel.includes(':subagent:');
   const subAgentId = isSubAgent ? (senderLabel.split(':').pop() || '').substring(0, 8) : null;
 
-  // metaContent 只做轻量预处理：清掉内部 upsert 用的 itemId 注释即可，
-  // 保留所有 :::thinking / :::plan / :::toolCall / :::commandOutput 块供 blockquote 渲染器展开为 CollapsibleMeta
-  const processedMetaContent = useMemo(() => {
-    if (!metaContent) return '';
-    return metaContent.replace(/(?:^|\n)\s*>\s*<!--agentItem:[^>]*-->\s*/g, '\n').trim();
-  }, [metaContent]);
-
-  const hasEmbeddedMeta = !isMetaOnly && !isUser && !!processedMetaContent;
-
-  // 思考信息折叠区的折叠策略（独立 meta 气泡 & 嵌入主气泡底部 meta 区）：
-  // - 默认折叠，避免流式阶段工具/Command Output 展开导致整屏高度跳动
-  // - 用户点击标题栏可展开查看；手动展开/折叠后不再自动改（metaUserToggledRef）
-  const metaSectionActive = isMetaOnly || hasEmbeddedMeta;
-  /**
-   * 折叠条「生成中」动效与 live 样式：整条助手回复在生成时（isTyping）即展示，不能绑在 !mainHasTranscript 上，
-   * 否则主气泡一旦吐字「仅无正文」条件恒为 false，转圈/思考中前缀永远不会出现。
-   */
-  const metaFoldGenerationUi =
-    metaSectionActive && msg.role === 'assistant' && !!(isTyping && isLast);
   /** 与 session.tool / meta 块里的「🔧 … 执行中」对齐，用于折叠条副文案 */
   const rawMetaForFoldHint = useMemo(() => {
     if (isMetaOnly) return String(msg.content || '').replace(/\r\n/g, '\n');
     return String(metaContent || '').replace(/\r\n/g, '\n');
   }, [isMetaOnly, msg.content, metaContent]);
+
+  // metaContent 只做轻量预处理：清掉内部 upsert 用的 itemId 注释即可，
+  // 保留所有 :::thinking / :::plan / :::toolCall / :::commandOutput 块供 blockquote 渲染器展开为 CollapsibleMeta
+  const processedMetaContent = useMemo(() => {
+    if (isUser || !showThinking || !rawMetaForFoldHint) return null;
+    return rawMetaForFoldHint.replace(/(?:^|\n)\s*>\s*<!--agentItem:[^>]*-->\s*/g, '\n').trim();
+  }, [rawMetaForFoldHint, showThinking, isUser]);
+
+  const hasEmbeddedMeta = !isMetaOnly && !isUser && !!rawMetaForFoldHint;
+
+  // 思考信息折叠区的折叠策略（独立 meta 气泡 & 嵌入主气泡底部 meta 区）：
+  // - 默认折叠，避免流式阶段工具/Command Output 展开导致整屏高度跳动
+  // - 用户点击标题栏可展开查看；手动展开/折叠后不再自动改（metaUserToggledRef）
+  // 💡 强化：只要是正在生成中的 AI 消息，强制激活该区域显示状态条
+  const metaSectionActive = isMetaOnly || hasEmbeddedMeta || (isTyping && !isUser);
+  
+  /**
+   * 折叠条「生成中」动效与 live 样式：整条助手回复在生成时（isTyping）即展示
+   */
+  const metaFoldGenerationUi =
+    metaSectionActive && msg.role === 'assistant' && !!isTyping;
   const metaFoldToolCallCount = useMemo(() => {
     if (!rawMetaForFoldHint) return 0;
     // 统计 :::toolCall 的数量或 🔧 的数量
@@ -421,14 +437,21 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   useEffect(() => {
     let interval: any;
     if (isThinkingState) {
-      interval = setInterval(() => {
-        setThinkingSeconds((s: number) => s + 1);
-      }, 1000);
+      // 💡 优化：优先使用消息对象里存的 _thinkStartedAt，保证跨组件重绘（如 show 开关切换）时计时不重置
+      const startAt = msg._thinkStartedAt || Date.now();
+      
+      const update = () => {
+        const elapsed = Math.floor((Date.now() - startAt) / 1000);
+        setThinkingSeconds(elapsed > 0 ? elapsed : 0);
+      };
+      
+      update(); // 立即执行一次
+      interval = setInterval(update, 1000);
     } else {
       setThinkingSeconds(0);
     }
     return () => clearInterval(interval);
-  }, [isThinkingState]);
+  }, [isThinkingState, msg._thinkStartedAt]);
 
   // 💡 关键修复：确保用户消息永远显示，不被空内容判断拦截
   if (!processedContent && !isUser && !(isTyping && isLast && !isUser) && !hasApproval && !hasEmbeddedMeta) return null;
@@ -764,7 +787,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                 </ReactMarkdown>
               </div>
 
-              {hasEmbeddedMeta && (() => {
+              {(hasEmbeddedMeta || (isTyping && !isUser)) && (() => {
                 // 嵌入式折叠区：挂在主气泡正文最底部
                 const thinkingShort = t('chat.metaFoldThinkingShort', { defaultValue: '思考中…' });
                 const suffixLabel = metaExpanded
@@ -777,21 +800,31 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                 const embedLabel =
                   !metaExpanded && metaFoldGenerationUi ? `${thinkingShort} · ${suffixLabel}` : suffixLabel;
 
-                // 💡 优化：如果关闭了“显示思考”，但在生成中，显示一个不带折叠条的轻量级提示
+                // 💡 优化：如果关闭了“显示思考”，但在生成中，显示一个“紫色窄条”样式的轻量级提示（不带点击折叠功能）
                 if (!showThinking) {
                   if (metaFoldGenerationUi) {
                     return (
                       <div style={{ 
-                        marginTop: 8, 
+                        marginTop: 10, 
                         display: 'flex', 
                         alignItems: 'center', 
-                        gap: 6, 
-                        fontSize: 12, 
-                        color: '#94a3b8',
+                        gap: 8, 
+                        padding: '6px 12px',
+                        background: 'rgba(79, 70, 229, 0.04)',
+                        border: '1px solid rgba(79, 70, 229, 0.1)',
+                        borderRadius: '8px',
+                        fontSize: '11px', 
+                        fontWeight: 600,
+                        color: '#6366f1',
+                        width: 'fit-content',
                         animation: 'v3-fade-in 0.3s'
                       }}>
-                        <Loader2 size={14} className="v3-thinking-spinner" />
-                        <span>{metaFoldIsToolCallGenerating ? t('chat.toolCallingWithCount', { defaultValue: `工具调用中 (已执行 ${metaFoldToolCallCount} 次)...` }) : t('chat.processing', { defaultValue: '正在处理中...' })}</span>
+                        <Loader2 size={13} className="v3-thinking-spinner" style={{ color: '#6366f1' }} />
+                        <span style={{ letterSpacing: '0.3px' }}>
+                          {metaFoldIsToolCallGenerating 
+                            ? t('chat.metaFoldExpandLiveTool', { defaultValue: '工具调用生成中' }) 
+                            : t('chat.metaFoldThinkingShort', { defaultValue: '思考中…' })}
+                        </span>
                       </div>
                     );
                   }

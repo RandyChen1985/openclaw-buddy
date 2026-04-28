@@ -387,6 +387,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           }}>
             <V3SessionList
               sessions={sessions}
+              botsModels={botsModels}
               sessionKey={sessionKey}
               typingSessionKeys={typingSessionKeys}
               loadingSessions={loadingSessions}
