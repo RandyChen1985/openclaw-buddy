@@ -365,6 +365,13 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
     if (isMetaOnly) return String(msg.content || '').replace(/\r\n/g, '\n');
     return String(metaContent || '').replace(/\r\n/g, '\n');
   }, [isMetaOnly, msg.content, metaContent]);
+  const metaFoldToolCallCount = useMemo(() => {
+    if (!rawMetaForFoldHint) return 0;
+    // 统计 :::toolCall 的数量或 🔧 的数量
+    const count = (rawMetaForFoldHint.match(/:::toolCall/gi) || []).length || (rawMetaForFoldHint.match(/🔧/g) || []).length;
+    return count;
+  }, [rawMetaForFoldHint]);
+
   const metaFoldIsToolCallGenerating = useMemo(() => {
     if (!metaFoldGenerationUi || !rawMetaForFoldHint) return false;
     const s = rawMetaForFoldHint;
@@ -769,6 +776,28 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                     : t('chat.metaFoldExpand', { defaultValue: '点击展开本次思考或工具调用' });
                 const embedLabel =
                   !metaExpanded && metaFoldGenerationUi ? `${thinkingShort} · ${suffixLabel}` : suffixLabel;
+
+                // 💡 优化：如果关闭了“显示思考”，但在生成中，显示一个不带折叠条的轻量级提示
+                if (!showThinking) {
+                  if (metaFoldGenerationUi) {
+                    return (
+                      <div style={{ 
+                        marginTop: 8, 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 6, 
+                        fontSize: 12, 
+                        color: '#94a3b8',
+                        animation: 'v3-fade-in 0.3s'
+                      }}>
+                        <Loader2 size={14} className="v3-thinking-spinner" />
+                        <span>{metaFoldIsToolCallGenerating ? t('chat.toolCallingWithCount', { defaultValue: `工具调用中 (已执行 ${metaFoldToolCallCount} 次)...` }) : t('chat.processing', { defaultValue: '正在处理中...' })}</span>
+                      </div>
+                    );
+                  }
+                  return null; // 非生成状态下，不显示任何东西
+                }
+
                 return (
                   <div style={{ marginTop: 10 }}>
                     <div
@@ -789,7 +818,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                       {!metaExpanded && metaFoldGenerationUi && (
                         <>
                           <Loader2 size={14} strokeWidth={2} className="v3-thinking-spinner v3-meta-fold-chip-spinner" aria-hidden />
-                          <span className="v3-meta-fold-chip-thinking">{thinkingShort}</span>
+                          <span className="v3-meta-fold-chip-thinking">{metaFoldIsToolCallGenerating ? `${thinkingShort} (${metaFoldToolCallCount})` : thinkingShort}</span>
                           <span className="v3-meta-fold-chip-sep" aria-hidden>·</span>
                         </>
                       )}

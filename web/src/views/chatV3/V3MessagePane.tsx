@@ -121,7 +121,10 @@ export function V3MessagePane({
         
         // 如果开启了“显示思考/工具”，则保留所有助手消息
         // 如果关闭了，则过滤掉那些“只有工具回执、没有正文”的骨架消息
-        if (!showThinking && isAssistantSkeletonContent(content)) {
+        // 💡 优化：如果是当前正在吐字的最后一条消息，无论开关如何都必须放行，
+        // 否则在思考阶段用户会看到一片空白，没有反馈。
+        const isLastAndTyping = isTyping && m.id === messages[messages.length - 1]?.id;
+        if (!showThinking && isAssistantSkeletonContent(content) && !isLastAndTyping) {
           return false;
         }
       }

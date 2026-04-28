@@ -2256,11 +2256,13 @@ func (s *Server) unbindWeChatAccount(c *gin.Context) {
 }
 
 func (s *Server) summarizeSession(c *gin.Context) {
+	log.Printf("🔍 [Summarize] API Hit: %s %s", c.Request.Method, c.Request.URL.Path)
 	var req struct {
 		Messages []map[string]interface{} `json:"messages" binding:"required"`
 		ModelID  string                   `json:"modelID"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("⚠️ [Summarize] JSON Bind Error: %v", err)
 		s.Error(c, http.StatusBadRequest, "参数错误: "+err.Error())
 		return
 	}
@@ -2268,6 +2270,7 @@ func (s *Server) summarizeSession(c *gin.Context) {
 	// 1. 获取模型和提供商配置
 	providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir)
 	if err != nil {
+		log.Printf("❌ [Summarize] Failed to get models config: %v", err)
 		s.Error(c, http.StatusInternalServerError, "无法加载模型配置: "+err.Error())
 		return
 	}
@@ -2336,8 +2339,30 @@ func (s *Server) summarizeSession(c *gin.Context) {
 		}
 	}
 
-	rawProv, ok := providers[providerName].(map[string]interface{})
-	if !ok {
+	// 2. 确定具体的提供商配置（支持不区分大小写的匹配）
+	var rawProv map[string]interface{}
+	var found bool
+	
+	// 首先尝试精确匹配
+	if p, ok := providers[providerName].(map[string]interface{}); ok {
+		rawProv = p
+		found = true
+	} else {
+		// 精确匹配失败，尝试不区分大小写匹配
+		for name, p := range providers {
+			if strings.EqualFold(name, providerName) {
+				if dp, ok := p.(map[string]interface{}); ok {
+					rawProv = dp
+					found = true
+					providerName = name // 修正为正确的 case
+					break
+				}
+			}
+		}
+	}
+
+	if !found {
+		log.Printf("❌ [Summarize] AI Provider not found: %s. Available keys: %v", providerName, getMapKeys(providers))
 		s.Error(c, http.StatusNotFound, "找不到对应提供商配置: "+providerName)
 		return
 	}
@@ -2820,4 +2845,12 @@ func (s *Server) deleteChannelAccount(c *gin.Context) {
 	}
 
 	s.Success(c, gin.H{"message": "Account deleted successfully"})
+}
+
+func getMapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

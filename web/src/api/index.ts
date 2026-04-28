@@ -99,15 +99,18 @@ export const summarizeSession = async (messages: any[], modelID?: string): Promi
     if (status === 404 && typeof window !== 'undefined') {
       try {
         const token = storage.getItem('guardian_token');
-        const fullUrl = `${window.location.origin}/v1/openclaw/chat/summarize`;
+        const base = getBaseURL();
+        const normalizedBase = base === '/' ? '' : base;
+        const fullUrl = `${window.location.origin}${normalizedBase}/v1/openclaw/chat/summarize`;
+        
         const retryRes = await axios.post(
           fullUrl,
           { messages, modelID },
           token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
         );
-        // 复用响应拦截器语义：此处直接返回 data.title（后端是标准 {code,data}，但重试不走 api 实例）
-        return retryRes?.data?.data?.title ?? retryRes?.data?.title ?? null;
+        return retryRes.data.data?.title || retryRes.data.title;
       } catch (retryErr) {
+        console.warn('Retry failed:', retryErr);
         console.error('Failed to summarize session (retry root /v1):', retryErr, { originalUrl: url });
         return null;
       }
