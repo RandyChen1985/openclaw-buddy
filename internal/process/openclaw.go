@@ -1769,3 +1769,44 @@ func GetSecurityStatusData() (*SecurityStatusData, error) {
 		Snapshot: snapshot,
 	}, nil
 }
+func GetBotWorkspace(configDir, botID string) (string, error) {
+	configPath := filepath.Join(configDir, "openclaw.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return "", err
+	}
+
+	var fullCfg map[string]interface{}
+	if err := json.Unmarshal(data, &fullCfg); err != nil {
+		return "", err
+	}
+
+	agents, ok := fullCfg["agents"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("agents not found")
+	}
+
+	list, ok := agents["list"].([]interface{})
+	if !ok {
+		return "", fmt.Errorf("agent list not found")
+	}
+
+	for _, item := range list {
+		bot, ok := item.(map[string]interface{})
+		if !ok { continue }
+		
+		id, _ := bot["id"].(string)
+		if id == botID {
+			ws, _ := bot["workspace"].(string)
+			if ws == "" {
+				// 尝试读取默认工作空间
+				if defaults, ok := agents["defaults"].(map[string]interface{}); ok {
+					ws, _ = defaults["workspace"].(string)
+				}
+			}
+			return utils.ExpandPath(ws), nil
+		}
+	}
+
+	return "", fmt.Errorf("bot not found")
+}

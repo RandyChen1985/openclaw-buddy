@@ -2467,17 +2467,13 @@ func (s *Server) handleChatUpload(c *gin.Context) {
 	uploadDir := "./data/uploads" // 默认路径
 
 	if botId != "" {
-		// 查找机器人对应的 workspace
-		botsData, err := process.GetOpenClawBotsModels(s.cfg.OpenClawConfigDir)
-		if err == nil {
-			for _, bot := range botsData.Bots {
-				if bot.ID == botId && bot.Workspace != "" {
-					// 如果机器人有专属 workspace，则在其下创建 uploads 目录
-					uploadDir = filepath.Join(utils.ExpandPath(bot.Workspace), "uploads")
-					break
-				}
-			}
+		start := time.Now()
+		// 优化：不再调用沉重的 GetOpenClawBotsModels，改为轻量级读取 Workspace
+		workspace, err := process.GetBotWorkspace(s.cfg.OpenClawConfigDir, botId)
+		if err == nil && workspace != "" {
+			uploadDir = filepath.Join(workspace, "uploads")
 		}
+		log.Printf("⏱️ [Upload] 查找机器人工作空间耗时: %v", time.Since(start))
 	}
 
 	// 2. 确保目录存在
@@ -2501,18 +2497,16 @@ func (s *Server) handleChatUpload(c *gin.Context) {
 		return
 	}
 
-	// 3.1 如果是图片，异步生成缩略图 (不阻塞上传响应)
+	// 3.1 如果是图片，生成缩略图 (同步生成)
 	thumbName := ""
 	if strings.HasPrefix(c.Request.Header.Get("Content-Type"), "image/") || 
 	   matchExt(ext, ".jpg", ".jpeg", ".png", ".webp", ".gif") {
 		thumbName = uniqueName + ".thumb.jpg"
-		// 使用 Goroutine 异步生成，接口秒回
-		go func(src, dst string) {
-			err := generateThumbnail(src, dst)
-			if err != nil {
-				log.Printf("⚠️ [Upload] 异步生成缩略图失败: %v", err)
-			}
-		}(filePath, filepath.Join(uploadDir, thumbName))
+		err := generateThumbnail(filePath, filepath.Join(uploadDir, thumbName))
+		if err != nil {
+			log.Printf("⚠️ [Upload] 生成缩略图失败: %v", err)
+			thumbName = "" // 失败则清空，前端会自动降级到原图
+		}
 	}
 
 	// 获取绝对路径，方便专家直接调用
@@ -2568,9 +2562,9 @@ func generateThumbnail(srcPath, dstPath string) error {
 	width := bounds.Dx()
 	height := bounds.Dy()
 	
-	// 如果原图宽度已经小于等于 200px，没必要生成缩略图，直接返回
+	// 如果原图宽度已经小于等于 200px，直接复制一份作为缩略图
 	if width <= 200 {
-		return nil
+		return utils.CopyFile(srcPath, dstPath)
 	}
 	
 	newWidth := 200
