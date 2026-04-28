@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { 
   Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star, 
   ChevronDown, ChevronUp, Activity, ZapOff, Bot, LayoutGrid, List, FolderOpen,
-  Eye, Save, Brain, Edit3, BrainCircuit, Copy, Heart, Users
+  Eye, Save, Brain, Edit3, BrainCircuit, Copy, Heart, Users, MessageSquare
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -29,13 +29,15 @@ interface BotsManagerProps {
   activeTasks?: any[];
   isRunning?: boolean;
   onNavigateToDashboard?: () => void;
+  onNavigateToChat?: (botId: string) => void;
 }
 
 const BotsManager: React.FC<BotsManagerProps> = ({ 
   botsModels, loadingBots, isMobile, onRefresh, onRefreshBots, modelsConfig, loadingConfig,
   onAddBot, onUpdateBot, onDeleteBot, onSetDefaultModel,
   activeTasks = [],
-  onNavigateToDashboard
+  onNavigateToDashboard,
+  onNavigateToChat
 }) => {
   const { t } = useTranslation();
   const cardColors = [
@@ -621,6 +623,15 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                              )}
                            </div>
                           <div style={{ display: 'flex', gap: 4 }}>
+                            {onNavigateToChat && (
+                              <Button
+                                type="text"
+                                size="small"
+                                icon={<MessageSquare size={16} />}
+                                onClick={() => onNavigateToChat(bot.id)}
+                                style={{ color: '#0ea5e9' }}
+                              />
+                            )}
                             <Button type="text" size="small" icon={<Pencil size={16} />} onClick={() => handleEditClick(bot)} style={{ color: '#94a3b8' }} />
                             {bot.id !== 'main' && (
                               <Button type="text" size="small" icon={<Trash2 size={16} />} onClick={() => showDeleteConfirm(bot.id)} style={{ color: '#94a3b8' }} className="delete-hover" />

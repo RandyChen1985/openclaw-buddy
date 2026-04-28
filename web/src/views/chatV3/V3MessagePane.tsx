@@ -44,6 +44,7 @@ export interface V3MessagePaneProps {
   onDelete: (idx: number) => void;
   onQuote: (content: string) => void;
   onSend: (text: string, files?: any[]) => void;
+  onSaveToWorkspace?: (content: string) => void;
   onRegenerate: () => void;
   copyToClipboard: (text: string) => void;
 }
@@ -79,6 +80,7 @@ export function V3MessagePane({
   onDelete,
   onQuote,
   onSend,
+  onSaveToWorkspace,
   onRegenerate,
   copyToClipboard
 }: V3MessagePaneProps) {
@@ -93,6 +95,12 @@ export function V3MessagePane({
       if ((m as any)._uiMetaOnly) return false;
 
       const content = (m.content || '').trim();
+
+      // 1.1 toolResult 属于“工具结果回执”，跟随 showThinking 开关显示/隐藏
+      // 说明：历史记录里 toolResult 可能是独立 role（由服务端持久化），不是普通 assistant 文本。
+      if ((m as any).role === 'toolResult') {
+        return !!showThinking;
+      }
       
       // 2. 过滤系统注入的提示词 (role: user)
       if (m.role === 'user') {
@@ -138,7 +146,7 @@ export function V3MessagePane({
       .replace(/> :::plan[\s\S]*?:::\s*/g, '')
       .replace(/> :::commandOutput[\s\S]*?:::\n*/g, '')
       .replace(/> :::toolCall[\s\S]*?:::\n*/g, '')
-      .replace(/> :::toolResult[\s\S]*?:::\n*/g, '')
+      .replace(/(?:^|\n)\s*(?:>\s*)?:::toolResult[\s\S]*?(?:^|\n)\s*(?:>\s*)?:::\s*/g, '\n')
       .replace(/<(anti-hallucination-guardrails|ephemeral_message|available_skills|relevant[-_]memories|thought|think|thought_process|reasoning|system_instruction)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
       .replace(/\[(search|coding)-mode|Bootstrap truncation warning|Queued user message that arrived while the previous turn was still active\][\s\S]*?(?=\n\n|\n\s*\[|\n\s*<|$)/gi, '')
       .replace(/^(?:System \(untrusted\):|System:).*?(?:\n|$)/gm, '')
@@ -359,6 +367,7 @@ export function V3MessagePane({
                   onDelete={(idx) => onDelete(idx)}
                   onQuote={onQuote}
                   onSend={onSend}
+                  onSaveToWorkspace={onSaveToWorkspace}
                   onRegenerate={onRegenerate}
                   copyToClipboard={copyToClipboard}
                   isTyping={isTyping}
@@ -377,4 +386,3 @@ export function V3MessagePane({
     </div>
   );
 }
-

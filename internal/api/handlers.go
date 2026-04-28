@@ -1442,6 +1442,7 @@ func (s *Server) createExplorerFile(c *gin.Context) {
 	var req struct {
 		Path     string `json:"path" binding:"required"`
 		Filename string `json:"filename" binding:"required"`
+		Content  string `json:"content"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		s.Error(c, http.StatusBadRequest, "path and filename are required")
@@ -1449,7 +1450,7 @@ func (s *Server) createExplorerFile(c *gin.Context) {
 	}
 
 	log.Printf("🎮 [控制] 用户请求: 【新建文件】 (Dir: %s, Name: %s)", req.Path, req.Filename)
-	destPath, err := process.CreateExplorerFile(req.Path, req.Filename, s.cfg.OpenClawConfigDir)
+	destPath, err := process.CreateExplorerFile(req.Path, req.Filename, req.Content, s.cfg.OpenClawConfigDir)
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return

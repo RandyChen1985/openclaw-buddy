@@ -347,6 +347,8 @@
 - [ ] **V3 提问引导链接 (Quick Link)**: 验证 `[🙋 问题](quick:查询)` 格式的链接按钮渲染正常，点击后能触发消息发送. `2026-04-21`
 - [x] **系统元标签过滤**: 验证聊天界面已物理隐藏 `<anti-hallucination-guardrails>`、`<ephemeral_message>`、`<available_skills>`、`[search-mode]`、`[coding-mode]`、`[Bootstrap truncation warning]`、`[Queued user message...]`、`System (untrusted):` 标签及带时间戳的自动注入消息头。 `2026-04-27`
 - [x] **V3 聊天工作区文件夹浏览器 (V3 Chat Workspace Explorer)**: 在 V3 聊天右上角添加文件夹图标，点击可快速打开该 Bot 对应的工作区内置文件浏览器，若会话 ID 无法解析出 Bot 则按钮自动置灰。 `2026-04-27`
+- [x] **文件内容发送到对话 (Context Attachment)**: 验证在文件浏览器中右键点击文件，选择“发送到对话”后，文件内容能以 Markdown 格式自动填充到输入框。 `2026-04-28`
+- [x] **消息保存到工作区 (Save to Workspace)**: 验证在 AI 消息下方点击“保存”按钮后，能自动进入保存模式并引导用户在文件浏览器中选择目标文件夹进行保存。 `2026-04-28`
 
 - [x] **V3 历史消息加载**: 验证 `chat.history` 返回的内容块数组能被正确解析为文本，且支持分页加载（offset/limit）。
 - [x] **历史思考过程解析**: 验证从历史记录加载的消息能正确提取并展示 `:::thinking` 块内容，且标识符已过滤。 `2026-04-21`

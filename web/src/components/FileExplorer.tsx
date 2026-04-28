@@ -4,7 +4,7 @@ import {
   Folder, FileText, ChevronRight, ChevronLeft, Save, Eye, PenLine, Trash2, FolderOpen, 
   Upload, Download, Search, LayoutList, Maximize2, Minimize2, 
   FileJson, FileCode2, Image as ImageIcon, Monitor, Terminal, File,
-  FolderPlus, FilePlus, Copy, PanelLeftOpen, PanelLeftClose
+  FolderPlus, FilePlus, Copy, PanelLeftOpen, PanelLeftClose, Send
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -42,6 +42,9 @@ interface FileExplorerProps {
   title: string;
   t: any;
   isMobile: boolean;
+  onSendToChat?: (content: string, fileName: string) => void;
+  pendingSaveContent?: string;
+  onClearPendingSave?: () => void;
 }
 
 const getFileIcon = (name: string, isDir: boolean, size: number = 20) => {
@@ -73,7 +76,10 @@ const getFileIcon = (name: string, isDir: boolean, size: number = 20) => {
   }
 };
 
-const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, title, t, isMobile }) => {
+const FileExplorer: React.FC<FileExplorerProps> = ({ 
+  open, onClose, rootPath, title, t, isMobile, 
+  onSendToChat, pendingSaveContent, onClearPendingSave 
+}) => {
   const [currentPath, setCurrentPath] = useState(rootPath);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -383,16 +389,18 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
     if (!newName) return;
     try {
       const endpoint = createType === 'file' ? '/v1/openclaw/files/create' : '/v1/openclaw/files/mkdir';
-      const payload = createType === 'file' ? { path: createParentPath, filename: newName } : { path: createParentPath, dirname: newName };
+      const payload = createType === 'file' 
+        ? { path: createParentPath, filename: newName, content: pendingSaveContent || '' } 
+        : { path: createParentPath, dirname: newName };
       await api.post(endpoint, payload);
       message.success(t('common.createSuccess'));
       setCreateModalOpen(false);
+      if (createType === 'file' && pendingSaveContent && onClearPendingSave) {
+        onClearPendingSave();
+      }
       loadFiles(currentPath);
       const newChildren = await loadTreeChildren(createParentPath);
       setTreeData(origin => updateTreeData(origin, createParentPath, newChildren));
-      if (createParentPath !== currentPath) {
-          // If created in a different folder, also refresh current if needed
-      }
     } catch (err: any) {
       message.error(err.response?.data?.error || err.message);
     }
@@ -426,21 +434,57 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
   const contextMenuItems: MenuProps['items'] = useMemo(() => {
     const items: MenuProps['items'] = [];
     
-    if (!contextIsFile) {
+    if (contextIsFile) {
+      if (onSendToChat) {
+        items.push({
+          key: 'sendToChat',
+          icon: <Send size={14} />,
+          label: t('chat.sendToChat', { defaultValue: '发送到对话' }),
+          onClick: async () => {
+            try {
+              const res = await api.get(`/v1/openclaw/files/get?path=${encodeURIComponent(contextPath)}`);
+              const fileName = contextPath.split(/[/\\]/).pop() || 'file';
+              onSendToChat(res.data.content || '', fileName);
+              onClose();
+            } catch (err: any) {
+              message.error(err.response?.data?.error || err.message || t('common.loadFailed'));
+            }
+          }
+        });
+      }
+      items.push({ 
+        key: 'copyPath', 
+        icon: <Copy size={14} />, 
+        label: t('common.copyPath', { defaultValue: '复制绝对路径' }), 
+        onClick: () => copyToClipboard(contextPath) 
+      });
+    } else {
       items.push({ key: 'newFile', icon: <FilePlus size={14} />, label: t('common.newFile'), onClick: () => handleCreateFile(contextPath) });
+      if (pendingSaveContent) {
+        items.push({
+          key: 'savePendingContent',
+          icon: <Save size={14} />,
+          label: t('chat.saveMessageHere', { defaultValue: '在此保存消息' }),
+          onClick: () => {
+            setCreateType('file');
+            setCreateParentPath(contextPath);
+            setNewName(`msg_${new Date().getTime()}.md`);
+            setCreateModalOpen(true);
+          }
+        });
+      }
       items.push({ key: 'newFolder', icon: <FolderPlus size={14} />, label: t('common.newFolder'), onClick: () => handleCreateDir(contextPath) });
       items.push({ type: 'divider' });
+      items.push({ 
+        key: 'copyPath', 
+        icon: <Copy size={14} />, 
+        label: t('common.copyPath', { defaultValue: '复制绝对路径' }), 
+        onClick: () => copyToClipboard(contextPath) 
+      });
     }
     
-    items.push({ 
-      key: 'copyPath', 
-      icon: <Copy size={14} />, 
-      label: t('common.copyPath', { defaultValue: '复制绝对路径' }), 
-      onClick: () => copyToClipboard(contextPath) 
-    });
-    
     return items;
-  }, [contextPath, contextIsFile, t]);
+  }, [contextPath, contextIsFile, t, onSendToChat, onClose, pendingSaveContent]);
 
   const handleFolderClick = (path: string) => {
     setCurrentPath(path);
@@ -450,6 +494,22 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
     setSelectedKeys([path]);
     if (!expandedKeys.includes(path)) setExpandedKeys(prev => [...prev, path]);
   };
+
+  // Keep tree selected keys in sync with currentPath when not editing a specific file
+  useEffect(() => {
+    if (!selectedFile && currentPath) {
+      setSelectedKeys([currentPath]);
+      // 自动展开到当前路径
+      const parts = currentPath.replace(rootPath, '').split(/[/\\]/).filter(Boolean);
+      let currentExpand = rootPath;
+      const newExpandedKeys = [rootPath];
+      parts.forEach(p => {
+        currentExpand = currentExpand.endsWith('/') || currentExpand.endsWith('\\') ? `${currentExpand}${p}` : `${currentExpand}/${p}`;
+        newExpandedKeys.push(currentExpand);
+      });
+      setExpandedKeys(prev => Array.from(new Set([...prev, ...newExpandedKeys])));
+    }
+  }, [currentPath, selectedFile, rootPath]);
 
   const onTreeSelect = (selectedKeys: React.Key[], info: any) => {
     if (selectedKeys.length === 0) return;
@@ -682,6 +742,26 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ open, onClose, rootPath, ti
       destroyOnClose
     >
       <input ref={uploadInputRef} type="file" multiple style={{ display: 'none' }} onChange={handleFileSelected} />
+
+      {pendingSaveContent && (
+        <div style={{ 
+          background: '#fff7ed', 
+          borderBottom: '1px solid #fed7aa', 
+          padding: '8px 16px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 8,
+          color: '#c2410c',
+          fontSize: 12,
+          fontWeight: 600
+        }}>
+          <Save size={14} />
+          {t('chat.savingMessageMode', { defaultValue: '消息保存模式：请在目标文件夹上右键选择“在此保存消息”' })}
+          <Button type="link" size="small" onClick={onClearPendingSave} style={{ marginLeft: 'auto', padding: 0, height: 'auto', fontSize: 12 }}>
+            {t('common.cancel')}
+          </Button>
+        </div>
+      )}
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: '#fff' }}>
         {!isMobile && (

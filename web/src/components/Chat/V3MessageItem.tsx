@@ -3,7 +3,7 @@ import { Avatar, Tooltip, Button, Input, message } from 'antd';
 import { 
   User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, 
   FileText, ChevronRight, ChevronDown, ShieldAlert, ShieldCheck, ListTodo, Loader2, Layers, Search, GitBranch,
-  Smartphone, MessageSquare, Send
+  Save
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -48,6 +48,7 @@ interface V3MessageItemProps {
   onDelete: (index: number) => void;
   onQuote: (content: string) => void;
   onSend: (content: string) => void;
+  onSaveToWorkspace?: (content: string) => void;
   onRegenerate: () => void;
   copyToClipboard: (text: string) => void;
   isTyping: boolean;
@@ -112,10 +113,56 @@ const CollapsibleMeta = ({ title, icon: Icon, children, defaultExpanded = false 
   );
 };
 
+const extractCodeFence = (text: string, lang: string) => {
+  const re = new RegExp("```" + lang + "\\n([\\s\\S]*?)\\n```", "i");
+  const m = re.exec(text);
+  return m ? (m[1] || '').trim() : '';
+};
+
+const prettyJsonMaybe = (raw: string) => {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return '';
+  try {
+    const obj = JSON.parse(trimmed);
+    return JSON.stringify(obj, null, 2);
+  } catch {
+    return raw;
+  }
+};
+
+const extractToolResultName = (fullText: string) => {
+  // 只取 :::toolResult 紧随其后的第一段 **name**，避免误抓正文里的 **xxx**
+  const re = /(?:^|\n)\s*(?:>\s*)?:::toolResult\s*\n+\s*(?:>\s*)?\*\*([^*\n]+)\*\*/i;
+  const m = re.exec(fullText || '');
+  return m ? (m[1] || '').trim() : '';
+};
+
+const stripToolResultWrapper = (fullText: string) => {
+  // 去掉 :::toolResult / ::: 包裹与工具名行，留下正文
+  const lines = String(fullText || '').split('\n');
+  const out: string[] = [];
+  let started = false;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const plain = l.replace(/^\s*>\s?/, '').trimEnd();
+    if (!started) {
+      if (/^:::toolResult\b/i.test(plain.trim())) {
+        started = true;
+      }
+      continue;
+    }
+    if (/^:::\s*$/.test(plain.trim())) break;
+    // 跳过工具名行：**xxx**
+    if (/^\*\*[^*\n]+\*\*\s*$/.test(plain.trim())) continue;
+    out.push(plain);
+  }
+  return out.join('\n').trim();
+};
+
 const V3MessageItem: React.FC<V3MessageItemProps> = ({ 
   msg, index, isMobile, showThinking,
   editingMsgIndex, editContent, setEditContent,
-  onEdit, onSaveEdit, onCancelEdit, onQuote, onSend, onRegenerate,
+  onEdit, onSaveEdit, onCancelEdit, onQuote, onSend, onSaveToWorkspace, onRegenerate,
   copyToClipboard, isTyping, isLast, isStalled, tpsData, mainHasTranscript, metaContent, t
 }) => {
   const [thinkingSeconds, setThinkingSeconds] = useState(0);
@@ -169,9 +216,6 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
     // 0.2 过滤自动注入的消息头时间戳 (e.g., [Mon 2026-04-27 10:01 GMT+8])
     content = content.replace(/(?:^|\n)\s*\[(?:[A-Z][a-z]{2} )?\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})? GMT[+-]\d+\]\s*/g, '\n');
 
-    // 1. :::toolResult 物理隐藏 (增强：处理可能不带 > 前缀的情况)
-    content = content.replace(/(?:^|\n)\s*(?:>\s*)?:::toolResult[\s\S]*?:::\n*/g, '\n');
-
     // 审批卡片：保留 :::approval 标记（blockquote 渲染器依赖），但剔除元信息行
     content = content.replace(
       /(> :::approval\n)([\s\S]*?)(> :::\n*)/g,
@@ -199,7 +243,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         /(?:^|\n)\s*(?:>\s*)?[🔧✅❌]\s*`[^`]+`\s*(?:执行中(?:…|\.\.\.)|完成|失败)(?:\s*<!--[\s\S]*?-->)?/g;
       content = content
         .replace(/(?:>\s*)?:::thinking[\s\S]*?(?::::|$)\n*/g, '')
-        .replace(/> :::toolResult[\s\S]*?:::\n*/g, '')
+        .replace(/(?:^|\n)\s*(?:>\s*)?:::toolResult[\s\S]*?(?:^|\n)\s*(?:>\s*)?:::\s*/g, '\n')
         .replace(/(?:^|\n)\s*\[(?:[A-Z][a-z]{2} )?\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})? GMT[+-]\d+\]\s*/g, '\n')
         .replace(/\[(search|coding)-mode|Bootstrap truncation warning|Queued user message that arrived while the previous turn was still active\][\s\S]*?(?=\n\n|\n\s*\[|\n\s*<|$)/gi, '')
         .replace(/^(?:System \(untrusted\):|System:).*?(?:\n|$)/gm, '')
@@ -244,18 +288,6 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   const senderLabel = msg.senderLabel || '';
   const isSubAgent = !isUser && senderLabel.includes(':subagent:');
   const subAgentId = isSubAgent ? (senderLabel.split(':').pop() || '').substring(0, 8) : null;
-
-  // 物理渠道解析 (微信、飞书、钉钉、Buddy等)
-  const channelSource = useMemo(() => {
-    const sl = senderLabel.toLowerCase();
-    if (sl === 'openclaw-control-ui') return { type: 'buddy', label: 'Buddy', icon: <Cpu size={10} /> };
-    if (sl.includes('weixin')) return { type: 'weixin', label: '微信', icon: <Smartphone size={10} /> };
-    if (sl.includes('feishu') || sl.includes('lark')) return { type: 'feishu', label: '飞书', icon: <MessageSquare size={10} /> };
-    if (sl.includes('dingtalk')) return { type: 'dingtalk', label: '钉钉', icon: <Layers size={10} /> };
-    if (sl.includes('telegram')) return { type: 'telegram', label: 'TG', icon: <Send size={10} /> };
-    if (sl.includes(':subagent:')) return { type: 'subagent', label: '子代理', icon: <GitBranch size={10} /> };
-    return null;
-  }, [senderLabel]);
 
   // metaContent 只做轻量预处理：清掉内部 upsert 用的 itemId 注释即可，
   // 保留所有 :::thinking / :::plan / :::toolCall / :::commandOutput 块供 blockquote 渲染器展开为 CollapsibleMeta
@@ -371,6 +403,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
             text === ':::thinking' || 
             text === ':::plan' || 
             text === ':::toolCall' || 
+            text === ':::toolResult' ||
             text === ':::commandOutput' || 
             text === ':::approval' || 
             text === ':::warning' || 
@@ -394,6 +427,31 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       }
       if (fullText.includes(':::toolCall')) {
         return <CollapsibleMeta title={t('chat.systemTool', { defaultValue: '系统工具' })} icon={Terminal} defaultExpanded={false}>{cleanChildren}</CollapsibleMeta>;
+      }
+      if (fullText.includes(':::toolResult')) {
+        const toolName = extractToolResultName(fullText);
+        const fenced = extractCodeFence(fullText, 'json');
+        const bodyRaw = fenced ? fenced : stripToolResultWrapper(fullText);
+        const maybePretty = bodyRaw ? prettyJsonMaybe(bodyRaw) : '';
+        const headerTitle = toolName
+          ? `${t('chat.toolResult', { defaultValue: '工具结果' })} · ${toolName}`
+          : t('chat.toolResult', { defaultValue: '工具结果' });
+
+        return (
+          <CollapsibleMeta title={headerTitle} icon={Terminal} defaultExpanded={false}>
+            {maybePretty ? (
+              <CodeBlock
+                language="json"
+                value={maybePretty}
+                isMobile={isMobile}
+              />
+            ) : (
+              <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12, lineHeight: 1.5 }}>
+                {cleanChildren}
+              </div>
+            )}
+          </CollapsibleMeta>
+        );
       }
       if (fullText.includes(':::analysis')) {
         return <CollapsibleMeta title={t('chat.analysisProcess', { defaultValue: '分析过程' })} icon={Search} defaultExpanded={false}>{cleanChildren}</CollapsibleMeta>;
@@ -505,21 +563,6 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       {isUser ? (
         <div style={{ flexShrink: 0, marginTop: 4, visibility: 'visible', position: 'relative' }}>
           <Avatar icon={<User size={18} />} style={{ background: '#1e293b', flexShrink: 0 }} />
-          {channelSource && (
-            <div 
-              title={channelSource.label}
-              style={{ 
-                position: 'absolute', bottom: -2, right: -4, 
-                width: 16, height: 16, borderRadius: '50%', 
-                background: '#fff', border: '1px solid #e2e8f0',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                zIndex: 2, color: channelSource.type === 'buddy' ? '#6366f1' : (channelSource.type === 'subagent' ? '#0d9488' : '#16a34a')
-              }}
-            >
-              {channelSource.icon}
-            </div>
-          )}
         </div>
       ) : isMetaOnly ? (
         // 思考信息附录气泡：不占头像位，保留尺寸以与主气泡对齐
@@ -538,21 +581,6 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
               <Bot size={isMobile ? 22 : 25} color="var(--v3-primary, #6366f1)" />
             )}
           </div>
-          {channelSource && !isSubAgent && (
-            <div 
-              title={channelSource.label}
-              style={{ 
-                position: 'absolute', bottom: -2, right: -4, 
-                width: 16, height: 16, borderRadius: '50%', 
-                background: '#fff', border: '1px solid #e2e8f0',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                zIndex: 2, color: channelSource.type === 'buddy' ? '#6366f1' : (channelSource.type === 'subagent' ? '#0d9488' : '#16a34a')
-              }}
-            >
-              {channelSource.icon}
-            </div>
-          )}
           {isSubAgent && subAgentId && (
             <div style={{ 
               position: 'absolute', bottom: -12, left: '50%', transform: 'translateX(-50%)',
@@ -752,6 +780,11 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                   <div style={{ display: 'flex', gap: 2 }}>
                     <Tooltip title={t('chat.copy')}><Button type="text" size="small" icon={<Copy size={11} />} onClick={() => copyToClipboard(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
                     <Tooltip title={t('chat.reply')}><Button type="text" size="small" icon={<Quote size={11} />} onClick={() => onQuote(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
+                    {!isUser && onSaveToWorkspace && (
+                      <Tooltip title={t('chat.saveToWorkspace', { defaultValue: '保存到工作区' })}>
+                        <Button type="text" size="small" icon={<Save size={11} />} onClick={() => onSaveToWorkspace(msg.content)} style={{ color: '#64748b' }} />
+                      </Tooltip>
+                    )}
                     {!isUser && (
                       <Tooltip title={t('chat.exportPDF')}>
                         <Button 

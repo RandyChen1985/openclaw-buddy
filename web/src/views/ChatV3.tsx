@@ -181,14 +181,34 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [explorerPath, setExplorerPath] = useState('');
   const [explorerTitle, setExplorerTitle] = useState('');
+  const [pendingSaveContent, setPendingSaveContent] = useState<string | undefined>(undefined);
 
+  const handleSendToChat = useCallback((content: string, fileName: string) => {
+    if (!content) return;
+    const wrapped = `File: ${fileName}\n---\n${content}\n`;
+    if (inputAreaRef.current) {
+      inputAreaRef.current.setValue((prev: string) => {
+        const current = prev.trim();
+        return current ? `${current}\n\n${wrapped}` : wrapped;
+      });
+      message.success(t('chat.contentAttached', { defaultValue: '文件内容已附加到输入框' }));
+    }
+  }, [t]);
 
   useEffect(() => {
-    if (!selectedBot && botsModels?.data?.bots?.length > 0) {
-      const firstBot = botsModels.data.bots[0];
-      setSelectedBot(`openclaw:${firstBot.id}`);
+    if (botsModels?.data?.bots?.length > 0) {
+      const quickChatBot = window.sessionStorage.getItem('v3_quick_chat_bot');
+      if (quickChatBot) {
+        window.sessionStorage.removeItem('v3_quick_chat_bot');
+        const botId = quickChatBot.replace('openclaw:', '');
+        setSelectedBot(quickChatBot);
+        startNewSession(botId);
+      } else if (!selectedBot) {
+        const firstBot = botsModels.data.bots[0];
+        setSelectedBot(`openclaw:${firstBot.id}`);
+      }
     }
-  }, [botsModels, selectedBot]);
+  }, [botsModels, selectedBot, startNewSession]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -264,6 +284,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
       setExplorerOpen(true);
     }
   }, [sessionKey, botsModels, t]);
+
+  const handleSaveToWorkspace = useCallback((content: string) => {
+    setPendingSaveContent(content);
+    handleOpenWorkspace();
+    message.info(t('chat.chooseFolderToSave', { defaultValue: '已进入保存模式，请在文件浏览器中选择目标文件夹并右键保存' }));
+  }, [handleOpenWorkspace, t]);
 
   const handleRequestNewSessionWithBot = React.useCallback((botValue: string) => {
     const nextBot = (botValue || '').trim();
@@ -513,6 +539,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           })}
           onQuote={setQuotedMsg}
           onSend={handleWrappedSend}
+          onSaveToWorkspace={handleSaveToWorkspace}
           onRegenerate={handleRegenerate}
           copyToClipboard={copyToClipboard}
         />
@@ -599,6 +626,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         title={explorerTitle}
         t={t}
         isMobile={!!isMobile}
+        onSendToChat={handleSendToChat}
+        pendingSaveContent={pendingSaveContent}
+        onClearPendingSave={() => setPendingSaveContent(undefined)}
       />
     </>
   );

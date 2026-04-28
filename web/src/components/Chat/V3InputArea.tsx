@@ -17,6 +17,7 @@ export interface InputAreaHandle {
   addFiles: (files: FileInfo[]) => void;
   uploadFiles: (files: File[]) => Promise<void>;
   focus: () => void;
+  setValue: (val: string | ((prev: string) => string)) => void;
 }
 
 interface V3InputAreaProps {
@@ -75,7 +76,7 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
     }
   };
 
-  // 暴露 addFiles 方法供拖拽上传调用
+  // 暴露方法给外部
   useImperativeHandle(ref, () => ({
     addFiles: (newFiles: FileInfo[]) => {
       setFiles(prev => [...prev, ...newFiles]);
@@ -83,6 +84,9 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
     uploadFiles: async (rawFiles: File[]) => uploadRawFiles(rawFiles),
     focus: () => {
       textAreaRef.current?.focus();
+    },
+    setValue: (val: string | ((prev: string) => string)) => {
+      setText(val);
     }
   }), [selectedBot]);
 

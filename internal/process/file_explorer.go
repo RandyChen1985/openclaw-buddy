@@ -257,7 +257,7 @@ func ReadExplorerFileBytes(path, configDir string) ([]byte, string, error) {
 }
 
 // CreateExplorerFile creates a new empty file
-func CreateExplorerFile(dirPath, filename, configDir string) (string, error) {
+func CreateExplorerFile(dirPath, filename, content, configDir string) (string, error) {
 	absDir, err := VerifyExplorerPath(dirPath, configDir)
 	if err != nil {
 		return "", err
@@ -269,7 +269,7 @@ func CreateExplorerFile(dirPath, filename, configDir string) (string, error) {
 		return "", fmt.Errorf("file already exists")
 	}
 
-	if err := os.WriteFile(destPath, []byte(""), 0644); err != nil {
+	if err := os.WriteFile(destPath, []byte(content), 0644); err != nil {
 		return "", err
 	}
 	return destPath, nil

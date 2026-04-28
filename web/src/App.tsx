@@ -1019,6 +1019,10 @@ const Dashboard = () => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
           }}
+          onNavigateToChat={(botId: string) => {
+            window.sessionStorage.setItem('v3_quick_chat_bot', `openclaw:${botId}`);
+            setActiveTab('chat');
+          }}
         />
       ),
       'components': (
