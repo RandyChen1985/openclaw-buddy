@@ -986,6 +986,7 @@ const Dashboard = () => {
           history={history}
  
           wsLogs={wsLogs} 
+          v3Status={v3Status}
           isRunning={isRunning} 
           onControl={handleControl} 
           onNavigate={setActiveTab}
