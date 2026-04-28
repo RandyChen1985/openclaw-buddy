@@ -268,7 +268,12 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   onEdit, onSaveEdit, onCancelEdit, onQuote, onSend, onSaveToWorkspace, onRegenerate,
   copyToClipboard, isTyping, isLast, isStalled, tpsData, mainHasTranscript, metaContent, t
 }) => {
-  const [thinkingSeconds, setThinkingSeconds] = useState(0);
+  const [thinkingSeconds, setThinkingSeconds] = useState(() => {
+    if (msg._thinkStartedAt) {
+      return Math.max(0, Math.floor((Date.now() - msg._thinkStartedAt) / 1000));
+    }
+    return 0;
+  });
   // 防止审批按钮重复点击：记录每个 approvalId 是否已点击过“通过”
   const [approvalClicked, setApprovalClicked] = useState<Record<string, boolean>>({});
 
@@ -465,14 +470,23 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   useEffect(() => {
     let interval: any;
     if (isThinkingState) {
+      // 💡 关键修复：如果存在服务器同步的开始时间，则以该时间为准计算，解决重连/刷新/状态切换导致的“重新计数”问题
+      if (msg._thinkStartedAt) {
+        setThinkingSeconds(Math.max(0, Math.floor((Date.now() - msg._thinkStartedAt) / 1000)));
+      }
+
       interval = setInterval(() => {
-        setThinkingSeconds((s: number) => s + 1);
+        if (msg._thinkStartedAt) {
+          setThinkingSeconds(Math.max(0, Math.floor((Date.now() - msg._thinkStartedAt) / 1000)));
+        } else {
+          setThinkingSeconds((s: number) => s + 1);
+        }
       }, 1000);
     } else {
       setThinkingSeconds(0);
     }
     return () => clearInterval(interval);
-  }, [isThinkingState]);
+  }, [isThinkingState, msg._thinkStartedAt]);
 
   // 💡 关键修复：确保用户消息永远显示，不被空内容判断拦截
   if (!processedContent && !isUser && !(isTyping && isLast && !isUser) && !hasApproval && !hasEmbeddedMeta) return null;
