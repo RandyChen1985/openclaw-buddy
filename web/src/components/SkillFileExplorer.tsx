@@ -613,11 +613,13 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                       />
                     </div>
                   ) : activeTab === 'preview' && isMarkdown ? (
-                      <div style={{ maxWidth: 800, margin: '0 auto', background: '#fff', padding: 32, borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                        <div className="markdown-body-v3">
-                          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeSanitize]}>
-                            {fileContent}
-                          </ReactMarkdown>
+                      <div style={{ height: '100%', overflowY: 'auto', background: '#f8fafc', padding: '24px' }}>
+                        <div style={{ maxWidth: 800, margin: '0 auto', background: '#fff', padding: 32, borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                          <div className="markdown-body-v3">
+                            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeSanitize]}>
+                              {fileContent}
+                            </ReactMarkdown>
+                          </div>
                         </div>
                       </div>
                     ) : activeTab === 'preview' && isImage ? (
