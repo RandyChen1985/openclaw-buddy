@@ -110,24 +110,47 @@ export function V3ComposerBar({
   }), [isFocused]);
 
   const currentModelInfo = useMemo(() => {
+    const models = botsModels?.data?.models || [];
+    const findModel = (id: string) => {
+      if (!id) return null;
+      // 1. 尝试精确匹配
+      let m = models.find((m: any) => m.id === id);
+      if (m) return m;
+      // 2. 尝试模糊匹配（处理带不带 provider 前缀的情况，例如 yovole/gemma vs gemma）
+      const baseId = id.includes('/') ? id.split('/').pop() : id;
+      return models.find((m: any) => {
+        const mBaseId = m.id.includes('/') ? m.id.split('/').pop() : m.id;
+        return mBaseId === baseId;
+      });
+    };
+
     if (!sessionModel) {
-      // Find the bot and its default model
       const botId = selectedBot.replace('openclaw:', '');
       const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
-      if (bot) {
-        return botsModels?.data?.models?.find((m: any) => m.id === bot.model);
-      }
+      if (bot) return findModel(bot.model);
       return null;
     }
-    return botsModels?.data?.models?.find((m: any) => m.id === sessionModel);
+    return findModel(sessionModel);
   }, [sessionModel, selectedBot, botsModels]);
 
   const supportsImage = useMemo(() => {
-    if (!currentModelInfo) return false;
-    return currentModelInfo.capabilities?.includes('image') || 
-           currentModelInfo.input?.includes('image') || 
-           currentModelInfo.input_modalities?.includes('image');
-  }, [currentModelInfo]);
+    // 优先从匹配到的模型详情里看
+    if (currentModelInfo) {
+      if (currentModelInfo.capabilities?.includes('image') || 
+          currentModelInfo.input?.includes('image') || 
+          currentModelInfo.input_modalities?.includes('image')) return true;
+    }
+    
+    // 兜底策略：如果没匹配到模型详情（例如 ID 漂移），或者使用的是默认模型
+    // 则直接看机器人（Bot）自身的定义，只要 Bot 声明了图片能力，就允许发送
+    const botId = selectedBot.replace('openclaw:', '');
+    const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
+    if (bot) {
+      if (bot.capabilities?.includes('image') || bot.input?.includes('image')) return true;
+    }
+
+    return false;
+  }, [currentModelInfo, selectedBot, botsModels]);
 
   return (
     <div style={containerStyle} className="input-container-v3">

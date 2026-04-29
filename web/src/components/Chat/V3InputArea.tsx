@@ -93,6 +93,10 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
 
   const handleInnerSend = () => {
     if ((!text.trim() && files.length === 0) || status !== 'authenticated' || inputLocked || uploading) return;
+    
+    // 增加拦截：如果包含图片但模型不支持，禁止发送
+    if (hasImages && !supportsImage) return;
+
     onSend(text, files);
     setText('');
     setFiles([]);
