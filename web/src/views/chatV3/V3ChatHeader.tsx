@@ -84,6 +84,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     showSider,
     onToggleSider,
     status,
+    lastHealth,
     sessionKey,
     sessionLabel,
     isSummarizing,
@@ -565,6 +566,44 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 2 : 6, flexShrink: 0 }}>
+        {/* WebSocket Health Indicator (Only in Fullscreen) */}
+        {isFullscreen && status === 'authenticated' && lastHealth && (
+          <Tooltip title={`${t('chat.v3Status', { defaultValue: 'WebSocket V3' })} | Latency: ${lastHealth.latency}ms | TS: ${new Date(lastHealth.ts).toLocaleTimeString()}`}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '2px 10px',
+              background: 'rgba(34, 197, 94, 0.10)',
+              borderRadius: 8,
+              border: '1px solid rgba(34, 197, 94, 0.20)',
+              cursor: 'default',
+              marginRight: 2
+            }}>
+              <div 
+                className="v3-heartbeat"
+                style={{ 
+                  width: 7, 
+                  height: 7, 
+                  borderRadius: '50%', 
+                  background: '#22c55e',
+                  boxShadow: '0 0 6px rgba(34, 197, 94, 0.5)',
+                  animation: 'v3-heartbeat 2s infinite'
+                }} 
+              />
+              <span style={{ 
+                fontSize: 10, 
+                fontWeight: 900, 
+                color: '#16a34a',
+                fontFamily: 'ui-monospace, monospace',
+                letterSpacing: '0.02em'
+              }}>
+                {lastHealth.latency}ms
+              </span>
+            </div>
+          </Tooltip>
+        )}
+
         <Button 
           size="small" 
           type="text" 
