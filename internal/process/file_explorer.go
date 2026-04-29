@@ -275,6 +275,70 @@ func CreateExplorerFile(dirPath, filename, content, configDir string) (string, e
 	return destPath, nil
 }
 
+// RenameExplorerFile renames or moves a file or directory
+func RenameExplorerFile(oldPath, newPath, configDir string) error {
+	absOld, err := VerifyExplorerPath(oldPath, configDir)
+	if err != nil {
+		return err
+	}
+
+	absNew, err := VerifyExplorerPath(newPath, configDir)
+	if err != nil {
+		return err
+	}
+
+	// Safety: don't allow renaming the root of an allowed base
+	allowedBases, _ := GetAllowedExplorerPaths(configDir)
+	for _, base := range allowedBases {
+		if absOld == base {
+			return fmt.Errorf("cannot rename root allowed directory")
+		}
+	}
+
+	// Check if destination already exists
+	if _, err := os.Stat(absNew); err == nil {
+		return fmt.Errorf("destination already exists")
+	}
+
+	return os.Rename(absOld, absNew)
+}
+
+// SearchExplorerFiles performs a recursive search for files matching the query
+func SearchExplorerFiles(rootPath, query, configDir string) ([]ExplorerFileEntry, error) {
+	absRoot, err := VerifyExplorerPath(rootPath, configDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var results []ExplorerFileEntry
+	query = strings.ToLower(query)
+
+	err = filepath.Walk(absRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Skip errors
+		}
+
+		if strings.Contains(strings.ToLower(info.Name()), query) {
+			results = append(results, ExplorerFileEntry{
+				Name:    info.Name(),
+				Path:    path,
+				IsDir:   info.IsDir(),
+				Size:    info.Size(),
+				ModTime: info.ModTime().Format("2006-01-02 15:04:05"),
+			})
+		}
+
+		// Limit results to 1000
+		if len(results) >= 1000 {
+			return filepath.SkipDir
+		}
+
+		return nil
+	})
+
+	return results, err
+}
+
 // CreateExplorerDir creates a new directory
 func CreateExplorerDir(dirPath, dirname, configDir string) (string, error) {
 	absDir, err := VerifyExplorerPath(dirPath, configDir)

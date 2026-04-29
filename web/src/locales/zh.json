@@ -298,6 +298,8 @@
   },
   "chat": {
     "title": "在线聊天",
+    "sendToChat": "发送到会话",
+    "aiSummary": "AI 一键总结",
     "classicMode": "经典模式 (HTTP)",
     "v3Mode": "V3 模式 (RPC)",
     "soulEditorRecovering": "正在加载专家灵魂...",

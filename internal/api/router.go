@@ -168,6 +168,8 @@ func (s *Server) setupRoutes() {
 			oc.GET("/files/download", s.downloadExplorerFile)
 			oc.POST("/files/create", s.createExplorerFile)
 			oc.POST("/files/mkdir", s.createExplorerDir)
+			oc.POST("/files/rename", s.renameExplorerFile)
+			oc.GET("/files/search", s.searchExplorerFiles)
 
 			oc.GET("/plugins", s.getOpenClawPlugins)
 			oc.POST("/plugins/reload", s.reloadPlugins)
