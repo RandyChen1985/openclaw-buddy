@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { 
   Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star, 
   ChevronDown, ChevronUp, Activity, ZapOff, Bot, LayoutGrid, List, FolderOpen,
-  Eye, Save, Brain, Edit3, BrainCircuit, Copy, Heart, Users
+  Eye, Save, Brain, Edit3, BrainCircuit, Copy, Heart, Users, MessageSquare, Image
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -29,13 +29,15 @@ interface BotsManagerProps {
   activeTasks?: any[];
   isRunning?: boolean;
   onNavigateToDashboard?: () => void;
+  onNavigateToChat?: (botId: string) => void;
 }
 
 const BotsManager: React.FC<BotsManagerProps> = ({ 
   botsModels, loadingBots, isMobile, onRefresh, onRefreshBots, modelsConfig, loadingConfig,
   onAddBot, onUpdateBot, onDeleteBot, onSetDefaultModel,
   activeTasks = [],
-  onNavigateToDashboard
+  onNavigateToDashboard,
+  onNavigateToChat
 }) => {
   const { t } = useTranslation();
   const cardColors = [
@@ -621,6 +623,15 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                              )}
                            </div>
                           <div style={{ display: 'flex', gap: 4 }}>
+                            {onNavigateToChat && (
+                              <Button
+                                type="text"
+                                size="small"
+                                icon={<MessageSquare size={16} />}
+                                onClick={() => onNavigateToChat(bot.id)}
+                                style={{ color: '#0ea5e9' }}
+                              />
+                            )}
                             <Button type="text" size="small" icon={<Pencil size={16} />} onClick={() => handleEditClick(bot)} style={{ color: '#94a3b8' }} />
                             {bot.id !== 'main' && (
                               <Button type="text" size="small" icon={<Trash2 size={16} />} onClick={() => showDeleteConfirm(bot.id)} style={{ color: '#94a3b8' }} className="delete-hover" />
@@ -732,12 +743,17 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                 <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800, flexShrink: 0 }}>
                                   {t('bots.currentModel')}
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: '65%', overflow: 'hidden' }}>
-                                  <Cpu size={12} color={color.theme} style={{ flexShrink: 0 }} />
-                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {bot.model}
-                                  </span>
-                                </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: '65%', overflow: 'hidden' }}>
+                                    <Cpu size={12} color={color.theme} style={{ flexShrink: 0 }} />
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {bot.model}
+                                    </span>
+                                    {bot.capabilities?.includes('image') && (
+                                      <Tag color="processing" style={{ margin: 0, borderRadius: 6, fontSize: 9, border: 'none', background: '#eff6ff', color: '#3b82f6', fontWeight: 700, padding: '0 4px', height: 16, lineHeight: '14px' }}>
+                                        <Image size={9} style={{ marginRight: 2, display: 'inline-block', verticalAlign: 'middle' }} /> {t('bots.imageSupport', { defaultValue: '图片型' })}
+                                      </Tag>
+                                    )}
+                                  </div>
                               </div>
                               <div style={{ height: 1, borderTop: `1px dashed ${color.border}40`, margin: '0' }}></div>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -919,7 +935,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                               const color = cardColors[mIdx % cardColors.length];
                               
                               return (
-                                <Col xs={24} sm={12} md={8} lg={8} xl={8} key={m.id}>
+                                <Col xs={24} sm={12} md={8} lg={6} xl={6} key={m.id}>
                                   <div style={{
                                     background: isDefault 
                                       ? `linear-gradient(135deg, #f5f3ff 0%, #ffffff 100%)` 
@@ -1005,6 +1021,11 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                              <Zap size={10} style={{ marginRight: 2, display: 'inline-block', verticalAlign: 'middle' }} /> {t('bots.reasoningType')}
                                            </Tag>
                                          )} 
+                                         {(m.input?.includes('image') || m.capabilities?.includes('image')) && (
+                                           <Tag color="processing" style={{ margin: 0, borderRadius: 6, fontSize: 10, border: 'none', background: '#eff6ff', color: '#3b82f6', fontWeight: 700, padding: '0 6px' }}>
+                                             <Image size={10} style={{ marginRight: 2, display: 'inline-block', verticalAlign: 'middle' }} /> {t('bots.imageSupport', { defaultValue: '图片型' })}
+                                           </Tag>
+                                         )}
                                       </div>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                         <Button
@@ -1255,8 +1276,11 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   <Select.OptGroup key={provider} label={provider.toUpperCase()}>
                     {models.map((m: any) => (
                       <Select.Option key={m.id} value={m.id} label={m.name}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span>{m.name || m.id}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontWeight: 600, fontSize: 13 }}>{m.name || m.id}</span>
+                            {m.capabilities?.includes('image') && <Image size={12} color="#0ea5e9" />}
+                          </div>
                           <span style={{ fontSize: 10, color: '#94a3b8' }}>{m.id}</span>
                         </div>
                       </Select.Option>
@@ -1485,8 +1509,11 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                   <Select.OptGroup key={provider} label={provider.toUpperCase()}>
                     {models.map((m: any) => (
                       <Select.Option key={m.id} value={m.id} label={m.name}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 600, fontSize: 13 }}>{m.name || m.id}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontWeight: 600, fontSize: 13 }}>{m.name || m.id}</span>
+                            {(m.input?.includes('image') || m.capabilities?.includes('image')) && <Image size={12} color="#0ea5e9" />}
+                          </div>
                           <span style={{ fontSize: 11, color: '#94a3b8' }}>{m.id}</span>
                         </div>
                       </Select.Option>

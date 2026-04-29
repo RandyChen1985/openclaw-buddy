@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Badge, Button, Dropdown, Input, Modal, Radio, Select, Switch, Tooltip } from 'antd';
-import { PanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2, Maximize2, Minimize2 } from 'lucide-react';
+import { PanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2, Maximize2, Minimize2, Folder } from 'lucide-react';
 
 import type { V3ThemeMode, V3ThemePresetId, V3ThemeTokens } from '../../hooks/chatV3/useV3Theme';
 
@@ -69,6 +69,7 @@ export interface V3ChatHeaderProps {
   };
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
+  onOpenWorkspace?: () => void;
 }
 
 /**
@@ -83,6 +84,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     showSider,
     onToggleSider,
     status,
+    lastHealth,
     sessionKey,
     sessionLabel,
     isSummarizing,
@@ -106,7 +108,8 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     botsModels,
     v3Theme,
     isFullscreen,
-    onToggleFullscreen
+    onToggleFullscreen,
+    onOpenWorkspace
   } = props;
 
   const [themeModalOpen, setThemeModalOpen] = useState(false);
@@ -533,9 +536,6 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
                       cursor: 'pointer',
                       whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      maxWidth: 240,
                       lineHeight: '12px',
                       opacity: 0.8
                     }}
@@ -563,9 +563,43 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 2 : 6, flexShrink: 0 }}>
-
-
-
+        {/* WebSocket Health Indicator (Only in Fullscreen) */}
+        {isFullscreen && status === 'authenticated' && lastHealth && (
+          <Tooltip title={`${t('chat.v3Status', { defaultValue: 'WebSocket V3' })} | Latency: ${lastHealth.latency}ms | TS: ${new Date(lastHealth.ts).toLocaleTimeString()}`}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '2px 10px',
+              background: 'rgba(34, 197, 94, 0.10)',
+              borderRadius: 8,
+              border: '1px solid rgba(34, 197, 94, 0.20)',
+              cursor: 'default',
+              marginRight: 2
+            }}>
+              <div 
+                className="v3-heartbeat"
+                style={{ 
+                  width: 7, 
+                  height: 7, 
+                  borderRadius: '50%', 
+                  background: '#22c55e',
+                  boxShadow: '0 0 6px rgba(34, 197, 94, 0.5)',
+                  animation: 'v3-heartbeat 2s infinite'
+                }} 
+              />
+              <span style={{ 
+                fontSize: 10, 
+                fontWeight: 900, 
+                color: '#16a34a',
+                fontFamily: 'ui-monospace, monospace',
+                letterSpacing: '0.02em'
+              }}>
+                {lastHealth.latency}ms
+              </span>
+            </div>
+          </Tooltip>
+        )}
 
         <Button 
           size="small" 
@@ -573,6 +607,19 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           icon={isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />} 
           title={isFullscreen ? t('common.exitFullscreen', { defaultValue: '退出全屏' }) : t('common.fullscreen', { defaultValue: '全屏' })}
           onClick={onToggleFullscreen}
+        />
+
+        <Button 
+          size="small" 
+          type="text" 
+          icon={<Folder size={14} />} 
+          title={t('bots.workspace', { defaultValue: '工作区' })}
+          onClick={onOpenWorkspace}
+          disabled={!sessionMeta?.bot?.workspace}
+          style={{ 
+            color: !sessionMeta?.bot?.workspace ? '#cbd5e1' : 'var(--v3-primary, #4f46e5)',
+            opacity: !sessionMeta?.bot?.workspace ? 0.5 : 1
+          }}
         />
 
         <Dropdown
@@ -739,4 +786,3 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     </div>
   );
 }
-

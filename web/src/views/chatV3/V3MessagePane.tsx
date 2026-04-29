@@ -44,6 +44,7 @@ export interface V3MessagePaneProps {
   onDelete: (idx: number) => void;
   onQuote: (content: string) => void;
   onSend: (text: string, files?: any[]) => void;
+  onSaveToWorkspace?: (content: string) => void;
   onRegenerate: () => void;
   copyToClipboard: (text: string) => void;
 }
@@ -79,6 +80,7 @@ export function V3MessagePane({
   onDelete,
   onQuote,
   onSend,
+  onSaveToWorkspace,
   onRegenerate,
   copyToClipboard
 }: V3MessagePaneProps) {
@@ -93,6 +95,12 @@ export function V3MessagePane({
       if ((m as any)._uiMetaOnly) return false;
 
       const content = (m.content || '').trim();
+
+      // 1.1 toolResult 属于“工具结果回执”，跟随 showThinking 开关显示/隐藏
+      // 说明：历史记录里 toolResult 可能是独立 role（由服务端持久化），不是普通 assistant 文本。
+      if ((m as any).role === 'toolResult') {
+        return !!showThinking;
+      }
       
       // 2. 过滤系统注入的提示词 (role: user)
       if (m.role === 'user') {
@@ -113,7 +121,10 @@ export function V3MessagePane({
         
         // 如果开启了“显示思考/工具”，则保留所有助手消息
         // 如果关闭了，则过滤掉那些“只有工具回执、没有正文”的骨架消息
-        if (!showThinking && isAssistantSkeletonContent(content)) {
+        // 💡 优化：如果是当前正在吐字的最后一条消息，无论开关如何都必须放行，
+        // 否则在思考阶段用户会看到一片空白，没有反馈。
+        const isLastAndTyping = isTyping && m.id === messages[messages.length - 1]?.id;
+        if (!showThinking && isAssistantSkeletonContent(content) && !isLastAndTyping) {
           return false;
         }
       }
@@ -138,7 +149,7 @@ export function V3MessagePane({
       .replace(/> :::plan[\s\S]*?:::\s*/g, '')
       .replace(/> :::commandOutput[\s\S]*?:::\n*/g, '')
       .replace(/> :::toolCall[\s\S]*?:::\n*/g, '')
-      .replace(/> :::toolResult[\s\S]*?:::\n*/g, '')
+      .replace(/(?:^|\n)\s*(?:>\s*)?:::toolResult[\s\S]*?(?:^|\n)\s*(?:>\s*)?:::\s*/g, '\n')
       .replace(/<(anti-hallucination-guardrails|ephemeral_message|available_skills|relevant[-_]memories|thought|think|thought_process|reasoning|system_instruction)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
       .replace(/\[(search|coding)-mode|Bootstrap truncation warning|Queued user message that arrived while the previous turn was still active\][\s\S]*?(?=\n\n|\n\s*\[|\n\s*<|$)/gi, '')
       .replace(/^(?:System \(untrusted\):|System:).*?(?:\n|$)/gm, '')
@@ -359,6 +370,7 @@ export function V3MessagePane({
                   onDelete={(idx) => onDelete(idx)}
                   onQuote={onQuote}
                   onSend={onSend}
+                  onSaveToWorkspace={onSaveToWorkspace}
                   onRegenerate={onRegenerate}
                   copyToClipboard={copyToClipboard}
                   isTyping={isTyping}
@@ -377,4 +389,3 @@ export function V3MessagePane({
     </div>
   );
 }
-

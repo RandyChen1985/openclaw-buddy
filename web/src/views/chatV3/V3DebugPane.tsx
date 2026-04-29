@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { Button, Tooltip, Empty, Tag, Input, Radio, ConfigProvider } from 'antd';
+import { Button, Tooltip, Empty, Tag, Input, Radio, ConfigProvider, message } from 'antd';
 import { X, Trash2, ArrowUpRight, ArrowDownLeft, Terminal, Copy, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -32,7 +32,42 @@ const LogItem = ({ log }: { log: any }) => {
 
   const copyToClipboard = (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(JSON.stringify(log.data, null, 2));
+    const text = JSON.stringify(log.data, null, 2);
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        message.success('已复制到剪贴板');
+      }).catch(err => {
+        console.warn('Debug log copy failed, trying fallback:', err);
+        fallbackCopyTextToClipboard(text);
+      });
+    } else {
+      fallbackCopyTextToClipboard(text);
+    }
+  };
+
+  const fallbackCopyTextToClipboard = (text: string) => {
+    try {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      textArea.style.top = "0";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      if (successful) {
+        message.success('已复制到剪贴板');
+      } else {
+        throw new Error('execCommand copy returned false');
+      }
+    } catch (err) {
+      console.error('Debug log fallback copy failed:', err);
+      message.error('复制失败');
+    }
   };
 
   return (

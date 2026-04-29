@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,18 +23,291 @@ import (
 // 配置区 - 根据实际情况修改
 // ============================================================
 const (
-	gatewayURL = "ws://127.0.0.1:18789/v1/gateway"
-	gatewayToken = "71937201d0ba32c6c14047dd15487a0cbf0cd1f3a05e07f8"
+	gatewayURL       = "ws://127.0.0.1:18789/v1/gateway"
+	gatewayToken     = "71937201d0ba32c6c14047dd15487a0cbf0cd1f3a05e07f8"
 	clientID         = "openclaw-control-ui" // 网关允许的客户端 ID
-	targetSessionKey = "agent:main:dashboard:abb6ee52-3716-4bde-b2a2-ea5180390a05"
-	historyLimit     = 200 // 拉取最近 N 条消息
+	targetSessionKey = "agent:main:main"
+	historyLimit     = 200                 // 拉取最近 N 条消息
 	outputFile       = "session_dump.json" // 输出到当前目录
+	markdownFile     = "temp.md"           // 对话可读版
 )
 
 // ============================================================
 
 func base64URLNoPadding(data []byte) string {
 	return strings.TrimRight(base64.URLEncoding.EncodeToString(data), "=")
+}
+
+func msgCreatedAtMillis(m map[string]interface{}) int64 {
+	for _, k := range []string{"createdAt", "created_at", "timestamp"} {
+		v, ok := m[k]
+		if !ok || v == nil {
+			continue
+		}
+		switch t := v.(type) {
+		case string:
+			if parsed, err := time.Parse(time.RFC3339Nano, t); err == nil {
+				return parsed.UnixMilli()
+			}
+			if parsed, err := time.Parse(time.RFC3339, t); err == nil {
+				return parsed.UnixMilli()
+			}
+		case float64:
+			return int64(t)
+		}
+	}
+	return 0
+}
+
+// formatHistoryPlain 将网关返回的 message.content 转成可读正文（对齐前端 formatMessageContent 的常见形态）。
+func formatHistoryPlain(raw interface{}, depth int) string {
+	if depth > 6 {
+		b, _ := json.Marshal(raw)
+		return string(b)
+	}
+	if raw == nil {
+		return ""
+	}
+	switch v := raw.(type) {
+	case string:
+		t := strings.TrimSpace(v)
+		if t == "" || t == "[]" || t == "{}" {
+			return ""
+		}
+		if strings.HasPrefix(t, "[") || strings.HasPrefix(t, "{") {
+			var parsed interface{}
+			if json.Unmarshal([]byte(t), &parsed) == nil {
+				return formatHistoryPlain(parsed, depth+1)
+			}
+		}
+		return v
+	case []interface{}:
+		var sb strings.Builder
+		for _, c := range v {
+			sb.WriteString(formatContentBlockPlain(c, depth+1))
+		}
+		return sb.String()
+	case map[string]interface{}:
+		th := ""
+		for _, key := range []string{"thought", "thinking", "reasoning"} {
+			if x, ok := v[key].(string); ok && strings.TrimSpace(x) != "" {
+				th = "> [thinking]\n> " + strings.ReplaceAll(strings.TrimSpace(x), "\n", "\n> ") + "\n\n"
+				break
+			}
+		}
+		if c, ok := v["content"]; ok {
+			return th + formatHistoryPlain(c, depth+1)
+		}
+		return th + formatHistoryPlain([]interface{}{v}, depth+1)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+func formatContentBlockPlain(c interface{}, depth int) string {
+	m, ok := c.(map[string]interface{})
+	if !ok {
+		return fmt.Sprintf("%v\n\n", c)
+	}
+	var sb strings.Builder
+	typ, _ := m["type"].(string)
+
+	if typ == "thinking" || m["thinking"] != nil || m["thought"] != nil || m["reasoning"] != nil {
+		th := pickString(m, "thinking", "thought", "reasoning", "content")
+		if th != "" {
+			sb.WriteString("> [thinking]\n> ")
+			sb.WriteString(strings.ReplaceAll(th, "\n", "\n> "))
+			sb.WriteString("\n\n")
+		}
+	}
+	if typ == "plan" || m["plan"] != nil {
+		p := pickString(m, "plan", "content")
+		if p != "" {
+			sb.WriteString("> [plan]\n> ")
+			sb.WriteString(strings.ReplaceAll(p, "\n", "\n> "))
+			sb.WriteString("\n\n")
+		}
+	}
+	if typ == "command_output" || m["command_output"] != nil || m["commandOutput"] != nil {
+		out := pickString(m, "command_output", "commandOutput", "content")
+		if out != "" {
+			sb.WriteString("> [command]\n> ")
+			sb.WriteString(strings.ReplaceAll(out, "\n", "\n> "))
+			sb.WriteString("\n\n")
+		}
+	}
+	if typ == "toolCall" || m["toolCall"] != nil || m["tool_call"] != nil {
+		tc := m["toolCall"]
+		if tc == nil {
+			tc = m["tool_call"]
+		}
+		if tc == nil {
+			tc = m
+		}
+		if tcm, ok := tc.(map[string]interface{}); ok {
+			name := ""
+			if n, ok := tcm["name"].(string); ok {
+				name = n
+			} else if fn, ok := tcm["function"].(map[string]interface{}); ok {
+				name, _ = fn["name"].(string)
+			}
+			args := tcm["arguments"]
+			argsStr := ""
+			if s, ok := args.(string); ok {
+				argsStr = s
+			} else {
+				b, _ := json.MarshalIndent(args, "", "  ")
+				argsStr = string(b)
+			}
+			sb.WriteString("[toolCall] ")
+			sb.WriteString(name)
+			sb.WriteString("\n```json\n")
+			sb.WriteString(argsStr)
+			sb.WriteString("\n```\n\n")
+		}
+	}
+	if typ == "toolResult" || m["toolResult"] != nil || m["tool_result"] != nil {
+		tr := m["toolResult"]
+		if tr == nil {
+			tr = m["tool_result"]
+		}
+		if tr == nil {
+			tr = m
+		}
+		if trm, ok := tr.(map[string]interface{}); ok {
+			tn := pickString(trm, "toolName", "tool_name", "name")
+			res := trm["content"]
+			if res == nil {
+				res = trm["result"]
+			}
+			rs := ""
+			if s, ok := res.(string); ok {
+				rs = s
+			} else {
+				b, _ := json.MarshalIndent(res, "", "  ")
+				rs = string(b)
+			}
+			sb.WriteString("[toolResult]")
+			if tn != "" {
+				sb.WriteString(" ")
+				sb.WriteString(tn)
+			}
+			sb.WriteString("\n```json\n")
+			sb.WriteString(rs)
+			sb.WriteString("\n```\n\n")
+		}
+	}
+
+	text := pickString(m, "text")
+	if text == "" && typ != "toolCall" && typ != "toolResult" && typ != "thinking" {
+		if s, ok := m["content"].(string); ok {
+			text = s
+		}
+	}
+	sb.WriteString(text)
+
+	if strings.TrimSpace(sb.String()) == "" && len(m) > 0 {
+		b, err := json.MarshalIndent(m, "", "  ")
+		if err == nil {
+			sb.WriteString("```json\n")
+			sb.WriteString(string(b))
+			sb.WriteString("\n```\n\n")
+		}
+	}
+	return sb.String()
+}
+
+func pickString(m map[string]interface{}, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k].(string); ok && strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func roleLabel(role string) string {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "user":
+		return "User"
+	case "assistant":
+		return "AI"
+	case "system":
+		return "System"
+	default:
+		if role == "" {
+			return "(unknown)"
+		}
+		return role
+	}
+}
+
+func writeMarkdownTranscript(sessionKey string, histPayload map[string]interface{}) error {
+	msgsRaw := histPayload["messages"]
+	if msgsRaw == nil {
+		msgsRaw = histPayload["items"]
+	}
+	list, ok := msgsRaw.([]interface{})
+	if !ok {
+		return fmt.Errorf("history 中没有 messages/items 数组")
+	}
+	items := make([]map[string]interface{}, 0, len(list))
+	for _, it := range list {
+		m, ok := it.(map[string]interface{})
+		if ok {
+			items = append(items, m)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return msgCreatedAtMillis(items[i]) < msgCreatedAtMillis(items[j])
+	})
+
+	var sb strings.Builder
+	sb.WriteString("# 会话 transcript\n\n")
+	sb.WriteString("- **sessionKey**: `" + sessionKey + "`\n")
+	sb.WriteString("- **exportedAt**: " + time.Now().Format(time.RFC3339) + "\n")
+	sb.WriteString("- **messages**: " + fmt.Sprintf("%d", len(items)) + "\n\n")
+	sb.WriteString("---\n\n")
+
+	for _, msg := range items {
+		role, _ := msg["role"].(string)
+		id, _ := msg["id"].(string)
+		when := ""
+		for _, k := range []string{"createdAt", "created_at"} {
+			if v, ok := msg[k].(string); ok {
+				when = v
+				break
+			}
+		}
+		label := roleLabel(role)
+		sb.WriteString("## ")
+		sb.WriteString(label)
+		sb.WriteString("\n\n")
+		if id != "" || when != "" {
+			sb.WriteString("*")
+			if id != "" {
+				sb.WriteString("id: `" + id + "`")
+			}
+			if id != "" && when != "" {
+				sb.WriteString(" · ")
+			}
+			if when != "" {
+				sb.WriteString(when)
+			}
+			sb.WriteString("*\n\n")
+		}
+		body := formatHistoryPlain(msg["content"], 0)
+		if strings.TrimSpace(body) == "" {
+			body = "_（空内容）_\n"
+		}
+		sb.WriteString(body)
+		if !strings.HasSuffix(body, "\n") {
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n---\n\n")
+	}
+
+	return os.WriteFile(markdownFile, []byte(sb.String()), 0644)
 }
 
 func sendAndWait(conn *websocket.Conn, req map[string]interface{}, waitID string) map[string]interface{} {
@@ -180,7 +454,6 @@ func main() {
 		}
 		fmt.Printf("\n✅ 完整 JSON 已保存到: %s (%d bytes)\n", outputFile, len(pretty))
 
-		// 顺便打印消息条数
 		if payload, ok := histResp["payload"].(map[string]interface{}); ok {
 			msgs := payload["messages"]
 			if msgs == nil {
@@ -188,6 +461,11 @@ func main() {
 			}
 			if list, ok := msgs.([]interface{}); ok {
 				fmt.Printf("📨 共 %d 条消息\n", len(list))
+			}
+			if err := writeMarkdownTranscript(targetSessionKey, payload); err != nil {
+				fmt.Printf("⚠️  写入 %s 失败: %v\n", markdownFile, err)
+			} else {
+				fmt.Printf("✅ 可读对话已保存到: %s\n", markdownFile)
 			}
 		}
 	}

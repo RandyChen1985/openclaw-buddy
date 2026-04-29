@@ -986,6 +986,7 @@ const Dashboard = () => {
           history={history}
  
           wsLogs={wsLogs} 
+          v3Status={v3Status}
           isRunning={isRunning} 
           onControl={handleControl} 
           onNavigate={setActiveTab}
@@ -1018,6 +1019,10 @@ const Dashboard = () => {
           onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
+          }}
+          onNavigateToChat={(botId: string) => {
+            window.sessionStorage.setItem('v3_quick_chat_bot', `openclaw:${botId}`);
+            setActiveTab('chat');
           }}
         />
       ),

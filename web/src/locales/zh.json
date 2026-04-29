@@ -101,7 +101,16 @@
     "fullscreen": "全屏",
     "exitFullscreen": "退出全屏",
     "sessionClosed": "会话已关闭",
-    "cron": "定时任务"
+    "cron": "定时任务",
+    "uploadSuccess": "上传成功",
+    "createSuccess": "创建成功",
+    "newFile": "新建文件",
+    "newFolder": "新建文件夹",
+    "enterFileName": "请输入文件名",
+    "enterFolderName": "请输入文件夹名",
+    "pdfSupportError": "您的浏览器不支持 PDF 在线预览，请下载后查看",
+    "unsupported": "暂不支持预览/编辑",
+    "unsupportedFile": "该文件格式暂不支持在线预览或编辑"
   },
   "cron": {
     "title": "定时任务",

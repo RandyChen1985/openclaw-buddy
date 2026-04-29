@@ -417,7 +417,7 @@ function compactAssistantThinkingAfterToolInPlace(rows: Message[]): void {
 }
 
 /** UI 占位「正在思考」被误写入 transcript 时，会紧跟在已有回复后多一条 assistant —— 直接丢弃 */
-function isAssistantUiThinkingPlaceholder(content: string, thinkingLabel: string, deepLabel: string): boolean {
+export function isAssistantUiThinkingPlaceholder(content: string, thinkingLabel: string, deepLabel: string): boolean {
   const x = (content || '').trim();
   if (x === thinkingLabel.trim() || x === deepLabel.trim() || x === '思考中...') return true;
   // 英文/轻微变体：短句 + Lobster + thinking
@@ -2125,7 +2125,7 @@ export function useV3Messages({
           ? `\n![${f.filename}](${f.thumbUrl || f.url} \"${f.url}\")\n(File path: ${f.path})`
           : `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
       }).join('');
-      finalContent += fileLinks + `\n\n**System Note for Expert:** The user has uploaded files. Access them via absolute \"File path\" provided.`;
+      finalContent += fileLinks + `\n\n**System Note for Expert:** The user has uploaded files. Access them via absolute \"File path\" provided. Please analyze the content and respond in Chinese.`;
     }
 
     const now = Date.now();
@@ -2144,7 +2144,8 @@ export function useV3Messages({
       role: 'assistant',
       content: assistantInitialMsg,
       timestamp: new Date(now).toLocaleTimeString(),
-      _sortTs: aiSortTs
+      _sortTs: aiSortTs,
+      _thinkStartedAt: now,
     };
 
     const prevCacheForSession = sessionCacheRef.current.get(currentKey);
@@ -2255,7 +2256,8 @@ export function useV3Messages({
       role: 'assistant',
       content: t('chat.thinking'),
       timestamp: new Date().toLocaleTimeString(),
-      _sortTs: baseSortTs + 1
+      _sortTs: baseSortTs + 1,
+      _thinkStartedAt: Date.now(),
     };
 
     const prevCacheForSession = sessionCacheRef.current.get(sessionKey);

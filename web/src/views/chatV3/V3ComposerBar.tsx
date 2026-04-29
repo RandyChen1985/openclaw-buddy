@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Button, Select, Tooltip } from 'antd';
-import { Activity, Bot, Cpu, Plus, Quote, RefreshCw, Zap } from 'lucide-react';
+import { Activity, Bot, Cpu, Image, Plus, Quote, RefreshCw, Zap } from 'lucide-react';
 import type { InputAreaHandle } from '../../components/Chat/V3InputArea';
 import V3InputArea from '../../components/Chat/V3InputArea';
 import { V3SoulEditorDrawer } from './V3SoulEditorDrawer';
@@ -109,6 +109,49 @@ export function V3ComposerBar({
     transform: isFocused ? 'translateY(-4px)' : 'none'
   }), [isFocused]);
 
+  const currentModelInfo = useMemo(() => {
+    const models = botsModels?.data?.models || [];
+    const findModel = (id: string) => {
+      if (!id) return null;
+      // 1. 尝试精确匹配
+      let m = models.find((m: any) => m.id === id);
+      if (m) return m;
+      // 2. 尝试模糊匹配（处理带不带 provider 前缀的情况，例如 yovole/gemma vs gemma）
+      const baseId = id.includes('/') ? id.split('/').pop() : id;
+      return models.find((m: any) => {
+        const mBaseId = m.id.includes('/') ? m.id.split('/').pop() : m.id;
+        return mBaseId === baseId;
+      });
+    };
+
+    if (!sessionModel) {
+      const botId = selectedBot.replace('openclaw:', '');
+      const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
+      if (bot) return findModel(bot.model);
+      return null;
+    }
+    return findModel(sessionModel);
+  }, [sessionModel, selectedBot, botsModels]);
+
+  const supportsImage = useMemo(() => {
+    // 优先从匹配到的模型详情里看
+    if (currentModelInfo) {
+      if (currentModelInfo.capabilities?.includes('image') || 
+          currentModelInfo.input?.includes('image') || 
+          currentModelInfo.input_modalities?.includes('image')) return true;
+    }
+    
+    // 兜底策略：如果没匹配到模型详情（例如 ID 漂移），或者使用的是默认模型
+    // 则直接看机器人（Bot）自身的定义，只要 Bot 声明了图片能力，就允许发送
+    const botId = selectedBot.replace('openclaw:', '');
+    const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
+    if (bot) {
+      if (bot.capabilities?.includes('image') || bot.input?.includes('image')) return true;
+    }
+
+    return false;
+  }, [currentModelInfo, selectedBot, botsModels]);
+
   return (
     <div style={containerStyle} className="input-container-v3">
       <div style={{ width: '100%', display: 'flex', alignItems: 'center', padding: isMobile ? '6px 12px 0' : '12px 16px 0', gap: 8, boxSizing: 'border-box' }}>
@@ -121,13 +164,13 @@ export function V3ComposerBar({
           padding: '2px 4px',
           height: 38,
           flex: isMobile ? 1 : '0 0 auto',
-          width: isMobile ? 'auto' : 420,
+          width: isMobile ? 'auto' : 510,
           minWidth: 0,
           boxShadow: 'none'
         }}>
           <Select
             placeholder={t('chat.selectBotTip')}
-            style={{ width: isMobile ? '45%' : 220, fontSize: isMobile ? 11 : 13 }}
+            style={{ width: isMobile ? '50%' : 220, fontSize: isMobile ? 11 : 13 }}
             value={selectedBot}
             onChange={onRequestNewSessionWithBot}
             loading={loadingBots}
@@ -144,9 +187,12 @@ export function V3ComposerBar({
                     <BotAvatar provider={bot.provider || (bot.id === 'main' ? 'openai' : '')} size={20} />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2', minWidth: 0, flex: 1 }}>
-                    <span style={{ fontWeight: 600, color: '#1e293b', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {bot.name || bot.id}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ fontWeight: 600, color: '#1e293b', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {bot.name || bot.id}
+                      </span>
+                      {(bot.capabilities?.includes('image') || bot.input?.includes('image')) && <Image size={11} color="#0ea5e9" style={{ flexShrink: 0 }} />}
+                    </div>
                     <span style={{ fontSize: 9, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {bot.model || '---'} {t('chat.defaultSuffix', { defaultValue: '(默认)' })}
                     </span>
@@ -182,7 +228,7 @@ export function V3ComposerBar({
           <div style={{ width: 1, height: 16, background: '#bfdbfe', margin: '0 4px' }} />
           <Select
             placeholder={t('chat.sessionModelPlaceholder', { defaultValue: '自由切换会话模型' })}
-            style={{ flex: 1, fontSize: isMobile ? 11 : 13, minWidth: 0 }}
+            style={{ width: isMobile ? '50%' : 260, fontSize: isMobile ? 11 : 13, minWidth: 0 }}
             value={sessionModel}
             onChange={onSessionModelChange}
             loading={loadingBots}
@@ -209,10 +255,17 @@ export function V3ComposerBar({
               return Object.keys(groups).sort().map(provider => (
                 <Select.OptGroup label={provider.toUpperCase()} key={provider}>
                   {groups[provider].map((m: any) => (
-                    <Select.Option key={m.id} value={m.id}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Cpu size={14} style={{ color: '#6366f1' }} />
-                        <span style={{ fontSize: 13 }}>{m.name || m.id}</span>
+                    <Select.Option key={m.id} value={m.id} label={m.name || m.id}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                          <Cpu size={14} style={{ color: '#6366f1', flexShrink: 0 }} />
+                          <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name || m.id}</span>
+                        </div>
+                        {(m.capabilities?.includes('image') || m.input?.includes('image') || m.input_modalities?.includes('image')) && (
+                          <Tooltip title="Supports Image (Vision)">
+                            <Image size={12} color="#0ea5e9" style={{ flexShrink: 0 }} />
+                          </Tooltip>
+                        )}
                       </div>
                     </Select.Option>
                   ))}
@@ -222,48 +275,52 @@ export function V3ComposerBar({
           </Select>
         </div>
 
-        <V3SoulEditorDrawer
-          t={t}
-          isMobile={!!isMobile}
-          selectedBot={selectedBot}
-          botsModels={botsModels}
-          status={status}
-        />
+        {!isMobile && (
+          <V3SoulEditorDrawer
+            t={t}
+            isMobile={!!isMobile}
+            selectedBot={selectedBot}
+            botsModels={botsModels}
+            status={status}
+          />
+        )}
 
-        <Tooltip
-          title={
-            isTyping
-              ? t('chat.refreshWaitReply', { defaultValue: '请等待当前回复结束后刷新' })
-              : (status === 'authenticated' && sessionKey)
-                ? t('chat.refreshSession', { defaultValue: '刷新' })
-                : t('chat.refreshSessionNoSession', { defaultValue: '暂无可刷新的会话' })
-          }
-        >
-          <span style={{ display: 'inline-flex', marginLeft: 2 }}>
-            <Button
-              type="text"
-              size="small"
-              icon={<RefreshCw size={16} className={isLoadingHistory ? 'animate-spin' : ''} />}
-              onClick={onRefreshSession}
-              disabled={status !== 'authenticated' || !sessionKey || isTyping || isLoadingHistory}
-              aria-label={t('chat.refreshSession', { defaultValue: '刷新' })}
-              style={{
-                height: 38,
-                width: 38,
-                borderRadius: 10,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: '#f5f3ff',
-                border: 'none',
-                padding: 0,
-                boxShadow: '0 2px 4px rgba(124, 58, 237, 0.06)',
-                color: (status !== 'authenticated' || !sessionKey || isTyping || isLoadingHistory) ? '#cbd5e1' : '#64748b',
-                opacity: (status !== 'authenticated' || !sessionKey || isTyping || isLoadingHistory) ? 0.55 : 1
-              }}
-            />
-          </span>
-        </Tooltip>
+        {!isMobile && (
+          <Tooltip
+            title={
+              isTyping
+                ? t('chat.refreshWaitReply', { defaultValue: '请等待当前回复结束后刷新' })
+                : (status === 'authenticated' && sessionKey)
+                  ? t('chat.refreshSession', { defaultValue: '刷新' })
+                  : t('chat.refreshSessionNoSession', { defaultValue: '暂无可刷新的会话' })
+            }
+          >
+            <span style={{ display: 'inline-flex', marginLeft: 2 }}>
+              <Button
+                type="text"
+                size="small"
+                icon={<RefreshCw size={16} className={isLoadingHistory ? 'animate-spin' : ''} />}
+                onClick={onRefreshSession}
+                disabled={status !== 'authenticated' || !sessionKey || isTyping || isLoadingHistory}
+                aria-label={t('chat.refreshSession', { defaultValue: '刷新' })}
+                style={{
+                  height: 38,
+                  width: 38,
+                  borderRadius: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#f5f3ff',
+                  border: 'none',
+                  padding: 0,
+                  boxShadow: '0 2px 4px rgba(124, 58, 237, 0.06)',
+                  color: (status !== 'authenticated' || !sessionKey || isTyping || isLoadingHistory) ? '#cbd5e1' : '#64748b',
+                  opacity: (status !== 'authenticated' || !sessionKey || isTyping || isLoadingHistory) ? 0.55 : 1
+                }}
+              />
+            </span>
+          </Tooltip>
+        )}
       </div>
 
       {quotedMsg && (
@@ -290,8 +347,8 @@ export function V3ComposerBar({
         isFocused={isFocused}
         setIsFocused={setIsFocused}
         selectedBot={selectedBot}
+        supportsImage={supportsImage}
       />
     </div>
   );
 }
-

@@ -36,6 +36,7 @@ export interface Message {
     tps?: number;
   };
   senderLabel?: string;
+  _thinkStartedAt?: number; // 💡 记录思考开始时间戳，用于 UI 跨组件重绘时保持计时器不重置
 }
 
 interface UseChatV3WebSocketProps {
@@ -271,6 +272,46 @@ export const useChatV3WebSocket = ({
     sendRPC,
     handleAutoSummarize
   });
+
+  /**
+   * 切换会话时：如果“刚离开的上一个会话”仍未命名，则尝试为它补全标题。
+   *
+   * 说明：
+   * - 这是“切走时补标题”的用户期望（当前会话的自动补标题仍保留）。
+   * - 真正的去重/限频在 useV3AutoSummarize 内部（2 分钟内同一 key 不重复）。
+   * - silent=true：不打扰用户（失败会在控制台有错误日志）。
+   */
+  const prevSessionKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prevKey = prevSessionKeyRef.current;
+    prevSessionKeyRef.current = sessionKey;
+
+    if (status !== 'authenticated') return;
+    if (!prevKey) return;
+    if (!sessionKey) return;
+    if (prevKey === sessionKey) return;
+    if (prevKey === 'agent:main:main') return;
+
+    const prevLabel = sessions.find((s: any) => s.key === prevKey)?.label;
+    if (!isUntitledSessionLabel(prevLabel)) return;
+
+    void (async () => {
+      const hRes = await sendRPC('chat.history', { sessionKey: prevKey, limit: 10 });
+      if (!hRes.ok) return;
+      const raw = hRes.payload?.messages || hRes.payload?.items || [];
+      if (!Array.isArray(raw) || raw.length === 0) return;
+
+      const msgs: Message[] = raw.map((m: any) => ({
+        id: m.id || `hist-${prevKey}-${Math.random().toString(36).slice(2)}`,
+        role: (m.role === 'toolResult' ? 'assistant' : m.role) as any,
+        content: (typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '')).toString(),
+        timestamp: ''
+      })).filter((m: any) => (m.content || '').trim().length > 0);
+
+      if (msgs.length < 2) return;
+      await handleAutoSummarize(msgs, true, prevKey, false);
+    })();
+  }, [handleAutoSummarize, sendRPC, sessionKey, sessions, status]);
 
   return {
     messages: v3Messages, setMessages: setV3Messages,

@@ -255,3 +255,40 @@ func ReadExplorerFileBytes(path, configDir string) ([]byte, string, error) {
 	}
 	return data, filepath.Base(absPath), nil
 }
+
+// CreateExplorerFile creates a new empty file
+func CreateExplorerFile(dirPath, filename, content, configDir string) (string, error) {
+	absDir, err := VerifyExplorerPath(dirPath, configDir)
+	if err != nil {
+		return "", err
+	}
+
+	destPath := filepath.Join(absDir, filename)
+	// Check if already exists
+	if _, err := os.Stat(destPath); err == nil {
+		return "", fmt.Errorf("file already exists")
+	}
+
+	if err := os.WriteFile(destPath, []byte(content), 0644); err != nil {
+		return "", err
+	}
+	return destPath, nil
+}
+
+// CreateExplorerDir creates a new directory
+func CreateExplorerDir(dirPath, dirname, configDir string) (string, error) {
+	absDir, err := VerifyExplorerPath(dirPath, configDir)
+	if err != nil {
+		return "", err
+	}
+
+	destPath := filepath.Join(absDir, dirname)
+	if _, err := os.Stat(destPath); err == nil {
+		return "", fmt.Errorf("directory already exists")
+	}
+
+	if err := os.MkdirAll(destPath, 0755); err != nil {
+		return "", err
+	}
+	return destPath, nil
+}

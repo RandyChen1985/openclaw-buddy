@@ -131,10 +131,8 @@ export function useV3AutoSummarize({
         }
       }
     } catch (err) {
-      if (!silent) {
-        // eslint-disable-next-line no-console
-        console.error('Summarize error:', err);
-      }
+      // eslint-disable-next-line no-console
+      console.error('Summarize error:', err);
     } finally {
       summarizingSessionsRef.current.delete(activeKey);
       if (!targetKey) setIsSummarizing(false);

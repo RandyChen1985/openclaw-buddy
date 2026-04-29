@@ -1438,6 +1438,45 @@ func (s *Server) downloadExplorerFile(c *gin.Context) {
 	c.Data(http.StatusOK, "application/octet-stream", data)
 }
 
+func (s *Server) createExplorerFile(c *gin.Context) {
+	var req struct {
+		Path     string `json:"path" binding:"required"`
+		Filename string `json:"filename" binding:"required"`
+		Content  string `json:"content"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "path and filename are required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【新建文件】 (Dir: %s, Name: %s)", req.Path, req.Filename)
+	destPath, err := process.CreateExplorerFile(req.Path, req.Filename, req.Content, s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success", "path": destPath})
+}
+
+func (s *Server) createExplorerDir(c *gin.Context) {
+	var req struct {
+		Path    string `json:"path" binding:"required"`
+		Dirname string `json:"dirname" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "path and dirname are required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【新建文件夹】 (Dir: %s, Name: %s)", req.Path, req.Dirname)
+	destPath, err := process.CreateExplorerDir(req.Path, req.Dirname, s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success", "path": destPath})
+}
+
 func (s *Server) getOpenClawModelsConfig(c *gin.Context) {
 	providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir)
 	if err != nil {
@@ -2217,11 +2256,13 @@ func (s *Server) unbindWeChatAccount(c *gin.Context) {
 }
 
 func (s *Server) summarizeSession(c *gin.Context) {
+	log.Printf("🔍 [Summarize] API Hit: %s %s", c.Request.Method, c.Request.URL.Path)
 	var req struct {
 		Messages []map[string]interface{} `json:"messages" binding:"required"`
 		ModelID  string                   `json:"modelID"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("⚠️ [Summarize] JSON Bind Error: %v", err)
 		s.Error(c, http.StatusBadRequest, "参数错误: "+err.Error())
 		return
 	}
@@ -2229,6 +2270,7 @@ func (s *Server) summarizeSession(c *gin.Context) {
 	// 1. 获取模型和提供商配置
 	providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir)
 	if err != nil {
+		log.Printf("❌ [Summarize] Failed to get models config: %v", err)
 		s.Error(c, http.StatusInternalServerError, "无法加载模型配置: "+err.Error())
 		return
 	}
@@ -2297,8 +2339,30 @@ func (s *Server) summarizeSession(c *gin.Context) {
 		}
 	}
 
-	rawProv, ok := providers[providerName].(map[string]interface{})
-	if !ok {
+	// 2. 确定具体的提供商配置（支持不区分大小写的匹配）
+	var rawProv map[string]interface{}
+	var found bool
+	
+	// 首先尝试精确匹配
+	if p, ok := providers[providerName].(map[string]interface{}); ok {
+		rawProv = p
+		found = true
+	} else {
+		// 精确匹配失败，尝试不区分大小写匹配
+		for name, p := range providers {
+			if strings.EqualFold(name, providerName) {
+				if dp, ok := p.(map[string]interface{}); ok {
+					rawProv = dp
+					found = true
+					providerName = name // 修正为正确的 case
+					break
+				}
+			}
+		}
+	}
+
+	if !found {
+		log.Printf("❌ [Summarize] AI Provider not found: %s. Available keys: %v", providerName, getMapKeys(providers))
 		s.Error(c, http.StatusNotFound, "找不到对应提供商配置: "+providerName)
 		return
 	}
@@ -2403,17 +2467,13 @@ func (s *Server) handleChatUpload(c *gin.Context) {
 	uploadDir := "./data/uploads" // 默认路径
 
 	if botId != "" {
-		// 查找机器人对应的 workspace
-		botsData, err := process.GetOpenClawBotsModels(s.cfg.OpenClawConfigDir)
-		if err == nil {
-			for _, bot := range botsData.Bots {
-				if bot.ID == botId && bot.Workspace != "" {
-					// 如果机器人有专属 workspace，则在其下创建 uploads 目录
-					uploadDir = filepath.Join(utils.ExpandPath(bot.Workspace), "uploads")
-					break
-				}
-			}
+		start := time.Now()
+		// 优化：不再调用沉重的 GetOpenClawBotsModels，改为轻量级读取 Workspace
+		workspace, err := process.GetBotWorkspace(s.cfg.OpenClawConfigDir, botId)
+		if err == nil && workspace != "" {
+			uploadDir = filepath.Join(workspace, "uploads")
 		}
+		log.Printf("⏱️ [Upload] 查找机器人工作空间耗时: %v", time.Since(start))
 	}
 
 	// 2. 确保目录存在
@@ -2437,18 +2497,19 @@ func (s *Server) handleChatUpload(c *gin.Context) {
 		return
 	}
 
-	// 3.1 如果是图片，生成缩略图
+	// 3.1 临时测试：不生成缩略图，直接使用原图地址作为预览图地址
 	thumbName := ""
+	/* 暂时注释掉缩略图生成逻辑
 	if strings.HasPrefix(c.Request.Header.Get("Content-Type"), "image/") || 
 	   matchExt(ext, ".jpg", ".jpeg", ".png", ".webp", ".gif") {
-		// 统一缩略图后缀为 .thumb.jpg，方便辨认
 		thumbName = uniqueName + ".thumb.jpg"
 		err := generateThumbnail(filePath, filepath.Join(uploadDir, thumbName))
 		if err != nil {
 			log.Printf("⚠️ [Upload] 生成缩略图失败: %v", err)
-			thumbName = "" // 失败则清空，前端会自动降级到原图
+			thumbName = "" 
 		}
 	}
+	*/
 
 	// 获取绝对路径，方便专家直接调用
 	absPath, _ := filepath.Abs(filePath)
@@ -2503,6 +2564,11 @@ func generateThumbnail(srcPath, dstPath string) error {
 	width := bounds.Dx()
 	height := bounds.Dy()
 	
+	// 如果原图宽度已经小于等于 200px，直接复制一份作为缩略图
+	if width <= 200 {
+		return utils.CopyFile(srcPath, dstPath)
+	}
+	
 	newWidth := 200
 	if width < 200 { newWidth = width } // 如果原图就很小，保持原宽
 	
@@ -2532,14 +2598,10 @@ func (s *Server) handleGetChatFile(c *gin.Context) {
 	// 1. 确定物理路径
 	uploadDir := "./data/uploads"
 	if botId != "" && botId != "default" {
-		botsData, err := process.GetOpenClawBotsModels(s.cfg.OpenClawConfigDir)
-		if err == nil {
-			for _, bot := range botsData.Bots {
-				if bot.ID == botId && bot.Workspace != "" {
-					uploadDir = filepath.Join(utils.ExpandPath(bot.Workspace), "uploads")
-					break
-				}
-			}
+		// 优化：使用轻量级方法获取路径，避免加载沉重的模型能力对账
+		workspace, err := process.GetBotWorkspace(s.cfg.OpenClawConfigDir, botId)
+		if err == nil && workspace != "" {
+			uploadDir = filepath.Join(workspace, "uploads")
 		}
 	}
 
@@ -2781,4 +2843,12 @@ func (s *Server) deleteChannelAccount(c *gin.Context) {
 	}
 
 	s.Success(c, gin.H{"message": "Account deleted successfully"})
+}
+
+func getMapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

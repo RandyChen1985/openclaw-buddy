@@ -12,6 +12,7 @@ interface DashboardOverviewProps {
   status: any;
   history: any[];
   wsLogs: string[];
+  v3Status?: string;
   isRunning: boolean;
   onControl: (action: string) => void;
   onNavigate?: (key: string) => void;
@@ -40,7 +41,7 @@ interface OcStatus {
 }
 
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({ 
-  status, history, isRunning, onControl, onNavigate,
+  status, history, v3Status, isRunning, onControl, onNavigate,
   systemEvents = [], topBots = [], ocInstalled, activeTasks = [], isTransitioning = false, loading = false,
   onRefreshVersion, onUpgrade, onRestart
 }) => {
@@ -60,6 +61,9 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   
   // 环境检测中锁定：1. OpenClaw 安装状态未知 2. 系统基本信息尚未对账完成
   const isEnvChecking = ocInstalled === null || !systemInfo;
+
+  // 连接中状态：WebSocket 正在握手
+  const isConnecting = ['connecting', 'handshaking', 'authorizing', 'identifying'].includes(v3Status || '');
 
   const fetchData = async () => {
     try {
@@ -365,11 +369,11 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <Card styles={{ body: { padding: 24 } }} style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: 13, fontWeight: 500 }}>
-                  <Activity size={15} color={isRunning ? '#22c55e' : '#ef4444'} />
+                  <Activity size={15} color={isRunning ? '#22c55e' : (isConnecting ? '#94a3b8' : '#ef4444')} />
                   {t('dashboard.coreStatus')}
                 </div>
-                <Tag color={isRunning ? 'success' : 'error'} style={{ borderRadius: 20, border: 'none', margin: 0, fontWeight: 600, padding: '0 10px' }}>
-                  {isRunning ? t('dashboard.running') : t('dashboard.stopped')}
+                <Tag color={isRunning ? 'success' : (isConnecting ? 'default' : 'error')} style={{ borderRadius: 20, border: 'none', margin: 0, fontWeight: 600, padding: '0 10px' }}>
+                  {isRunning ? t('dashboard.running') : (isConnecting ? t('chat.gatewayConnecting') : t('dashboard.stopped'))}
                 </Tag>
               </div>
               <div style={{ marginBottom: 24 }}>
@@ -560,7 +564,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<Play size={14} />}
             onClick={() => onControl('start')}
-            disabled={isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking}
+            disabled={isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking || isConnecting}
             loading={(isGatewayProcessing && !isRunning) || (isEnvChecking && ocInstalled === null)}
             style={{ 
               borderRadius: 10, 
@@ -577,7 +581,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<Square size={14} />}
             onClick={() => onControl('stop')}
-            disabled={!isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking}
+            disabled={!isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking || isConnecting}
             loading={isGatewayProcessing && isRunning}
             style={{ borderRadius: 10, width: '100%' }}
           >
@@ -587,7 +591,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             size="large"
             icon={<RefreshCw size={14} />}
             onClick={() => onControl('restart')}
-            disabled={!isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking}
+            disabled={!isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking || isConnecting}
             loading={isGatewayProcessing}
             style={{ borderRadius: 10, border: '1.5px solid #e2e8f0', width: '100%' }}
           >

@@ -17,6 +17,7 @@ import { V3FloatingButtons } from './chatV3/V3FloatingButtons';
 import { V3MessagePane } from './chatV3/V3MessagePane';
 import { V3ComposerBar } from './chatV3/V3ComposerBar';
 import { V3DebugPane } from './chatV3/V3DebugPane';
+import FileExplorer from '../components/FileExplorer';
 import { useV3Theme } from '../hooks/chatV3/useV3Theme';
 import '../styles/ChatV3.css';
 
@@ -177,19 +178,92 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
   const [editContent, setEditContent] = useState('');
   const [sessionSearch, setSessionSearch] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [explorerOpen, setExplorerOpen] = useState(false);
+  const [explorerPath, setExplorerPath] = useState('');
+  const [explorerTitle, setExplorerTitle] = useState('');
+  const [pendingSaveContent, setPendingSaveContent] = useState<string | undefined>(undefined);
 
+  const handleSendToChat = useCallback((content: string, fileName: string) => {
+    if (!content) return;
+    const wrapped = `File: ${fileName}\n---\n${content}\n`;
+    if (inputAreaRef.current) {
+      inputAreaRef.current.setValue((prev: string) => {
+        const current = prev.trim();
+        return current ? `${current}\n\n${wrapped}` : wrapped;
+      });
+      message.success(t('chat.contentAttached', { defaultValue: '文件内容已附加到输入框' }));
+    }
+  }, [t]);
 
   useEffect(() => {
-    if (!selectedBot && botsModels?.data?.bots?.length > 0) {
-      const firstBot = botsModels.data.bots[0];
-      setSelectedBot(`openclaw:${firstBot.id}`);
+    if (botsModels?.data?.bots?.length > 0) {
+      const quickChatBot = window.sessionStorage.getItem('v3_quick_chat_bot');
+      if (quickChatBot) {
+        window.sessionStorage.removeItem('v3_quick_chat_bot');
+        const botId = quickChatBot.replace('openclaw:', '');
+        setSelectedBot(quickChatBot);
+        startNewSession(botId);
+      } else if (!selectedBot && !sessionKey) {
+        const firstBot = botsModels.data.bots[0];
+        setSelectedBot(`openclaw:${firstBot.id}`);
+      }
     }
-  }, [botsModels, selectedBot]);
+  }, [botsModels, selectedBot, sessionKey, startNewSession]);
+
+  // 首次进入/刷新：若已恢复 sessionKey，则强制将 bot 下拉与会话 key 对齐，避免“默认选中第一个 bot”造成错配
+  useEffect(() => {
+    if (!sessionKey) return;
+    const { botId } = parseSessionKey(sessionKey);
+    const desired = `openclaw:${botId}`;
+    if (desired && desired !== selectedBot) {
+      setSelectedBot(desired);
+    }
+  }, [sessionKey, selectedBot]);
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-      .then(() => { message.success(t('chat.copySuccess')); })
-      .catch(() => { message.error(t('chat.copyFailed', { defaultValue: '复制失败，请手动复制' })); });
+    if (!text) return;
+    
+    // 优先尝试现代 Clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        message.success(t('chat.copySuccess'));
+      }).catch(err => {
+        console.warn('Modern Clipboard API failed, trying fallback:', err);
+        fallbackCopyTextToClipboard(text);
+      });
+    } else {
+      // API 不可用（如非安全上下文）时使用后备方案
+      fallbackCopyTextToClipboard(text);
+    }
+  };
+
+  const fallbackCopyTextToClipboard = (text: string) => {
+    try {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      
+      // 确保元素在视口外且不可见
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      textArea.style.top = "0";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      
+      textArea.focus();
+      textArea.select();
+
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+
+      if (successful) {
+        message.success(t('chat.copySuccess'));
+      } else {
+        throw new Error('execCommand copy returned false');
+      }
+    } catch (err) {
+      console.error('Fallback copy failed:', err);
+      message.error(t('chat.copyFailed', { defaultValue: '复制失败，请手动复制' }));
+    }
   };
 
   useEffect(() => {
@@ -249,6 +323,23 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
     if (!sessionKey) return null;
     return parseSessionKey(sessionKey).botId;
   }, [sessionKey]);
+
+  const handleOpenWorkspace = useCallback(() => {
+    if (!sessionKey) return;
+    const { botId } = parseSessionKey(sessionKey);
+    const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
+    if (bot?.workspace) {
+      setExplorerPath(bot.workspace);
+      setExplorerTitle(`${bot.name || bot.id} ${t('bots.workspace', { defaultValue: '工作区' })}`);
+      setExplorerOpen(true);
+    }
+  }, [sessionKey, botsModels, t]);
+
+  const handleSaveToWorkspace = useCallback((content: string) => {
+    setPendingSaveContent(content);
+    handleOpenWorkspace();
+    message.info(t('chat.chooseFolderToSave', { defaultValue: '已进入保存模式，请在文件浏览器中选择目标文件夹并右键保存' }));
+  }, [handleOpenWorkspace, t]);
 
   const handleRequestNewSessionWithBot = React.useCallback((botValue: string) => {
     const nextBot = (botValue || '').trim();
@@ -336,6 +427,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           }}>
             <V3SessionList
               sessions={sessions}
+              botsModels={botsModels}
               sessionKey={sessionKey}
               typingSessionKeys={typingSessionKeys}
               loadingSessions={loadingSessions}
@@ -447,6 +539,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           }}
           isFullscreen={isFullscreen}
           onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+          onOpenWorkspace={handleOpenWorkspace}
         />
   
         <V3MessagePane
@@ -497,6 +590,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           })}
           onQuote={setQuotedMsg}
           onSend={handleWrappedSend}
+          onSaveToWorkspace={handleSaveToWorkspace}
           onRegenerate={handleRegenerate}
           copyToClipboard={copyToClipboard}
         />
@@ -576,6 +670,17 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         />
       </div>
 
+      <FileExplorer
+        open={explorerOpen}
+        onClose={() => setExplorerOpen(false)}
+        rootPath={explorerPath}
+        title={explorerTitle}
+        t={t}
+        isMobile={!!isMobile}
+        onSendToChat={handleSendToChat}
+        pendingSaveContent={pendingSaveContent}
+        onClearPendingSave={() => setPendingSaveContent(undefined)}
+      />
     </>
   );
 };
