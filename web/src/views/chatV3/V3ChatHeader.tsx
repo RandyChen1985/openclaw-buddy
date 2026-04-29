@@ -536,9 +536,6 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
                       cursor: 'pointer',
                       whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      maxWidth: 240,
                       lineHeight: '12px',
                       opacity: 0.8
                     }}
