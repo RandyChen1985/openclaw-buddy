@@ -115,6 +115,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
 
   // Sider Widths
   const [rightSiderWidth, setRightSiderWidth] = useState(() => Number(storage.getItem('v3_right_sider_width')) || 400);
+  const [isDraggingRight, setIsDraggingRight] = useState(false);
   const isResizingRight = useRef(false);
 
   useEffect(() => {
@@ -128,6 +129,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
     };
     const handleMouseUp = () => {
       isResizingRight.current = false;
+      setIsDraggingRight(false);
       document.body.style.cursor = 'default';
       document.body.style.userSelect = 'auto';
     };
@@ -746,24 +748,28 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
             {/* Resize Handle Right */}
             <div 
               style={{ 
-                width: 4, 
+                width: 8, 
                 cursor: 'col-resize', 
-                background: 'transparent',
+                background: isDraggingRight ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
                 transition: 'background 0.2s',
-                zIndex: 50
+                zIndex: 50,
+                marginLeft: -4,
+                marginRight: -4
               }}
               onMouseDown={() => {
                 isResizingRight.current = true;
+                setIsDraggingRight(true);
                 document.body.style.cursor = 'col-resize';
                 document.body.style.userSelect = 'none';
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.05)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = isDraggingRight ? 'rgba(59, 130, 246, 0.2)' : 'transparent')}
             />
             <V3TerminalPane 
               t={t} 
               cwd={terminalCwd}
               width={rightSiderWidth}
+              transition={isDraggingRight ? 'none' : undefined}
               onWidthChange={(newWidth) => {
                 setRightSiderWidth(newWidth);
                 storage.setItem('v3_right_sider_width', String(newWidth));
@@ -788,25 +794,29 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
             {!showTerminal && (
               <div 
                 style={{ 
-                  width: 4, 
+                  width: 8, 
                   cursor: 'col-resize', 
-                  background: 'transparent',
+                  background: isDraggingRight ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
                   transition: 'background 0.2s',
-                  zIndex: 50
+                  zIndex: 50,
+                  marginLeft: -4,
+                  marginRight: -4
                 }}
                 onMouseDown={() => {
                   isResizingRight.current = true;
+                  setIsDraggingRight(true);
                   document.body.style.cursor = 'col-resize';
                   document.body.style.userSelect = 'none';
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.05)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = isDraggingRight ? 'rgba(59, 130, 246, 0.2)' : 'transparent')}
               />
             )}
             <V3ExplorerPane 
               t={t} 
               rootPath={explorerPath}
               width={rightSiderWidth}
+              transition={isDraggingRight ? 'none' : undefined}
               onWidthChange={(newWidth) => {
                 setRightSiderWidth(newWidth);
                 storage.setItem('v3_right_sider_width', String(newWidth));

@@ -14,9 +14,10 @@ interface V3TerminalPaneProps {
   width?: number;
   onWidthChange?: (width: number) => void;
   onClose: () => void;
+  transition?: string;
 }
 
-export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({ t, cwd, width = 450, onWidthChange, onClose }) => {
+export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({ t, cwd, width = 450, onWidthChange, onClose, transition: customTransition }) => {
   const [terminalEl, setTerminalEl] = useState<HTMLDivElement | null>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -175,7 +176,7 @@ export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({ t, cwd, width = 
       flexDirection: 'column',
       boxShadow: '-4px 0 15px rgba(0,0,0,0.2)',
       zIndex: 20,
-      transition: 'width 0.2s ease-in-out'
+      transition: customTransition !== undefined ? customTransition : 'width 0.2s ease-in-out'
     }}>
       <div style={{ 
         padding: '12px 16px', 

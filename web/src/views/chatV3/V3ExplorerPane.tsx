@@ -10,9 +10,10 @@ interface V3ExplorerPaneProps {
   onWidthChange?: (width: number) => void;
   onClose: () => void;
   onSendToChat?: (content: string, fileName: string, fileInfo?: any) => void;
+  transition?: string;
 }
 
-export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({ t, rootPath, width = 400, onWidthChange, onClose, onSendToChat }) => {
+export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({ t, rootPath, width = 400, onWidthChange, onClose, onSendToChat, transition: customTransition }) => {
   const [refreshKey, setRefreshKey] = React.useState(0);
 
   const handleBackToRoot = () => {
@@ -29,7 +30,7 @@ export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({ t, rootPath, wid
       flexDirection: 'column',
       boxShadow: '-4px 0 15px rgba(0,0,0,0.1)',
       zIndex: 20,
-      transition: 'width 0.2s ease-in-out'
+      transition: customTransition !== undefined ? customTransition : 'width 0.2s ease-in-out'
     }}>
       <div style={{ 
         padding: '12px 16px', 
