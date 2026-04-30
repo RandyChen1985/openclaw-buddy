@@ -100,6 +100,8 @@
     "connectionClosed": "连接已关闭",
     "fullscreen": "全屏",
     "exitFullscreen": "退出全屏",
+    "maximize": "最大化",
+    "minimize": "最小化",
     "sessionClosed": "会话已关闭",
     "cron": "定时任务",
     "uploadSuccess": "上传成功",

@@ -92,6 +92,8 @@
     "connectionClosed": "Connection closed",
     "fullscreen": "Fullscreen",
     "exitFullscreen": "Exit Fullscreen",
+    "maximize": "Maximize",
+    "minimize": "Minimize",
     "sessionClosed": "Session closed",
     "cron": "Scheduled Jobs"
   },

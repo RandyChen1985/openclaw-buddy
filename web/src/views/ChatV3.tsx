@@ -16,7 +16,10 @@ import { V3ChatHeader } from './chatV3/V3ChatHeader';
 import { V3FloatingButtons } from './chatV3/V3FloatingButtons';
 import { V3MessagePane } from './chatV3/V3MessagePane';
 import { V3ComposerBar } from './chatV3/V3ComposerBar';
+import { V3TerminalModal } from '../components/Chat/V3TerminalModal';
 import { V3DebugPane } from './chatV3/V3DebugPane';
+import { V3TerminalPane } from './chatV3/V3TerminalPane';
+import { V3ExplorerPane } from './chatV3/V3ExplorerPane';
 import FileExplorer from '../components/FileExplorer';
 import { useV3Theme } from '../hooks/chatV3/useV3Theme';
 import '../styles/ChatV3.css';
@@ -99,6 +102,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
 
   // Debug Logs
   const [showDebug, setShowDebug] = useState(() => storage.getItem('v3_show_debug') === 'true');
+  const [showTerminal, setShowTerminal] = useState(() => storage.getItem('v3_show_terminal') === 'true');
+  const [showExplorer, setShowExplorer] = useState(() => storage.getItem('v3_show_explorer') === 'true');
   const [wsLogs, setWsLogs] = useState<any[]>([]);
 
   const handleAddLog = useCallback((log: any) => {
@@ -106,6 +111,32 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
     if (!storage.getItem('v3_show_debug')) return;
     if (log.data?.event === 'health') return; 
     setWsLogs(prev => [...prev.slice(-99), log]);
+  }, []);
+
+  // Sider Widths
+  const [rightSiderWidth, setRightSiderWidth] = useState(() => Number(storage.getItem('v3_right_sider_width')) || 400);
+  const isResizingRight = useRef(false);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isResizingRight.current) {
+        const newWidth = Math.max(300, Math.min(800, window.innerWidth - e.clientX));
+        setRightSiderWidth(newWidth);
+        storage.setItem('v3_right_sider_width', String(newWidth));
+        window.dispatchEvent(new Event('resize'));
+      }
+    };
+    const handleMouseUp = () => {
+      isResizingRight.current = false;
+      document.body.style.cursor = 'default';
+      document.body.style.userSelect = 'auto';
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
   }, []);
 
   // Refs
@@ -182,6 +213,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
   const [explorerPath, setExplorerPath] = useState('');
   const [explorerTitle, setExplorerTitle] = useState('');
   const [pendingSaveContent, setPendingSaveContent] = useState<string | undefined>(undefined);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [terminalCwd, setTerminalCwd] = useState('');
+  const [terminalTitle, setTerminalTitle] = useState('');
 
   const handleSendToChat = useCallback((content: string, fileName: string, fileInfo?: any) => {
     if (inputAreaRef.current) {
@@ -228,6 +262,17 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
       setSelectedBot(desired);
     }
   }, [sessionKey, selectedBot]);
+  
+  // Sync workspace paths for pinned sidebars
+  useEffect(() => {
+    if (!sessionKey || !botsModels?.data?.bots) return;
+    const { botId } = parseSessionKey(sessionKey);
+    const bot = botsModels.data.bots.find((b: any) => b.id === botId);
+    if (bot?.workspace) {
+      if (explorerPath !== bot.workspace) setExplorerPath(bot.workspace);
+      if (terminalCwd !== bot.workspace) setTerminalCwd(bot.workspace);
+    }
+  }, [sessionKey, botsModels, explorerPath, terminalCwd]);
 
   const copyToClipboard = (text: string) => {
     if (!text) return;
@@ -344,6 +389,22 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
     }
   }, [sessionKey, botsModels, t]);
 
+  const handleOpenTerminal = useCallback(() => {
+    if (!sessionKey) return;
+    const { botId } = parseSessionKey(sessionKey);
+    const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
+    if (bot?.workspace) {
+      setTerminalCwd(bot.workspace);
+      setTerminalTitle(`${bot.name || bot.id} ${t('common.terminal', { defaultValue: '运维终端' })}`);
+      setTerminalOpen(true);
+    } else {
+      // 如果没有 workspace，也可以打开，只是不自动 cd
+      setTerminalCwd('');
+      setTerminalTitle(t('common.terminal', { defaultValue: '运维终端' }));
+      setTerminalOpen(true);
+    }
+  }, [sessionKey, botsModels, t]);
+
   const handleSaveToWorkspace = useCallback((content: string) => {
     setPendingSaveContent(content);
     handleOpenWorkspace();
@@ -422,16 +483,14 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
             />
           )}
           <div style={{ 
-            width: isMobile ? 280 : 260, 
+            width: isMobile ? 280 : 280, 
             height: '100%', 
             borderRight: '1px solid #f1f5f9', 
             display: 'flex', 
             flexDirection: 'column',
             background: '#fff',
             position: isMobile ? 'fixed' : 'relative',
-            top: 0, left: 0, bottom: 0,
             zIndex: 201,
-            boxShadow: isMobile ? '4px 0 20px rgba(0,0,0,0.15)' : 'none',
             flexShrink: 0
           }}>
             <V3SessionList
@@ -549,6 +608,16 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           isFullscreen={isFullscreen}
           onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
           onOpenWorkspace={handleOpenWorkspace}
+          showTerminal={showTerminal}
+          setShowTerminal={(val) => {
+            setShowTerminal(val);
+            storage.setItem('v3_show_terminal', val ? 'true' : 'false');
+          }}
+          showExplorer={showExplorer}
+          setShowExplorer={(val) => {
+            setShowExplorer(val);
+            storage.setItem('v3_show_explorer', val ? 'true' : 'false');
+          }}
         />
   
         <V3MessagePane
@@ -655,6 +724,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
               onClearQuote={() => setQuotedMsg(null)}
               onSend={handleWrappedSend}
               onStop={handleStopGeneration}
+              onOpenTerminal={handleOpenTerminal}
             />
 
           </div>
@@ -670,6 +740,91 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
               setWsLogs([]);
             }} 
           />
+        )}
+        {showTerminal && !isMobile && (
+          <>
+            {/* Resize Handle Right */}
+            <div 
+              style={{ 
+                width: 4, 
+                cursor: 'col-resize', 
+                background: 'transparent',
+                transition: 'background 0.2s',
+                zIndex: 50
+              }}
+              onMouseDown={() => {
+                isResizingRight.current = true;
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.05)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            />
+            <V3TerminalPane 
+              t={t} 
+              cwd={terminalCwd}
+              width={rightSiderWidth}
+              onWidthChange={(newWidth) => {
+                setRightSiderWidth(newWidth);
+                storage.setItem('v3_right_sider_width', String(newWidth));
+                // 自动折叠左侧会话列表
+                if (newWidth >= 800) {
+                  setShowSider(false);
+                } else {
+                  setShowSider(true);
+                }
+                window.dispatchEvent(new Event('resize'));
+              }}
+              onClose={() => {
+                setShowTerminal(false);
+                storage.setItem('v3_show_terminal', 'false');
+              }} 
+            />
+          </>
+        )}
+        {showExplorer && !isMobile && (
+          <>
+            {/* Resize Handle Right */}
+            {!showTerminal && (
+              <div 
+                style={{ 
+                  width: 4, 
+                  cursor: 'col-resize', 
+                  background: 'transparent',
+                  transition: 'background 0.2s',
+                  zIndex: 50
+                }}
+                onMouseDown={() => {
+                  isResizingRight.current = true;
+                  document.body.style.cursor = 'col-resize';
+                  document.body.style.userSelect = 'none';
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.05)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              />
+            )}
+            <V3ExplorerPane 
+              t={t} 
+              rootPath={explorerPath}
+              width={rightSiderWidth}
+              onWidthChange={(newWidth) => {
+                setRightSiderWidth(newWidth);
+                storage.setItem('v3_right_sider_width', String(newWidth));
+                // 自动折叠左侧会话列表
+                if (newWidth >= 800) {
+                  setShowSider(false);
+                } else {
+                  setShowSider(true);
+                }
+                window.dispatchEvent(new Event('resize'));
+              }}
+              onSendToChat={handleSendToChat}
+              onClose={() => {
+                setShowExplorer(false);
+                storage.setItem('v3_show_explorer', 'false');
+              }} 
+            />
+          </>
         )}
         <ChatV3Auth 
           status={status} 
@@ -689,6 +844,13 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         onSendToChat={handleSendToChat}
         pendingSaveContent={pendingSaveContent}
         onClearPendingSave={() => setPendingSaveContent(undefined)}
+      />
+
+      <V3TerminalModal
+        open={terminalOpen}
+        onClose={() => setTerminalOpen(false)}
+        cwd={terminalCwd}
+        title={terminalTitle}
       />
     </>
   );

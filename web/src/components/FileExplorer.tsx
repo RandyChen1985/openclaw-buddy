@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Modal, Button, message, Spin, Breadcrumb, Tabs, Input, Empty, 
-  Popconfirm, Tooltip, Tree, Table, Dropdown, Checkbox, Space, 
+  Popconfirm, Tooltip, Tree, Table, Dropdown, Checkbox, 
   Segmented, Card 
 } from 'antd';
 import type { MenuProps } from 'antd';
@@ -19,7 +19,7 @@ import {
   Folder, FileText, ChevronLeft, Save, Eye, PenLine, Trash2, FolderOpen, 
   Upload, Download, Search, LayoutList, Maximize2, Minimize2, 
   FileJson, FileCode2, Image as ImageIcon, Monitor, Terminal, File,
-  FolderPlus, FilePlus, Copy, PanelLeftOpen, PanelLeftClose,
+  FolderPlus, FilePlus, Copy, PanelLeftOpen, PanelLeftClose, X,
   MoreVertical, Edit3, Grid, List as ListIcon, RefreshCcw, Sparkles, Shield
 } from 'lucide-react';
 
@@ -53,6 +53,7 @@ interface FileExplorerProps {
   onSendToChat?: (content: string, fileName: string, fileInfo?: any) => void;
   pendingSaveContent?: string;
   onClearPendingSave?: () => void;
+  simplified?: boolean;
 }
 
 const getFileIcon = (name: string, isDir: boolean, size: number = 20, isProtected: boolean = false) => {
@@ -85,9 +86,10 @@ const getFileIcon = (name: string, isDir: boolean, size: number = 20, isProtecte
   }
 };
 
-const FileExplorer: React.FC<FileExplorerProps> = ({ 
+export const FileExplorerContent: React.FC<FileExplorerProps> = ({ 
   open, onClose, rootPath, title, t, isMobile, 
-  onSendToChat, pendingSaveContent, onClearPendingSave 
+  onSendToChat, pendingSaveContent, onClearPendingSave,
+  simplified = false
 }) => {
   const [currentPath, setCurrentPath] = useState(rootPath);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -99,7 +101,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
   const [isUploading, setIsUploading] = useState(false);
   const [filterText, setFilterText] = useState('');
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [treeData, setTreeData] = useState<TreeDataItem[]>([]);
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
@@ -239,7 +240,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       setSelectedFile(null);
       setIsEditing(false);
       setFilterText('');
-      setIsFullscreen(false);
       
       const initialRoot: TreeDataItem = {
         title: title || 'Root',
@@ -256,6 +256,22 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       });
     }
   }, [open, rootPath, title]);
+
+  // Sync currentPath when rootPath changes (important for pinned sidebar)
+  useEffect(() => {
+    if (rootPath) {
+      setCurrentPath(rootPath);
+      loadFiles(rootPath);
+    }
+  }, [rootPath]);
+
+  const handleBack = () => {
+    if (currentPath === rootPath) return;
+    const parts = currentPath.split(/[/\\]/).filter(Boolean);
+    parts.pop();
+    const parentPath = currentPath.startsWith('/') ? '/' + parts.join('/') : parts.join('/');
+    handleFolderClick(parentPath || rootPath);
+  };
 
   const loadFiles = async (path: string) => {
     setLoading(true);
@@ -874,198 +890,209 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
   return (
     <>
-      <Modal
-        title={null}
-        open={open}
-        onCancel={onClose}
-        footer={null}
-        width={isFullscreen ? '100%' : (isMobile ? '100%' : 1200)}
-        style={isFullscreen ? { top: 0, paddingBottom: 0, maxWidth: 'none' } : { top: 20, maxWidth: '95vw' }}
-        bodyStyle={{ padding: 0, height: isFullscreen ? '100vh' : 'calc(100vh - 120px)', overflow: 'hidden', borderRadius: 12 }}
-        maskStyle={{ backdropFilter: 'blur(4px)', background: 'rgba(0,0,0,0.45)' }}
-        destroyOnClose
-      >
-        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#fff' }}>
           {/* Custom Header */}
+          {/* Custom Header - Only show if not simplified */}
+          {!simplified && (
+            <div style={{ 
+              padding: isMobile ? '12px 16px' : '16px 24px', 
+              borderBottom: '1px solid #f1f5f9',
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              alignItems: isMobile ? 'flex-start' : 'center',
+              justifyContent: 'space-between',
+              gap: isMobile ? 12 : 0,
+              background: '#fff',
+              zIndex: 10
+            }}>
+              {(isEditing || (isMobile && currentPath !== rootPath)) && (
+                <Button 
+                  type="text" 
+                  icon={<ChevronLeft size={isMobile ? 18 : 20} />} 
+                  onClick={() => {
+                    if (isEditing) {
+                      setIsEditing(false);
+                      setSelectedFile(null);
+                    } else if (isMobile && currentPath !== rootPath) {
+                      // Go up one level
+                      const parts = currentPath.split(/[/\\]/).filter(Boolean);
+                      parts.pop();
+                      const parentPath = currentPath.startsWith('/') ? '/' + parts.join('/') : parts.join('/');
+                      handleFolderClick(parentPath || rootPath);
+                    }
+                  }}
+                  style={{ padding: 0, width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                />
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flex: 1, minWidth: 0 }}>
+                {!isMobile && (
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={isSidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+                    onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                    style={{ color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  />
+                )}
+                {!isMobile && (
+                  <div 
+                    style={{ background: '#f0f9ff', padding: 8, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={() => handleFolderClick(rootPath)}
+                  >
+                    <FolderOpen size={20} color="#0ea5e9" />
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.2, marginBottom: 2 }}>{title}</div>
+                  <Breadcrumb
+                    style={{ fontSize: 12 }}
+                    items={breadcrumbs.map((crumb, idx) => ({
+                      title: (
+                        <span 
+                          style={{ 
+                            cursor: 'pointer',
+                            color: idx < breadcrumbs.length - 1 ? '#0ea5e9' : '#94a3b8',
+                            transition: 'color 0.2s'
+                          }}
+                          onClick={() => handleFolderClick(crumb.path)}
+                          className="breadcrumb-item"
+                        >
+                          {crumb.name}
+                        </span>
+                      )
+                    }))}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
           <div style={{ 
-            padding: isMobile ? '12px 16px' : '16px 24px', 
+            padding: '8px 16px', 
             borderBottom: '1px solid #f1f5f9',
             display: 'flex',
-            flexDirection: isMobile ? 'column' : 'row',
-            alignItems: isMobile ? 'flex-start' : 'center',
+            alignItems: 'center',
             justifyContent: 'space-between',
-            gap: isMobile ? 12 : 0,
-            background: '#fff',
-            zIndex: 10
-          }}>
-            {(isEditing || (isMobile && currentPath !== rootPath)) && (
-              <Button 
-                type="text" 
-                icon={<ChevronLeft size={isMobile ? 18 : 20} />} 
-                onClick={() => {
-                  if (isEditing) {
-                    setIsEditing(false);
-                    setSelectedFile(null);
-                  } else if (isMobile && currentPath !== rootPath) {
-                    // Go up one level
-                    const parts = currentPath.split(/[/\\]/).filter(Boolean);
-                    parts.pop();
-                    const parentPath = currentPath.startsWith('/') ? '/' + parts.join('/') : parts.join('/');
-                    handleFolderClick(parentPath || rootPath);
-                  }
-                }}
-                style={{ padding: 0, width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              />
-            )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flex: 1, minWidth: 0 }}>
-            {!isMobile && (
-              <Button
-                type="text"
-                size="small"
-                icon={isSidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                style={{ color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              />
-            )}
-            {!isMobile && (
-              <div 
-                style={{ background: '#f0f9ff', padding: 8, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onClick={() => handleFolderClick(rootPath)}
-              >
-                <FolderOpen size={20} color="#0ea5e9" />
-              </div>
-            )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.2, marginBottom: 2 }}>{title}</div>
-              <Breadcrumb
-                style={{ fontSize: 12 }}
-                items={breadcrumbs.map((crumb, idx) => ({
-                  title: (
-                    <span 
-                      style={{ 
-                        cursor: 'pointer',
-                        color: idx < breadcrumbs.length - 1 ? '#0ea5e9' : '#94a3b8',
-                        transition: 'color 0.2s'
-                      }}
-                      onClick={() => handleFolderClick(crumb.path)}
-                      className="breadcrumb-item"
-                    >
-                      {crumb.name}
-                    </span>
-                  )
-                }))}
-              />
-            </div>
-          </div>
-          <div style={{ 
-            display: 'flex', 
-            gap: isMobile ? 4 : 8, 
-            alignItems: 'center', 
-            width: isMobile ? '100%' : 'auto',
-            justifyContent: isMobile ? 'flex-end' : 'flex-start',
-            marginTop: isMobile ? 4 : 0
+            background: '#f8fafc',
+            flexShrink: 0
           }}>
             {!isEditing && (
-              <Space.Compact style={{ flex: isMobile ? 1 : 'none' }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                {simplified && (
+                  <Button 
+                    type="text" 
+                    size="small"
+                    icon={<ChevronLeft size={16} />} 
+                    onClick={handleBack}
+                    disabled={currentPath === rootPath}
+                  />
+                )}
                 <Input
-                  placeholder={searchMode === 'current' ? t('common.searchPlaceholder') : t('common.globalSearch', { defaultValue: '全局搜索...' })}
-                  prefix={<Search size={isMobile ? 14 : 16} color="#94a3b8" style={{ marginRight: 4 }} />}
+                  placeholder={simplified ? t('common.search', { defaultValue: '搜索' }) : (searchMode === 'current' ? t('common.searchPlaceholder') : t('common.globalSearch', { defaultValue: '全局搜索...' }))}
+                  prefix={<Search size={14} color="#94a3b8" />}
                   value={filterText}
                   onChange={e => setFilterText(e.target.value)}
                   onPressEnter={() => searchMode === 'global' && loadFiles(currentPath)}
                   allowClear
                   style={{ 
-                    borderRadius: '8px 0 0 8px', 
-                    height: isMobile ? 28 : 32, 
-                    width: isMobile ? 'auto' : 180,
+                    borderRadius: simplified ? 8 : '8px 0 0 8px', 
+                    height: 32, 
+                    flex: simplified ? 1 : 'none',
+                    width: simplified ? 'auto' : (isMobile ? 'auto' : 180),
+                    border: simplified ? '1px solid #e2e8f0' : undefined
                   }}
                 />
-                <Segmented
-                  size={isMobile ? 'small' : 'middle'}
-                  value={searchMode}
-                  onChange={(v) => setSearchMode(v as any)}
-                  options={[
-                    { value: 'current', label: <Tooltip title={t('common.currentDir', { defaultValue: '当前目录' })}><Folder size={14}/></Tooltip> },
-                    { value: 'global', label: <Tooltip title={t('common.globalRecursive', { defaultValue: '全局递归' })}><Search size={14}/></Tooltip> }
-                  ]}
-                  style={{ borderRadius: '0 8px 8px 0', background: '#f1f5f9' }}
-                />
-              </Space.Compact>
+                {!simplified && (
+                  <Segmented
+                    size={isMobile ? 'small' : 'middle'}
+                    value={searchMode}
+                    onChange={(v) => setSearchMode(v as any)}
+                    options={[
+                      { value: 'current', label: <Tooltip title={t('common.currentDir', { defaultValue: '当前目录' })}><Folder size={14}/></Tooltip> },
+                      { value: 'global', label: <Tooltip title={t('common.globalRecursive', { defaultValue: '全局递归' })}><Search size={14}/></Tooltip> }
+                    ]}
+                    style={{ borderRadius: '0 8px 8px 0', background: '#f1f5f9' }}
+                  />
+                )}
+              </div>
             )}
-            <Button 
-              type="text"
-              size={isMobile ? 'small' : undefined}
-              icon={isFullscreen ? <Minimize2 size={isMobile ? 16 : 18} /> : <Maximize2 size={isMobile ? 16 : 18} />}
-              onClick={() => setIsFullscreen(!isFullscreen)}
-              style={{ color: '#64748b' }}
-            />
 
-            <Tooltip title={t('common.upload', { defaultValue: '上传' })}>
-              <Button 
-                size={isMobile ? 'small' : undefined}
-                icon={<Upload size={isMobile ? 14 : 16} />} 
-                loading={isUploading} 
-                onClick={handleUploadClick} 
-                style={{ borderRadius: 8 }}
-              >
-                {!isMobile && t('common.upload', { defaultValue: '上传' })}
-              </Button>
-            </Tooltip>
-            {!isEditing && (
-              <>
-                <Dropdown
-                  menu={{
-                    items: [
-                      { key: 'name', label: t('common.sortByName', { defaultValue: '按名称排序' }), onClick: () => setSortBy('name') },
-                      { key: 'size', label: t('common.sortBySize', { defaultValue: '按大小排序' }), onClick: () => setSortBy('size') },
-                      { key: 'time', label: t('common.sortByTime', { defaultValue: '按时间排序' }), onClick: () => setSortBy('time') },
-                    ],
-                    selectedKeys: [sortBy]
-                  }}
-                  trigger={['click']}
-                >
+            {!simplified && (
+              <div style={{ 
+                display: 'flex', 
+                gap: isMobile ? 4 : 8, 
+                alignItems: 'center', 
+                width: isMobile ? '100%' : 'auto',
+                justifyContent: isMobile ? 'flex-end' : 'flex-start',
+                marginTop: isMobile ? 4 : 0
+              }}>
+
+                <Tooltip title={t('common.upload', { defaultValue: '上传' })}>
                   <Button 
                     size={isMobile ? 'small' : undefined}
-                    icon={<RefreshCcw size={14} />} 
+                    icon={<Upload size={isMobile ? 14 : 16} />} 
+                    loading={isUploading} 
+                    onClick={handleUploadClick} 
                     style={{ borderRadius: 8 }}
                   >
-                    {!isMobile && (
-                      sortBy === 'name' ? t('common.sortByName', { defaultValue: '按名称排序' }) :
-                      sortBy === 'size' ? t('common.sortBySize', { defaultValue: '按大小排序' }) :
-                      t('common.sortByTime', { defaultValue: '按时间排序' })
-                    )}
+                    {!isMobile && t('common.upload', { defaultValue: '上传' })}
                   </Button>
-                </Dropdown>
-                <Segmented
-                  size={isMobile ? 'small' : 'middle'}
-                  value={viewMode}
-                  onChange={(v) => setViewMode(v as any)}
-                  options={[
-                    { value: 'list', icon: <ListIcon size={14} /> },
-                    { value: 'grid', icon: <Grid size={14} /> }
-                  ]}
-                  style={{ borderRadius: 8, background: '#f1f5f9' }}
-                />
-                <Tooltip title={t('common.newFile', { defaultValue: '新建文件' })}>
-                  <Button 
-                    size={isMobile ? 'small' : undefined}
-                    icon={<FilePlus size={14} />} 
-                    onClick={() => handleCreateFile()} 
-                    style={{ borderRadius: 8 }}
-                  />
                 </Tooltip>
-                <Tooltip title={t('common.newFolder', { defaultValue: '新建文件夹' })}>
-                  <Button 
-                    size={isMobile ? 'small' : undefined}
-                    icon={<FolderPlus size={14} />} 
-                    onClick={() => handleCreateDir()} 
-                    style={{ borderRadius: 8 }}
-                  />
-                </Tooltip>
-              </>
+                {!isEditing && (
+                  <>
+                    <Dropdown
+                      menu={{
+                        items: [
+                          { key: 'name', label: t('common.sortByName', { defaultValue: '按名称排序' }), onClick: () => setSortBy('name') },
+                          { key: 'size', label: t('common.sortBySize', { defaultValue: '按大小排序' }), onClick: () => setSortBy('size') },
+                          { key: 'time', label: t('common.sortByTime', { defaultValue: '按时间排序' }), onClick: () => setSortBy('time') },
+                        ],
+                        selectedKeys: [sortBy]
+                      }}
+                      trigger={['click']}
+                    >
+                      <Button 
+                        size={isMobile ? 'small' : undefined}
+                        icon={<RefreshCcw size={14} />} 
+                        style={{ borderRadius: 8 }}
+                      >
+                        {!isMobile && (
+                          sortBy === 'name' ? t('common.sortByName', { defaultValue: '按名称排序' }) :
+                          sortBy === 'size' ? t('common.sortBySize', { defaultValue: '按大小排序' }) :
+                          t('common.sortByTime', { defaultValue: '按时间排序' })
+                        )}
+                      </Button>
+                    </Dropdown>
+                    <Segmented
+                      size={isMobile ? 'small' : 'middle'}
+                      value={viewMode}
+                      onChange={(v) => setViewMode(v as any)}
+                      options={[
+                        { value: 'list', icon: <ListIcon size={14} /> },
+                        { value: 'grid', icon: <Grid size={14} /> }
+                      ]}
+                      style={{ borderRadius: 8, background: '#f1f5f9' }}
+                    />
+                    <Tooltip title={t('common.newFile', { defaultValue: '新建文件' })}>
+                      <Button 
+                        size={isMobile ? 'small' : undefined}
+                        icon={<FilePlus size={14} />} 
+                        onClick={() => handleCreateFile()} 
+                        style={{ borderRadius: 8 }}
+                      />
+                    </Tooltip>
+                    <Tooltip title={t('common.newFolder', { defaultValue: '新建文件夹' })}>
+                      <Button 
+                        size={isMobile ? 'small' : undefined}
+                        icon={<FolderPlus size={14} />} 
+                        onClick={() => handleCreateDir()} 
+                        style={{ borderRadius: 8 }}
+                      />
+                    </Tooltip>
+                  </>
+                )}
+              </div>
             )}
           </div>
-        </div>
 
       <input ref={uploadInputRef} type="file" multiple style={{ display: 'none' }} onChange={handleFileSelected} />
 
@@ -1090,7 +1117,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       )}
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: '#fff' }}>
-        {!isMobile && (
+        {!isMobile && !simplified && (
           <div style={{ 
             width: isSidebarCollapsed ? 0 : 280, 
             display: 'flex', 
@@ -1102,8 +1129,13 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             opacity: isSidebarCollapsed ? 0 : 1,
             pointerEvents: isSidebarCollapsed ? 'none' : 'auto'
           }}>
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', fontSize: 12, fontWeight: 700, color: '#64748b', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
-              <LayoutList size={14} /> {t('common.directory')}
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: 4, overflow: 'hidden' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+                <LayoutList size={14} /> {t('common.directory')}
+              </div>
+              <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={rootPath}>
+                {rootPath}
+              </div>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px 8px', minWidth: 280 }}>
                 <DirectoryTree
@@ -1135,9 +1167,21 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             ) : isEditing ? (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#fff' }}>
                 <div style={{ padding: '8px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#475569' }}>
-                    {getFileIcon(selectedFile?.name || '', false, 16)}
-                    {selectedFile?.name}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#475569', overflow: 'hidden' }}>
+                    {simplified && (
+                      <Button 
+                        size="small" type="text" icon={<ChevronLeft size={16} />} 
+                        onClick={() => {
+                          setIsEditing(false);
+                          setSelectedFile(null);
+                        }}
+                        style={{ color: '#64748b' }}
+                      />
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+                      {getFileIcon(selectedFile?.name || '', false, 16)}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedFile?.name}</span>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     {onSendToChat && selectedFile && !selectedFile.is_dir && canView && (
@@ -1550,8 +1594,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         .word-preview-v3 table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
         .word-preview-v3 table td, .word-preview-v3 table th { border: 1px solid #ddd; padding: 8px; }
       `}</style>
-        </div>
-      </Modal>
+      </div>
 
       {/* Auxiliary Modals (Create, Rename) */}
       <Modal
@@ -1597,6 +1640,62 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         </div>
       </Modal>
     </>
+  );
+};
+
+const FileExplorer: React.FC<FileExplorerProps> = (props) => {
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  return (
+    <Modal
+      open={props.open}
+      onCancel={props.onClose}
+      footer={null}
+      width={isMaximized ? '98%' : 1200}
+      centered
+      destroyOnClose
+      styles={{
+        body: { padding: 0, height: isMaximized ? 'calc(100vh - 80px)' : 'calc(100vh - 120px)', background: '#fff', overflow: 'hidden', borderRadius: '0 0 12px 12px' },
+        content: { padding: 0, background: '#fff', borderRadius: 12, overflow: 'hidden' },
+        header: { padding: 0, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', marginBottom: 0, borderRadius: '12px 12px 0 0' }
+      }}
+      title={
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between', 
+          padding: '12px 16px',
+          background: '#f8fafc',
+          borderRadius: '12px 12px 0 0'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FolderOpen size={18} color="#0ea5e9" />
+            <span style={{ fontSize: 15, fontWeight: 700 }}>{props.title || props.t('common.fileExplorer', { defaultValue: '文件浏览器' })}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Tooltip title={isMaximized ? props.t('common.minimize') : props.t('common.maximize')}>
+              <Button 
+                type="text" 
+                size="small" 
+                icon={isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />} 
+                onClick={() => setIsMaximized(!isMaximized)}
+                style={{ color: '#64748b' }}
+              />
+            </Tooltip>
+            <Button 
+              type="text" 
+              size="small" 
+              icon={<X size={18} />} 
+              onClick={props.onClose} 
+              style={{ color: '#64748b' }}
+            />
+          </div>
+        </div>
+      }
+      closeIcon={null}
+    >
+      <FileExplorerContent {...props} simplified={false} />
+    </Modal>
   );
 };
 
