@@ -1245,7 +1245,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                   ) : activeTab === 'preview' && isMarkdown ? (
                     <div style={{ height: '100%', padding: 24, overflowY: 'auto', background: '#f1f5f9' }}>
                       <div style={{ maxWidth: 900, margin: '0 auto', background: '#fff', padding: 40, borderRadius: 12, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-                        <div className="markdown-body-v3">
+                        <div className="file-explorer-markdown">
                           <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeSanitize]}>
                             {fileContent}
                           </ReactMarkdown>
@@ -1581,13 +1581,13 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
         .custom-directory-tree .ant-tree-node-content-wrapper:not(.ant-tree-node-selected) .ant-tree-title {
           color: #475569 !important;
         }
-        .markdown-body-v3 {
+        .file-explorer-markdown {
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
           font-size: 15px; line-height: 1.6; color: #24292f;
         }
-        .markdown-body-v3 h1, .markdown-body-v3 h2, .markdown-body-v3 h3 { margin-top: 24px; margin-bottom: 16px; font-weight: 600; line-height: 1.25; }
-        .markdown-body-v3 code { background: #afb8c133; padding: .2em .4em; border-radius: 6px; font-size: 85%; font-family: monospace; }
-        .markdown-body-v3 pre { background: #f6f8fa; padding: 16px; border-radius: 8px; overflow: auto; margin-bottom: 16px; border: 1px solid #e2e8f0; }
+        .file-explorer-markdown h1, .file-explorer-markdown h2, .file-explorer-markdown h3 { margin-top: 24px; margin-bottom: 16px; font-weight: 600; line-height: 1.25; }
+        .file-explorer-markdown code { background: #afb8c133; padding: .2em .4em; border-radius: 6px; font-size: 85%; font-family: monospace; }
+        .file-explorer-markdown pre { background: #f6f8fa; padding: 16px; border-radius: 8px; overflow: auto; margin-bottom: 16px; border: 1px solid #e2e8f0; }
         .word-preview-v3 { font-family: "Times New Roman", Times, serif; font-size: 16px; line-height: 1.5; color: #333; }
         .word-preview-v3 h1, .word-preview-v3 h2, .word-preview-v3 h3 { margin-top: 1.2em; margin-bottom: 0.6em; }
         .word-preview-v3 p { margin-bottom: 1em; text-align: justify; }
