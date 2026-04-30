@@ -203,7 +203,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       <div
         onDragOver={handleDragOver}
         onDrop={(e) => handleDropOnFolder(e, nodeData.key)}
-        style={{ display: 'inline-block', width: '100%' }}
+        style={{ display: 'inline-flex', alignItems: 'center', width: '100%' }}
       >
         {nodeData.title}
       </div>
@@ -1361,6 +1361,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                           background: selectedFile?.path === item.path ? '#eff6ff' : 'transparent',
                           cursor: 'pointer',
                           display: 'flex',
+                          flexDirection: 'row',
                           alignItems: 'center',
                           gap: 12,
                           transition: 'all 0.2s',
@@ -1522,6 +1523,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           border-radius: 6px;
           transition: all 0.2s;
           padding: 4px 8px !important;
+          display: flex !important;
+          align-items: center;
         }
         .custom-directory-tree .ant-tree-node-selected {
           background-color: #3b82f6 !important;

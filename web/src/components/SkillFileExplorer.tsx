@@ -738,6 +738,8 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
           border-radius: 6px;
           transition: all 0.2s;
           padding: 4px 8px !important;
+          display: flex !important;
+          align-items: center;
         }
         .custom-directory-tree .ant-tree-node-selected {
           background-color: #2563eb !important;
