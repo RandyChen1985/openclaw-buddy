@@ -15,7 +15,7 @@ import (
 	"openclaw-buddy/internal/process"
 )
 
-func (s *Server) startPTY(c *gin.Context, command string, args ...string) {
+func (s *Server) startPTY(c *gin.Context, command string, cwd string, args ...string) {
 	upgrader := s.wsUpgrader()
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -47,8 +47,18 @@ func (s *Server) startPTY(c *gin.Context, command string, args ...string) {
 		cmd.Env = append(cmd.Env, "HOME="+homeDir)
 	}
 	cmd.Env = append(cmd.Env, "OPENCLAW_CONFIG_DIR="+configDir)
-	// 设置工作目录为配置目录或家目录
-	cmd.Dir = homeDir
+
+	// 设置工作目录：优先使用传入的 cwd，否则使用 homeDir
+	if cwd != "" {
+		if _, err := os.Stat(cwd); err == nil {
+			cmd.Dir = cwd
+		} else {
+			log.Printf("PTY: provided cwd %s does not exist, falling back to %s", cwd, homeDir)
+			cmd.Dir = homeDir
+		}
+	} else {
+		cmd.Dir = homeDir
+	}
 
 	// 通过 PTY 启动命令
 	ptmx, err := pty.Start(cmd)

@@ -44,6 +44,12 @@ export interface V3ChatHeaderProps {
   showDebug: boolean;
   setShowDebug: (val: boolean) => void;
 
+  showTerminal: boolean;
+  setShowTerminal: (val: boolean) => void;
+
+  showExplorer: boolean;
+  setShowExplorer: (val: boolean) => void;
+
   /** 发送 `/reasoning …` 等用户消息（需在已连接且非生成中时由父组件校验） */
   onSendReasoningCommand?: (text: string) => void;
 
@@ -109,7 +115,11 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     v3Theme,
     isFullscreen,
     onToggleFullscreen,
-    onOpenWorkspace
+    onOpenWorkspace,
+    showTerminal,
+    setShowTerminal,
+    showExplorer,
+    setShowExplorer
   } = props;
 
   const [themeModalOpen, setThemeModalOpen] = useState(false);
@@ -233,20 +243,52 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           <Switch size="small" checked={showThinking} onChange={(val) => setShowThinking(val)} />
         </div>
 
+        <div style={{ height: 1, background: '#f1f5f9' }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+              {t('chat.showDebug', { defaultValue: '显示推送日志' })}
+            </div>
+            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+              {t('chat.showDebugHint', { defaultValue: '仅 debug 调试用，开启可能占用 CPU' })}
+            </div>
+          </div>
+          <Switch size="small" checked={showDebug} onChange={(val) => { setShowDebug(val); setSettingsOpen(false); }} />
+        </div>
+
         {!isMobile && (
           <>
             <div style={{ height: 1, background: '#f1f5f9' }} />
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <div>
-                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
-                  {t('chat.showDebug', { defaultValue: '显示推送日志' })}
-                </div>
-                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
-                  {t('chat.showDebugHint', { defaultValue: '仅 debug 调试用，开启可能占用 CPU' })}
-                </div>
+              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+                {t('common.showTerminal', { defaultValue: '显示终端' })}
               </div>
-              <Switch size="small" checked={showDebug} onChange={(val) => { setShowDebug(val); setSettingsOpen(false); }} />
+              <Switch
+                size="small"
+                checked={showTerminal}
+                onChange={(val) => {
+                  setShowTerminal(val);
+                  setSettingsOpen(false);
+                }}
+              />
+            </div>
+
+            <div style={{ height: 1, background: '#f1f5f9' }} />
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+                {t('common.showFolder', { defaultValue: '显示文件夹' })}
+              </div>
+              <Switch
+                size="small"
+                checked={showExplorer}
+                onChange={(val) => {
+                  setShowExplorer(val);
+                  setSettingsOpen(false);
+                }}
+              />
             </div>
           </>
         )}
@@ -335,37 +377,11 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
               <Select.Option value="high">High</Select.Option>
               <Select.Option value="xhigh">XHigh</Select.Option>
             </Select>
-          </div>
-          <div
-            style={{
-              marginTop: 10,
-              padding: '10px 12px',
-              background: '#f8fafc',
-              borderRadius: 10,
-              border: '1px solid #f1f5f9'
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 800,
-                color: '#475569',
-                lineHeight: 1.45,
-                marginBottom: 6,
-                overflowWrap: 'break-word',
-                wordBreak: 'break-word'
-              }}
-            >
-              {t('chat.thinkingLevelHelpTitle')}
-            </div>
-            <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.55, overflowWrap: 'break-word', wordBreak: 'break-word' }}>
-              {t('chat.thinkingLevelHelpBody')}
-            </div>
-          </div>
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 
   return (
     <div style={{ padding: isMobile ? '6px 10px' : '10px 16px', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 10, gap: 8, width: '100%', boxSizing: 'border-box' }}>

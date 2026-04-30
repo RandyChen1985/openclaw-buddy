@@ -21,10 +21,11 @@ func (s *Server) handleTUI(c *gin.Context) {
 		openclawPath = "openclaw" // 兜底
 	}
 
-	s.startPTY(c, openclawPath, "tui")
+	s.startPTY(c, openclawPath, "", "tui")
 }
 
 func (s *Server) handleShell(c *gin.Context) {
+	cwd := c.Query("cwd")
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		if runtime.GOOS == "windows" {
@@ -44,5 +45,5 @@ func (s *Server) handleShell(c *gin.Context) {
 		}
 	}
 
-	s.startPTY(c, shell)
+	s.startPTY(c, shell, cwd)
 }

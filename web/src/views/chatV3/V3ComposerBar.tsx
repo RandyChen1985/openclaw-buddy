@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Button, Select, Tooltip } from 'antd';
-import { Activity, Bot, Cpu, Image, Plus, Quote, RefreshCw, Zap } from 'lucide-react';
+import { Activity, Bot, Cpu, Image, Plus, Quote, RefreshCw, Terminal as TerminalIcon, Zap } from 'lucide-react';
 import type { InputAreaHandle } from '../../components/Chat/V3InputArea';
 import V3InputArea from '../../components/Chat/V3InputArea';
 import { V3SoulEditorDrawer } from './V3SoulEditorDrawer';
@@ -35,6 +35,7 @@ export interface V3ComposerBarProps {
   onClearQuote: () => void;
   onSend: (text: string, files?: any[]) => void;
   onStop: () => void;
+  onOpenTerminal?: () => void;
 }
 
 /**
@@ -66,7 +67,8 @@ export function V3ComposerBar({
   quotedMsg,
   onClearQuote,
   onSend,
-  onStop
+  onStop,
+  onOpenTerminal
 }: V3ComposerBarProps) {
   const [isComposing, setIsComposing] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -315,6 +317,34 @@ export function V3ComposerBar({
                   boxShadow: '0 2px 4px rgba(124, 58, 237, 0.06)',
                   color: (status !== 'authenticated' || !sessionKey || isTyping || isLoadingHistory) ? '#cbd5e1' : '#64748b',
                   opacity: (status !== 'authenticated' || !sessionKey || isTyping || isLoadingHistory) ? 0.55 : 1
+                }}
+              />
+            </span>
+          </Tooltip>
+        )}
+
+        {!isMobile && (
+          <Tooltip title={t('common.terminal', { defaultValue: '运维终端' })}>
+            <span style={{ display: 'inline-flex', marginLeft: 6 }}>
+              <Button
+                type="text"
+                size="small"
+                icon={<TerminalIcon size={16} />}
+                onClick={onOpenTerminal}
+                disabled={status !== 'authenticated' || !sessionKey}
+                style={{
+                  height: 38,
+                  width: 38,
+                  borderRadius: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#f0f9ff',
+                  border: 'none',
+                  padding: 0,
+                  boxShadow: '0 2px 4px rgba(14, 165, 233, 0.06)',
+                  color: (status !== 'authenticated' || !sessionKey) ? '#cbd5e1' : '#0ea5e9',
+                  opacity: (status !== 'authenticated' || !sessionKey) ? 0.55 : 1
                 }}
               />
             </span>
