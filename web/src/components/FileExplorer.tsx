@@ -19,7 +19,7 @@ import {
   Folder, FileText, ChevronLeft, Save, Eye, PenLine, Trash2, FolderOpen, 
   Upload, Download, Search, LayoutList, Maximize2, Minimize2, 
   FileJson, FileCode2, Image as ImageIcon, Monitor, Terminal, File,
-  FolderPlus, FilePlus, Copy, PanelLeftOpen, PanelLeftClose, Send,
+  FolderPlus, FilePlus, Copy, PanelLeftOpen, PanelLeftClose,
   MoreVertical, Edit3, Grid, List as ListIcon, RefreshCcw, Sparkles, Shield
 } from 'lucide-react';
 
@@ -50,7 +50,7 @@ interface FileExplorerProps {
   title: string;
   t: any;
   isMobile: boolean;
-  onSendToChat?: (content: string, fileName: string) => void;
+  onSendToChat?: (content: string, fileName: string, fileInfo?: any) => void;
   pendingSaveContent?: string;
   onClearPendingSave?: () => void;
 }
@@ -129,6 +129,86 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [contextPath, setContextPath] = useState('');
   const [contextIsFile, setContextIsFile] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+
+  // Drag and Drop Logic
+  const handleDragStart = (e: React.DragEvent, item: FileEntry) => {
+    e.stopPropagation();
+    let pathsToMove = [item.path];
+    if (selectedBulkKeys.includes(item.path)) {
+      pathsToMove = selectedBulkKeys;
+    }
+    e.dataTransfer.setData('application/x-openclaw-files', JSON.stringify(pathsToMove));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDropOnFolder = async (e: React.DragEvent, targetFolderPath: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const data = e.dataTransfer.getData('application/x-openclaw-files');
+    if (!data) return;
+    
+    try {
+      const pathsToMove: string[] = JSON.parse(data);
+      const validPaths = pathsToMove.filter(p => {
+        const parentPath = p.substring(0, p.lastIndexOf(p.includes('/') ? '/' : '\\')) || rootPath;
+        return parentPath !== targetFolderPath && p !== targetFolderPath && !targetFolderPath.startsWith(p + '/');
+      });
+
+      if (validPaths.length === 0) return;
+
+      setLoading(true);
+      let successCount = 0;
+      for (const p of validPaths) {
+        const fileName = p.split(/[/\\]/).pop();
+        if (!fileName) continue;
+        const newPath = targetFolderPath === rootPath && targetFolderPath.endsWith('/') 
+          ? `${targetFolderPath}${fileName}`
+          : `${targetFolderPath}/${fileName}`;
+          
+        try {
+          await api.post('/v1/openclaw/files/rename', {
+            oldPath: p,
+            newPath: newPath
+          });
+          successCount++;
+        } catch (err: any) {
+          message.error(`${fileName}: ${err.response?.data?.error || err.message || '移动失败'}`);
+        }
+      }
+      
+      if (successCount > 0) {
+        message.success(t('common.moveSuccess', { defaultValue: `成功移动 ${successCount} 个项` }));
+        if (expandedKeys.includes(targetFolderPath)) {
+          const children = await loadTreeChildren(targetFolderPath);
+          setTreeData(prev => updateTreeData(prev, targetFolderPath, children));
+        }
+        await loadFiles(currentPath);
+        setSelectedBulkKeys([]);
+      }
+    } catch (err) {
+      console.error('Drag and drop error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const treeTitleRender = (nodeData: any) => {
+    return (
+      <div
+        onDragOver={handleDragOver}
+        onDrop={(e) => handleDropOnFolder(e, nodeData.key)}
+        style={{ display: 'inline-block', width: '100%' }}
+      >
+        {nodeData.title}
+      </div>
+    );
+  };
 
   const isProtected = (name: string, path: string) => {
     if (path === rootPath) return true;
@@ -583,40 +663,29 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       if (onSendToChat) {
         const fileName = contextPath.split(/[/\\]/).pop() || 'file';
         const ext = fileName.split('.').pop()?.toLowerCase() || '';
-        const isTextFile = ['txt', 'log', 'csv', 'json', 'js', 'ts', 'jsx', 'tsx', 'py', 'go', 'sh', 'bash', 'yml', 'yaml', 'css', 'html', 'htm', 'md', 'dockerfile'].includes(ext) || fileName.endsWith('.md') || fileName.endsWith('.html');
+        const validExts = ['txt', 'json', 'js', 'ts', 'tsx', 'py', 'go', 'sh', 'yml', 'yaml', 'css', 'less', 'scss', 'conf', 'env', 'xml', 'sql', 'bat', 'ps1', 'ini', 'toml', 'log', 'prop', 'properties', 'dockerfile', 'ignore', 'gitignore', 'csv', 'md', 'html', 'htm', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'pdf', 'xls', 'xlsx', 'doc', 'docx'];
+        const isAnalyzable = validExts.includes(ext) || fileName.endsWith('.md') || fileName.endsWith('.html');
         
-        items.push({
-          key: 'sendToChat',
-          icon: <Send size={14} />,
-          label: t('chat.sendToChat', { defaultValue: '发送到会话' }),
-          onClick: async () => {
-            try {
-              const res = await api.get(`/v1/openclaw/files/get?path=${encodeURIComponent(contextPath)}`);
-              onSendToChat(res.data.content || '', fileName);
-              onClose();
-            } catch (err: any) {
-              message.error(err.response?.data?.error || err.message || t('common.loadFailed'));
-            }
-          }
-        });
-        
-        if (isTextFile) {
+        if (isAnalyzable) {
           items.push({
-            key: 'aiSummary',
+            key: 'aiAnalyze',
             icon: <Sparkles size={14} color="#8b5cf6" />,
-            label: t('chat.aiSummary', { defaultValue: 'AI 一键总结' }),
-            onClick: async () => {
-              try {
-                const res = await api.get(`/v1/openclaw/files/get?path=${encodeURIComponent(contextPath)}`);
-                onSendToChat(`请帮我总结并分析这个文件的内容：\n\n文件名: ${fileName}\n\n内容:\n${res.data.content || ''}`, fileName);
-                onClose();
-              } catch (err: any) {
-                message.error(err.response?.data?.error || err.message || t('common.loadFailed'));
-              }
+            label: t('chat.aiOneClickAnalyze', { defaultValue: 'AI 一键分析' }),
+            onClick: () => {
+              onSendToChat('', fileName, {
+                url: '',
+                path: contextPath,
+                filename: fileName,
+                size: 0,
+                ext: ext,
+                type: 'workspace_file',
+                entityId: contextPath
+              });
+              onClose();
             }
           });
+          items.push({ type: 'divider' });
         }
-        items.push({ type: 'divider' });
       }
       const isRoot = contextPath === rootPath;
       const fileName = contextPath.split(/[/\\]/).pop() || '';
@@ -1048,6 +1117,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                   showIcon={true}
                   blockNode
                   expandAction={false}
+                  titleRender={treeTitleRender}
                   className="custom-directory-tree"
                 />
               </div>
@@ -1070,25 +1140,22 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                     {selectedFile?.name}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    {onSendToChat && selectedFile && !selectedFile.is_dir && (
-                      <Tooltip title={t('chat.sendToChat', { defaultValue: '发送到会话' })}>
-                        <Button 
-                          type="text" size="small" icon={<Send size={16} />} 
-                          onClick={() => {
-                            const fileName = selectedFile.name;
-                            onSendToChat(fileContent, fileName);
-                            onClose();
-                          }} 
-                        />
-                      </Tooltip>
-                    )}
-                    {onSendToChat && selectedFile && !selectedFile.is_dir && isText && (
-                      <Tooltip title={t('chat.aiSummary', { defaultValue: 'AI 一键总结' })}>
+                    {onSendToChat && selectedFile && !selectedFile.is_dir && canView && (
+                      <Tooltip title={t('chat.aiOneClickAnalyze', { defaultValue: 'AI 一键分析' })}>
                         <Button 
                           type="text" size="small" icon={<Sparkles size={16} color="#8b5cf6" />} 
                           onClick={() => {
                             const fileName = selectedFile.name;
-                            onSendToChat(`请帮我总结并分析这个文件的内容：\n\n文件名: ${fileName}\n\n内容:\n${fileContent}`, fileName);
+                            const ext = fileName.split('.').pop()?.toLowerCase() || '';
+                            onSendToChat('', fileName, {
+                              url: '',
+                              path: selectedFile.path,
+                              filename: fileName,
+                              size: 0,
+                              ext: ext,
+                              type: 'workspace_file',
+                              entityId: selectedFile.path
+                            });
                             onClose();
                           }} 
                         />
@@ -1302,6 +1369,10 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                         }}
                         onClick={() => item.is_dir ? handleFolderClick(item.path) : loadFileContent(item)}
                         onContextMenu={(e) => handleRightClick(e, item.path, item.is_dir)}
+                        draggable={item.name !== '..' && !isProtected(item.name, item.path)}
+                        onDragStart={(e) => handleDragStart(e, item)}
+                        onDragOver={item.is_dir ? handleDragOver : undefined}
+                        onDrop={item.is_dir ? (e) => handleDropOnFolder(e, item.path) : undefined}
                         className="file-item-hover"
                       >
                         <Checkbox 
@@ -1339,22 +1410,20 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                           )}
                           {item.name !== '..' && !isProtected(item.name, item.path) && (
                             <Dropdown menu={{ items: [
-                              ...(!item.is_dir && onSendToChat ? [
-                                { key: 'send', icon: <Send size={14} />, label: t('chat.sendToChat', { defaultValue: '发送到会话' }), onClick: async (e: any) => { 
+                              ...(!item.is_dir && onSendToChat && (['txt', 'json', 'js', 'ts', 'tsx', 'py', 'go', 'sh', 'yml', 'yaml', 'css', 'less', 'scss', 'conf', 'env', 'xml', 'sql', 'bat', 'ps1', 'ini', 'toml', 'log', 'prop', 'properties', 'dockerfile', 'ignore', 'gitignore', 'csv', 'md', 'html', 'htm', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'pdf', 'xls', 'xlsx', 'doc', 'docx'].includes(item.name.split('.').pop()?.toLowerCase() || '') || item.name.endsWith('.md') || item.name.endsWith('.html')) ? [
+                                { key: 'aiAnalyze', icon: <Sparkles size={14} color="#8b5cf6" />, label: t('chat.aiOneClickAnalyze', { defaultValue: 'AI 一键分析' }), onClick: (e: any) => { 
                                   e.domEvent.stopPropagation(); 
-                                  try {
-                                    const res = await api.get(`/v1/openclaw/files/get?path=${encodeURIComponent(item.path)}`);
-                                    onSendToChat(res.data.content || '', item.name);
-                                    onClose();
-                                  } catch (err: any) { message.error(err.message); }
-                                } },
-                                { key: 'ai', icon: <Sparkles size={14} color="#8b5cf6" />, label: t('chat.aiSummary', { defaultValue: 'AI 一键总结' }), onClick: async (e: any) => { 
-                                  e.domEvent.stopPropagation(); 
-                                  try {
-                                    const res = await api.get(`/v1/openclaw/files/get?path=${encodeURIComponent(item.path)}`);
-                                    onSendToChat(`请帮我总结并分析这个文件的内容：\n\n文件名: ${item.name}\n\n内容:\n${res.data.content || ''}`, item.name);
-                                    onClose();
-                                  } catch (err: any) { message.error(err.message); }
+                                  const ext = item.name.split('.').pop()?.toLowerCase() || '';
+                                  onSendToChat('', item.name, {
+                                    url: '',
+                                    path: item.path,
+                                    filename: item.name,
+                                    size: 0,
+                                    ext: ext,
+                                    type: 'workspace_file',
+                                    entityId: item.path
+                                  });
+                                  onClose();
                                 } },
                                 { type: 'divider' as const }
                               ] : []),
@@ -1384,6 +1453,10 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                           }}
                           onClick={() => item.is_dir ? handleFolderClick(item.path) : loadFileContent(item)}
                           onContextMenu={(e) => handleRightClick(e, item.path, item.is_dir)}
+                          draggable={item.name !== '..' && !isProtected(item.name, item.path)}
+                          onDragStart={(e: any) => handleDragStart(e, item)}
+                          onDragOver={item.is_dir ? handleDragOver : undefined}
+                          onDrop={item.is_dir ? (e: any) => handleDropOnFolder(e, item.path) : undefined}
                           cover={
                             <div style={{ padding: '24px 0 12px 0', position: 'relative' }}>
                               {!isProtected(item.name, item.path) && item.name !== '..' && (

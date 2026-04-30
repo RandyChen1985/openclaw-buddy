@@ -502,11 +502,21 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                               {s.contextTokens > 0 && (
                                 <div style={{ marginTop: 6, width: '100%' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, fontSize: 9, fontWeight: 600 }}>
-                                       <span style={{ color: isActive ? '#4f46e5' : '#94a3b8', transform: 'scale(0.9)', transformOrigin: 'left', fontWeight: 800, textTransform: 'uppercase' }}>
+                                       <span style={{ color: isActive ? '#4f46e5' : '#94a3b8', transform: 'scale(0.9)', transformOrigin: 'left', fontWeight: 800 }}>
                                          {(() => {
-                                           const { botId } = parseSessionKey(s.key);
+                                           const { botId, source, openAIUser } = parseSessionKey(s.key);
                                            const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
-                                           return bot?.name || botId;
+                                           const botName = bot?.name || botId;
+                                           if (source === 'openai-user' && openAIUser) {
+                                             return (
+                                               <>
+                                                 <span style={{ textTransform: 'uppercase' }}>{botName}</span>
+                                                 <span style={{ opacity: 0.6, margin: '0 4px' }}>/</span>
+                                                 <span>{openAIUser}</span>
+                                               </>
+                                             );
+                                           }
+                                           return <span style={{ textTransform: 'uppercase' }}>{botName}</span>;
                                          })()}
                                        </span>
                                        <span style={{ 

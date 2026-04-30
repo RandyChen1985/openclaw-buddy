@@ -102,7 +102,7 @@ export function V3ComposerBar({
       : '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 0 0 2px var(--v3-input-idle-ring, rgba(99, 102, 241, 0.1))',
     border: 'none',
     flexDirection: 'column' as const,
-    overflow: 'hidden',
+    overflow: 'visible',
     transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
     width: '100%',
     boxSizing: 'border-box' as const,
@@ -136,13 +136,12 @@ export function V3ComposerBar({
   const supportsImage = useMemo(() => {
     // 优先从匹配到的模型详情里看
     if (currentModelInfo) {
-      if (currentModelInfo.capabilities?.includes('image') || 
-          currentModelInfo.input?.includes('image') || 
-          currentModelInfo.input_modalities?.includes('image')) return true;
+      return !!(currentModelInfo.capabilities?.includes('image') || 
+                currentModelInfo.input?.includes('image') || 
+                currentModelInfo.input_modalities?.includes('image'));
     }
     
-    // 兜底策略：如果没匹配到模型详情（例如 ID 漂移），或者使用的是默认模型
-    // 则直接看机器人（Bot）自身的定义，只要 Bot 声明了图片能力，就允许发送
+    // 兜底策略：如果没匹配到模型详情（例如 ID 漂移），则直接看机器人（Bot）自身的定义
     const botId = selectedBot.replace('openclaw:', '');
     const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
     if (bot) {
@@ -348,6 +347,7 @@ export function V3ComposerBar({
         setIsFocused={setIsFocused}
         selectedBot={selectedBot}
         supportsImage={supportsImage}
+        botsModels={botsModels}
       />
     </div>
   );

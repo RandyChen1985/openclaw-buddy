@@ -183,15 +183,24 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
   const [explorerTitle, setExplorerTitle] = useState('');
   const [pendingSaveContent, setPendingSaveContent] = useState<string | undefined>(undefined);
 
-  const handleSendToChat = useCallback((content: string, fileName: string) => {
-    if (!content) return;
-    const wrapped = `File: ${fileName}\n---\n${content}\n`;
+  const handleSendToChat = useCallback((content: string, fileName: string, fileInfo?: any) => {
     if (inputAreaRef.current) {
-      inputAreaRef.current.setValue((prev: string) => {
-        const current = prev.trim();
-        return current ? `${current}\n\n${wrapped}` : wrapped;
-      });
-      message.success(t('chat.contentAttached', { defaultValue: '文件内容已附加到输入框' }));
+      if (fileInfo) {
+        inputAreaRef.current.addFiles([fileInfo]);
+        inputAreaRef.current.setValue((prev: string) => {
+          const current = prev.trim();
+          return current ? current : t('chat.defaultAnalyzePrompt', { defaultValue: '请帮我分析这个文件' });
+        });
+        message.success(t('chat.contentAttached', { defaultValue: '文件已附加到输入框' }));
+      } else {
+        if (!content) return;
+        const wrapped = `File: ${fileName}\n---\n${content}\n`;
+        inputAreaRef.current.setValue((prev: string) => {
+          const current = prev.trim();
+          return current ? `${current}\n\n${wrapped}` : wrapped;
+        });
+        message.success(t('chat.contentAttached', { defaultValue: '文件内容已附加到输入框' }));
+      }
     }
   }, [t]);
 

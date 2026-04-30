@@ -2119,13 +2119,22 @@ export function useV3Messages({
 
     let finalContent = text;
     if (attachedFiles && attachedFiles.length > 0) {
-      const fileLinks = attachedFiles.map(f => {
-        const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
+      // 1. 处理提及实体 (Mentions)
+      const mentions = attachedFiles.filter(f => (f as any).type).map(f => {
+        if ((f as any).type === 'workspace_file') return `\n[File: ${f.path}]`;
+        if ((f as any).type === 'skill') return `\n[Skill: ${(f as any).entityId}]`;
+        return '';
+      }).join('');
+
+      // 2. 处理传统上传文件
+      const fileLinks = attachedFiles.filter(f => !(f as any).type).map(f => {
+        const isImage = f.ext.replace(/^\./, '').match(/^(jpg|jpeg|png|gif|webp|svg)$/i);
         return isImage
-          ? `\n![${f.filename}](${f.thumbUrl || f.url} \"${f.url}\")\n(File path: ${f.path})`
+          ? `\n![${f.filename}](${f.thumbUrl || f.url})\n(File path: ${f.path})`
           : `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
       }).join('');
-      finalContent += fileLinks + `\n\n**System Note for Expert:** The user has uploaded files. Access them via absolute \"File path\" provided. Please analyze the content and respond in Chinese.`;
+      
+      finalContent += mentions + fileLinks + `\n\n**System Note for Expert:** The user has provided context via files or skills. Please analyze the content and respond in Chinese.`;
     }
 
     const now = Date.now();
