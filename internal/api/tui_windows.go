@@ -14,8 +14,8 @@ import (
 	"openclaw-buddy/internal/process"
 )
 
-func (s *Server) startPTY(c *gin.Context, command string, args ...string) {
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+func (s *Server) startPTY(c *gin.Context, command string, cwd string, args ...string) {
+	conn, err := s.wsUpgrader().Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("PTY WebSocket upgrade failed: %v", err)
 		return
@@ -54,7 +54,18 @@ func (s *Server) startPTY(c *gin.Context, command string, args ...string) {
 		cmd.Env = append(cmd.Env, "USERPROFILE="+homeDir)
 	}
 	cmd.Env = append(cmd.Env, "OPENCLAW_CONFIG_DIR="+configDir)
-	cmd.Dir = homeDir
+
+	// 设置工作目录：优先使用传入的 cwd，否则使用 homeDir
+	if cwd != "" {
+		if _, err := os.Stat(cwd); err == nil {
+			cmd.Dir = cwd
+		} else {
+			log.Printf("PTY: provided cwd %s does not exist, falling back to %s", cwd, homeDir)
+			cmd.Dir = homeDir
+		}
+	} else {
+		cmd.Dir = homeDir
+	}
 
 	// 5. 启动进程
 	if err := cmd.Start(); err != nil {

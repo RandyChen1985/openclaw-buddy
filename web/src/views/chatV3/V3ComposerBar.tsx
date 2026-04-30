@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Button, Select, Tooltip } from 'antd';
-import { Activity, Bot, Cpu, Image, Plus, Quote, RefreshCw, Zap } from 'lucide-react';
+import { Activity, Bot, Cpu, Image, Plus, Quote, RefreshCw, Terminal as TerminalIcon, Zap } from 'lucide-react';
 import type { InputAreaHandle } from '../../components/Chat/V3InputArea';
 import V3InputArea from '../../components/Chat/V3InputArea';
 import { V3SoulEditorDrawer } from './V3SoulEditorDrawer';
@@ -35,6 +35,7 @@ export interface V3ComposerBarProps {
   onClearQuote: () => void;
   onSend: (text: string, files?: any[]) => void;
   onStop: () => void;
+  onOpenTerminal?: () => void;
 }
 
 /**
@@ -66,7 +67,8 @@ export function V3ComposerBar({
   quotedMsg,
   onClearQuote,
   onSend,
-  onStop
+  onStop,
+  onOpenTerminal
 }: V3ComposerBarProps) {
   const [isComposing, setIsComposing] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -102,7 +104,7 @@ export function V3ComposerBar({
       : '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 0 0 2px var(--v3-input-idle-ring, rgba(99, 102, 241, 0.1))',
     border: 'none',
     flexDirection: 'column' as const,
-    overflow: 'hidden',
+    overflow: 'visible',
     transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
     width: '100%',
     boxSizing: 'border-box' as const,
@@ -136,13 +138,12 @@ export function V3ComposerBar({
   const supportsImage = useMemo(() => {
     // 优先从匹配到的模型详情里看
     if (currentModelInfo) {
-      if (currentModelInfo.capabilities?.includes('image') || 
-          currentModelInfo.input?.includes('image') || 
-          currentModelInfo.input_modalities?.includes('image')) return true;
+      return !!(currentModelInfo.capabilities?.includes('image') || 
+                currentModelInfo.input?.includes('image') || 
+                currentModelInfo.input_modalities?.includes('image'));
     }
     
-    // 兜底策略：如果没匹配到模型详情（例如 ID 漂移），或者使用的是默认模型
-    // 则直接看机器人（Bot）自身的定义，只要 Bot 声明了图片能力，就允许发送
+    // 兜底策略：如果没匹配到模型详情（例如 ID 漂移），则直接看机器人（Bot）自身的定义
     const botId = selectedBot.replace('openclaw:', '');
     const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
     if (bot) {
@@ -321,6 +322,34 @@ export function V3ComposerBar({
             </span>
           </Tooltip>
         )}
+
+        {!isMobile && (
+          <Tooltip title={t('common.terminal', { defaultValue: '运维终端' })}>
+            <span style={{ display: 'inline-flex', marginLeft: 6 }}>
+              <Button
+                type="text"
+                size="small"
+                icon={<TerminalIcon size={16} />}
+                onClick={onOpenTerminal}
+                disabled={status !== 'authenticated' || !sessionKey}
+                style={{
+                  height: 38,
+                  width: 38,
+                  borderRadius: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#f0f9ff',
+                  border: 'none',
+                  padding: 0,
+                  boxShadow: '0 2px 4px rgba(14, 165, 233, 0.06)',
+                  color: (status !== 'authenticated' || !sessionKey) ? '#cbd5e1' : '#0ea5e9',
+                  opacity: (status !== 'authenticated' || !sessionKey) ? 0.55 : 1
+                }}
+              />
+            </span>
+          </Tooltip>
+        )}
       </div>
 
       {quotedMsg && (
@@ -348,6 +377,7 @@ export function V3ComposerBar({
         setIsFocused={setIsFocused}
         selectedBot={selectedBot}
         supportsImage={supportsImage}
+        botsModels={botsModels}
       />
     </div>
   );

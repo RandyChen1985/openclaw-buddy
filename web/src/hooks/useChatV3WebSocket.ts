@@ -15,6 +15,8 @@ export interface FileInfo {
   filename: string;
   size: number;
   ext: string;
+  type?: 'workspace_file' | 'skill';
+  entityId?: string;
 }
 
 export interface Message {

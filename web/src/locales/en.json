@@ -92,6 +92,8 @@
     "connectionClosed": "Connection closed",
     "fullscreen": "Fullscreen",
     "exitFullscreen": "Exit Fullscreen",
+    "maximize": "Maximize",
+    "minimize": "Minimize",
     "sessionClosed": "Session closed",
     "cron": "Scheduled Jobs"
   },
@@ -281,6 +283,8 @@
   },
   "chat": {
     "title": "Online Chat",
+    "sendToChat": "Send to Chat",
+    "aiSummary": "AI Summary",
     "classicMode": "Classic (HTTP)",
     "v3Mode": "V3 (RPC)",
     "soulEditorRecovering": "Loading expert soul...",

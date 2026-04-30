@@ -1,5 +1,5 @@
 import React from 'react';
-import { Input, Button, Spin, Tooltip, Avatar, Badge as AntBadge } from 'antd';
+import { Input, Button, Spin, Tooltip, Avatar, Badge as AntBadge, Select } from 'antd';
 import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe, Clock, PenLine, Sparkles, Settings, GitBranch } from 'lucide-react';
 
 export interface V3SessionListProps {
@@ -90,6 +90,51 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
   typingSessionKeys = [],
   newSessionBusy = false
 }) => {
+  const [activeBotId, setActiveBotId] = React.useState<string>('all');
+  const [activeSource, setActiveSource] = React.useState<string>('all');
+
+  const sourcesInSessions = React.useMemo(() => {
+    const sources = new Set<string>();
+    sessions.forEach((s: any) => {
+      const { botId, source } = parseSessionKey(s.key);
+      if (activeBotId === 'all' || botId === activeBotId) {
+        if (source) sources.add(source);
+      }
+    });
+    return Array.from(sources).map(src => {
+      const meta = getSourceMeta(src);
+      return {
+        id: src,
+        name: t(meta.labelKey, { defaultValue: meta.defaultLabel }),
+        icon: meta.icon,
+        color: meta.color
+      };
+    });
+  }, [sessions, activeBotId, t]);
+
+  React.useEffect(() => {
+    if (activeSource !== 'all' && !sourcesInSessions.find(s => s.id === activeSource)) {
+      setActiveSource('all');
+    }
+  }, [sourcesInSessions, activeSource]);
+
+  const botsInSessions = React.useMemo(() => {
+    const bots = new Set<string>();
+    sessions.forEach((s: any) => {
+      if (s.key !== 'agent:main:main') {
+        const { botId } = parseSessionKey(s.key);
+        if (botId) bots.add(botId);
+      }
+    });
+    return Array.from(bots).map(botId => {
+      const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
+      return {
+        id: botId,
+        name: botId === 'main' ? (bot?.name || t('chat.mainBotName', { defaultValue: '系统主机器人' })) : (bot?.name || botId)
+      };
+    });
+  }, [sessions, botsModels, t]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--v3-surface, #fff)' }}>
       <style>{`
@@ -163,6 +208,8 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
         .v3-dots span:nth-child(1) { animation-delay: 0ms; }
         .v3-dots span:nth-child(2) { animation-delay: 160ms; }
         .v3-dots span:nth-child(3) { animation-delay: 320ms; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
       <div style={{ padding: '16px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 8, alignItems: 'center' }}>
         <Button 
@@ -188,7 +235,79 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
       </div>
       
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-        <div style={{ padding: '4px 8px 8px', display: 'flex', gap: 6, alignItems: 'center' }}>
+        {botsInSessions.length > 0 && (
+          <div style={{ 
+            padding: '4px 8px 10px', 
+            display: 'flex', 
+            gap: 8, 
+            alignItems: 'center',
+            overflowX: 'auto', 
+            whiteSpace: 'nowrap',
+          }} className="hide-scrollbar">
+            <div 
+              onClick={() => setActiveBotId('all')}
+              style={{
+                cursor: 'pointer',
+                fontWeight: activeBotId === 'all' ? 600 : 500,
+                color: activeBotId === 'all' ? 'var(--v3-primary, #4f46e5)' : '#64748b',
+                background: activeBotId === 'all' ? 'rgba(79, 70, 229, 0.1)' : '#f8fafc',
+                border: '1px solid',
+                borderColor: activeBotId === 'all' ? 'rgba(79, 70, 229, 0.2)' : '#e2e8f0',
+                padding: '4px 12px',
+                borderRadius: '16px',
+                fontSize: 12,
+                transition: 'all 0.2s ease',
+                userSelect: 'none'
+              }}
+            >
+              {t('chat.allBots', { defaultValue: '全部' })}
+            </div>
+            {botsInSessions.map(b => (
+              <div 
+                key={b.id}
+                onClick={() => setActiveBotId(b.id)}
+                style={{
+                  cursor: 'pointer',
+                  fontWeight: activeBotId === b.id ? 600 : 500,
+                  color: activeBotId === b.id ? 'var(--v3-primary, #4f46e5)' : '#64748b',
+                  background: activeBotId === b.id ? 'rgba(79, 70, 229, 0.1)' : '#f8fafc',
+                  border: '1px solid',
+                  borderColor: activeBotId === b.id ? 'rgba(79, 70, 229, 0.2)' : '#e2e8f0',
+                  padding: '4px 12px',
+                  borderRadius: '16px',
+                  fontSize: 12,
+                  transition: 'all 0.2s ease',
+                  userSelect: 'none'
+                }}
+              >
+                {b.name}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ padding: '0 8px 12px', display: 'flex', gap: 6, alignItems: 'center' }}>
+          {sourcesInSessions.length > 0 && (
+            <Select
+              size="small"
+              value={activeSource}
+              onChange={setActiveSource}
+              style={{ width: 105 }}
+              popupMatchSelectWidth={false}
+              options={[
+                { label: t('chat.allSources', { defaultValue: '全部渠道' }), value: 'all' },
+                ...sourcesInSessions.map(s => ({
+                  label: (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                      {s.icon && React.cloneElement(s.icon as React.ReactElement, { size: 12, color: s.color })}
+                      <span>{s.name}</span>
+                    </div>
+                  ),
+                  value: s.id
+                }))
+              ]}
+            />
+          )}
           <Input
             size="small"
             prefix={<Search size={12} style={{ color: '#94a3b8' }} />}
@@ -221,8 +340,29 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
         ) : (
           (() => {
             const filtered = sessions.filter((s: any) => !sessionSearch || (s.key || '').toLowerCase().includes(sessionSearch.toLowerCase()) || (s.label || '').toLowerCase().includes(sessionSearch.toLowerCase()));
-            const mainSession = filtered.find((s: any) => s.key === 'agent:main:main');
-            const otherSessions = filtered.filter((s: any) => s.key !== 'agent:main:main');
+            
+            let mainSession = filtered.find((s: any) => s.key === 'agent:main:main');
+            if (mainSession) {
+                if (activeBotId !== 'all' && activeBotId !== 'main') mainSession = undefined;
+                if (mainSession && activeSource !== 'all') {
+                    const { source } = parseSessionKey(mainSession.key);
+                    if (source !== activeSource) mainSession = undefined;
+                }
+            }
+                
+            let otherSessions = filtered.filter((s: any) => s.key !== 'agent:main:main');
+            if (activeBotId !== 'all') {
+                otherSessions = otherSessions.filter((s: any) => {
+                    const { botId } = parseSessionKey(s.key);
+                    return botId === activeBotId;
+                });
+            }
+            if (activeSource !== 'all') {
+                otherSessions = otherSessions.filter((s: any) => {
+                    const { source } = parseSessionKey(s.key);
+                    return source === activeSource;
+                });
+            }
 
             // 分组逻辑
             const groups: Record<string, any[]> = { today: [], yesterday: [], lastWeek: [], older: [] };
@@ -362,11 +502,21 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                               {s.contextTokens > 0 && (
                                 <div style={{ marginTop: 6, width: '100%' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, fontSize: 9, fontWeight: 600 }}>
-                                       <span style={{ color: isActive ? '#4f46e5' : '#94a3b8', transform: 'scale(0.9)', transformOrigin: 'left', fontWeight: 800, textTransform: 'uppercase' }}>
+                                       <span style={{ color: isActive ? '#4f46e5' : '#94a3b8', transform: 'scale(0.9)', transformOrigin: 'left', fontWeight: 800 }}>
                                          {(() => {
-                                           const { botId } = parseSessionKey(s.key);
+                                           const { botId, source, openAIUser } = parseSessionKey(s.key);
                                            const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
-                                           return bot?.name || botId;
+                                           const botName = bot?.name || botId;
+                                           if (source === 'openai-user' && openAIUser) {
+                                             return (
+                                               <>
+                                                 <span style={{ textTransform: 'uppercase' }}>{botName}</span>
+                                                 <span style={{ opacity: 0.6, margin: '0 4px' }}>/</span>
+                                                 <span>{openAIUser}</span>
+                                               </>
+                                             );
+                                           }
+                                           return <span style={{ textTransform: 'uppercase' }}>{botName}</span>;
                                          })()}
                                        </span>
                                        <span style={{ 

@@ -1365,6 +1365,41 @@ func (s *Server) saveExplorerFileContent(c *gin.Context) {
 	s.Success(c, gin.H{"status": "success"})
 }
 
+func (s *Server) renameExplorerFile(c *gin.Context) {
+	var req struct {
+		OldPath string `json:"oldPath" binding:"required"`
+		NewPath string `json:"newPath" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "oldPath and newPath are required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【重命名/移动文件】 (%s -> %s)", req.OldPath, req.NewPath)
+	err := process.RenameExplorerFile(req.OldPath, req.NewPath, s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success"})
+}
+
+func (s *Server) searchExplorerFiles(c *gin.Context) {
+	rootPath := c.Query("path")
+	query := c.Query("query")
+	if rootPath == "" || query == "" {
+		s.Error(c, http.StatusBadRequest, "path and query are required")
+		return
+	}
+
+	files, err := process.SearchExplorerFiles(rootPath, query, s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"files": files})
+}
+
 func (s *Server) deleteExplorerFile(c *gin.Context) {
 	path := c.Query("path")
 	if path == "" {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -498,12 +499,41 @@ func AddOpenClawBot(id, model, workspace string) error {
 }
 
 func SetOpenClawBotIdentity(id, name string) error {
-	// 执行 openclaw agents set-identity --agent [id] --name "[name]"
+	// 1. 执行 openclaw agents set-identity --agent [id] --name "[name]"
 	cmd := exec.Command("openclaw", "agents", "set-identity", "--agent", id, "--name", name)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to set identity: %v. Output: %s", err, string(out))
 	}
+
+	// 2. 兜底逻辑：同步修改 IDENTITY.md 文件中的 - **Name:** 字段
+	// 我们需要先找到该机器人的工作区
+	configDir := filepath.Dir(os.Getenv("OPENCLAW_CONFIG"))
+	if configDir == "." || configDir == "" {
+		configDir = utils.ExpandPath("~/.openclaw")
+	}
+
+	res, err := GetOpenClawBotsModels(configDir)
+	if err == nil {
+		var workspace string
+		for _, bot := range res.Bots {
+			if bot.ID == id {
+				workspace = bot.Workspace
+				break
+			}
+		}
+
+		if workspace != "" {
+			identityPath := filepath.Join(utils.ExpandPath(workspace), "IDENTITY.md")
+			if content, err := os.ReadFile(identityPath); err == nil {
+				// 使用正则替换 - **Name:** 后面的内容
+				re := regexp.MustCompile(`(?m)^- \*\*Name:\*\*.*$`)
+				newContent := re.ReplaceAllString(string(content), fmt.Sprintf("- **Name:** %s", name))
+				_ = os.WriteFile(identityPath, []byte(newContent), 0644)
+			}
+		}
+	}
+
 	return nil
 }
 

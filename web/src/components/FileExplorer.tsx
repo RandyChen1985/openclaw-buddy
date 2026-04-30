@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Modal, List, Button, message, Spin, Breadcrumb, Tabs, Input, Empty, Popconfirm, Tooltip, Tree } from 'antd';
 import { 
-  Folder, FileText, ChevronRight, ChevronLeft, Save, Eye, PenLine, Trash2, FolderOpen, 
-  Upload, Download, Search, LayoutList, Maximize2, Minimize2, 
-  FileJson, FileCode2, Image as ImageIcon, Monitor, Terminal, File,
-  FolderPlus, FilePlus, Copy, PanelLeftOpen, PanelLeftClose, Send
-} from 'lucide-react';
+  Modal, Button, message, Spin, Breadcrumb, Tabs, Input, Empty, 
+  Popconfirm, Tooltip, Tree, Table, Dropdown, Checkbox, 
+  Segmented, Card 
+} from 'antd';
+import type { MenuProps } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -15,9 +14,18 @@ import storage from '../utils/storage';
 import TokenBadge from './TokenBadge';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
-import { Table, Dropdown, type MenuProps } from 'antd';
+import Editor from '@monaco-editor/react';
+import { 
+  Folder, FileText, ChevronLeft, Save, Eye, PenLine, Trash2, FolderOpen, 
+  Upload, Download, Search, LayoutList, Maximize2, Minimize2, 
+  FileJson, FileCode2, Image as ImageIcon, Monitor, Terminal, File,
+  FolderPlus, FilePlus, Copy, PanelLeftOpen, PanelLeftClose, X,
+  MoreVertical, Edit3, Grid, List as ListIcon, RefreshCcw, Sparkles, Shield
+} from 'lucide-react';
 
 const { DirectoryTree } = Tree;
+
+const protectedFiles = ['soul.md', 'agent.md', 'agents.md', 'identity.md', 'identify.md', 'user.md', 'tools.md', 'heartbeat.md', 'memory.md', 'soul', 'agent', 'memory', 'identity', 'heartbeat'];
 
 interface FileEntry {
   name: string;
@@ -42,12 +50,14 @@ interface FileExplorerProps {
   title: string;
   t: any;
   isMobile: boolean;
-  onSendToChat?: (content: string, fileName: string) => void;
+  onSendToChat?: (content: string, fileName: string, fileInfo?: any) => void;
   pendingSaveContent?: string;
   onClearPendingSave?: () => void;
+  simplified?: boolean;
 }
 
-const getFileIcon = (name: string, isDir: boolean, size: number = 20) => {
+const getFileIcon = (name: string, isDir: boolean, size: number = 20, isProtected: boolean = false) => {
+  if (isProtected && !isDir) return <Shield size={size} color="#8b5cf6" fill="#8b5cf622" />;
   if (isDir) return <Folder size={size} color="#0ea5e9" fill="#0ea5e933" />;
   const ext = name.split('.').pop()?.toLowerCase();
   switch (ext) {
@@ -76,9 +86,10 @@ const getFileIcon = (name: string, isDir: boolean, size: number = 20) => {
   }
 };
 
-const FileExplorer: React.FC<FileExplorerProps> = ({ 
+export const FileExplorerContent: React.FC<FileExplorerProps> = ({ 
   open, onClose, rootPath, title, t, isMobile, 
-  onSendToChat, pendingSaveContent, onClearPendingSave 
+  onSendToChat, pendingSaveContent, onClearPendingSave,
+  simplified = false
 }) => {
   const [currentPath, setCurrentPath] = useState(rootPath);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -90,7 +101,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
   const [isUploading, setIsUploading] = useState(false);
   const [filterText, setFilterText] = useState('');
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [treeData, setTreeData] = useState<TreeDataItem[]>([]);
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
@@ -99,6 +109,15 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [excelData, setExcelData] = useState<{ columns: any[], dataSource: any[] } | null>(null);
   const [wordHtml, setWordHtml] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [selectedBulkKeys, setSelectedBulkKeys] = useState<string[]>([]);
+  const [searchMode, setSearchMode] = useState<'current' | 'global'>('current');
+  const [sortBy, setSortBy] = useState<'name' | 'size' | 'time'>('name');
+  
+  // Rename States
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [oldRenamePath, setOldRenamePath] = useState('');
+  const [renameTargetName, setRenameTargetName] = useState('');
   
   // Create Modal States
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -112,6 +131,105 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [contextIsFile, setContextIsFile] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
 
+  // Drag and Drop Logic
+  const handleDragStart = (e: React.DragEvent, item: FileEntry) => {
+    e.stopPropagation();
+    let pathsToMove = [item.path];
+    if (selectedBulkKeys.includes(item.path)) {
+      pathsToMove = selectedBulkKeys;
+    }
+    e.dataTransfer.setData('application/x-openclaw-files', JSON.stringify(pathsToMove));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDropOnFolder = async (e: React.DragEvent, targetFolderPath: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const data = e.dataTransfer.getData('application/x-openclaw-files');
+    if (!data) return;
+    
+    try {
+      const pathsToMove: string[] = JSON.parse(data);
+      const validPaths = pathsToMove.filter(p => {
+        const parentPath = p.substring(0, p.lastIndexOf(p.includes('/') ? '/' : '\\')) || rootPath;
+        return parentPath !== targetFolderPath && p !== targetFolderPath && !targetFolderPath.startsWith(p + '/');
+      });
+
+      if (validPaths.length === 0) return;
+
+      setLoading(true);
+      let successCount = 0;
+      for (const p of validPaths) {
+        const fileName = p.split(/[/\\]/).pop();
+        if (!fileName) continue;
+        const newPath = targetFolderPath === rootPath && targetFolderPath.endsWith('/') 
+          ? `${targetFolderPath}${fileName}`
+          : `${targetFolderPath}/${fileName}`;
+          
+        try {
+          await api.post('/v1/openclaw/files/rename', {
+            oldPath: p,
+            newPath: newPath
+          });
+          successCount++;
+        } catch (err: any) {
+          message.error(`${fileName}: ${err.response?.data?.error || err.message || '移动失败'}`);
+        }
+      }
+      
+      if (successCount > 0) {
+        message.success(t('common.moveSuccess', { defaultValue: `成功移动 ${successCount} 个项` }));
+        if (expandedKeys.includes(targetFolderPath)) {
+          const children = await loadTreeChildren(targetFolderPath);
+          setTreeData(prev => updateTreeData(prev, targetFolderPath, children));
+        }
+        await loadFiles(currentPath);
+        setSelectedBulkKeys([]);
+      }
+    } catch (err) {
+      console.error('Drag and drop error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const treeTitleRender = (nodeData: any) => {
+    return (
+      <div
+        onDragOver={handleDragOver}
+        onDrop={(e) => handleDropOnFolder(e, nodeData.key)}
+        style={{ display: 'inline-flex', alignItems: 'center', width: '100%' }}
+      >
+        {nodeData.title}
+      </div>
+    );
+  };
+
+  const isProtected = (name: string, path: string) => {
+    if (path === rootPath) return true;
+    const baseName = name.toLowerCase().replace(/\.md$/, '');
+    return protectedFiles.includes(name.toLowerCase()) || protectedFiles.includes(baseName);
+  };
+
+  const isMarkdown = selectedFile?.name.endsWith('.md');
+  const isHTML = selectedFile?.name.endsWith('.html') || selectedFile?.name.endsWith('.htm');
+  const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'];
+  const ext = selectedFile?.name.split('.').pop()?.toLowerCase() || '';
+  const isImage = imageExts.includes(ext);
+  const isPDF = ext === 'pdf';
+  const isExcel = ['xls', 'xlsx'].includes(ext);
+  const isWord = ['doc', 'docx'].includes(ext);
+  const hasPreview = isMarkdown || isHTML || isImage || isPDF || isExcel || isWord;
+  const textExts = ['txt', 'json', 'js', 'ts', 'tsx', 'py', 'go', 'sh', 'yml', 'yaml', 'css', 'less', 'scss', 'conf', 'env', 'xml', 'sql', 'bat', 'ps1', 'ini', 'toml', 'log', 'prop', 'properties', 'dockerfile', 'ignore', 'gitignore'];
+  const isText = textExts.includes(ext) || isMarkdown || isHTML;
+  const canView = hasPreview || isText;
+
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize path and tree when modal opens
@@ -122,7 +240,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       setSelectedFile(null);
       setIsEditing(false);
       setFilterText('');
-      setIsFullscreen(false);
       
       const initialRoot: TreeDataItem = {
         title: title || 'Root',
@@ -140,11 +257,31 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     }
   }, [open, rootPath, title]);
 
+  // Sync currentPath when rootPath changes (important for pinned sidebar)
+  useEffect(() => {
+    if (rootPath) {
+      setCurrentPath(rootPath);
+      loadFiles(rootPath);
+    }
+  }, [rootPath]);
+
+  const handleBack = () => {
+    if (currentPath === rootPath) return;
+    const parts = currentPath.split(/[/\\]/).filter(Boolean);
+    parts.pop();
+    const parentPath = currentPath.startsWith('/') ? '/' + parts.join('/') : parts.join('/');
+    handleFolderClick(parentPath || rootPath);
+  };
+
   const loadFiles = async (path: string) => {
     setLoading(true);
-    setFilterText('');
     try {
-      const res = await api.get(`/v1/openclaw/files/list?path=${encodeURIComponent(path)}`);
+      let res;
+      if (searchMode === 'global' && filterText.trim()) {
+        res = await api.get(`/v1/openclaw/files/search?path=${encodeURIComponent(path)}&query=${encodeURIComponent(filterText)}`);
+      } else {
+        res = await api.get(`/v1/openclaw/files/list?path=${encodeURIComponent(path)}`);
+      }
       const sortedFiles = (res.data.files || []).sort((a: FileEntry, b: FileEntry) => {
         if (a.is_dir === b.is_dir) return a.name.localeCompare(b.name);
         return a.is_dir ? -1 : 1;
@@ -318,8 +455,76 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         setSelectedFile(null);
         setSelectedKeys([currentPath]);
       }
+      setSelectedBulkKeys(prev => prev.filter(k => k !== file.path));
     } catch (err: any) {
       message.error(err.response?.data?.error || err.message || t('common.deleteFailed'));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedBulkKeys.length === 0) return;
+    setLoading(true);
+    let successCount = 0;
+    for (const path of selectedBulkKeys) {
+      try {
+        await api.delete(`/v1/openclaw/files/delete?path=${encodeURIComponent(path)}`);
+        successCount++;
+      } catch (err: any) {
+        message.error(`${path}: ${err.message}`);
+      }
+    }
+    setLoading(false);
+    if (successCount > 0) {
+      message.success(t('common.deleteSuccess'));
+      setSelectedBulkKeys([]);
+      loadFiles(currentPath);
+      // Refresh tree
+      const newChildren = await loadTreeChildren(currentPath);
+      setTreeData(origin => updateTreeData(origin, currentPath, newChildren));
+    }
+  };
+
+  const handleRename = async () => {
+    if (!renameTargetName || !oldRenamePath) return;
+    const parentPath = oldRenamePath.substring(0, oldRenamePath.lastIndexOf(oldRenamePath.includes('/') ? '/' : '\\'));
+    const newPath = parentPath ? `${parentPath}/${renameTargetName}` : renameTargetName;
+    
+    try {
+      await api.post('/v1/openclaw/files/rename', {
+        oldPath: oldRenamePath,
+        newPath: newPath
+      });
+      message.success(t('common.renameSuccess', { defaultValue: '重命名成功' }));
+      setRenameModalOpen(false);
+      loadFiles(currentPath);
+      // Refresh tree
+      if (parentPath) {
+        const newChildren = await loadTreeChildren(parentPath);
+        setTreeData(origin => updateTreeData(origin, parentPath, newChildren));
+      }
+    } catch (err: any) {
+      message.error(err.response?.data?.error || err.message);
+    }
+  };
+
+  const getEditorLanguage = (filename: string) => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    switch (ext) {
+      case 'js': return 'javascript';
+      case 'ts': return 'typescript';
+      case 'tsx': return 'typescript';
+      case 'json': return 'json';
+      case 'py': return 'python';
+      case 'go': return 'go';
+      case 'sh': return 'shell';
+      case 'yml':
+      case 'yaml': return 'yaml';
+      case 'css': return 'css';
+      case 'html': return 'html';
+      case 'md': return 'markdown';
+      case 'sql': return 'sql';
+      case 'xml': return 'xml';
+      default: return 'plaintext';
     }
   };
 
@@ -472,21 +677,58 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     
     if (contextIsFile) {
       if (onSendToChat) {
-        items.push({
-          key: 'sendToChat',
-          icon: <Send size={14} />,
-          label: t('chat.sendToChat', { defaultValue: '发送到对话' }),
-          onClick: async () => {
-            try {
-              const res = await api.get(`/v1/openclaw/files/get?path=${encodeURIComponent(contextPath)}`);
-              const fileName = contextPath.split(/[/\\]/).pop() || 'file';
-              onSendToChat(res.data.content || '', fileName);
+        const fileName = contextPath.split(/[/\\]/).pop() || 'file';
+        const ext = fileName.split('.').pop()?.toLowerCase() || '';
+        const validExts = ['txt', 'json', 'js', 'ts', 'tsx', 'py', 'go', 'sh', 'yml', 'yaml', 'css', 'less', 'scss', 'conf', 'env', 'xml', 'sql', 'bat', 'ps1', 'ini', 'toml', 'log', 'prop', 'properties', 'dockerfile', 'ignore', 'gitignore', 'csv', 'md', 'html', 'htm', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'pdf', 'xls', 'xlsx', 'doc', 'docx'];
+        const isAnalyzable = validExts.includes(ext) || fileName.endsWith('.md') || fileName.endsWith('.html');
+        
+        if (isAnalyzable) {
+          items.push({
+            key: 'aiAnalyze',
+            icon: <Sparkles size={14} color="#8b5cf6" />,
+            label: t('chat.aiOneClickAnalyze', { defaultValue: 'AI 一键分析' }),
+            onClick: () => {
+              onSendToChat('', fileName, {
+                url: '',
+                path: contextPath,
+                filename: fileName,
+                size: 0,
+                ext: ext,
+                type: 'workspace_file',
+                entityId: contextPath
+              });
               onClose();
-            } catch (err: any) {
-              message.error(err.response?.data?.error || err.message || t('common.loadFailed'));
             }
+          });
+          items.push({ type: 'divider' });
+        }
+      }
+      const isRoot = contextPath === rootPath;
+      const fileName = contextPath.split(/[/\\]/).pop() || '';
+      if (!isRoot && !isProtected(fileName, contextPath)) {
+        items.push({ 
+          key: 'rename', 
+          icon: <Edit3 size={14} />, 
+          label: t('common.rename', { defaultValue: '重命名' }), 
+          onClick: () => {
+            setOldRenamePath(contextPath);
+            setRenameTargetName(fileName);
+            setRenameModalOpen(true);
+          } 
+        });
+        items.push({ 
+          key: 'delete', 
+          icon: <Trash2 size={14} />, 
+          label: t('common.delete', { defaultValue: '删除' }), 
+          danger: true,
+          onClick: () => {
+            Modal.confirm({
+              title: t('common.deleteConfirm'),
+              onOk: () => handleDelete({ name: fileName, path: contextPath, is_dir: !contextIsFile, size: 0, mod_time: '' })
+            });
           }
         });
+        items.push({ type: 'divider' });
       }
       items.push({ 
         key: 'copyPath', 
@@ -511,6 +753,33 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       }
       items.push({ key: 'newFolder', icon: <FolderPlus size={14} />, label: t('common.newFolder'), onClick: () => handleCreateDir(contextPath) });
       items.push({ type: 'divider' });
+      const isRoot = contextPath === rootPath;
+      const dirName = contextPath.split(/[/\\]/).pop() || '';
+      if (!isRoot && !isProtected(dirName, contextPath)) {
+        items.push({ 
+          key: 'rename', 
+          icon: <Edit3 size={14} />, 
+          label: t('common.rename', { defaultValue: '重命名' }), 
+          onClick: () => {
+            setOldRenamePath(contextPath);
+            setRenameTargetName(dirName);
+            setRenameModalOpen(true);
+          } 
+        });
+        items.push({ 
+          key: 'delete', 
+          icon: <Trash2 size={14} />, 
+          label: t('common.delete', { defaultValue: '删除' }), 
+          danger: true,
+          onClick: () => {
+            Modal.confirm({
+              title: t('common.deleteConfirm'),
+              onOk: () => handleDelete({ name: dirName, path: contextPath, is_dir: !contextIsFile, size: 0, mod_time: '' })
+            });
+          }
+        });
+        items.push({ type: 'divider' });
+      }
       items.push({ 
         key: 'copyPath', 
         icon: <Copy size={14} />, 
@@ -572,13 +841,25 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   };
 
   const filteredFiles = useMemo(() => {
-    let result = files;
-    if (filterText.trim()) {
+    let result = [...files];
+    if (filterText.trim() && searchMode === 'current') {
       const term = filterText.toLowerCase();
       result = files.filter(f => f.name.toLowerCase().includes(term));
     }
     
-    if (currentPath !== rootPath && !filterText) {
+    // Sorting logic
+    result.sort((a, b) => {
+      // Folders always first
+      if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
+      
+      switch (sortBy) {
+        case 'size': return b.size - a.size;
+        case 'time': return b.mod_time.localeCompare(a.mod_time) * -1;
+        default: return a.name.localeCompare(b.name);
+      }
+    });
+
+    if (currentPath !== rootPath && !filterText && searchMode === 'current') {
       // Find parent path
       const parts = currentPath.split(/[/\\]/).filter(Boolean);
       parts.pop();
@@ -590,7 +871,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       ];
     }
     return result;
-  }, [files, filterText, currentPath, rootPath]);
+  }, [files, filterText, currentPath, rootPath, sortBy, searchMode]);
 
   const breadcrumbs = useMemo(() => {
     if (!rootPath) return [];
@@ -606,177 +887,213 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     return crumbs;
   }, [currentPath, rootPath, title]);
 
-  const isMarkdown = selectedFile?.name.endsWith('.md');
-  const isHTML = selectedFile?.name.endsWith('.html') || selectedFile?.name.endsWith('.htm');
-  const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'];
-  const ext = selectedFile?.name.split('.').pop()?.toLowerCase() || '';
-  const isImage = imageExts.includes(ext);
-  const isPDF = ext === 'pdf';
-  const isExcel = ['xls', 'xlsx'].includes(ext);
-  const isWord = ['doc', 'docx'].includes(ext);
-  const hasPreview = isMarkdown || isHTML || isImage || isPDF || isExcel || isWord;
-  const textExts = ['txt', 'json', 'js', 'ts', 'tsx', 'py', 'go', 'sh', 'yml', 'yaml', 'css', 'less', 'scss', 'conf', 'env', 'xml', 'sql', 'bat', 'ps1', 'ini', 'toml', 'log', 'prop', 'properties', 'dockerfile', 'ignore', 'gitignore'];
-  const isText = textExts.includes(ext) || isMarkdown || isHTML;
-  const canView = hasPreview || isText;
-
-  const protectedFiles = ['soul.md', 'agent.md', 'agents.md', 'identity.md', 'identify.md', 'user.md', 'tools.md', 'heartbeat.md'];
-  const isProtected = (name: string) => protectedFiles.includes(name.toLowerCase());
 
   return (
-    <Modal
-      title={
-        <div style={{ 
-          display: 'flex', 
-          flexDirection: isMobile ? 'column' : 'row',
-          alignItems: isMobile ? 'flex-start' : 'center', 
-          justifyContent: 'space-between', 
-          width: '100%', 
-          paddingRight: isMobile ? 0 : 32,
-          gap: isMobile ? 12 : 0
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, width: isMobile ? '100%' : 'auto' }}>
-            {!isMobile && (
-              <Button
-                type="text"
-                size="small"
-                icon={isSidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                style={{ color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              />
-            )}
-            {(isEditing || (isMobile && currentPath !== rootPath)) && (
-              <Button 
-                type="text" 
-                icon={<ChevronLeft size={isMobile ? 18 : 20} />} 
-                onClick={() => {
-                  if (isEditing) {
-                    setIsEditing(false);
-                    setSelectedFile(null);
-                  } else if (isMobile && currentPath !== rootPath) {
-                    // Go up one level
-                    const parts = currentPath.split(/[/\\]/).filter(Boolean);
-                    parts.pop();
-                    const parentPath = currentPath.startsWith('/') ? '/' + parts.join('/') : parts.join('/');
-                    handleFolderClick(parentPath || rootPath);
-                  }
-                }}
-                style={{ padding: 0, width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              />
-            )}
-            {!isMobile && (
-              <div style={{ background: '#f0f9ff', padding: 8, borderRadius: 10 }}>
-                <FolderOpen size={20} color="#0ea5e9" />
+    <>
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+          {/* Custom Header */}
+          {/* Custom Header - Only show if not simplified */}
+          {!simplified && (
+            <div style={{ 
+              padding: isMobile ? '12px 16px' : '16px 24px', 
+              borderBottom: '1px solid #f1f5f9',
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              alignItems: isMobile ? 'flex-start' : 'center',
+              justifyContent: 'space-between',
+              gap: isMobile ? 12 : 0,
+              background: '#fff',
+              zIndex: 10
+            }}>
+              {(isEditing || (isMobile && currentPath !== rootPath)) && (
+                <Button 
+                  type="text" 
+                  icon={<ChevronLeft size={isMobile ? 18 : 20} />} 
+                  onClick={() => {
+                    if (isEditing) {
+                      setIsEditing(false);
+                      setSelectedFile(null);
+                    } else if (isMobile && currentPath !== rootPath) {
+                      // Go up one level
+                      const parts = currentPath.split(/[/\\]/).filter(Boolean);
+                      parts.pop();
+                      const parentPath = currentPath.startsWith('/') ? '/' + parts.join('/') : parts.join('/');
+                      handleFolderClick(parentPath || rootPath);
+                    }
+                  }}
+                  style={{ padding: 0, width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                />
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flex: 1, minWidth: 0 }}>
+                {!isMobile && (
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={isSidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+                    onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                    style={{ color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  />
+                )}
+                {!isMobile && (
+                  <div 
+                    style={{ background: '#f0f9ff', padding: 8, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={() => handleFolderClick(rootPath)}
+                  >
+                    <FolderOpen size={20} color="#0ea5e9" />
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.2, marginBottom: 2 }}>{title}</div>
+                  <Breadcrumb
+                    style={{ fontSize: 12 }}
+                    items={breadcrumbs.map((crumb, idx) => ({
+                      title: (
+                        <span 
+                          style={{ 
+                            cursor: 'pointer',
+                            color: idx < breadcrumbs.length - 1 ? '#0ea5e9' : '#94a3b8',
+                            transition: 'color 0.2s'
+                          }}
+                          onClick={() => handleFolderClick(crumb.path)}
+                          className="breadcrumb-item"
+                        >
+                          {crumb.name}
+                        </span>
+                      )
+                    }))}
+                  />
+                </div>
               </div>
-            )}
-            <div style={{ flex: isMobile ? 1 : 'none' }}>
-              <div style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, lineHeight: 1.2 }}>{title}</div>
-              <Breadcrumb
-                style={{ fontSize: isMobile ? 10 : 11, marginTop: isMobile ? 1 : 2 }}
-                items={breadcrumbs.map((crumb, idx) => ({
-                  title: (
-                    <span 
-                      style={{ 
-                        cursor: idx < breadcrumbs.length - 1 ? 'pointer' : 'default',
-                        color: idx < breadcrumbs.length - 1 ? '#0ea5e9' : '#94a3b8'
-                      }}
-                      onClick={() => idx < breadcrumbs.length - 1 && handleFolderClick(crumb.path)}
-                    >
-                      {crumb.name}
-                    </span>
-                  )
-                }))}
-              />
             </div>
-          </div>
+          )}
           <div style={{ 
-            display: 'flex', 
-            gap: isMobile ? 4 : 8, 
-            alignItems: 'center', 
-            width: isMobile ? '100%' : 'auto',
-            justifyContent: isMobile ? 'flex-end' : 'flex-start',
-            marginTop: isMobile ? 4 : 0
+            padding: '8px 16px', 
+            borderBottom: '1px solid #f1f5f9',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: '#f8fafc',
+            flexShrink: 0
           }}>
             {!isEditing && (
-              <Input
-                placeholder={t('common.searchPlaceholder')}
-                prefix={<Search size={isMobile ? 14 : 16} color="#94a3b8" style={{ marginRight: 4 }} />}
-                value={filterText}
-                onChange={e => setFilterText(e.target.value)}
-                allowClear
-                style={{ 
-                  borderRadius: 8, 
-                  height: isMobile ? 28 : 32, 
-                  flex: isMobile ? 1 : 'none',
-                  width: isMobile ? 'auto' : 200,
-                  marginRight: isMobile ? 4 : 8
-                }}
-              />
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                {simplified && (
+                  <Button 
+                    type="text" 
+                    size="small"
+                    icon={<ChevronLeft size={16} />} 
+                    onClick={handleBack}
+                    disabled={currentPath === rootPath}
+                  />
+                )}
+                <Input
+                  placeholder={simplified ? t('common.search', { defaultValue: '搜索' }) : (searchMode === 'current' ? t('common.searchPlaceholder') : t('common.globalSearch', { defaultValue: '全局搜索...' }))}
+                  prefix={<Search size={14} color="#94a3b8" />}
+                  value={filterText}
+                  onChange={e => setFilterText(e.target.value)}
+                  onPressEnter={() => searchMode === 'global' && loadFiles(currentPath)}
+                  allowClear
+                  style={{ 
+                    borderRadius: simplified ? 8 : '8px 0 0 8px', 
+                    height: 32, 
+                    flex: simplified ? 1 : 'none',
+                    width: simplified ? 'auto' : (isMobile ? 'auto' : 180),
+                    border: simplified ? '1px solid #e2e8f0' : undefined
+                  }}
+                />
+                {!simplified && (
+                  <Segmented
+                    size={isMobile ? 'small' : 'middle'}
+                    value={searchMode}
+                    onChange={(v) => setSearchMode(v as any)}
+                    options={[
+                      { value: 'current', label: <Tooltip title={t('common.currentDir', { defaultValue: '当前目录' })}><Folder size={14}/></Tooltip> },
+                      { value: 'global', label: <Tooltip title={t('common.globalRecursive', { defaultValue: '全局递归' })}><Search size={14}/></Tooltip> }
+                    ]}
+                    style={{ borderRadius: '0 8px 8px 0', background: '#f1f5f9' }}
+                  />
+                )}
+              </div>
             )}
-            <Button 
-              type="text"
-              size={isMobile ? 'small' : undefined}
-              icon={isFullscreen ? <Minimize2 size={isMobile ? 16 : 18} /> : <Maximize2 size={isMobile ? 16 : 18} />}
-              onClick={() => setIsFullscreen(!isFullscreen)}
-              style={{ color: '#64748b' }}
-            />
-            {isEditing && (
-              <Button 
-                type="primary" 
-                size={isMobile ? 'small' : undefined}
-                icon={<Save size={14} />} 
-                loading={isSaving} 
-                onClick={handleSave} 
-                style={{ background: '#0ea5e9', border: 'none' }}
-              >
-                {t('common.save')}
-              </Button>
-            )}
-            <Tooltip title={t('common.uploadFile')}>
-              <Button 
-                size={isMobile ? 'small' : undefined}
-                icon={<Upload size={14} />} 
-                loading={isUploading} 
-                onClick={handleUploadClick} 
-                style={{ borderRadius: 8 }}
-              >
-                {!isMobile && t('common.uploadFile')}
-              </Button>
-            </Tooltip>
-            {!isEditing && (
-              <>
-                <Tooltip title={t('common.newFile', { defaultValue: '新建文件' })}>
+
+            {!simplified && (
+              <div style={{ 
+                display: 'flex', 
+                gap: isMobile ? 4 : 8, 
+                alignItems: 'center', 
+                width: isMobile ? '100%' : 'auto',
+                justifyContent: isMobile ? 'flex-end' : 'flex-start',
+                marginTop: isMobile ? 4 : 0
+              }}>
+
+                <Tooltip title={t('common.upload', { defaultValue: '上传' })}>
                   <Button 
                     size={isMobile ? 'small' : undefined}
-                    icon={<FilePlus size={14} />} 
-                    onClick={() => handleCreateFile()} 
+                    icon={<Upload size={isMobile ? 14 : 16} />} 
+                    loading={isUploading} 
+                    onClick={handleUploadClick} 
                     style={{ borderRadius: 8 }}
-                  />
+                  >
+                    {!isMobile && t('common.upload', { defaultValue: '上传' })}
+                  </Button>
                 </Tooltip>
-                <Tooltip title={t('common.newFolder', { defaultValue: '新建文件夹' })}>
-                  <Button 
-                    size={isMobile ? 'small' : undefined}
-                    icon={<FolderPlus size={14} />} 
-                    onClick={() => handleCreateDir()} 
-                    style={{ borderRadius: 8 }}
-                  />
-                </Tooltip>
-              </>
+                {!isEditing && (
+                  <>
+                    <Dropdown
+                      menu={{
+                        items: [
+                          { key: 'name', label: t('common.sortByName', { defaultValue: '按名称排序' }), onClick: () => setSortBy('name') },
+                          { key: 'size', label: t('common.sortBySize', { defaultValue: '按大小排序' }), onClick: () => setSortBy('size') },
+                          { key: 'time', label: t('common.sortByTime', { defaultValue: '按时间排序' }), onClick: () => setSortBy('time') },
+                        ],
+                        selectedKeys: [sortBy]
+                      }}
+                      trigger={['click']}
+                    >
+                      <Button 
+                        size={isMobile ? 'small' : undefined}
+                        icon={<RefreshCcw size={14} />} 
+                        style={{ borderRadius: 8 }}
+                      >
+                        {!isMobile && (
+                          sortBy === 'name' ? t('common.sortByName', { defaultValue: '按名称排序' }) :
+                          sortBy === 'size' ? t('common.sortBySize', { defaultValue: '按大小排序' }) :
+                          t('common.sortByTime', { defaultValue: '按时间排序' })
+                        )}
+                      </Button>
+                    </Dropdown>
+                    <Segmented
+                      size={isMobile ? 'small' : 'middle'}
+                      value={viewMode}
+                      onChange={(v) => setViewMode(v as any)}
+                      options={[
+                        { value: 'list', icon: <ListIcon size={14} /> },
+                        { value: 'grid', icon: <Grid size={14} /> }
+                      ]}
+                      style={{ borderRadius: 8, background: '#f1f5f9' }}
+                    />
+                    <Tooltip title={t('common.newFile', { defaultValue: '新建文件' })}>
+                      <Button 
+                        size={isMobile ? 'small' : undefined}
+                        icon={<FilePlus size={14} />} 
+                        onClick={() => handleCreateFile()} 
+                        style={{ borderRadius: 8 }}
+                      />
+                    </Tooltip>
+                    <Tooltip title={t('common.newFolder', { defaultValue: '新建文件夹' })}>
+                      <Button 
+                        size={isMobile ? 'small' : undefined}
+                        icon={<FolderPlus size={14} />} 
+                        onClick={() => handleCreateDir()} 
+                        style={{ borderRadius: 8 }}
+                      />
+                    </Tooltip>
+                  </>
+                )}
+              </div>
             )}
           </div>
-        </div>
-      }
-      open={open}
-      onCancel={onClose}
-      width={isFullscreen ? '100%' : (isMobile ? '100%' : 1000)}
-      style={isFullscreen ? { top: 0, paddingBottom: 0, maxWidth: 'none' } : {}}
-      footer={null}
-      styles={{ 
-        body: { padding: 0, height: isFullscreen ? 'calc(100vh - 110px)' : (isMobile ? 'calc(100vh - 120px)' : 550), display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-        header: { padding: isMobile ? '12px 12px' : '16px 24px', borderBottom: '1px solid #f1f5f9' }
-      }}
-      centered={!isFullscreen}
-      destroyOnClose
-    >
+
       <input ref={uploadInputRef} type="file" multiple style={{ display: 'none' }} onChange={handleFileSelected} />
 
       {pendingSaveContent && (
@@ -800,7 +1117,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       )}
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: '#fff' }}>
-        {!isMobile && (
+        {!isMobile && !simplified && (
           <div style={{ 
             width: isSidebarCollapsed ? 0 : 280, 
             display: 'flex', 
@@ -812,8 +1129,13 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             opacity: isSidebarCollapsed ? 0 : 1,
             pointerEvents: isSidebarCollapsed ? 'none' : 'auto'
           }}>
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', fontSize: 12, fontWeight: 700, color: '#64748b', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
-              <LayoutList size={14} /> {t('common.directory')}
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: 4, overflow: 'hidden' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+                <LayoutList size={14} /> {t('common.directory')}
+              </div>
+              <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={rootPath}>
+                {rootPath}
+              </div>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px 8px', minWidth: 280 }}>
                 <DirectoryTree
@@ -827,6 +1149,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                   showIcon={true}
                   blockNode
                   expandAction={false}
+                  titleRender={treeTitleRender}
                   className="custom-directory-tree"
                 />
               </div>
@@ -844,11 +1167,44 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             ) : isEditing ? (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#fff' }}>
                 <div style={{ padding: '8px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#475569' }}>
-                    {getFileIcon(selectedFile?.name || '', false, 16)}
-                    {selectedFile?.name}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#475569', overflow: 'hidden' }}>
+                    {simplified && (
+                      <Button 
+                        size="small" type="text" icon={<ChevronLeft size={16} />} 
+                        onClick={() => {
+                          setIsEditing(false);
+                          setSelectedFile(null);
+                        }}
+                        style={{ color: '#64748b' }}
+                      />
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+                      {getFileIcon(selectedFile?.name || '', false, 16)}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedFile?.name}</span>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    {onSendToChat && selectedFile && !selectedFile.is_dir && canView && (
+                      <Tooltip title={t('chat.aiOneClickAnalyze', { defaultValue: 'AI 一键分析' })}>
+                        <Button 
+                          type="text" size="small" icon={<Sparkles size={16} color="#8b5cf6" />} 
+                          onClick={() => {
+                            const fileName = selectedFile.name;
+                            const ext = fileName.split('.').pop()?.toLowerCase() || '';
+                            onSendToChat('', fileName, {
+                              url: '',
+                              path: selectedFile.path,
+                              filename: fileName,
+                              size: 0,
+                              ext: ext,
+                              type: 'workspace_file',
+                              entityId: selectedFile.path
+                            });
+                            onClose();
+                          }} 
+                        />
+                      </Tooltip>
+                    )}
                     {canView ? (
                       <Tabs 
                         size="small" activeKey={activeTab} onChange={(k) => setActiveTab(k as any)}
@@ -864,7 +1220,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                     <Tooltip title={t('common.download')}>
                       <Button type="text" size="small" icon={<Download size={16} />} onClick={() => handleDownload(selectedFile)} />
                     </Tooltip>
-                    {!isProtected(selectedFile?.name || '') && (
+                    {!isProtected(selectedFile?.name || '', selectedFile?.path || '') && (
                       <Popconfirm title={t('common.deleteConfirm')} onConfirm={() => selectedFile && handleDelete(selectedFile)} okButtonProps={{ danger: true }}>
                         <Button type="text" danger icon={<Trash2 size={16} />} />
                       </Popconfirm>
@@ -889,7 +1245,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                   ) : activeTab === 'preview' && isMarkdown ? (
                     <div style={{ height: '100%', padding: 24, overflowY: 'auto', background: '#f1f5f9' }}>
                       <div style={{ maxWidth: 900, margin: '0 auto', background: '#fff', padding: 40, borderRadius: 12, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-                        <div className="markdown-body-v3">
+                        <div className="file-explorer-markdown">
                           <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeSanitize]}>
                             {fileContent}
                           </ReactMarkdown>
@@ -952,77 +1308,227 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                   ) : (
                     <div style={{ position: 'relative', height: '100%' }}>
                       <TokenBadge text={fileContent} />
-                      <Input.TextArea
+                      <Button 
+                        type="primary" 
+                        icon={<Save size={16} />} 
+                        loading={isSaving} 
+                        onClick={handleSave} 
+                        style={{ 
+                          position: 'absolute', 
+                          bottom: 32, 
+                          right: 32, 
+                          zIndex: 100, 
+                          borderRadius: 24, 
+                          height: 44, 
+                          padding: '0 24px', 
+                          boxShadow: '0 8px 20px rgba(14, 165, 233, 0.4)',
+                          background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
+                          border: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          fontSize: 15,
+                          fontWeight: 600,
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                        }}
+                        className="save-float-btn"
+                      >
+                        {t('common.save', { defaultValue: '保存' })}
+                      </Button>
+                      <Editor
+                        height="100%"
+                        defaultLanguage={getEditorLanguage(selectedFile?.name || '')}
                         value={fileContent}
-                        onChange={(e) => setFileContent(e.target.value)}
-                        spellCheck={false}
-                        style={{
-                          height: '100%', border: 'none', borderRadius: 0, resize: 'none', fontFamily: 'monospace',
-                          fontSize: 13, padding: 16, background: '#fff', outline: 'none', boxShadow: 'none'
+                        onChange={(val) => setFileContent(val || '')}
+                        theme="vs-light"
+                        options={{
+                          fontSize: 13,
+                          minimap: { enabled: false },
+                          scrollBeyondLastLine: false,
+                          automaticLayout: true,
+                          tabSize: 2,
+                          wordWrap: 'on',
+                          padding: { top: 16, bottom: 16 }
                         }}
                       />
                     </div>
                   )}
                 </div>
               </div>
-            ) : filteredFiles.length > 0 ? (
+            ) : (
               <div 
-                style={{ flex: 1, overflowY: 'auto' }}
+                style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
                 onContextMenu={(e) => handleRightClick(e, currentPath, true)}
               >
-                <List
-                  className="file-explorer-list"
-                  style={{ padding: isMobile ? '12px 12px' : '12px 24px' }}
-                  dataSource={filteredFiles}
-                  renderItem={(item) => (
-                    <List.Item
-                      style={{ 
-                        cursor: 'pointer', borderRadius: 12, border: 'none', padding: '10px 16px', marginBottom: 8,
-                        transition: 'all 0.2s', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                {selectedBulkKeys.length > 0 && (
+                  <div style={{ padding: '8px 24px', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <Checkbox 
+                      indeterminate={selectedBulkKeys.length > 0 && selectedBulkKeys.length < filteredFiles.filter(f => !isProtected(f.name, f.path) && f.name !== '..').length}
+                      checked={selectedBulkKeys.length === filteredFiles.filter(f => !isProtected(f.name, f.path) && f.name !== '..').length && filteredFiles.length > 0}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          const selectable = filteredFiles.filter(f => !isProtected(f.name, f.path) && f.name !== '..').map(f => f.path);
+                          setSelectedBulkKeys(selectable);
+                        } else {
+                          setSelectedBulkKeys([]);
+                        }
                       }}
-                      className="file-item-hover"
-                      onClick={() => item.is_dir ? handleFolderClick(item.path) : loadFileContent(item)}
-                      onContextMenu={(e) => handleRightClick(e, item.path, item.is_dir)}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
+                    />
+                    <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
+                      {t('common.selectedCount', { count: selectedBulkKeys.length, defaultValue: `已选择 ${selectedBulkKeys.length} 项` })}
+                    </span>
+                    <Button size="small" type="link" onClick={() => setSelectedBulkKeys([])}>{t('common.cancelSelect', { defaultValue: '取消选择' })}</Button>
+                    <div style={{ marginLeft: 'auto' }}>
+                      <Popconfirm 
+                        title={t('common.bulkDeleteConfirm', { defaultValue: '确定删除选中的所有项吗？' })} 
+                        onConfirm={handleBulkDelete}
+                        okText={t('common.confirm')}
+                        cancelText={t('common.cancel')}
+                      >
+                        <Button size="small" danger type="primary" icon={<Trash2 size={14} />}>{t('common.delete')}</Button>
+                      </Popconfirm>
+                    </div>
+                  </div>
+                )}
+                
+                {filteredFiles.length === 0 ? (
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Empty description={t('common.noContent')} />
+                  </div>
+                ) : viewMode === 'list' ? (
+                  <div style={{ height: '100%', overflowY: 'auto' }}>
+                    {filteredFiles.map((item, index) => (
+                      <div 
+                        key={item.path + index}
+                        style={{ 
+                          padding: isMobile ? '4px 12px' : '4px 24px',
+                          background: selectedFile?.path === item.path ? '#eff6ff' : 'transparent',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 12,
+                          transition: 'all 0.2s',
+                          borderBottom: '1px solid #f8fafc',
+                          position: 'relative'
+                        }}
+                        onClick={() => item.is_dir ? handleFolderClick(item.path) : loadFileContent(item)}
+                        onContextMenu={(e) => handleRightClick(e, item.path, item.is_dir)}
+                        draggable={item.name !== '..' && !isProtected(item.name, item.path)}
+                        onDragStart={(e) => handleDragStart(e, item)}
+                        onDragOver={item.is_dir ? handleDragOver : undefined}
+                        onDrop={item.is_dir ? (e) => handleDropOnFolder(e, item.path) : undefined}
+                        className="file-item-hover"
+                      >
+                        <Checkbox 
+                          style={{ 
+                            opacity: selectedBulkKeys.includes(item.path) ? 1 : 0.2,
+                            visibility: (isProtected(item.name, item.path) || item.name === '..') ? 'hidden' : 'visible'
+                          }}
+                          checked={selectedBulkKeys.includes(item.path)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            if (e.target.checked) setSelectedBulkKeys(prev => [...prev, item.path]);
+                            else setSelectedBulkKeys(prev => prev.filter(k => k !== item.path));
+                          }}
+                          className="item-checkbox"
+                          onClick={(e) => e.stopPropagation()}
+                        />
                         <div style={{ 
-                          background: item.is_dir ? '#e0f2fe' : '#f8fafc', padding: 8, borderRadius: 8,
+                          background: item.is_dir ? '#e0f2fe' : isProtected(item.name, item.path) ? '#f5f3ff' : '#f8fafc', 
+                          padding: 8, borderRadius: 8,
                           display: 'flex', alignItems: 'center', justifyContent: 'center'
                         }}>
-                          {getFileIcon(item.name, item.is_dir)}
+                          {getFileIcon(item.name, item.is_dir, 20, isProtected(item.name, item.path))}
                         </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 14, color: '#1e293b', fontWeight: 600 }}>{item.name}</div>
-                          {!item.is_dir && (
-                            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
-                              {(item.size / 1024).toFixed(1)} KB · {item.mod_time}
-                            </div>
-                          )}
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                          <div style={{ fontSize: 14, color: '#1e293b', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
+                          <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                            {item.is_dir ? t('common.folder', { defaultValue: '文件夹' }) : `${(item.size / 1024).toFixed(1)} KB · ${item.mod_time}`}
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          {!item.is_dir && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} className="action-btns">
+                          {item.name !== '..' && (
                             <Tooltip title={t('common.download')}>
                               <Button type="text" size="small" icon={<Download size={14} />} onClick={(e) => { e.stopPropagation(); handleDownload(item); }} className="action-btn-hover" style={{ color: '#0ea5e9' }} />
                             </Tooltip>
                           )}
-                          {item.name !== '..' && !isProtected(item.name) && (
-                            <Popconfirm title={t('common.deleteConfirm')} onConfirm={(e) => { e?.stopPropagation(); handleDelete(item); }} onCancel={(e) => e?.stopPropagation()} okButtonProps={{ danger: true }}>
-                              <Button type="text" size="small" danger icon={<Trash2 size={14} />} onClick={(e) => e.stopPropagation()} className="action-btn-hover" />
-                            </Popconfirm>
+                          {item.name !== '..' && !isProtected(item.name, item.path) && (
+                            <Dropdown menu={{ items: [
+                              ...(!item.is_dir && onSendToChat && (['txt', 'json', 'js', 'ts', 'tsx', 'py', 'go', 'sh', 'yml', 'yaml', 'css', 'less', 'scss', 'conf', 'env', 'xml', 'sql', 'bat', 'ps1', 'ini', 'toml', 'log', 'prop', 'properties', 'dockerfile', 'ignore', 'gitignore', 'csv', 'md', 'html', 'htm', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'pdf', 'xls', 'xlsx', 'doc', 'docx'].includes(item.name.split('.').pop()?.toLowerCase() || '') || item.name.endsWith('.md') || item.name.endsWith('.html')) ? [
+                                { key: 'aiAnalyze', icon: <Sparkles size={14} color="#8b5cf6" />, label: t('chat.aiOneClickAnalyze', { defaultValue: 'AI 一键分析' }), onClick: (e: any) => { 
+                                  e.domEvent.stopPropagation(); 
+                                  const ext = item.name.split('.').pop()?.toLowerCase() || '';
+                                  onSendToChat('', item.name, {
+                                    url: '',
+                                    path: item.path,
+                                    filename: item.name,
+                                    size: 0,
+                                    ext: ext,
+                                    type: 'workspace_file',
+                                    entityId: item.path
+                                  });
+                                  onClose();
+                                } },
+                                { type: 'divider' as const }
+                              ] : []),
+                              { key: 'rename', icon: <Edit3 size={14} />, label: t('common.rename', { defaultValue: '重命名' }), onClick: (e: any) => { e.domEvent.stopPropagation(); setOldRenamePath(item.path); setRenameTargetName(item.name); setRenameModalOpen(true); } },
+                              { key: 'delete', icon: <Trash2 size={14} />, label: t('common.delete', { defaultValue: '删除' }), danger: true, onClick: (e: any) => { e.domEvent.stopPropagation(); handleDelete(item); } }
+                            ] }}>
+                              <Button type="text" size="small" icon={<MoreVertical size={14} />} onClick={(e) => e.stopPropagation()} className="action-btn-hover" />
+                            </Dropdown>
                           )}
-                          <ChevronRight size={18} color="#cbd5e1" />
                         </div>
                       </div>
-                    </List.Item>
-                  )}
-                />
-              </div>
-            ) : (
-              <div 
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onContextMenu={(e) => handleRightClick(e, currentPath, true)}
-              >
-                <Empty description={t('common.noContent')} />
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ padding: 24, overflowY: 'auto', flex: 1 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 16 }}>
+                      {filteredFiles.map(item => (
+                        <Card
+                          key={item.path}
+                          hoverable
+                          size="small"
+                          style={{ 
+                            borderRadius: 12, 
+                            textAlign: 'center', 
+                            background: selectedBulkKeys.includes(item.path) ? '#f0f9ff' : '#fff',
+                            border: selectedBulkKeys.includes(item.path) ? '1px solid #0ea5e9' : '1px solid #f1f5f9'
+                          }}
+                          onClick={() => item.is_dir ? handleFolderClick(item.path) : loadFileContent(item)}
+                          onContextMenu={(e) => handleRightClick(e, item.path, item.is_dir)}
+                          draggable={item.name !== '..' && !isProtected(item.name, item.path)}
+                          onDragStart={(e: any) => handleDragStart(e, item)}
+                          onDragOver={item.is_dir ? handleDragOver : undefined}
+                          onDrop={item.is_dir ? (e: any) => handleDropOnFolder(e, item.path) : undefined}
+                          cover={
+                            <div style={{ padding: '24px 0 12px 0', position: 'relative' }}>
+                              {!isProtected(item.name, item.path) && item.name !== '..' && (
+                                <Checkbox 
+                                  style={{ position: 'absolute', top: 8, left: 8 }}
+                                  checked={selectedBulkKeys.includes(item.path)}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    if (e.target.checked) setSelectedBulkKeys(prev => [...prev, item.path]);
+                                    else setSelectedBulkKeys(prev => prev.filter(k => k !== item.path));
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              )}
+                              {getFileIcon(item.name, item.is_dir, 48, isProtected(item.name, item.path))}
+                            </div>
+                          }
+                        >
+                          <Card.Meta 
+                            title={<div style={{ fontSize: 13, fontWeight: 600 }}>{item.name}</div>}
+                            description={!item.is_dir ? `${(item.size / 1024).toFixed(0)} KB` : t('common.folder')}
+                          />
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1053,10 +1559,16 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         }
         .action-btn-hover { opacity: 0; transition: opacity 0.2s; }
         .file-item-hover:hover .action-btn-hover { opacity: 1; }
+        .save-float-btn:hover {
+          transform: translateY(-2px) scale(1.05);
+          box-shadow: 0 12px 24px rgba(14, 165, 233, 0.5) !important;
+        }
         .custom-directory-tree .ant-tree-node-content-wrapper {
           border-radius: 6px;
           transition: all 0.2s;
           padding: 4px 8px !important;
+          display: flex !important;
+          align-items: center;
         }
         .custom-directory-tree .ant-tree-node-selected {
           background-color: #3b82f6 !important;
@@ -1069,20 +1581,22 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         .custom-directory-tree .ant-tree-node-content-wrapper:not(.ant-tree-node-selected) .ant-tree-title {
           color: #475569 !important;
         }
-        .markdown-body-v3 {
+        .file-explorer-markdown {
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
           font-size: 15px; line-height: 1.6; color: #24292f;
         }
-        .markdown-body-v3 h1, .markdown-body-v3 h2, .markdown-body-v3 h3 { margin-top: 24px; margin-bottom: 16px; font-weight: 600; line-height: 1.25; }
-        .markdown-body-v3 code { background: #afb8c133; padding: .2em .4em; border-radius: 6px; font-size: 85%; font-family: monospace; }
-        .markdown-body-v3 pre { background: #f6f8fa; padding: 16px; border-radius: 8px; overflow: auto; margin-bottom: 16px; border: 1px solid #e2e8f0; }
+        .file-explorer-markdown h1, .file-explorer-markdown h2, .file-explorer-markdown h3 { margin-top: 24px; margin-bottom: 16px; font-weight: 600; line-height: 1.25; }
+        .file-explorer-markdown code { background: #afb8c133; padding: .2em .4em; border-radius: 6px; font-size: 85%; font-family: monospace; }
+        .file-explorer-markdown pre { background: #f6f8fa; padding: 16px; border-radius: 8px; overflow: auto; margin-bottom: 16px; border: 1px solid #e2e8f0; }
         .word-preview-v3 { font-family: "Times New Roman", Times, serif; font-size: 16px; line-height: 1.5; color: #333; }
         .word-preview-v3 h1, .word-preview-v3 h2, .word-preview-v3 h3 { margin-top: 1.2em; margin-bottom: 0.6em; }
         .word-preview-v3 p { margin-bottom: 1em; text-align: justify; }
         .word-preview-v3 table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
         .word-preview-v3 table td, .word-preview-v3 table th { border: 1px solid #ddd; padding: 8px; }
       `}</style>
-      
+      </div>
+
+      {/* Auxiliary Modals (Create, Rename) */}
       <Modal
         title={createType === 'file' ? t('common.newFile') : t('common.newFolder')}
         open={createModalOpen}
@@ -1094,7 +1608,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       >
         <div style={{ paddingTop: 10 }}>
           <div style={{ marginBottom: 8, fontSize: 12, color: '#64748b' }}>
-            {createType === 'file' ? t('common.enterFileName') : t('common.enterFolderName')}
+            {createType === 'file' ? t('common.enterFileName', { defaultValue: '请输入文件名' }) : t('common.enterFolderName', { defaultValue: '请输入文件夹名' })}
           </div>
           <Input 
             autoFocus 
@@ -1105,6 +1619,82 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           />
         </div>
       </Modal>
+
+      <Modal
+        title={t('common.rename', { defaultValue: '重命名' })}
+        open={renameModalOpen}
+        onOk={handleRename}
+        onCancel={() => setRenameModalOpen(false)}
+        okText={t('common.confirm')}
+        cancelText={t('common.cancel')}
+        destroyOnClose
+      >
+        <div style={{ paddingTop: 10 }}>
+          <div style={{ marginBottom: 8, fontSize: 12, color: '#64748b' }}>{t('common.enterNewName', { defaultValue: '请输入新名称' })}</div>
+          <Input 
+            autoFocus 
+            value={renameTargetName} 
+            onChange={e => setRenameTargetName(e.target.value)} 
+            onPressEnter={handleRename}
+          />
+        </div>
+      </Modal>
+    </>
+  );
+};
+
+const FileExplorer: React.FC<FileExplorerProps> = (props) => {
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  return (
+    <Modal
+      open={props.open}
+      onCancel={props.onClose}
+      footer={null}
+      width={isMaximized ? '98%' : 1200}
+      centered
+      destroyOnClose
+      styles={{
+        body: { padding: 0, height: isMaximized ? 'calc(100vh - 80px)' : 'calc(100vh - 120px)', background: '#fff', overflow: 'hidden', borderRadius: '0 0 12px 12px' },
+        content: { padding: 0, background: '#fff', borderRadius: 12, overflow: 'hidden' },
+        header: { padding: 0, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', marginBottom: 0, borderRadius: '12px 12px 0 0' }
+      }}
+      title={
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between', 
+          padding: '12px 16px',
+          background: '#f8fafc',
+          borderRadius: '12px 12px 0 0'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FolderOpen size={18} color="#0ea5e9" />
+            <span style={{ fontSize: 15, fontWeight: 700 }}>{props.title || props.t('common.fileExplorer', { defaultValue: '文件浏览器' })}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Tooltip title={isMaximized ? props.t('common.minimize') : props.t('common.maximize')}>
+              <Button 
+                type="text" 
+                size="small" 
+                icon={isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />} 
+                onClick={() => setIsMaximized(!isMaximized)}
+                style={{ color: '#64748b' }}
+              />
+            </Tooltip>
+            <Button 
+              type="text" 
+              size="small" 
+              icon={<X size={18} />} 
+              onClick={props.onClose} 
+              style={{ color: '#64748b' }}
+            />
+          </div>
+        </div>
+      }
+      closeIcon={null}
+    >
+      <FileExplorerContent {...props} simplified={false} />
     </Modal>
   );
 };
