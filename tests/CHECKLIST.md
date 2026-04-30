@@ -194,7 +194,8 @@
 - [ ] **配置持久化**: 验证 `dev.sh` 在重启或停止时是否能正确保留 `temp-dev-test/env` 文件，且不再重复覆盖。
 - [ ] **Windows 兼容性**: 在 Windows 环境下执行 `openclaw-buddy.exe`，验证 Shell 终端与 TUI 聊天能够正常启动（ConPTY）。
 - [ ] **跨平台编译**: 执行 `GOOS=windows go build` 应无 `syscall` 相关编译错误。
-- [x] **1.0.6 重新打包**: 验证 1.0.6 版本全量打包过程，确保 Mac 和 Linux 产物一致且包含最新 indigo 视觉全案。 `2026-04-12` [x]
+- [x] **1.0.6 重新打包**: 验证 1.0.6 版本全量打包过程，确保 Mac 和 Linux 产物一致且包含最新 indigo 视觉全案。 `2026-04-12`
+- [x] **反馈与建议邮件图标**: 验证 Sidebar 和 DashboardOverview 的 GitHub 图标旁是否出现邮件图标，点击应能复制邮箱地址 `cexlong@163.com` 到剪贴板并弹出成功提示。 `2026-04-30`
 - [x] **PID 路径一致性**: 验证 `start.sh` 和 `stop.sh` 均使用 `./pid/openclaw-buddy.pid`，且 `SelfRestart` 后能通过 `stop.sh` 正常停止进程。 `2026-04-12`
 - [x] **目录自动创建**: 验证 `start.sh` 启动时能自动创建 `pid`, `logs`, `data`, `reports`, `backups` 等必要目录。 `2026-04-13` 
 - [x] **思考过程抓取**: 验证对 `thought` 顶层字段和 `thinking` 消息块的兼容，确保推理链完整展示。 `2026-04-13`
