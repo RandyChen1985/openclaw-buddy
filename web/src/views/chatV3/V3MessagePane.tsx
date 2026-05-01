@@ -131,7 +131,7 @@ export function V3MessagePane({
 
       return true;
     }),
-    [messages, showThinking],
+    [messages, showThinking, isTyping],
   );
 
   /** 识别那些只有元数据（思考、工具、计划）而没有实际正文回复的消息 */
