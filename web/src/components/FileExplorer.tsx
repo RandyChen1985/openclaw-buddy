@@ -22,6 +22,8 @@ import {
   FolderPlus, FilePlus, Copy, PanelLeftOpen, PanelLeftClose, X,
   MoreVertical, Edit3, Grid, List as ListIcon, RefreshCcw, Sparkles, Shield
 } from 'lucide-react';
+import Draggable from 'react-draggable';
+import type { DraggableBounds, DraggableData, DraggableEvent } from 'react-draggable';
 
 const { DirectoryTree } = Tree;
 
@@ -964,19 +966,46 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                   />
                 </div>
               </div>
+              {/* 编辑模式下的操作按钮移动到 header，节省空间 */}
+              {isEditing && !isMobile && (
+                <div style={{ display: 'flex', gap: 8, marginLeft: 16 }}>
+                  <Tooltip title={t('common.back', { defaultValue: '返回' })}>
+                    <Button 
+                      icon={<ChevronLeft size={16} />} 
+                      onClick={() => { setIsEditing(false); setSelectedFile(null); }}
+                      style={{ borderRadius: 8 }}
+                    >
+                      {t('common.back', { defaultValue: '返回' })}
+                    </Button>
+                  </Tooltip>
+                  <Tooltip title={t('common.upload', { defaultValue: '上传' })}>
+                    <Button 
+                      icon={<Upload size={16} />} 
+                      loading={isUploading}
+                      onClick={handleUploadClick}
+                      style={{ borderRadius: 8 }}
+                    >
+                      {t('common.upload', { defaultValue: '上传' })}
+                    </Button>
+                  </Tooltip>
+                </div>
+              )}
             </div>
           )}
-          <div style={{ 
-            padding: '8px 16px', 
-            borderBottom: '1px solid #f1f5f9',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: '#f8fafc',
-            flexShrink: 0
-          }}>
+          {(!isEditing || isMobile || simplified) && (
+            <div style={{ 
+              padding: '8px 16px', 
+              borderBottom: '1px solid #f1f5f9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: '#f8fafc',
+              flexShrink: 0,
+              flexWrap: isMobile ? 'wrap' : 'nowrap',
+              rowGap: isMobile ? 8 : 0
+            }}>
             {!isEditing && (
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ flex: isMobile ? '1 1 100%' : 1, display: 'flex', alignItems: 'center', gap: 8 }}>
                 {simplified && (
                   <Button 
                     type="text" 
@@ -996,8 +1025,8 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                   style={{ 
                     borderRadius: simplified ? 8 : '8px 0 0 8px', 
                     height: 32, 
-                    flex: simplified ? 1 : 'none',
-                    width: simplified ? 'auto' : (isMobile ? 'auto' : 180),
+                    flex: 1,
+                    width: simplified ? 'auto' : (isMobile ? '100%' : 180),
                     border: simplified ? '1px solid #e2e8f0' : undefined
                   }}
                 />
@@ -1015,6 +1044,8 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                 )}
               </div>
             )}
+            {/* 这里的 spacer 确保在文件编辑/预览模式下内容依然靠右 */}
+            {isEditing && !simplified && <div style={{ flex: 1 }} />}
 
             {!simplified && (
               <div style={{ 
@@ -1022,9 +1053,21 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                 gap: isMobile ? 4 : 8, 
                 alignItems: 'center', 
                 width: isMobile ? '100%' : 'auto',
-                justifyContent: isMobile ? 'flex-end' : 'flex-start',
-                marginTop: isMobile ? 4 : 0
+                justifyContent: 'flex-end'
               }}>
+                {/* [返回按钮] 优先显示在最前面 */}
+                {(isEditing || currentPath !== rootPath) && (
+                  <Tooltip title={isEditing ? t('common.back', { defaultValue: '返回' }) : t('common.back', { defaultValue: '返回上级' })}>
+                    <Button 
+                      size={isMobile ? 'small' : undefined}
+                      icon={<ChevronLeft size={isMobile ? 14 : 16} />} 
+                      onClick={isEditing ? () => { setIsEditing(false); setSelectedFile(null); } : handleBack} 
+                      style={{ borderRadius: 8 }}
+                    >
+                      {!isMobile && t('common.back', { defaultValue: '返回' })}
+                    </Button>
+                  </Tooltip>
+                )}
 
                 <Tooltip title={t('common.upload', { defaultValue: '上传' })}>
                   <Button 
@@ -1093,6 +1136,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
               </div>
             )}
           </div>
+        )}
 
       <input ref={uploadInputRef} type="file" multiple style={{ display: 'none' }} onChange={handleFileSelected} />
 
@@ -1645,6 +1689,21 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
 
 const FileExplorer: React.FC<FileExplorerProps> = (props) => {
   const [isMaximized, setIsMaximized] = useState(false);
+  const [dragDisabled, setDragDisabled] = useState(true);
+  const [bounds, setBounds] = useState<DraggableBounds>({ left: 0, top: 0, bottom: 0, right: 0 });
+  const draggleRef = useRef<HTMLDivElement>(null);
+
+  const onStart = (_event: DraggableEvent, uiData: DraggableData) => {
+    const { clientWidth, clientHeight } = window.document.documentElement;
+    const targetRect = draggleRef.current?.getBoundingClientRect();
+    if (!targetRect) return;
+    setBounds({
+      left: -targetRect.left + uiData.x,
+      right: clientWidth - (targetRect.right - uiData.x),
+      top: -targetRect.top + uiData.y,
+      bottom: clientHeight - (targetRect.bottom - uiData.y),
+    });
+  };
 
   return (
     <Modal
@@ -1659,15 +1718,35 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
         content: { padding: 0, background: '#fff', borderRadius: 12, overflow: 'hidden' },
         header: { padding: 0, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', marginBottom: 0, borderRadius: '12px 12px 0 0' }
       }}
+      modalRender={(modal) => (
+        <Draggable
+          disabled={dragDisabled || isMaximized}
+          bounds={bounds}
+          onStart={(event, uiData) => onStart(event, uiData)}
+        >
+          <div ref={draggleRef}>{modal}</div>
+        </Draggable>
+      )}
       title={
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'space-between', 
-          padding: '12px 16px',
-          background: '#f8fafc',
-          borderRadius: '12px 12px 0 0'
-        }}>
+        <div 
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            padding: '12px 16px',
+            background: '#f8fafc',
+            borderRadius: '12px 12px 0 0',
+            cursor: isMaximized ? 'default' : 'move'
+          }}
+          onMouseOver={() => {
+            if (dragDisabled) {
+              setDragDisabled(false);
+            }
+          }}
+          onMouseOut={() => {
+            setDragDisabled(true);
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <FolderOpen size={18} color="#0ea5e9" />
             <span style={{ fontSize: 15, fontWeight: 700 }}>{props.title || props.t('common.fileExplorer', { defaultValue: '文件浏览器' })}</span>
@@ -1680,6 +1759,8 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
                 icon={isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />} 
                 onClick={() => setIsMaximized(!isMaximized)}
                 style={{ color: '#64748b' }}
+                onMouseEnter={() => setDragDisabled(true)}
+                onMouseLeave={() => setDragDisabled(false)}
               />
             </Tooltip>
             <Button 
@@ -1688,6 +1769,8 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
               icon={<X size={18} />} 
               onClick={props.onClose} 
               style={{ color: '#64748b' }}
+              onMouseEnter={() => setDragDisabled(true)}
+              onMouseLeave={() => setDragDisabled(false)}
             />
           </div>
         </div>

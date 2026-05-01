@@ -129,7 +129,7 @@ const Dashboard = () => {
     }
   );
 
-  const { status: v3Status, lastHealth } = useV3Gateway();
+  const { status: v3Status, lastHealth, connect: v3Connect } = useV3Gateway();
 
   // 核心：合并状态机。
   // WS health payload 不含 cpu/memory（验证过），所以 metrics 仍由 HTTP 提供。
@@ -869,6 +869,17 @@ const Dashboard = () => {
 
   // 网关运行状态：完全基于 WebSocket 连接判断，不再使用 HTTP 轮询值
   const isRunning = v3Status === 'authenticated';
+
+  // [自动刷新] 连通性自愈：当 HTTP 轮询发现网关已启动，但 WebSocket 处于断开或错误状态时，主动拉起连接
+  useEffect(() => {
+    // 仅在非过渡态且 HTTP 状态明确为 running 时触发
+    if (!isTransitioning && status?.gateway?.status === 'running') {
+      if (v3Status === 'disconnected' || v3Status === 'error') {
+        console.log('🔄 [Connectivity] Gateway is running (HTTP), but WebSocket is inactive. Triggering auto-reconnect...');
+        v3Connect();
+      }
+    }
+  }, [status?.gateway?.status, v3Status, v3Connect, isTransitioning]);
 
 
   // --- Menu Configuration ---

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Tag, Progress, Button, Timeline, Badge, Spin, Empty, message, notification, Tabs, Radio, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Server, Activity, Play, Square, RefreshCw, Trophy, Zap, Monitor, Mail } from 'lucide-react';
+import { Server, Activity, Play, Square, RefreshCw, Trophy, Zap, Monitor, Mail, Loader2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import dayjs from 'dayjs';
 import api from '../api';
@@ -381,7 +381,22 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   <Activity size={15} color={isRunning ? '#22c55e' : (isConnecting ? '#94a3b8' : '#ef4444')} />
                   {t('dashboard.coreStatus')}
                 </div>
-                <Tag color={isRunning ? 'success' : (isConnecting ? 'default' : 'error')} style={{ borderRadius: 20, border: 'none', margin: 0, fontWeight: 600, padding: '0 10px' }}>
+                <Tag
+                  icon={
+                    isConnecting ? (
+                      <Loader2 size={12} className="animate-spin" style={{ color: '#64748b' }} aria-hidden />
+                    ) : undefined
+                  }
+                  color={isRunning ? 'success' : (isConnecting ? 'default' : 'error')}
+                  style={{
+                    borderRadius: 20,
+                    border: 'none',
+                    margin: 0,
+                    fontWeight: 600,
+                    padding: '0 10px',
+                    ...(isConnecting ? { display: 'inline-flex', alignItems: 'center', gap: 6 } : {}),
+                  }}
+                >
                   {isRunning ? t('dashboard.running') : (isConnecting ? t('chat.gatewayConnecting') : t('dashboard.stopped'))}
                 </Tag>
               </div>

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Badge, Button, Dropdown, Input, Modal, Radio, Select, Switch, Tooltip } from 'antd';
-import { PanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2, Maximize2, Minimize2, Folder } from 'lucide-react';
+import { PanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2, Maximize2, Minimize2, Folder, Loader2 } from 'lucide-react';
 
 import type { V3ThemeMode, V3ThemePresetId, V3ThemeTokens } from '../../hooks/chatV3/useV3Theme';
 
@@ -407,12 +407,16 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           <div style={{ 
             display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
             animation: 'v3-fade-in 0.5s ease',
-            opacity: (status === 'disconnected' || status === 'connecting') ? 0.7 : 1
+            // 仅「未连接」弱化；连接各阶段保持不透明，避免 connecting→challenging 时opacity跳变闪烁
+            opacity: status === 'disconnected' ? 0.7 : 1
           }}>
             <Badge 
               status={status === 'error' ? 'error' : (status === 'disconnected' ? 'default' : 'processing')} 
               style={{ filter: status === 'disconnected' ? 'grayscale(1)' : 'none' }}
             />
+            {(status !== 'error' && status !== 'disconnected') && (
+              <Loader2 size={12} className="animate-spin" style={{ color: '#94a3b8', flexShrink: 0 }} aria-hidden />
+            )}
             <span style={{ fontSize: 11, color: status === 'error' ? '#ef4444' : '#94a3b8', fontWeight: 500 }}>
               {status === 'error' 
                 ? t('chat.gatewayConnectFailed') 

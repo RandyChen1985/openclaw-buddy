@@ -283,6 +283,11 @@ export function useV3GatewayConnection({
     if (connectInFlightRef.current) return;
     connectInFlightRef.current = true;
 
+    // 手动调用或业务拉起时，尝试恢复状态机：如果当前处于错误状态，清除计数给一次重连机会
+    if (status === 'error' || status === 'disconnected') {
+      reconnectCountRef.current = 0;
+    }
+
     dispatch({ type: 'CONNECT_REQUEST' });
     
     // 💡 性能优化：并行预取 Ticket 和 Gateway Token，缩短等待链路
