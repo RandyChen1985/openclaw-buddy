@@ -16,9 +16,10 @@ interface V3TerminalModalProps {
   onClose: () => void;
   cwd?: string;
   title?: string;
+  showSider?: boolean;
 }
 
-export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose, cwd, title }) => {
+export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose, cwd, title, showSider }) => {
   const { t } = useTranslation();
   const [terminalEl, setTerminalEl] = useState<HTMLDivElement | null>(null);
   const xtermRef = useRef<Terminal | null>(null);
@@ -47,6 +48,23 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
       bottom: clientHeight - (targetRect.bottom - uiData.y),
     });
   };
+
+  // 每次重新打开时，重置最大化和拖动位置状态
+  useEffect(() => {
+    if (open) {
+      setIsFullscreen(false);
+      setDragPos({ x: 0, y: 0 });
+      savedDragPos.current = { x: 0, y: 0 };
+    }
+  }, [open]);
+
+  // 当左侧侧边栏展开时，如果当前是全屏，则自动退出全屏，避免界面过于拥挤
+  useEffect(() => {
+    if (showSider && isFullscreen) {
+      setIsFullscreen(false);
+      setDragPos({ x: 0, y: 0 });
+    }
+  }, [showSider, isFullscreen]);
 
   const onDragStop = (_event: DraggableEvent, uiData: DraggableData) => {
     const newPos = { x: uiData.x, y: uiData.y };
@@ -171,7 +189,7 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
       onCancel={onClose}
       footer={null}
       width={isFullscreen ? '100vw' : 1000}
-      centered
+      centered={!isFullscreen}
       destroyOnClose
       styles={{
         body: { padding: 0, height: isFullscreen ? 'calc(100vh - 40px)' : '600px', background: '#0f172a', overflow: 'hidden', borderRadius: isFullscreen ? 0 : '0 0 12px 12px' },

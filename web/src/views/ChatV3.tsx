@@ -543,7 +543,14 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           t={t}
           isMobile={!!isMobile}
           showSider={showSider}
-          onToggleSider={() => setShowSider(!showSider)}
+          onToggleSider={() => {
+            const nextShow = !showSider;
+            setShowSider(nextShow);
+            // 如果是展开左侧，且右侧正处于最大化宽度，则自动收缩右侧
+            if (nextShow && rightSiderWidth >= 800) {
+              setRightSiderWidth(450);
+            }
+          }}
           status={status}
           lastHealth={lastHealth}
           latencyHistory={latencyHistory}
@@ -614,11 +621,17 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           setShowTerminal={(val) => {
             setShowTerminal(val);
             storage.setItem('v3_show_terminal', val ? 'true' : 'false');
+            if (val && rightSiderWidth >= 800) {
+              setRightSiderWidth(450);
+            }
           }}
           showExplorer={showExplorer}
           setShowExplorer={(val) => {
             setShowExplorer(val);
             storage.setItem('v3_show_explorer', val ? 'true' : 'false');
+            if (val && rightSiderWidth >= 800) {
+              setRightSiderWidth(450);
+            }
           }}
         />
   
@@ -851,6 +864,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         title={explorerTitle}
         t={t}
         isMobile={!!isMobile}
+        showSider={showSider}
         onSendToChat={handleSendToChat}
         pendingSaveContent={pendingSaveContent}
         onClearPendingSave={() => setPendingSaveContent(undefined)}
@@ -861,6 +875,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         onClose={() => setTerminalOpen(false)}
         cwd={terminalCwd}
         title={terminalTitle}
+        showSider={showSider}
       />
     </>
   );

@@ -164,14 +164,14 @@ export function V3ComposerBar({
           border: 'none',
           padding: '2px 4px',
           height: 38,
-          flex: isMobile ? 1 : '0 0 auto',
-          width: isMobile ? 'auto' : 510,
+          flex: 1,
+          maxWidth: isMobile ? 'none' : 510,
           minWidth: 0,
           boxShadow: 'none'
         }}>
           <Select
             placeholder={t('chat.selectBotTip')}
-            style={{ width: isMobile ? '50%' : 220, fontSize: isMobile ? 11 : 13 }}
+            style={{ flex: 1, minWidth: 0, fontSize: isMobile ? 11 : 13 }} // 改为 flex: 1
             value={selectedBot}
             onChange={onRequestNewSessionWithBot}
             loading={loadingBots}
@@ -229,7 +229,7 @@ export function V3ComposerBar({
           <div style={{ width: 1, height: 16, background: '#bfdbfe', margin: '0 4px' }} />
           <Select
             placeholder={t('chat.sessionModelPlaceholder', { defaultValue: '自由切换会话模型' })}
-            style={{ width: isMobile ? '50%' : 260, fontSize: isMobile ? 11 : 13, minWidth: 0 }}
+            style={{ flex: 1.2, minWidth: 0, fontSize: isMobile ? 11 : 13 }} // 改为 flex: 1.2 并保持 minWidth: 0
             value={sessionModel}
             onChange={onSessionModelChange}
             loading={loadingBots}

@@ -56,6 +56,7 @@ interface FileExplorerProps {
   pendingSaveContent?: string;
   onClearPendingSave?: () => void;
   simplified?: boolean;
+  showSider?: boolean;
 }
 
 const getFileIcon = (name: string, isDir: boolean, size: number = 20, isProtected: boolean = false) => {
@@ -1747,6 +1748,23 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
     });
   };
 
+  // 每次重新打开时，重置最大化和拖动位置状态
+  useEffect(() => {
+    if (props.open) {
+      setIsMaximized(false);
+      setDragPos({ x: 0, y: 0 });
+      savedDragPos.current = { x: 0, y: 0 };
+    }
+  }, [props.open]);
+
+  // 当左侧侧边栏展开时，如果当前是全屏，则自动退出全屏，避免界面过于拥挤
+  useEffect(() => {
+    if (props.showSider && isMaximized) {
+      setIsMaximized(false);
+      setDragPos({ x: 0, y: 0 });
+    }
+  }, [props.showSider, isMaximized]);
+
   const onDragStop = (_event: DraggableEvent, uiData: DraggableData) => {
     const newPos = { x: uiData.x, y: uiData.y };
     setDragPos(newPos);
@@ -1772,14 +1790,15 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
       open={props.open}
       onCancel={props.onClose}
       footer={null}
-      width={isMaximized ? '98%' : 1200}
-      centered
+      width={isMaximized ? '100vw' : 1200}
+      centered={!isMaximized}
       destroyOnClose
       styles={{
-        body: { padding: 0, height: isMaximized ? 'calc(100vh - 80px)' : 'calc(100vh - 120px)', background: '#fff', overflow: 'hidden', borderRadius: '0 0 12px 12px' },
-        content: { padding: 0, background: '#fff', borderRadius: 12, overflow: 'hidden' },
-        header: { padding: 0, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', marginBottom: 0, borderRadius: '12px 12px 0 0' }
+        body: { padding: 0, height: isMaximized ? 'calc(100vh - 44px)' : 'calc(100vh - 120px)', background: '#fff', overflow: 'hidden', borderRadius: isMaximized ? 0 : '0 0 12px 12px' },
+        content: { padding: 0, background: '#fff', borderRadius: isMaximized ? 0 : 12, overflow: 'hidden' },
+        header: { padding: 0, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', marginBottom: 0, borderRadius: isMaximized ? 0 : '12px 12px 0 0' }
       }}
+      style={isMaximized ? { top: 0, maxWidth: '100vw', margin: 0, padding: 0 } : {}}
       modalRender={(modal) => (
         <Draggable
           disabled={dragDisabled || isMaximized}
@@ -1797,9 +1816,9 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'space-between', 
-            padding: '12px 16px',
+            padding: '8px 16px',
             background: '#f8fafc',
-            borderRadius: '12px 12px 0 0',
+            borderRadius: isMaximized ? 0 : '12px 12px 0 0',
             cursor: isMaximized ? 'default' : 'move'
           }}
           onMouseOver={() => {
