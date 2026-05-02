@@ -1731,6 +1731,9 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
   const [dragDisabled, setDragDisabled] = useState(true);
   const [bounds, setBounds] = useState<DraggableBounds>({ left: 0, top: 0, bottom: 0, right: 0 });
   const draggleRef = useRef<HTMLDivElement>(null);
+  // 受控位置：最大化时重置为 (0,0)，恢复时还原
+  const [dragPos, setDragPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const savedDragPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const onStart = (_event: DraggableEvent, uiData: DraggableData) => {
     const { clientWidth, clientHeight } = window.document.documentElement;
@@ -1741,6 +1744,26 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
       right: clientWidth - (targetRect.right - uiData.x),
       top: -targetRect.top + uiData.y,
       bottom: clientHeight - (targetRect.bottom - uiData.y),
+    });
+  };
+
+  const onDragStop = (_event: DraggableEvent, uiData: DraggableData) => {
+    const newPos = { x: uiData.x, y: uiData.y };
+    setDragPos(newPos);
+    savedDragPos.current = newPos;
+  };
+
+  const toggleMaximized = () => {
+    setIsMaximized(prev => {
+      const next = !prev;
+      if (next) {
+        // 最大化：重置到 (0,0)，消除拖动偏移
+        setDragPos({ x: 0, y: 0 });
+      } else {
+        // 还原：回到之前的拖动位置
+        setDragPos(savedDragPos.current);
+      }
+      return next;
     });
   };
 
@@ -1761,7 +1784,9 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
         <Draggable
           disabled={dragDisabled || isMaximized}
           bounds={bounds}
+          position={dragPos}
           onStart={(event, uiData) => onStart(event, uiData)}
+          onStop={(event, uiData) => onDragStop(event, uiData)}
         >
           <div ref={draggleRef}>{modal}</div>
         </Draggable>
@@ -1796,7 +1821,7 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
                 type="text" 
                 size="small" 
                 icon={isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />} 
-                onClick={() => setIsMaximized(!isMaximized)}
+                onClick={toggleMaximized}
                 style={{ color: '#64748b' }}
                 onMouseEnter={() => setDragDisabled(true)}
                 onMouseLeave={() => setDragDisabled(false)}

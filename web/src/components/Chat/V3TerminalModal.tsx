@@ -32,6 +32,9 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
   const [dragDisabled, setDragDisabled] = useState(true);
   const [bounds, setBounds] = useState<DraggableBounds>({ left: 0, top: 0, bottom: 0, right: 0 });
   const draggleRef = useRef<HTMLDivElement>(null);
+  // 受控位置：进入全屏时重置为 (0,0)，退出时还原
+  const [dragPos, setDragPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const savedDragPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const onStart = (_event: DraggableEvent, uiData: DraggableData) => {
     const { clientWidth, clientHeight } = window.document.documentElement;
@@ -42,6 +45,26 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
       right: clientWidth - (targetRect.right - uiData.x),
       top: -targetRect.top + uiData.y,
       bottom: clientHeight - (targetRect.bottom - uiData.y),
+    });
+  };
+
+  const onDragStop = (_event: DraggableEvent, uiData: DraggableData) => {
+    const newPos = { x: uiData.x, y: uiData.y };
+    setDragPos(newPos);
+    savedDragPos.current = newPos;
+  };
+
+  const toggleFullscreen = () => {
+    setIsFullscreen(prev => {
+      const next = !prev;
+      if (next) {
+        // 进入全屏：保存当前拖动位置，然后重置到 (0,0)
+        setDragPos({ x: 0, y: 0 });
+      } else {
+        // 退出全屏：还原之前的拖动位置
+        setDragPos(savedDragPos.current);
+      }
+      return next;
     });
   };
 
@@ -159,7 +182,9 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
         <Draggable
           disabled={dragDisabled || isFullscreen}
           bounds={bounds}
+          position={dragPos}
           onStart={(event, uiData) => onStart(event, uiData)}
+          onStop={(event, uiData) => onDragStop(event, uiData)}
         >
           <div ref={draggleRef}>{modal}</div>
         </Draggable>
@@ -202,7 +227,7 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
               <Button
                 size="small" type="text"
                 icon={isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                onClick={() => setIsFullscreen(!isFullscreen)} style={{ color: '#94a3b8' }}
+                onClick={toggleFullscreen} style={{ color: '#94a3b8' }}
                 onMouseEnter={() => setDragDisabled(true)}
                 onMouseLeave={() => setDragDisabled(false)}
               />

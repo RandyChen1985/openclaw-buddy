@@ -217,7 +217,7 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
           <input
             ref={searchInputRef}
             className="v3-mention-search"
-            style={{ paddingLeft: 32 }}
+            style={{ paddingLeft: 32, paddingRight: loading && items.length > 0 ? 32 : 12 }}
             placeholder={activeTab === 'files' ? t('chat.searchFiles', { defaultValue: '搜索文件或目录...' }) : t('chat.searchSkills', { defaultValue: '搜索技能...' })}
             value={searchText}
             onChange={e => {
@@ -225,6 +225,12 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
               setActiveIndex(0);
             }}
           />
+          {/* 有数据时的搜索中指示器：用右侧小转圈代替全屏 Spin，防止闪动 */}
+          {loading && items.length > 0 && (
+            <div style={{ position: 'absolute', right: 10, top: 9 }}>
+              <Spin size="small" />
+            </div>
+          )}
         </div>
       </div>
       
@@ -243,31 +249,34 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
         </div>
       </div>
 
-      <div className="v3-mention-list">
-        {loading ? (
+      <div className="v3-mention-list" style={{ position: 'relative' }}>
+        {/* 仅在初次加载（列表为空）时显示全屏 Spin，避免搜索时整个列表闪动 */}
+        {loading && filteredItems.length === 0 ? (
           <div style={{ padding: '20px', textAlign: 'center' }}><Spin size="small" /></div>
         ) : filteredItems.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('common.noContent')} />
         ) : (
-          filteredItems.map((item, idx) => (
-            <div 
-              key={item.id} 
-              className={`v3-mention-item ${idx === activeIndex ? 'active' : ''}`}
-              onClick={() => handleItemAction(item)}
-              onMouseEnter={() => setActiveIndex(idx)}
-            >
-              <div className="v3-mention-item-icon">
-                {item.label === '..' ? <CornerUpLeft size={16} color="#64748b" /> : 
-                 item.type === 'directory' ? <Folder size={16} color="#0ea5e9" /> : 
-                 item.type === 'workspace_file' ? getFileIcon(item.label, false, 16) : 
-                 <Zap size={16} color="#0d9488" />}
+          <div style={{ opacity: loading ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
+            {filteredItems.map((item, idx) => (
+              <div 
+                key={item.id} 
+                className={`v3-mention-item ${idx === activeIndex ? 'active' : ''}`}
+                onClick={() => handleItemAction(item)}
+                onMouseEnter={() => setActiveIndex(idx)}
+              >
+                <div className="v3-mention-item-icon">
+                  {item.label === '..' ? <CornerUpLeft size={16} color="#64748b" /> : 
+                   item.type === 'directory' ? <Folder size={16} color="#0ea5e9" /> : 
+                   item.type === 'workspace_file' ? getFileIcon(item.label, false, 16) : 
+                   <Zap size={16} color="#0d9488" />}
+                </div>
+                <div className="v3-mention-item-info">
+                  <div className="v3-mention-item-name">{item.label}</div>
+                  <div className="v3-mention-item-desc">{item.desc}</div>
+                </div>
               </div>
-              <div className="v3-mention-item-info">
-                <div className="v3-mention-item-name">{item.label}</div>
-                <div className="v3-mention-item-desc">{item.desc}</div>
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
       
