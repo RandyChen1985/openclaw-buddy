@@ -1352,6 +1352,38 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                   ) : (
                     <div style={{ position: 'relative', height: '100%' }}>
                       <TokenBadge text={fileContent} />
+                      <Tooltip title={t('common.copyContent', { defaultValue: '复制全部内容' })}>
+                        <Button 
+                          type="default"
+                          icon={<Copy size={16} />} 
+                          onClick={() => {
+                            navigator.clipboard.writeText(fileContent).then(() => {
+                              message.success(t('common.copied', { defaultValue: '已复制到剪贴板' }));
+                            }).catch(() => {
+                              message.error(t('common.copyFailed', { defaultValue: '复制失败，请手动复制' }));
+                            });
+                          }}
+                          style={{ 
+                            position: 'absolute', 
+                            bottom: 32, 
+                            right: 160,
+                            zIndex: 100, 
+                            borderRadius: 22, 
+                            height: 44, 
+                            width: 44,
+                            padding: 0,
+                            boxShadow: '0 4px 14px rgba(100, 116, 139, 0.3)',
+                            background: 'rgba(255,255,255,0.95)',
+                            border: '1px solid #e2e8f0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#475569',
+                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                          }}
+                          className="copy-float-btn"
+                        />
+                      </Tooltip>
                       <Button 
                         type="primary" 
                         icon={<Save size={16} />} 
@@ -1606,6 +1638,13 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
         .save-float-btn:hover {
           transform: translateY(-2px) scale(1.05);
           box-shadow: 0 12px 24px rgba(14, 165, 233, 0.5) !important;
+        }
+        .copy-float-btn:hover {
+          transform: translateY(-2px) scale(1.05);
+          box-shadow: 0 8px 20px rgba(100, 116, 139, 0.35) !important;
+          background: #fff !important;
+          border-color: #94a3b8 !important;
+          color: #0ea5e9 !important;
         }
         .custom-directory-tree .ant-tree-node-content-wrapper {
           border-radius: 6px;
