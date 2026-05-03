@@ -250,11 +250,23 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
-      <div style={{ padding: '16px', borderBottom: `1px solid ${shell.hairline}`, display: 'flex', gap: 8, alignItems: 'center' }}>
+      <div style={{ padding: isMobile ? '12px 12px' : '16px', borderBottom: `1px solid ${shell.hairline}`, display: 'flex', gap: isMobile ? 6 : 8, alignItems: 'center' }}>
         <Button 
-            type="primary" 
-            icon={<Plus size={16} />} 
-            style={{ flex: 1, borderRadius: 8, height: 38, background: 'var(--v3-primary, #4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            type="primary"
+            size={isMobile ? 'small' : 'middle'}
+            icon={<Plus size={isMobile ? 14 : 16} />} 
+            style={{
+              flex: 1,
+              minWidth: 0,
+              borderRadius: 8,
+              height: isMobile ? 32 : 38,
+              fontSize: isMobile ? 12 : 14,
+              paddingInline: isMobile ? 8 : 12,
+              background: 'var(--v3-primary, #4f46e5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
             loading={newSessionBusy}
             disabled={newSessionBusy}
             onClick={() => {
@@ -266,11 +278,22 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
           {t('chat.v3NewSession', { defaultValue: '开启新会话' })}
         </Button>
         <Button 
-          icon={<RefreshCw size={14} className={loadingSessions ? "v3-spin" : ""} />} 
+          size={isMobile ? 'small' : 'middle'}
+          icon={<RefreshCw size={isMobile ? 13 : 14} className={loadingSessions ? "v3-spin" : ""} />} 
           onClick={() => fetchSessions(false)} 
           loading={loadingSessions}
-          style={{ height: 38, width: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}
+          style={{ height: isMobile ? 32 : 38, width: isMobile ? 32 : 38, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}
         />
+        {sessions.some(s => s.key !== 'agent:main:main') && (
+          <Tooltip title={t('chat.clearAllHistory', { defaultValue: '清除全部历史' })}>
+            <Button
+              size={isMobile ? 'small' : 'middle'}
+              icon={<Trash2 size={isMobile ? 12 : 13} />}
+              onClick={onClearAll}
+              style={{ height: isMobile ? 32 : 38, width: isMobile ? 32 : 38, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, color: shell.textMuted }}
+            />
+          </Tooltip>
+        )}
       </div>
       
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
@@ -356,17 +379,6 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
             allowClear
             style={{ borderRadius: 8, fontSize: 12, flex: 1 }}
           />
-          {sessions.some(s => s.key !== 'agent:main:main') && (
-            <Tooltip title={t('chat.clearAllHistory', { defaultValue: '清除全部历史' })}>
-                <Button 
-                    size="small" 
-                    type="text" 
-                    icon={<Trash2 size={13} />} 
-                    onClick={onClearAll}
-                    style={{ color: shell.textMuted, background: shell.chipBg, borderRadius: 8 }}
-                />
-            </Tooltip>
-          )}
         </div>
 
         {loadingSessions && sessions.length === 0 ? (

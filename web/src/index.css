@@ -6,7 +6,9 @@
   background-color: #f5f5f5;
 }
 
-html.dark {
+html.dark,
+html.dark body,
+html.dark #root {
   background-color: #0f172a;
 }
 

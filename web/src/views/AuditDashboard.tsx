@@ -413,25 +413,25 @@ const AuditDashboard: React.FC<AuditDashboardProps> = ({ isDarkMode = false }) =
             { title: t('audit.modelCoverage'), value: summary?.model_distribution?.length, Icon: Cpu, iconColor: '#8b5cf6' },
           ] as { title: string; value: any; Icon: LucideIcon; iconColor: string; isAlert?: boolean }[]).map((item, idx) => {
             const MetricIcon = item.Icon;
-            const iconSize = 24;
-            const iconWrap = 46;
+            const iconSize = isMobile ? 18 : 24;
+            const iconWrap = isMobile ? 36 : 46;
+            const iconRadius = isMobile ? 10 : 12;
             return (
-            <Card key={idx} bodyStyle={{ padding: '10px 12px' }} style={{ borderRadius: '8px', border: `1px solid ${isDarkMode ? '#334155' : '#f1f5f9'}`, background: isDarkMode ? '#1e293b' : '#fff' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+            <Card key={idx} bodyStyle={{ padding: isMobile ? '10px 10px' : '10px 12px' }} style={{ borderRadius: '8px', border: `1px solid ${isDarkMode ? '#334155' : '#f1f5f9'}`, background: isDarkMode ? '#1e293b' : '#fff' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: isMobile ? 8 : 10 }}>
                 <div style={{ minWidth: 0 }}>
                   <Text type="secondary" style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 600, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: isDarkMode ? '#94a3b8' : 'inherit' }}>{item.title}</Text>
                   <div style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 700, color: item.isAlert ? '#ef4444' : (isDarkMode ? '#f1f5f9' : '#1e293b'), marginTop: 0 }}>
                     {item.value?.toLocaleString() || 0}
                   </div>
                 </div>
-                {!isMobile && (
                 <div
                   aria-hidden
                   style={{
                     width: iconWrap,
                     height: iconWrap,
                     minWidth: iconWrap,
-                    borderRadius: 12,
+                    borderRadius: iconRadius,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -440,9 +440,8 @@ const AuditDashboard: React.FC<AuditDashboardProps> = ({ isDarkMode = false }) =
                     border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
                   }}
                 >
-                  <MetricIcon size={iconSize} color={item.iconColor} strokeWidth={2.25} aria-hidden />
+                  <MetricIcon size={iconSize} color={item.iconColor} strokeWidth={isMobile ? 2 : 2.25} aria-hidden />
                 </div>
-                )}
               </div>
             </Card>
             );

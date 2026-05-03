@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode, theme } from 'antd';
+import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode, theme, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
@@ -1225,35 +1225,126 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
 
 
 
-  const headerEl = (onMenuClick?: () => void) => (
+  const headerEl = (onMenuClick?: () => void) => {
+    const breadcrumbTitle = `${t('common.console')} / ${getActiveLabel(activeTab)}`;
+    const gatewayTitle = [
+      'Gateway',
+      isRunning ? t('dashboard.running') : t('dashboard.stopped'),
+      isRunning && lastHealth?.latency !== undefined ? `${lastHealth.latency}ms` : '',
+    ].filter(Boolean).join(' · ');
+
+    const gatewayBadgeText = (
+      <span
+        style={{
+          color: isDarkMode ? '#94a3b8' : '#64748b',
+          fontSize: isMobile ? 10 : 12,
+          fontWeight: 500,
+          whiteSpace: 'nowrap',
+          maxWidth: isMobile ? 76 : undefined,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          display: 'inline-block',
+          verticalAlign: 'middle',
+        }}
+      >
+        {!isMobile && 'Gateway '}
+        {isRunning ? t('dashboard.running') : t('dashboard.stopped')}
+        {isRunning && lastHealth?.latency !== undefined && (
+          <span style={{ color: '#10b981', marginLeft: isMobile ? 2 : 4, fontWeight: 700 }}>
+            {isMobile ? `${lastHealth.latency}ms` : `(${lastHealth.latency}ms)`}
+          </span>
+        )}
+      </span>
+    );
+
+    return (
     <Header style={{
-      background: isDarkMode ? '#1e293b' : '#fff', height: 56, padding: isMobile ? '0 12px' : '0 24px', borderBottom: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      background: isDarkMode ? '#1e293b' : '#fff', height: 56, padding: isMobile ? '0 8px' : '0 24px', borderBottom: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
       position: 'sticky', top: 0, zIndex: 20, flexShrink: 0, lineHeight: 'normal',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 8, minWidth: 0, flex: 1, overflow: 'hidden' }}>
         <Button 
           type="text" 
-          icon={<MenuIcon size={20} />} 
+          icon={<MenuIcon size={isMobile ? 18 : 20} />} 
           onClick={onMenuClick} 
-          style={{ marginLeft: -8, color: isDarkMode ? '#94a3b8' : '#64748b' }} 
+          style={{ marginLeft: isMobile ? -4 : -8, color: isDarkMode ? '#94a3b8' : '#64748b', flexShrink: 0 }} 
         />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: isDarkMode ? '#94a3b8' : '#64748b' }}>
-          <span 
-            style={{ fontWeight: 600, color: isDarkMode ? '#f1f5f9' : '#1e293b', cursor: 'pointer', transition: 'color 0.2s' }} 
-            onClick={() => setActiveTab('dashboard')}
-            onMouseEnter={(e) => (e.currentTarget.style.color = '#2563eb')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = isDarkMode ? '#f1f5f9' : '#1e293b')}
+        {isMobile ? (
+          <Tooltip title={breadcrumbTitle}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 12,
+                color: isDarkMode ? '#94a3b8' : '#64748b',
+                minWidth: 0,
+                flex: 1,
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  minWidth: 0,
+                }}
+              >
+                <span 
+                  style={{ fontWeight: 600, color: isDarkMode ? '#f1f5f9' : '#1e293b', cursor: 'pointer', transition: 'color 0.2s' }} 
+                  onClick={(e) => { e.stopPropagation(); setActiveTab('dashboard'); }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = '#2563eb')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = isDarkMode ? '#f1f5f9' : '#1e293b')}
+                >
+                  {t('common.console')}
+                </span>
+                <span> / </span>
+                <span style={{ color: '#2563eb', fontWeight: 500 }}>
+                  {getActiveLabel(activeTab)}
+                </span>
+              </div>
+            </div>
+          </Tooltip>
+        ) : (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 14,
+              color: isDarkMode ? '#94a3b8' : '#64748b',
+              minWidth: 0,
+              flex: 1,
+              overflow: 'hidden',
+            }}
           >
-            {t('common.console')}
-          </span>
-          <span>/</span>
-          <span style={{ color: '#2563eb', fontWeight: 500 }}>
-            {getActiveLabel(activeTab)}
-          </span>
-        </div>
+            <div
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                minWidth: 0,
+              }}
+            >
+              <span 
+                style={{ fontWeight: 600, color: isDarkMode ? '#f1f5f9' : '#1e293b', cursor: 'pointer', transition: 'color 0.2s' }} 
+                onClick={() => setActiveTab('dashboard')}
+                onMouseEnter={(e) => (e.currentTarget.style.color = '#2563eb')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = isDarkMode ? '#f1f5f9' : '#1e293b')}
+              >
+                {t('common.console')}
+              </span>
+              <span> / </span>
+              <span style={{ color: '#2563eb', fontWeight: 500 }}>
+                {getActiveLabel(activeTab)}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 12, flexShrink: 0 }}>
         <TaskTray 
           tasks={activeTasks} 
           isMobile={isMobile} 
@@ -1264,30 +1355,35 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
         <LanguageSwitcher isMobile={isMobile} />
         <Button
           type="text"
-          icon={isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+          icon={isDarkMode ? <Sun size={isMobile ? 16 : 18} /> : <Moon size={isMobile ? 16 : 18} />}
           onClick={toggleTheme}
-          style={{ color: isDarkMode ? '#94a3b8' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{ color: isDarkMode ? '#94a3b8' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobile ? '0 4px' : undefined }}
         />
-        <Badge
-          status={
-            isRunning ? 'success' : 
-            (['challenging', 'authorizing'].includes(v3Status) ? 'processing' : 'error')
-          }
-          text={
-            <span style={{ color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>
-              {!isMobile && 'Gateway '}
-              {isRunning ? t('dashboard.running') : t('dashboard.stopped')}
-              {isRunning && lastHealth?.latency !== undefined && (
-                <span style={{ color: '#10b981', marginLeft: 4, fontWeight: 700 }}>
-                  ({lastHealth.latency}ms)
-                </span>
-              )}
+        {isMobile ? (
+          <Tooltip title={gatewayTitle}>
+            <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <Badge
+                status={
+                  isRunning ? 'success' : 
+                  (['challenging', 'authorizing'].includes(v3Status) ? 'processing' : 'error')
+                }
+                text={gatewayBadgeText}
+              />
             </span>
-          }
-        />
+          </Tooltip>
+        ) : (
+          <Badge
+            status={
+              isRunning ? 'success' : 
+              (['challenging', 'authorizing'].includes(v3Status) ? 'processing' : 'error')
+            }
+            text={gatewayBadgeText}
+          />
+        )}
       </div>
     </Header>
-  );
+    );
+  };
 
   return (
     <>
@@ -1314,7 +1410,9 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
           {headerEl(() => setMobileMenuOpen(true))}
           <Content style={{ 
             padding: activeTab === 'tui' || activeTab === 'shell' || activeTab === 'chat' || activeTab === 'logs' ? 0 : 16, 
-            background: (activeTab === 'tui' || activeTab === 'shell') ? '#0f172a' : '#f8fafc' 
+            background: isDarkMode
+              ? '#0f172a'
+              : (activeTab === 'tui' || activeTab === 'shell' ? '#0f172a' : '#f8fafc'),
           }}>
             {renderContent()}
           </Content>
@@ -1582,6 +1680,7 @@ export default function App() {
         borderRadius: 8,
         fontFamily: "'Inter', sans-serif",
         colorBgContainer: isDarkMode ? '#1e293b' : '#ffffff',
+        colorBgLayout: isDarkMode ? '#0f172a' : '#f5f5f5',
         colorText: isDarkMode ? '#f1f5f9' : '#334155',
       },
       components: {

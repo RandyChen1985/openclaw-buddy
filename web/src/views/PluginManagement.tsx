@@ -426,10 +426,11 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
           borderBottom: `1px solid ${dividerSubtle}`,
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
-          alignItems: isMobile ? 'flex-start' : 'center',
-          gap: 12
+          alignItems: isMobile ? 'stretch' : 'center',
+          gap: 12,
+          minWidth: 0
         }} className={isDarkMode ? 'plugin-mgmt-toolbar' : undefined}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: isMobile ? '100%' : 'auto', flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: isMobile ? '100%' : 'auto', flex: 1, minWidth: 0 }}>
             <Input 
               prefix={<Search size={16} color="#94a3b8" />} 
               placeholder={t('plugins.search')} 
@@ -448,30 +449,48 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
+          <div style={{
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: isMobile ? 'stretch' : 'center',
+            gap: 12,
+            width: isMobile ? '100%' : 'auto',
+            minWidth: 0,
+            justifyContent: isMobile ? 'flex-start' : 'flex-end'
+          }}>
             {isMobile && (
               <Button 
                 size="small" 
                 icon={<ArrowUpCircle size={14} />} 
                 onClick={handleUpdate}
                 loading={updating}
-                style={{ fontSize: 11, borderRadius: 6, background: isDarkMode ? '#0f172a' : undefined, borderColor: isDarkMode ? '#334155' : undefined, color: isDarkMode ? '#cbd5e1' : undefined }}
+                style={{ alignSelf: 'flex-start', fontSize: 11, borderRadius: 6, background: isDarkMode ? '#0f172a' : undefined, borderColor: isDarkMode ? '#334155' : undefined, color: isDarkMode ? '#cbd5e1' : undefined }}
               >
                 {t('plugins.update')}
               </Button>
             )}
-            <Segmented
-              className={isDarkMode ? 'plugin-mgmt-seg' : undefined}
-              options={[
-                { label: t('plugins.loaded'), value: 'loaded' },
-                { label: t('plugins.filterEnabled'), value: 'enabled' },
-                { label: t('common.all'), value: 'all' },
-                { label: t('plugins.filterDisabled'), value: 'disabled' }
-              ]}
-              value={statusFilter}
-              onChange={(value) => setStatusFilter(value)}
-              style={{ background: isDarkMode ? '#0f172a' : '#f1f5f9', borderRadius: 8, padding: 2, border: isDarkMode ? '1px solid #334155' : undefined }}
-            />
+            <div
+              style={
+                isMobile
+                  ? { width: '100%', minWidth: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' as const }
+                  : undefined
+              }
+            >
+              <Segmented
+                block={isMobile}
+                size={isMobile ? 'small' : 'middle'}
+                className={[isDarkMode ? 'plugin-mgmt-seg' : '', isMobile ? 'plugin-mgmt-filter-seg-mobile' : ''].filter(Boolean).join(' ') || undefined}
+                options={[
+                  { label: t('plugins.loaded'), value: 'loaded' },
+                  { label: t('plugins.filterEnabled'), value: 'enabled' },
+                  { label: t('common.all'), value: 'all' },
+                  { label: t('plugins.filterDisabled'), value: 'disabled' }
+                ]}
+                value={statusFilter}
+                onChange={(value) => setStatusFilter(value)}
+                style={{ background: isDarkMode ? '#0f172a' : '#f1f5f9', borderRadius: 8, padding: 2, border: isDarkMode ? '1px solid #334155' : undefined }}
+              />
+            </div>
           </div>
         </div>
 
@@ -659,6 +678,12 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
           box-shadow: none !important;
         }
         ` : ''}
+        .plugin-mgmt-filter-seg-mobile.ant-segmented.ant-segmented-sm .ant-segmented-item-label {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          max-width: 100%;
+        }
       `}</style>
     </div>
   );
