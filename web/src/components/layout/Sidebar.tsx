@@ -6,6 +6,11 @@ import { useTranslation } from 'react-i18next';
 
 import { hasNewVersion } from '../../utils/version';
 
+/** 侧栏品牌区与菜单共用壳色，不随全局浅色/深色切换 */
+const SIDEBAR_SHELL = '#0f172a';
+/** 品牌条高度（与主区顶栏 56px 同高，仅尺寸参考；颜色仍跟侧栏壳） */
+const SIDEBAR_BRAND_HEIGHT = 56;
+
 interface SidebarProps {
   activeTab: string;
   collapsed: boolean;
@@ -23,33 +28,36 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
   const displayTag = tag && tag.length > 10 ? tag.substring(0, 8) + '...' : tag;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#001529' }}>
-      {/* Logo Area */}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: SIDEBAR_SHELL }}>
+      {/* Logo Area：56px 与主顶栏同高便于对齐；壳色与下方菜单一致，不随全局主题变白 */}
       <div style={{ 
-        height: 72, padding: collapsed ? '0 12px' : '0 20px', 
-        display: 'flex', alignItems: 'center', gap: 12,
-        background: 'linear-gradient(to bottom, #0f172a, #131c31)',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
+        height: SIDEBAR_BRAND_HEIGHT,
+        minHeight: SIDEBAR_BRAND_HEIGHT,
+        padding: collapsed ? '0 12px' : '0 16px', 
+        display: 'flex', alignItems: 'center', gap: 10,
+        background: SIDEBAR_SHELL,
+        borderBottom: '1px solid rgba(51, 65, 85, 0.45)',
         flexShrink: 0,
-        overflow: 'hidden'
+        overflow: 'hidden',
+        boxSizing: 'border-box',
       }}>
         {/* Lobster Icon with Badge Hint */}
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <div style={{ 
-            width: 40, height: 40, borderRadius: 12, 
+            width: 34, height: 34, borderRadius: 10, 
             background: 'rgba(99, 102, 241, 0.06)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             border: '1px solid rgba(99, 102, 241, 0.12)',
             boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)'
           }}>
-            <span style={{ fontSize: 24, lineHeight: 1 }}>🦞</span>
+            <span style={{ fontSize: 20, lineHeight: 1 }}>🦞</span>
           </div>
           {collapsed && tag && (
             <div style={{ 
               position: 'absolute', top: -1, right: -1, 
               width: 10, height: 10, borderRadius: '50%',
               background: 'linear-gradient(135deg, #6366f1, #a855f7)',
-              border: '2px solid #0f172a',
+              border: `2px solid ${SIDEBAR_SHELL}`,
               boxShadow: '0 0 6px rgba(99, 102, 241, 0.6)'
             }} />
           )}
@@ -59,7 +67,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
               <span style={{ 
-                fontSize: 14, fontWeight: 800, color: '#f8fafc', 
+                fontSize: 13, fontWeight: 800, color: '#f8fafc', 
                 letterSpacing: '0.01em', lineHeight: 1.2,
                 whiteSpace: 'nowrap', textShadow: '0 2px 4px rgba(0,0,0,0.1)',
                 flexShrink: 0
@@ -67,7 +75,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
                 OpenClaw Buddy
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <a 
                   href={versionUpdate?.release_url || "https://github.com/RandyChen1985/openclaw-buddy/releases"}
@@ -164,9 +172,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
           50% { transform: scale(1.05); box-shadow: 0 0 10px 3px rgba(255, 77, 79, 0.5); }
           100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.2); }
         }
-        /* 微调子菜单背景色，使其与父级更贴合 */
+        /* 子菜单背景与侧栏壳、父级菜单一致 */
         .ant-menu-sub.ant-menu-inline {
-          background: #001021 !important;
+          background: ${SIDEBAR_SHELL} !important;
           border-radius: 8px;
         }
         /* 稍微减弱子菜单项的缩进，让视觉更紧凑 */
