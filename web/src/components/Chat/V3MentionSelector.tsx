@@ -280,7 +280,7 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
         )}
       </div>
       
-      <div style={{ padding: '8px 12px', borderTop: '1px solid #f1f5f9', background: '#f8fafc', fontSize: 10, color: '#94a3b8', display: 'flex', justifyContent: 'space-between' }}>
+      <div className="v3-mention-footer">
         <span>↑↓ 选择 • Enter 确认</span>
         <span>Tab 切换分类</span>
       </div>

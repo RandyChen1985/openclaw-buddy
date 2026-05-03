@@ -9,6 +9,7 @@ interface LogsViewerProps {
   onSourceChange: (source: string) => void;
   isRunning?: boolean;
   onNavigateToDashboard?: () => void;
+  isDarkMode?: boolean;
 }
 
 const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceChange }) => {
@@ -71,6 +72,7 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceC
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 200 }}>
           <Segmented
+            className="logs-viewer-source-segmented"
             value={activeSource}
             onChange={(val) => onSourceChange(val as string)}
             options={[
@@ -80,8 +82,8 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceC
                     display: 'flex', 
                     alignItems: 'center', 
                     gap: 6, 
-                    color: activeSource === 'buddy' ? '#161b22' : '#8b949e',
-                    transition: 'color 0.3s'
+                    color: activeSource === 'buddy' ? '#f8fafc' : '#8b949e',
+                    transition: 'color 0.2s'
                   }}>
                     <Shield size={14} /> Buddy
                   </div>
@@ -94,8 +96,8 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceC
                     display: 'flex', 
                     alignItems: 'center', 
                     gap: 6, 
-                    color: activeSource === 'gateway' ? '#161b22' : '#8b949e',
-                    transition: 'color 0.3s'
+                    color: activeSource === 'gateway' ? '#f8fafc' : '#8b949e',
+                    transition: 'color 0.2s'
                   }}>
                     <Terminal size={14} /> OpenClaw
                   </div>
@@ -198,6 +200,25 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceC
         )}
         <div ref={logsEndRef} style={{ height: 10 }} />
       </div>
+
+      <style>{`
+        /* 覆盖全局暗色主题下 Segmented 的 itemSelectedBg：避免选中块发灰 + 与深色 #161b22 文案叠在一起无法辨认 */
+        .logs-viewer-source-segmented.ant-segmented .ant-segmented-thumb {
+          background: #2563eb !important;
+          box-shadow: none !important;
+        }
+        .logs-viewer-source-segmented.ant-segmented .ant-segmented-item-selected {
+          background: #2563eb !important;
+          color: #f8fafc !important;
+          box-shadow: none !important;
+        }
+        .logs-viewer-source-segmented.ant-segmented .ant-segmented-item-selected .ant-segmented-item-label {
+          color: #f8fafc !important;
+        }
+        .logs-viewer-source-segmented.ant-segmented .ant-segmented-item:not(.ant-segmented-item-selected):hover {
+          color: #c9d1d9 !important;
+        }
+      `}</style>
     </div>
   );
 };

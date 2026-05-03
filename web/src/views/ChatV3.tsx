@@ -62,12 +62,13 @@ interface ChatV3Props {
   loadingBots: boolean;
   onRefreshBots: () => void;
   isMobile?: boolean;
+  isDarkMode?: boolean;
 }
 
 
 // --- Utils ---
 
-const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) => {
+const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDarkMode = false }) => {
 
   const { t } = useTranslation();
   const v3Theme = useV3Theme();
@@ -457,12 +458,13 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
     <>
       <div
         className={`chat-v3-root ${isFullscreen ? 'chat-v3-root-fullscreen' : ''}`}
+        data-app-dark={isDarkMode ? 'true' : undefined}
         data-v3-theme={v3Theme.rootAttrs['data-v3-theme']}
         style={{
           ...(v3Theme.rootAttrs.styleVars || {}),
           flex: 1,
           display: 'flex',
-          background: '#f8fafc',
+          background: isDarkMode ? '#0f172a' : '#f8fafc',
           overflowX: 'hidden',
           height: '100%',
           position: 'relative',
@@ -487,10 +489,10 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           <div style={{ 
             width: isMobile ? 280 : 280, 
             height: '100%', 
-            borderRight: '1px solid #f1f5f9', 
+            borderRight: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9', 
             display: 'flex', 
             flexDirection: 'column',
-            background: '#fff',
+            background: isDarkMode ? '#1e293b' : '#fff',
             position: isMobile ? 'fixed' : 'relative',
             zIndex: 201,
             flexShrink: 0
@@ -514,12 +516,13 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
               setShowSider={setShowSider}
               copyToClipboard={copyToClipboard}
               t={t}
+              isDarkMode={isDarkMode}
             />
           </div>
         </>
       )}
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fafafa', position: 'relative', width: '100%', minWidth: 0, overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: isDarkMode ? '#0f172a' : '#fafafa', position: 'relative', width: '100%', minWidth: 0, overflow: 'hidden' }}>
         
         {/* 💡 注入局部样式强制锁死浮动按钮在各种状态下的颜色 */}
         <style>{`
@@ -542,6 +545,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         <V3ChatHeader
           t={t}
           isMobile={!!isMobile}
+          isDarkMode={isDarkMode}
           showSider={showSider}
           onToggleSider={() => {
             const nextShow = !showSider;
@@ -638,6 +642,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         <V3MessagePane
           t={t}
           isMobile={!!isMobile}
+          isDarkMode={isDarkMode}
           messages={messages}
           isTyping={isTyping}
           showThinking={showThinking}
@@ -648,7 +653,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           scrollRef={scrollRef}
           virtuosoRef={virtuosoRef}
           inputAreaRef={inputAreaRef}
-          emptyState={<ChatV3EmptyState isMobile={!!isMobile} t={t} />}
+          emptyState={<ChatV3EmptyState isMobile={!!isMobile} isDarkMode={isDarkMode} t={t} />}
           scrollState={{
             showScrollBtnRef,
             setShowScrollBtn,
@@ -705,19 +710,21 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           }}
         />
 
-        <div style={{ padding: isMobile ? '8px 12px' : '0 24px 20px', background: '#fafafa', borderTop: '1px solid #f1f5f9', width: '100%', boxSizing: 'border-box' }}>
+        <div style={{ padding: isMobile ? '8px 12px' : '0 24px 20px', background: isDarkMode ? '#0f172a' : '#fafafa', borderTop: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9', width: '100%', boxSizing: 'border-box' }}>
 
            <V3QuickCommands
              t={t}
              status={status}
              onSend={handleWrappedSend}
              isMobile={!!isMobile}
+             isDarkMode={isDarkMode}
              sendBlocked={isCreatingNewSession}
            />
 
             <V3ComposerBar
               t={t}
               isMobile={!!isMobile}
+              isDarkMode={isDarkMode}
               status={status}
               isTyping={isTyping}
               sessionComposeBlocked={isCreatingNewSession}
@@ -828,6 +835,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
             <V3ExplorerPane 
               t={t} 
               rootPath={explorerPath}
+              isDarkMode={isDarkMode}
               width={rightSiderWidth}
               transition={isDraggingRight ? 'none' : undefined}
               onWidthChange={(newWidth) => {
@@ -853,7 +861,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
           status={status} 
           isMobile={!!isMobile} 
           onConnect={connect} 
-          t={t} 
+          t={t}
+          isDarkMode={isDarkMode}
         />
       </div>
 
@@ -865,6 +874,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile }) =>
         t={t}
         isMobile={!!isMobile}
         showSider={showSider}
+        isDarkMode={isDarkMode}
         onSendToChat={handleSendToChat}
         pendingSaveContent={pendingSaveContent}
         onClearPendingSave={() => setPendingSaveContent(undefined)}

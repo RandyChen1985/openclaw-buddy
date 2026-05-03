@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Badge, Button, List, Tag, Modal, Spin, message, Tabs, Table, Typography, Space, Radio, Descriptions, Collapse } from 'antd';
+import { Card, Badge, Button, List, Tag, Modal, Spin, message, Tabs, Table, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Zap, Terminal, FileText, ChevronRight, RefreshCw, Clock, HardDrive, AlertCircle, History, Code, Wand2, Save, Layout as LayoutIcon, Copy, Activity } from 'lucide-react';
+import { Zap, Terminal, FileText, ChevronRight, RefreshCw, Clock, HardDrive, AlertCircle, History, Code, Wand2, Save, Copy, Activity } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -11,29 +11,6 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import dayjs from 'dayjs';
 import api from '../api';
 import TokenBadge from '../components/TokenBadge';
-
-// --- Global Styles for SelfHealing ---
-const styles = `
-  .heal-tabs .ant-tabs-nav {
-    margin-bottom: 0 !important;
-  }
-  .heal-tabs .ant-tabs-tab {
-    background: #f8fafc !important;
-    border: 1px solid #e2e8f0 !important;
-    border-bottom: none !important;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    border-radius: 8px 8px 0 0 !important;
-    margin-right: 4px !important;
-  }
-  .heal-tabs .ant-tabs-tab-active {
-    background: #fff !important;
-    border-top: 2px solid #3b82f6 !important;
-  }
-  .heal-tabs .ant-tabs-tab:hover {
-    color: #3b82f6 !important;
-    background: #fff !important;
-  }
-`;
 
 // --- Sub-components for Config Management ---
 
@@ -157,128 +134,22 @@ const HighlightedJsonEditor: React.FC<{
   );
 };
 
-const JsonVisualizer = ({ content, isMobile }: { content: string, isMobile?: boolean }) => {
-  const { t } = useTranslation();
-  let data: any = {};
-  try {
-    data = JSON.parse(content);
-  } catch (e) {
-    return (
-      <div style={{ padding: '60px 0', textAlign: 'center', color: '#94a3b8' }}>
-        <AlertCircle size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
-        <div>{t('heal.parseFailed', { defaultValue: 'JSON 解析失败，请检查语法' })}</div>
-      </div>
-    );
-  }
-
-  const renderSection = (title: string, obj: any) => {
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
-    
-    const entries = Object.entries(obj).filter(([_, val]) => val !== undefined && val !== null);
-    if (entries.length === 0) return null;
-
-    return (
-      <Descriptions 
-        title={<span style={{ fontSize: 13, color: '#3b82f6', fontWeight: 700 }}>{title}</span>}
-        column={isMobile ? 1 : { xxl: 2, xl: 2, lg: 2, md: 1, sm: 1, xs: 1 }}
-        size="small"
-        bordered
-        style={{ marginBottom: 20 }}
-      >
-        {entries.map(([key, val]: [string, any]) => (
-          <Descriptions.Item label={key} key={key}>
-            {typeof val === 'object' ? (
-              <pre style={{ margin: 0, fontSize: 11, background: '#f1f5f9', padding: '4px 8px', borderRadius: 4 }}>
-                {JSON.stringify(val, null, 2)}
-              </pre>
-            ) : (
-              <Typography.Text copyable={typeof val === 'string' && val.length > 20}>{String(val)}</Typography.Text>
-            )}
-          </Descriptions.Item>
-        ))}
-      </Descriptions>
-    );
-  };
-
-  const providers = data.models?.providers || {};
-  const flattenedModels: any[] = [];
-  Object.entries(providers).forEach(([providerId, provider]: [string, any]) => {
-    const models = provider.models || {};
-    Object.entries(models).forEach(([modelId, model]: [string, any]) => {
-      flattenedModels.push({
-        ...model,
-        id: modelId,
-        provider: providerId
-      });
-    });
-  });
-
-  return (
-    <div style={{ background: '#fff', padding: isMobile ? '12px' : '20px', borderRadius: 12, border: '1px solid #f1f5f9' }}>
-      <Collapse ghost defaultActiveKey={['gateway', 'defaults', 'agents', 'plugins']}>
-        <Collapse.Panel header={<Typography.Text strong>网关设置 (Gateway)</Typography.Text>} key="gateway">
-          {renderSection('HTTP', data.gateway?.http)}
-          {renderSection('Server', { host: data.host, port: data.port, debug: data.debug, logLevel: data.logLevel })}
-        </Collapse.Panel>
-        
-        <Collapse.Panel header={<Typography.Text strong>缺省配置 (Defaults)</Typography.Text>} key="defaults">
-          {renderSection('Compaction', data.defaults?.compaction)}
-          {renderSection('Model', data.defaults?.model)}
-          <Descriptions size="small" bordered column={1} labelStyle={{ background: '#f8fafc', width: 140 }}>
-            <Descriptions.Item label="maxConcurrent">{data.defaults?.maxConcurrent}</Descriptions.Item>
-          </Descriptions>
-        </Collapse.Panel>
-
-        <Collapse.Panel header={<Typography.Text strong>运行环境 (Agents & Scripts)</Typography.Text>} key="agents">
-          {renderSection('Agent Defaults', data.agents?.defaults)}
-          {data.external && renderSection('External Services', data.external)}
-        </Collapse.Panel>
-
-        <Collapse.Panel header={<Typography.Text strong>模型资产库 (Models Inventory)</Typography.Text>} key="models">
-          <Table 
-            size="small" 
-            pagination={{ pageSize: isMobile ? 5 : 10, size: 'small' }}
-            dataSource={flattenedModels}
-            scroll={{ x: isMobile ? 600 : undefined }}
-            columns={[
-              { title: 'ID', dataIndex: 'id', key: 'id', render: (v) => <Tag color="blue">{v}</Tag> },
-              { title: 'Name', dataIndex: 'name', key: 'name' },
-              { title: 'Provider', dataIndex: 'provider', key: 'provider', render: (v) => <Tag color="cyan">{v}</Tag> },
-              { title: 'Capabilities', dataIndex: 'capabilities', key: 'caps', render: (v) => Array.isArray(v) ? v.map(c => <Tag key={c}>{c}</Tag>) : '-' }
-            ]}
-          />
-        </Collapse.Panel>
-
-        <Collapse.Panel header={<Typography.Text strong>扩展插件 (Plugins, Skills, Tools)</Typography.Text>} key="plugins">
-           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-             {data.plugins && renderSection('Plugins Configuration', data.plugins)}
-             {data.tools && renderSection('Available Tools', data.tools)}
-             {data.skills && renderSection('Skills Config', data.skills)}
-             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
-               {Object.keys(data.plugins || {}).map(p => <Tag key={p}>{p}</Tag>)}
-               {Object.keys(data.tools || {}).map(t => <Tag key={t} color="purple">{t}</Tag>)}
-             </div>
-           </div>
-        </Collapse.Panel>
-      </Collapse>
-    </div>
-  );
-};
-
 interface SelfHealingProps {
   selfHealingEnabled: boolean;
   healEvents: any[];
   loadingSets: boolean;
   onToggle: (checked: boolean) => void;
   ocInstalled: boolean | null;
+  isDarkMode?: boolean;
 }
 
 const SelfHealing: React.FC<SelfHealingProps> = ({ 
-  selfHealingEnabled, 
-  healEvents, 
-  onToggle
+  selfHealingEnabled, healEvents, onToggle,
+  isDarkMode = false
 }) => {
   const { t } = useTranslation();
+  const tabPanelCardBorder = isDarkMode ? '#334155' : '#e2e8f0';
+  const tabPanelCardBg = isDarkMode ? '#1e293b' : '#fff';
   
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -312,7 +183,6 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
   const [configContent, setConfigContent] = useState('');
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
-  const [editMode, setEditMode] = useState<'editor' | 'visual'>('editor');
   const [runningDoctor, setRunningDoctor] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
 
@@ -330,12 +200,37 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
 
   useEffect(() => {
     const styleTag = document.createElement('style');
-    styleTag.innerHTML = styles;
+    styleTag.innerHTML = `
+      .heal-tabs .ant-tabs-nav {
+        margin-bottom: 0 !important;
+      }
+      .heal-tabs .ant-tabs-tab {
+        background: ${isDarkMode ? '#0f172a' : '#f8fafc'} !important;
+        border: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'} !important;
+        border-bottom: none !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        border-radius: 8px 8px 0 0 !important;
+        margin-right: 4px !important;
+      }
+      .heal-tabs .ant-tabs-tab-active {
+        background: ${isDarkMode ? '#1e293b' : '#fff'} !important;
+        border-top: 2px solid #3b82f6 !important;
+      }
+      .heal-tabs .ant-tabs-tab:hover {
+        color: #3b82f6 !important;
+        background: ${isDarkMode ? '#1e293b' : '#fff'} !important;
+      }
+      .heal-tabs.ant-tabs-card > .ant-tabs-content-holder,
+      .heal-tabs > .ant-tabs-content-holder {
+        border-color: ${isDarkMode ? '#334155' : '#e2e8f0'} !important;
+        background: ${isDarkMode ? '#1e293b' : '#fff'} !important;
+      }
+    `;
     document.head.appendChild(styleTag);
     fetchReports();
     fetchBackups();
     return () => { document.head.removeChild(styleTag); };
-  }, []);
+  }, [isDarkMode]);
 
   const fetchReports = async () => {
     setLoadingReports(true);
@@ -403,10 +298,10 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
             centered: true,
             content: (
               <div style={{ marginTop: 12 }}>
-                <div style={{ background: '#fff1f0', border: '1px solid #ffccc7', padding: '12px 16px', borderRadius: 8, color: '#cf1322', fontSize: 13, fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: 200, overflowY: 'auto' }}>
+                <div style={{ background: isDarkMode ? 'rgba(127, 29, 29, 0.45)' : '#fff1f0', border: isDarkMode ? '1px solid #b91c1c' : '1px solid #ffccc7', padding: '12px 16px', borderRadius: 8, color: isDarkMode ? '#fecaca' : '#cf1322', fontSize: 13, fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: 200, overflowY: 'auto' }}>
                   {cleaned}
                 </div>
-                <div style={{ marginTop: 12, fontSize: 12, color: '#64748b' }}>
+                <div style={{ marginTop: 12, fontSize: 12, color: isDarkMode ? '#94a3b8' : '#64748b' }}>
                   {t('heal.configErrorTip', { defaultValue: '建议检查 JSON 语法或必填字段。系统已自动回滚，您的更改尚未生效。' })}
                 </div>
               </div>
@@ -453,7 +348,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
         centered: true,
         content: (
           <div style={{ marginTop: 12 }}>
-            <div style={{ background: '#fff1f0', border: '1px solid #ffccc7', padding: '12px 16px', borderRadius: 8, color: '#cf1322', fontSize: 13, fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: 300, overflowY: 'auto' }}>
+            <div style={{ background: isDarkMode ? 'rgba(127, 29, 29, 0.45)' : '#fff1f0', border: isDarkMode ? '1px solid #b91c1c' : '1px solid #ffccc7', padding: '12px 16px', borderRadius: 8, color: isDarkMode ? '#fecaca' : '#cf1322', fontSize: 13, fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: 300, overflowY: 'auto' }}>
               {cleaned}
             </div>
           </div>
@@ -527,17 +422,17 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
 
   return (
     <div style={{ padding: isMobile ? '12px' : '20px' }}>
-      <Card styles={{ body: { padding: isMobile ? '20px' : '24px' } }} style={{ borderRadius: 16, border: '1px solid #e2e8f0', marginBottom: 20 }}>
+      <Card styles={{ body: { padding: isMobile ? '20px' : '24px' } }} style={{ borderRadius: 16, border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, background: isDarkMode ? '#1e293b' : '#fff', marginBottom: 20 }}>
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', gap: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 16 : 20 }}>
-            <div style={{ width: isMobile ? 44 : 52, height: isMobile ? 44 : 52, borderRadius: 12, background: selfHealingEnabled ? '#f0f9ff' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: isMobile ? 44 : 52, height: isMobile ? 44 : 52, borderRadius: 12, background: isDarkMode ? '#0f172a' : (selfHealingEnabled ? '#f0f9ff' : '#f8fafc'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Zap size={isMobile ? 22 : 26} color={selfHealingEnabled ? '#3b82f6' : '#94a3b8'} fill={selfHealingEnabled ? '#3b82f6' : 'none'} />
             </div>
             <div>
-              <div style={{ fontWeight: 800, color: '#1e293b', fontSize: isMobile ? 16 : 17, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontWeight: 800, color: isDarkMode ? '#f1f5f9' : '#1e293b', fontSize: isMobile ? 16 : 17, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
                 {t('heal.title')} <Badge status={selfHealingEnabled ? 'processing' : 'default'} />
               </div>
-              <div style={{ color: '#64748b', fontSize: 13, maxWidth: 600, lineHeight: 1.5 }}>{t('heal.description')}</div>
+              <div style={{ color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 13, maxWidth: 600, lineHeight: 1.5 }}>{t('heal.description')}</div>
             </div>
           </div>
           <div style={{ textAlign: isMobile ? 'left' : 'right', width: isMobile ? '100%' : 'auto', display: 'flex', flexDirection: isMobile ? 'row' : 'column', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -556,11 +451,11 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
         </div>
       </Card>
 
-      <Card styles={{ body: { padding: isMobile ? '16px' : '20px' } }} style={{ borderRadius: 16, border: '1px solid #e2e8f0', background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', marginBottom: 20 }}>
+      <Card styles={{ body: { padding: isMobile ? '16px' : '20px' } }} style={{ borderRadius: 16, border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, background: isDarkMode ? '#1e293b' : 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexDirection: isMobile ? 'column' : 'row', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Code size={20} color="#3b82f6" /></div>
-            <div><div style={{ fontSize: 15, fontWeight: 700, color: '#1e293b' }}>{t('heal.coreConfigTitle')}</div><div style={{ fontSize: 12, color: '#64748b' }}>{t('heal.coreConfigDesc')}</div></div>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: isDarkMode ? '#0f172a' : '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Code size={20} color="#3b82f6" /></div>
+            <div><div style={{ fontSize: 15, fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#1e293b' }}>{t('heal.coreConfigTitle')}</div><div style={{ fontSize: 12, color: isDarkMode ? '#94a3b8' : '#64748b' }}>{t('heal.coreConfigDesc')}</div></div>
           </div>
           <Space>
             <Button type="primary" icon={<Wand2 size={14} />} onClick={() => setIsConfigModalOpen(true)} disabled={runningDoctor} style={{ borderRadius: 8, height: 44, fontWeight: 600, padding: '0 24px' }}>{t('heal.manageConfig')}</Button>
@@ -571,26 +466,25 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
 
       <Modal
         title={
-          <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', width: '95%', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 12 : 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Code size={18} color="#3b82f6" /></div>
-              <span style={{ fontSize: 16, fontWeight: 700 }}>{t('heal.configModalTitle')}</span>
-            </div>
-            <Radio.Group value={editMode} onChange={(e) => setEditMode(e.target.value)} size="small" optionType="button" buttonStyle="solid">
-              <Radio.Button value="editor"><Space size={4}><Code size={12} />{t('heal.editorMode')}</Space></Radio.Button>
-              <Radio.Button value="visual"><Space size={4}><LayoutIcon size={12} />{t('heal.visualMode')}</Space></Radio.Button>
-            </Radio.Group>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: isDarkMode ? '#0f172a' : '#eff6ff', border: isDarkMode ? '1px solid #334155' : undefined, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Code size={18} color="#3b82f6" /></div>
+            <span style={{ fontSize: 16, fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#0f172a' }}>{t('heal.configModalTitle')}</span>
           </div>
         }
         open={isConfigModalOpen}
         onCancel={() => setIsConfigModalOpen(false)}
         width={isMobile ? '100%' : 1000}
         style={isMobile ? { top: 0, margin: 0, maxWidth: '100vw' } : {}}
-        bodyStyle={isMobile ? { height: 'calc(100vh - 120px)', padding: '12px' } : {}}
+        bodyStyle={isMobile ? { height: 'calc(100vh - 120px)', padding: '12px', background: isDarkMode ? '#0f172a' : undefined } : { background: isDarkMode ? '#0f172a' : undefined }}
         centered={!isMobile}
+        styles={{
+          content: isDarkMode ? { background: '#0f172a' } : undefined,
+          header: isDarkMode ? { background: '#1e293b', borderBottom: '1px solid #334155', color: '#f1f5f9' } : undefined,
+          footer: isDarkMode ? { background: '#1e293b', borderTop: '1px solid #334155' } : undefined,
+        }}
         footer={[
           <div key="footer" style={{ display: 'flex', alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'space-between', flexDirection: isMobile ? 'column' : 'row', gap: 12 }}>
-            <div style={{ fontSize: 12, color: '#64748b', display: (isMobile && editMode === 'visual') ? 'none' : 'flex', alignItems: 'center', gap: 8, background: '#f8fafc', padding: '10px 14px', borderRadius: 8, textAlign: 'left', width: isMobile ? '100%' : 'auto' }}>
+            <div style={{ fontSize: 12, color: isDarkMode ? '#94a3b8' : '#64748b', display: 'flex', alignItems: 'center', gap: 8, background: isDarkMode ? '#0f172a' : '#f8fafc', border: isDarkMode ? '1px solid #334155' : undefined, padding: '10px 14px', borderRadius: 8, textAlign: 'left', width: isMobile ? '100%' : 'auto' }}>
               <AlertCircle size={14} color="#3b82f6" style={{ flexShrink: 0 }} /><span style={{ flex: 1 }}>{t('heal.configSaveTip')}</span>
             </div>
             <Space style={{ width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
@@ -599,25 +493,21 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
                 icon={<Activity size={14} />} 
                 onClick={handleValidateConfig} 
                 loading={isValidating}
-                disabled={editMode === 'visual' || savingConfig || loadingConfig || isValidating}
+                disabled={savingConfig || loadingConfig || isValidating}
                 style={{ borderRadius: 8 }}
               >
                 {t('heal.validate', { defaultValue: '仅校验内容' })}
               </Button>
-              <Button type="primary" icon={<Save size={16} />} onClick={handleSaveConfig} loading={savingConfig} disabled={editMode === 'visual' || savingConfig || loadingConfig || isValidating} style={{ fontWeight: 700, borderRadius: 8, height: 36, padding: '0 20px' }}>{t('common.save')}</Button>
+              <Button type="primary" icon={<Save size={16} />} onClick={handleSaveConfig} loading={savingConfig} disabled={savingConfig || loadingConfig || isValidating} style={{ fontWeight: 700, borderRadius: 8, height: 36, padding: '0 20px' }}>{t('common.save')}</Button>
               <Button onClick={() => setIsConfigModalOpen(false)} style={{ borderRadius: 8 }}>{t('common.close')}</Button>
             </Space>
           </div>
         ]}
       >
         <div style={{ marginTop: isMobile ? 0 : 16, height: '100%' }}>
-          {editMode === 'editor' ? (
-            <div style={{ height: isMobile ? '100%' : '65vh' }}>
-              <HighlightedJsonEditor value={configContent} onChange={setConfigContent} onCopy={handleCopy} disabled={savingConfig || loadingConfig} isMobile={isMobile} />
-            </div>
-          ) : (
-            <JsonVisualizer content={configContent} isMobile={isMobile} />
-          )}
+          <div style={{ height: isMobile ? '100%' : '65vh' }}>
+            <HighlightedJsonEditor value={configContent} onChange={setConfigContent} onCopy={handleCopy} disabled={savingConfig || loadingConfig} isMobile={isMobile} />
+          </div>
         </div>
       </Modal>
 
@@ -629,7 +519,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
             key: 'events',
             label: <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Terminal size={14} /> {t('heal.historyEvents')}</span>,
             children: (
-              <Card style={{ borderTopLeftRadius: 0, border: '1px solid #e2e8f0', borderTop: 'none' }}>
+              <Card style={{ borderTopLeftRadius: 0, border: `1px solid ${tabPanelCardBorder}`, borderTop: 'none', background: tabPanelCardBg }}>
                 <List
                   dataSource={healEvents}
                   locale={{ emptyText: t('heal.noEvents') }}
@@ -648,12 +538,12 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
                           </Space>
                           <span style={{ fontSize: 12, color: '#94a3b8', fontFamily: 'monospace' }}>{dayjs(item.timestamp).format('YYYY-MM-DD HH:mm:ss')}</span>
                         </div>
-                        <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: 8, border: '1px solid #f1f5f9' }}>
-                          <div style={{ display: 'flex', gap: 12, fontSize: 13 }}><span style={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>{t('heal.recoveryMethod')}:</span><span style={{ color: '#1e293b' }}>{item.method}</span></div>
+                        <div style={{ background: isDarkMode ? '#0f172a' : '#f8fafc', padding: '12px 16px', borderRadius: 8, border: `1px solid ${isDarkMode ? '#334155' : '#f1f5f9'}` }}>
+                          <div style={{ display: 'flex', gap: 12, fontSize: 13 }}><span style={{ color: isDarkMode ? '#94a3b8' : '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>{t('heal.recoveryMethod')}:</span><span style={{ color: isDarkMode ? '#f1f5f9' : '#1e293b' }}>{item.method}</span></div>
                           {item.result === 'Failed' && item.verify_error && (
                             <div style={{ marginTop: 10, display: 'flex', gap: 12, fontSize: 12 }}>
                               <span style={{ color: '#ef4444', fontWeight: 700, whiteSpace: 'nowrap' }}>失败原因:</span>
-                              <span style={{ color: '#991b1b', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                              <span style={{ color: isDarkMode ? '#f87171' : '#991b1b', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                                 {String(item.verify_error)}
                               </span>
                             </div>
@@ -670,7 +560,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
             key: 'backups',
             label: <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><History size={14} /> {t('heal.backupHistory')}</span>,
             children: (
-              <Card style={{ borderTopLeftRadius: 0, border: '1px solid #e2e8f0', borderTop: 'none' }} extra={<Button size="small" type="text" icon={<RefreshCw size={12} />} onClick={fetchBackups} loading={loadingBackups}>{t('common.refresh')}</Button>}>
+              <Card style={{ borderTopLeftRadius: 0, border: `1px solid ${tabPanelCardBorder}`, borderTop: 'none', background: tabPanelCardBg }} extra={<Button size="small" type="text" icon={<RefreshCw size={12} />} onClick={fetchBackups} loading={loadingBackups}>{t('common.refresh')}</Button>}>
                 <Table dataSource={backups} columns={backupColumns} pagination={{ pageSize: 10 }} loading={loadingBackups} size="small" rowKey="name" scroll={{ x: 'max-content' }} />
               </Card>
             )
@@ -679,7 +569,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
             key: 'reports',
             label: <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FileText size={14} /> {t('heal.reports')}</span>,
             children: (
-              <Card style={{ borderTopLeftRadius: 0, border: '1px solid #e2e8f0', borderTop: 'none' }}>
+              <Card style={{ borderTopLeftRadius: 0, border: `1px solid ${tabPanelCardBorder}`, borderTop: 'none', background: tabPanelCardBg }}>
                 <List
                   dataSource={reports}
                   locale={{ emptyText: t('heal.noReports') }}
@@ -688,8 +578,8 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
                     <List.Item style={{ padding: '12px 0', cursor: 'pointer' }} onClick={() => viewReport(item)}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <div style={{ width: 32, height: 32, borderRadius: 8, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={16} color="#64748b" /></div>
-                          <div><div style={{ fontWeight: 600, color: '#1e293b', fontSize: 13 }}>{item.name}</div><div style={{ display: 'flex', gap: 12, marginTop: 2 }}><span style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={10} /> {item.time}</span><span style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}><HardDrive size={10} /> {formatSize(item.size)}</span></div></div>
+                          <div style={{ width: 32, height: 32, borderRadius: 8, background: isDarkMode ? '#0f172a' : '#f1f5f9', border: isDarkMode ? '1px solid #334155' : undefined, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={16} color={isDarkMode ? '#94a3b8' : '#64748b'} /></div>
+                          <div><div style={{ fontWeight: 600, color: isDarkMode ? '#f1f5f9' : '#1e293b', fontSize: 13 }}>{item.name}</div><div style={{ display: 'flex', gap: 12, marginTop: 2 }}><span style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={10} /> {item.time}</span><span style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}><HardDrive size={10} /> {formatSize(item.size)}</span></div></div>
                         </div>
                         <ChevronRight size={16} color="#cbd5e1" />
                       </div>

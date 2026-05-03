@@ -14,6 +14,7 @@ const { Paragraph, Text } = Typography;
 interface TuiViewProps {
   isRunning?: boolean;
   onNavigateToDashboard?: () => void;
+  isDarkMode?: boolean;
 }
 
 const TuiView: React.FC<TuiViewProps> = () => {

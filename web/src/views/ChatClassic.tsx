@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip, Upload } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2, ArrowDown, ZapOff, Activity, Paperclip, FileText, Loader2 } from 'lucide-react';
@@ -40,18 +40,17 @@ interface Message {
   }
 }
 
-interface OnlineChatProps {
+interface ChatClassicProps {
   botsModels: any;
   loadingBots: boolean;
   onRefreshBots: () => void;
   isMobile?: boolean;
   onRestartGateway?: () => Promise<void>;
+  isDarkMode?: boolean;
 }
 
-
-
-const ChatClassic: React.FC<OnlineChatProps> = ({ 
-  botsModels, loadingBots, onRefreshBots, isMobile, onRestartGateway
+const ChatClassic: React.FC<ChatClassicProps> = ({ 
+  botsModels, loadingBots, onRefreshBots, isMobile, onRestartGateway, isDarkMode = false
 }) => {
 
 
@@ -293,6 +292,120 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
+
+  const c = useMemo(() => {
+    const border = isDarkMode ? '#334155' : '#e2e8f0';
+    const hairline = isDarkMode ? '#334155' : '#f1f5f9';
+    return {
+      pageBg: isDarkMode ? '#0f172a' : '#f8fafc',
+      card: isDarkMode ? '#1e293b' : '#fff',
+      cardShadow: isDarkMode ? '0 1px 2px rgba(0,0,0,0.25)' : '0 1px 2px rgba(0,0,0,0.03)',
+      border,
+      hairline,
+      scrollBg: isDarkMode ? '#0f172a' : '#fafafa',
+      heading: isDarkMode ? '#f1f5f9' : '#1e293b',
+      body: isDarkMode ? '#94a3b8' : '#64748b',
+      assistantBg: isDarkMode ? '#1e293b' : '#fff',
+      assistantBorder: isDarkMode ? '#334155' : '#e2e8f0',
+      assistantText: isDarkMode ? '#e2e8f0' : '#1e293b',
+      overlay: isDarkMode ? 'rgba(15,23,42,0.85)' : 'rgba(255,255,255,0.65)',
+      pickCard: isDarkMode ? '#1e293b' : '#fff',
+      pickCardBorder: hairline,
+      mdH: isDarkMode ? '#f1f5f9' : '#1e293b',
+      mdTableBorder: border,
+      mdThBg: isDarkMode ? '#1e293b' : '#f8fafc',
+      mdStrip: isDarkMode ? '#0f172a' : '#fcfcfc',
+      mdQuote: isDarkMode ? '#94a3b8' : '#64748b',
+      mdQuoteBorder: isDarkMode ? '#475569' : '#e2e8f0',
+      inputFoot: isDarkMode ? '#1e293b' : '#fff',
+      quoteBar: isDarkMode ? '#0f172a' : '#f8fafc',
+      ghostBtnBg: isDarkMode ? '#334155' : '#f1f5f9',
+      uploadBg: isDarkMode ? '#1e293b' : '#fff',
+      cmdRowBg: isDarkMode ? '#0f172a' : '#f8fafc',
+      cmdRowBorder: hairline,
+      shareTa: isDarkMode ? '#0f172a' : '#f8fafc',
+      mascotRing: isDarkMode ? '#1e293b' : '#fff',
+      subtle: '#94a3b8',
+      dot: isDarkMode ? '#475569' : '#cbd5e1',
+      uploadDashed: isDarkMode ? '#1e3a5f' : '#eff6ff'
+    };
+  }, [isDarkMode]);
+
+  const markdownStyles = useMemo(() => (
+    <style>{`
+      .markdown-body {
+        font-size: 13.5px;
+        line-height: 1.5;
+        word-wrap: break-word;
+        color: inherit;
+      }
+      .markdown-body > *:first-child { margin-top: 0 !important; }
+      .markdown-body > *:last-child { margin-bottom: 0 !important; }
+      
+      .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+        margin-top: 12px;
+        margin-bottom: 6px;
+        font-weight: 700;
+        color: ${c.mdH};
+      }
+      .markdown-body p { margin-bottom: 6px; }
+      .markdown-body a { color: #2563eb; text-decoration: none; }
+      .markdown-body a:hover { text-decoration: underline; }
+      .markdown-body ul, .markdown-body ol {
+        margin-bottom: 6px;
+        padding-left: 20px;
+      }
+      .markdown-body li {
+        margin-bottom: 2px;
+      }
+      .markdown-body table {
+        border-spacing: 0;
+        border-collapse: collapse;
+        margin-bottom: 12px;
+        width: 100%;
+        overflow-x: auto;
+        display: block;
+        border-radius: 8px;
+        border: 1px solid ${c.mdTableBorder};
+      }
+      .markdown-body table th, .markdown-body table td {
+        padding: 8px 12px;
+        border: 1px solid ${c.mdTableBorder};
+      }
+      .markdown-body table th {
+        background-color: ${c.mdThBg};
+        font-weight: 600;
+        text-align: left;
+      }
+      .markdown-body table tr:nth-child(2n) {
+        background-color: ${c.mdStrip};
+      }
+      .markdown-body blockquote {
+        margin: 0 0 10px 0;
+        padding: 0 12px;
+        color: ${c.mdQuote};
+        border-left: 4px solid ${c.mdQuoteBorder};
+      }
+      .markdown-body pre {
+        margin-bottom: 10px !important;
+        max-width: 100%;
+        overflow-x: auto;
+      }
+      @media (max-width: 768px) {
+        .markdown-body {
+          font-size: 13px;
+          word-break: break-word;
+          overflow-wrap: anywhere;
+        }
+        .markdown-body h1 { fontSize: 1.5em; margin-top: 10px; }
+        .markdown-body h2 { fontSize: 1.3em; margin-top: 8px; }
+        .markdown-body h3 { fontSize: 1.1em; margin-top: 6px; }
+        .markdown-body p { margin-bottom: 4px; }
+        .markdown-body ul, .markdown-body ol { padding-left: 16px; margin-bottom: 4px; }
+        .markdown-body blockquote { margin-bottom: 6px; }
+      }
+    `}</style>
+  ), [c]);
 
   const handleSend = async (textOverride?: string) => {
     const text = textOverride || inputText;
@@ -553,12 +666,12 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
   if (chatEnabled === false) {
     return (
       <div style={{ height: 'calc(100vh - 120px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Card style={{ width: 450, borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,0.05)', textAlign: 'center' }} styles={{ body: { padding: '40px 32px' } }}>
+        <Card style={{ width: 450, borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,0.05)', textAlign: 'center', background: c.card, borderColor: c.border }} styles={{ body: { padding: '40px 32px' } }}>
           <div style={{ background: '#fff7ed', width: 64, height: 64, borderRadius: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', color: '#f97316' }}>
             <Zap size={32} />
           </div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1e293b', marginBottom: 12 }}>{t('chat.notEnabled')}</h2>
-          <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6, marginBottom: 32 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: c.heading, marginBottom: 12 }}>{t('chat.notEnabled')}</h2>
+          <p style={{ color: c.body, fontSize: 14, lineHeight: 1.6, marginBottom: 32 }}>
             {t('chat.notEnabledDesc')}
           </p>
           <Button 
@@ -571,7 +684,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
           >
             {t('chat.oneClickEnable')}
           </Button>
-          <div style={{ marginTop: 16, fontSize: 12, color: '#94a3b8' }}>
+          <div style={{ marginTop: 16, fontSize: 12, color: c.subtle }}>
             {t('chat.enableWarning')}
           </div>
         </Card>
@@ -579,90 +692,13 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
     );
   }
 
-  // --- Styles for Markdown Content ---
-  const markdownStyles = (
-    <style>{`
-      .markdown-body {
-        font-size: 13.5px;
-        line-height: 1.5;
-        word-wrap: break-word;
-        color: inherit;
-      }
-      .markdown-body > *:first-child { margin-top: 0 !important; }
-      .markdown-body > *:last-child { margin-bottom: 0 !important; }
-      
-      .markdown-body h1, .markdown-body h2, .markdown-body h3 {
-        margin-top: 12px;
-        margin-bottom: 6px;
-        font-weight: 700;
-        color: #1e293b;
-      }
-      .markdown-body p { margin-bottom: 6px; }
-      .markdown-body a { color: #2563eb; text-decoration: none; }
-      .markdown-body a:hover { text-decoration: underline; }
-      .markdown-body ul, .markdown-body ol {
-        margin-bottom: 6px;
-        padding-left: 20px;
-      }
-      .markdown-body li {
-        margin-bottom: 2px;
-      }
-      .markdown-body table {
-        border-spacing: 0;
-        border-collapse: collapse;
-        margin-bottom: 12px;
-        width: 100%;
-        overflow-x: auto;
-        display: block;
-        border-radius: 8px;
-        border: 1px solid #e2e8f0;
-      }
-      .markdown-body table th, .markdown-body table td {
-        padding: 8px 12px;
-        border: 1px solid #e2e8f0;
-      }
-      .markdown-body table th {
-        background-color: #f8fafc;
-        font-weight: 600;
-        text-align: left;
-      }
-      .markdown-body table tr:nth-child(2n) {
-        background-color: #fcfcfc;
-      }
-      .markdown-body blockquote {
-        margin: 0 0 10px 0;
-        padding: 0 12px;
-        color: #64748b;
-        border-left: 4px solid #e2e8f0;
-      }
-      .markdown-body pre {
-        margin-bottom: 10px !important;
-        max-width: 100%;
-        overflow-x: auto;
-      }
-      @media (max-width: 768px) {
-        .markdown-body {
-          font-size: 13px;
-          word-break: break-word;
-          overflow-wrap: anywhere;
-        }
-        .markdown-body h1 { fontSize: 1.5em; margin-top: 10px; }
-        .markdown-body h2 { fontSize: 1.3em; margin-top: 8px; }
-        .markdown-body h3 { fontSize: 1.1em; margin-top: 6px; }
-        .markdown-body p { margin-bottom: 4px; }
-        .markdown-body ul, .markdown-body ol { padding-left: 16px; margin-bottom: 4px; }
-        .markdown-body blockquote { margin-bottom: 6px; }
-      }
-    `}</style>
-  );
-
   return (
     <div style={{ 
       flex: 1,
       display: 'flex', 
       flexDirection: 'column', 
       gap: isEmbedMode ? 0 : 16,
-      background: '#f8fafc',
+      background: c.pageBg,
       width: '100%',
       height: '100%',
       minHeight: 0,
@@ -676,19 +712,20 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
         styles={{ body: { padding: isMobile ? '8px 12px' : '12px 20px' } }} 
         style={{ 
           borderRadius: isEmbedMode ? 0 : 12, 
-          boxShadow: isEmbedMode ? 'none' : '0 1px 2px rgba(0,0,0,0.03)',
-          border: isEmbedMode ? 'none' : '1px solid #e2e8f0',
-          borderBottom: isEmbedMode ? '1px solid #f1f5f9' : 'none'
+          boxShadow: isEmbedMode ? 'none' : c.cardShadow,
+          border: isEmbedMode ? 'none' : `1px solid ${c.border}`,
+          borderBottom: isEmbedMode ? `1px solid ${c.hairline}` : 'none',
+          background: c.card
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'nowrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12 }}>
-            <div style={{ padding: isMobile ? 6 : 8, background: '#eff6ff', borderRadius: 10, color: '#2563eb', flexShrink: 0 }}>
+            <div style={{ padding: isMobile ? 6 : 8, background: isDarkMode ? 'rgba(37, 99, 235, 0.22)' : '#eff6ff', borderRadius: 10, color: isDarkMode ? '#93c5fd' : '#2563eb', flexShrink: 0, border: isDarkMode ? '1px solid #334155' : undefined }}>
                 <MessageSquare size={isMobile ? 18 : 20} />
             </div>
             {!isMobile && (
               <div>
-                <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontWeight: 700, color: c.heading, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
                   {t('chat.welcomeTitle')}
                   {urlUser && (
                     <span style={{ 
@@ -704,13 +741,13 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: 12, color: '#64748b' }}>{t('chat.labDescription')}</div>
+                <div style={{ fontSize: 12, color: c.body }}>{t('chat.labDescription')}</div>
               </div>
             )}
           </div>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flex: isMobile ? 1 : 'none', justifyContent: 'flex-end', minWidth: 0 }}>
-            {!isMobile && <span style={{ color: '#64748b', fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap' }}>{t('chat.selectBotTip')}:</span>}
+            {!isMobile && <span style={{ color: c.body, fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap' }}>{t('chat.selectBotTip')}:</span>}
             <Select 
               placeholder={t('chat.selectBotTip')} 
               style={{ width: isMobile ? 'auto' : 240, flex: isMobile ? 1 : 'none', minWidth: isMobile ? 120 : 0, height: 40 }} 
@@ -726,8 +763,8 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0' }}>
                     <ProviderIcon provider={bot.provider || (bot.id === 'main' ? 'openai' : '')} size={20} />
                     <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2' }}>
-                      <span style={{ fontWeight: 600, color: '#1e293b', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bot.name || bot.id}</span>
-                      <span style={{ fontSize: 10, color: '#94a3b8', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <span style={{ fontWeight: 600, color: c.heading, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bot.name || bot.id}</span>
+                      <span style={{ fontSize: 10, color: c.subtle, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {bot.model || t('common.loading')}
                       </span>
                     </div>
@@ -762,12 +799,12 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                     width: 500,
                     content: (
                       <div style={{ marginTop: 16 }}>
-                        <p style={{ fontSize: 13, color: '#64748b' }}>{t('chat.shareDesc')}</p>
+                        <p style={{ fontSize: 13, color: c.body }}>{t('chat.shareDesc')}</p>
                         <Input.TextArea 
                           readOnly 
                           value={iframeCode} 
                           autoSize={{ minRows: 3 }} 
-                          style={{ fontFamily: 'monospace', fontSize: 12, background: '#f8fafc' }}
+                          style={{ fontFamily: 'monospace', fontSize: 12, background: c.shareTa, color: isDarkMode ? '#e2e8f0' : undefined }}
                         />
                         <Button 
                           type="primary" 
@@ -796,9 +833,9 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
       {/* Chat Area */}
       <div style={{ 
         flex: 1, 
-        background: '#fff', 
+        background: c.card, 
         borderRadius: isEmbedMode ? 0 : 12, 
-        border: isEmbedMode ? 'none' : '1px solid #e2e8f0',
+        border: isEmbedMode ? 'none' : `1px solid ${c.border}`,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -811,7 +848,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(255,255,255,0.65)',
+            background: c.overlay,
             backdropFilter: 'blur(3px)',
             zIndex: 10,
             display: 'flex',
@@ -821,10 +858,10 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
             gap: 12,
             animation: 'fade-in 0.3s ease'
           }}>
-            <div style={{ padding: '24px 32px', background: '#fff', borderRadius: 16, boxShadow: '0 12px 40px rgba(0,0,0,0.1)', border: '1px solid #f1f5f9', textAlign: 'center' }}>
+            <div style={{ padding: '24px 32px', background: c.pickCard, borderRadius: 16, boxShadow: '0 12px 40px rgba(0,0,0,0.1)', border: `1px solid ${c.pickCardBorder}`, textAlign: 'center' }}>
               <div style={{ fontSize: 32, marginBottom: 12 }}>☝️</div>
-              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>{t('chat.selectBot')}</div>
-              <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>{t('chat.labDescription')}</div>
+              <div style={{ fontWeight: 700, color: c.heading, fontSize: 16 }}>{t('chat.selectBot')}</div>
+              <div style={{ fontSize: 13, color: c.subtle, marginTop: 4 }}>{t('chat.labDescription')}</div>
             </div>
           </div>
         )}
@@ -837,7 +874,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
             display: 'flex',
             flexDirection: 'column',
             gap: isMobile ? 12 : 20,
-            background: '#fafafa'
+            background: c.scrollBg
           }}
         >
           {messages.length === 0 ? (
@@ -845,17 +882,17 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
               <div style={{ marginBottom: 24, position: 'relative', display: 'inline-block' }}>
                 <img 
                   src={`${getBaseURL()}/openclaw.png`} 
-                  style={{ width: 80, height: 80, borderRadius: 20, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '4px solid #fff' }} 
+                  style={{ width: 80, height: 80, borderRadius: 20, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: `4px solid ${c.mascotRing}` }} 
                   alt="Mascot"
                 />
-                <div style={{ position: 'absolute', bottom: -5, right: -5, width: 24, height: 24, background: '#22c55e', borderRadius: '50%', border: '4px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ position: 'absolute', bottom: -5, right: -5, width: 24, height: 24, background: '#22c55e', borderRadius: '50%', border: `4px solid ${c.mascotRing}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Zap size={10} color="#fff" fill="#fff" />
                 </div>
               </div>
-              <h2 style={{ color: '#1e293b', fontWeight: 800, fontSize: isMobile ? 20 : 26, letterSpacing: '-0.02em', marginBottom: 8 }}>
+              <h2 style={{ color: c.heading, fontWeight: 800, fontSize: isMobile ? 20 : 26, letterSpacing: '-0.02em', marginBottom: 8 }}>
                 {t('chat.welcomeTitle')}
               </h2>
-              <p style={{ color: '#64748b', fontSize: isMobile ? 13 : 15, marginBottom: 32, maxWidth: 440, margin: '0 auto 32px' }}>
+              <p style={{ color: c.body, fontSize: isMobile ? 13 : 15, marginBottom: 32, maxWidth: 440, margin: '0 auto 32px' }}>
                 {t('chat.welcomeSubtitle')}
               </p>
               
@@ -878,7 +915,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                         handleSend(item.text);
                     }}
                     style={{ 
-                      padding: '16px', background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', 
+                      padding: '16px', background: c.pickCard, borderRadius: 14, border: `1px solid ${c.border}`, 
                       cursor: isTyping ? 'not-allowed' : 'pointer', transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
                       display: 'flex', flexDirection: 'column', gap: 6,
                       boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
@@ -888,9 +925,9 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontSize: 18 }}>{item.icon}</span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{item.title}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: c.heading }}>{item.title}</span>
                     </div>
-                    <span style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.text}</span>
+                    <span style={{ fontSize: 12, color: c.body, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.text}</span>
                   </div>
                 ))}
               </div>
@@ -912,8 +949,8 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                 <Avatar 
                   size={isMobile ? 32 : 36} 
                   style={{ 
-                    background: msg.role === 'user' ? '#4f46e5' : '#fff',
-                    border: msg.role === 'assistant' ? '1px solid #e2e8f0' : 'none',
+                    background: msg.role === 'user' ? '#4f46e5' : c.assistantBg,
+                    border: msg.role === 'assistant' ? `1px solid ${c.assistantBorder}` : 'none',
                     boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
                     flexShrink: 0
                   }}
@@ -931,8 +968,8 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                     borderRadius: 16,
                     borderTopRightRadius: msg.role === 'user' ? 4 : 16,
                     borderTopLeftRadius: msg.role === 'assistant' ? 4 : 16,
-                    background: msg.role === 'user' ? '#4f46e5' : '#fff',
-                    color: msg.role === 'user' ? '#fff' : '#1e293b',
+                    background: msg.role === 'user' ? '#4f46e5' : c.assistantBg,
+                    color: msg.role === 'user' ? '#fff' : c.assistantText,
                     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
                     fontSize: 14,
                     lineHeight: 1.6,
@@ -951,7 +988,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                           borderRadius: 8, 
                           marginBottom: 8,
                           borderLeft: `3px solid ${msg.role === 'user' ? '#fff' : '#2563eb'}`,
-                          color: msg.role === 'user' ? 'rgba(255,255,255,0.8)' : '#64748b',
+                          color: msg.role === 'user' ? 'rgba(255,255,255,0.8)' : c.body,
                           maxWidth: '100%',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -987,8 +1024,8 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                                   overflowX: 'auto', 
                                   marginBottom: 12, 
                                   borderRadius: 8,
-                                  border: '1px solid #e2e8f0',
-                                  background: '#fff',
+                                  border: `1px solid ${c.border}`,
+                                  background: c.card,
                                   WebkitOverflowScrolling: 'touch'
                                 }}>
                                   <table {...props} style={{ 
@@ -1002,18 +1039,20 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                               th: ({ node, ...props }: any) => (
                                 <th {...props} style={{ 
                                   padding: '8px 12px', 
-                                  background: '#f8fafc', 
-                                  borderBottom: '1px solid #e2e8f0', 
-                                  borderRight: '1px solid #e2e8f0',
+                                  background: c.mdThBg, 
+                                  borderBottom: `1px solid ${c.border}`, 
+                                  borderRight: `1px solid ${c.border}`,
                                   textAlign: 'left',
-                                  fontWeight: 600
+                                  fontWeight: 600,
+                                  color: isDarkMode ? '#e2e8f0' : undefined
                                 }} />
                               ),
                               td: ({ node, ...props }: any) => (
                                 <td {...props} style={{ 
                                   padding: '8px 12px', 
-                                  borderBottom: '1px solid #e2e8f0', 
-                                  borderRight: '1px solid #e2e8f0'
+                                  borderBottom: `1px solid ${c.border}`, 
+                                  borderRight: `1px solid ${c.border}`,
+                                  color: isDarkMode ? '#cbd5e1' : undefined
                                 }} />
                               ),
                                 code: ({ node, inline, className, children, ...props }: any) => {
@@ -1069,7 +1108,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                         type="text" 
                         size="small" 
                         icon={<Quote size={12} />} 
-                        style={{ color: '#94a3b8', height: 22, fontSize: 11, padding: '0 4px' }} 
+                        style={{ color: c.subtle, height: 22, fontSize: 11, padding: '0 4px' }} 
                         onClick={() => {
                           setQuotedMsg(msg.content);
                           inputRef.current?.focus();
@@ -1080,7 +1119,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                       type="text" 
                       size="small" 
                       icon={<Copy size={12} />} 
-                      style={{ color: '#94a3b8', height: 22, fontSize: 11, padding: '0 4px' }} 
+                        style={{ color: c.subtle, height: 22, fontSize: 11, padding: '0 4px' }} 
                       onClick={() => copyToClipboard(msg.content)}
                     >{t('chat.copy')}</Button>
                     {msg.role === 'assistant' && index === messages.length - 1 && !isTyping && (
@@ -1088,26 +1127,26 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                         type="text" 
                         size="small" 
                         icon={<RotateCcw size={12} />} 
-                        style={{ color: '#94a3b8', height: 22, fontSize: 11, padding: '0 4px' }} 
+                        style={{ color: c.subtle, height: 22, fontSize: 11, padding: '0 4px' }} 
                         onClick={handleRegenerate}
                       >{t('chat.retry')}</Button>
                     )}
                     {!isMobile && msg.metrics && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10, color: '#94a3b8', opacity: 0.6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10, color: c.subtle, opacity: 0.6 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                           <Zap size={10} color="#f59e0b" fill="#f59e0b" />
                           <span>TTFT: {msg.metrics.ttft}ms</span>
                         </div>
-                        <div style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }}></div>
+                        <div style={{ width: 3, height: 3, borderRadius: '50%', background: c.dot }}></div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                           <Activity size={10} color="#10b981" />
                           <span>Speed: {msg.metrics.tps} tps</span>
                         </div>
-                        <div style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }}></div>
+                        <div style={{ width: 3, height: 3, borderRadius: '50%', background: c.dot }}></div>
                         <span>Time: {msg.metrics.duration}s</span>
                       </div>
                     )}
-                    <span style={{ fontSize: 10, color: '#94a3b8', opacity: 0.8, marginLeft: 4 }}>
+                    <span style={{ fontSize: 10, color: c.subtle, opacity: 0.8, marginLeft: 4 }}>
                       {msg.timestamp}
                     </span>
                   </div>
@@ -1117,9 +1156,9 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
           )}
           {isTyping && messages[messages.length - 1]?.role !== 'assistant' && (
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, animation: 'fade-in 0.3s ease' }}>
-                <Avatar size={isMobile ? 32 : 36} style={{ background: '#fff', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }} icon={<Bot size={18} color="#2563eb" />} />
-                <div style={{ padding: '12px 16px', background: '#fff', borderRadius: '4px 16px 16px 16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>{t('chat.thinking')}</span>
+                <Avatar size={isMobile ? 32 : 36} style={{ background: c.assistantBg, border: `1px solid ${c.assistantBorder}`, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }} icon={<Bot size={18} color="#2563eb" />} />
+                <div style={{ padding: '12px 16px', background: c.assistantBg, borderRadius: '4px 16px 16px 16px', border: `1px solid ${c.assistantBorder}`, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 12, color: c.body, fontWeight: 500 }}>{t('chat.thinking')}</span>
                     <div className="typing-indicator">
                       <div className="typing-dot"></div>
                       <div className="typing-dot"></div>
@@ -1148,9 +1187,9 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: '#fff',
-              color: '#64748b',
-              border: '1px solid #e2e8f0'
+              background: c.inputFoot,
+              color: c.body,
+              border: `1px solid ${c.border}`
             }}
           />
         )}
@@ -1180,11 +1219,11 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
         )}
 
         {/* Input Area */}
-        <div style={{ padding: isMobile ? '12px' : '16px 24px', background: '#fff', borderTop: '1px solid #f1f5f9', position: 'relative' }}>
+        <div style={{ padding: isMobile ? '12px' : '16px 24px', background: c.inputFoot, borderTop: `1px solid ${c.hairline}`, position: 'relative' }}>
           {/* Quote Preview */}
           {quotedMsg && (
             <div style={{ 
-              background: '#f8fafc', 
+              background: c.quoteBar, 
               padding: '8px 12px', 
               borderLeft: '4px solid #2563eb', 
               marginBottom: 8, 
@@ -1194,7 +1233,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
               justifyContent: 'space-between',
               animation: 'slide-up 0.2s ease'
             }}>
-              <div style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+              <div style={{ fontSize: 12, color: c.body, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                 <span style={{ fontWeight: 700, marginRight: 6 }}>{t('chat.reply')}:</span>
                 {quotedMsg}
               </div>
@@ -1211,7 +1250,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                     <Button 
                       key={item.id}
                       size="small"
-                      style={{ borderRadius: 16, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, background: '#f8fafc', color: '#64748b', borderColor: '#e2e8f0', flexShrink: 0, opacity: isTyping ? 0.6 : 1 }}
+                      style={{ borderRadius: 16, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, background: c.cmdRowBg, color: c.body, borderColor: c.border, flexShrink: 0, opacity: isTyping ? 0.6 : 1 }}
                       onClick={() => handleSend(item.prompt)}
                       disabled={isTyping}
                     >
@@ -1224,7 +1263,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                     type="text" 
                     size="small" 
                     icon={<Settings size={14} />} 
-                    style={{ color: '#94a3b8', background: '#f1f5f9', borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ color: c.subtle, background: c.ghostBtnBg, borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onClick={() => setIsManageModalOpen(true)}
                     title={t('chat.manageQuickCommands')}
                   />
@@ -1232,7 +1271,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                     type="text" 
                     size="small" 
                     icon={<ChevronUp size={16} />} 
-                    style={{ color: '#94a3b8', background: '#f1f5f9', borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ color: c.subtle, background: c.ghostBtnBg, borderRadius: 12, height: 24, width: 24, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onClick={() => {
                         setShowQuickActions(false);
                         storage.setItem('chat_show_quick_actions', 'false');
@@ -1243,7 +1282,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
               </>
             ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-                    <div style={{ height: 1, flex: 1, background: '#f1f5f9' }}></div>
+                    <div style={{ height: 1, flex: 1, background: c.hairline }}></div>
                     <Button 
                         type="text" 
                         size="small" 
@@ -1252,11 +1291,11 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                             setShowQuickActions(true);
                             storage.setItem('chat_show_quick_actions', 'true');
                         }}
-                        style={{ fontSize: 11, color: '#94a3b8', height: 20, padding: '0 8px', borderRadius: 10, background: '#f8fafc', display: 'flex', alignItems: 'center' }}
+                        style={{ fontSize: 11, color: c.subtle, height: 20, padding: '0 8px', borderRadius: 10, background: c.cmdRowBg, display: 'flex', alignItems: 'center' }}
                     >
                         {t('chat.expandQuickCommands')}
                     </Button>
-                    <div style={{ height: 1, flex: 1, background: '#f1f5f9' }}></div>
+                    <div style={{ height: 1, flex: 1, background: c.hairline }}></div>
                 </div>
             )}
           </div>
@@ -1295,7 +1334,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                     icon={<Paperclip size={20} />} 
                     disabled={isUploading || isTyping}
                     style={{ 
-                      color: (isUploading || isTyping) ? '#cbd5e1' : '#94a3b8', 
+                      color: (isUploading || isTyping) ? c.dot : c.subtle, 
                       borderRadius: 10, 
                       height: 40, width: 40, 
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1322,8 +1361,8 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                       width: 56, 
                       height: 56, 
                       borderRadius: 8, 
-                      border: '1px solid #e2e8f0',
-                      background: '#fff',
+                      border: `1px solid ${c.border}`,
+                      background: c.uploadBg,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1334,8 +1373,8 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                         <img src={file.thumbUrl || file.url} alt={file.filename} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                          <FileText size={18} color="#64748b" />
-                          <span style={{ fontSize: 8, color: '#94a3b8', maxWidth: 48, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <FileText size={18} color={c.body} />
+                          <span style={{ fontSize: 8, color: c.subtle, maxWidth: 48, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {file.filename}
                           </span>
                         </div>
@@ -1361,7 +1400,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                       height: 56, 
                       borderRadius: 8, 
                       border: '1px dashed #3b82f6',
-                      background: '#eff6ff',
+                      background: c.uploadDashed,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1386,7 +1425,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
                     handleSend();
                   }
                 }}
-                style={{ borderRadius: 12, padding: isMobile ? '8px 12px' : '10px 16px', fontSize: isMobile ? 15 : 14 }}
+                style={{ borderRadius: 12, padding: isMobile ? '8px 12px' : '10px 16px', fontSize: isMobile ? 15 : 14, background: isDarkMode ? '#0f172a' : undefined, color: isDarkMode ? '#e2e8f0' : undefined, borderColor: isDarkMode ? '#334155' : undefined }}
                 disabled={!selectedBot || isTyping}
               />
             </div>
@@ -1410,7 +1449,7 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
             )}
           </div>
           {!isMobile && (
-            <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8', display: 'flex', gap: 16 }}>
+            <div style={{ marginTop: 8, fontSize: 11, color: c.subtle, display: 'flex', gap: 16 }}>
               <span>{t('chat.streamingInfo')}</span>
               <span>🤖 User: {urlUser || (generatedSessionId ? `lobster-${generatedSessionId}` : t('chat.anonymous'))}</span>
               <span>{t('chat.persistenceInfo')}</span>
@@ -1432,13 +1471,13 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
         bodyStyle={{ paddingTop: 16 }}
       >
         <div style={{ marginBottom: 24 }}>
-            <h4 style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>{t('chat.currentCommands')}</h4>
+            <h4 style={{ fontSize: 13, color: c.body, marginBottom: 12 }}>{t('chat.currentCommands')}</h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {quickCommands.map(cmd => (
-                    <div key={cmd.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #f1f5f9' }}>
+                    <div key={cmd.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: c.cmdRowBg, borderRadius: 8, border: `1px solid ${c.cmdRowBorder}` }}>
                         <div style={{ minWidth: 0, flex: 1 }}>
-                            <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 14 }}>{cmd.label}</div>
-                            <div style={{ fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd.prompt}</div>
+                            <div style={{ fontWeight: 600, color: c.heading, fontSize: 14 }}>{cmd.label}</div>
+                            <div style={{ fontSize: 12, color: c.subtle, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd.prompt}</div>
                         </div>
                         {!cmd.is_system && (
                             <Button 
@@ -1454,8 +1493,8 @@ const ChatClassic: React.FC<OnlineChatProps> = ({
             </div>
         </div>
 
-        <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 24 }}>
-            <h4 style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>{t('chat.addCommand')}</h4>
+        <div style={{ borderTop: `1px solid ${c.hairline}`, paddingTop: 24 }}>
+            <h4 style={{ fontSize: 13, color: c.body, marginBottom: 12 }}>{t('chat.addCommand')}</h4>
             <Form form={form} layout="vertical" onFinish={handleAddQuickCommand}>
                 <Form.Item name="label" label={t('chat.commandLabel')} rules={[{ required: true, message: t('chat.labelRequired') }]}>
                     <Input placeholder={t('chat.commandLabelPlaceholder')} style={{ borderRadius: 8 }} />

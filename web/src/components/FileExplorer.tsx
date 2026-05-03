@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import Draggable from 'react-draggable';
 import type { DraggableBounds, DraggableData, DraggableEvent } from 'react-draggable';
+import { FE_THEME_DARK, FE_THEME_LIGHT } from '../theme/feSurfaceTheme';
 
 const { DirectoryTree } = Tree;
 
@@ -57,6 +58,8 @@ interface FileExplorerProps {
   onClearPendingSave?: () => void;
   simplified?: boolean;
   showSider?: boolean;
+  /** 与全局暗色一致；为 true 时使用深色面板与列表背景 */
+  isDarkMode?: boolean;
 }
 
 const getFileIcon = (name: string, isDir: boolean, size: number = 20, isProtected: boolean = false) => {
@@ -92,8 +95,10 @@ const getFileIcon = (name: string, isDir: boolean, size: number = 20, isProtecte
 export const FileExplorerContent: React.FC<FileExplorerProps> = ({ 
   open, onClose, rootPath, title, t, isMobile, 
   onSendToChat, pendingSaveContent, onClearPendingSave,
-  simplified = false
+  simplified = false,
+  isDarkMode = false,
 }) => {
+  const fe = useMemo(() => (isDarkMode ? FE_THEME_DARK : FE_THEME_LIGHT), [isDarkMode]);
   const [currentPath, setCurrentPath] = useState(rootPath);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -893,19 +898,19 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
 
   return (
     <>
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+      <div className={isDarkMode ? 'file-explorer-root file-explorer-root--dark' : 'file-explorer-root'} style={{ height: '100%', display: 'flex', flexDirection: 'column', background: fe.bg, color: fe.text }}>
           {/* Custom Header */}
           {/* Custom Header - Only show if not simplified */}
           {!simplified && (
             <div style={{ 
               padding: isMobile ? '12px 16px' : '16px 24px', 
-              borderBottom: '1px solid #f1f5f9',
+              borderBottom: `1px solid ${fe.border}`,
               display: 'flex',
               flexDirection: isMobile ? 'column' : 'row',
               alignItems: isMobile ? 'flex-start' : 'center',
               justifyContent: 'space-between',
               gap: isMobile ? 12 : 0,
-              background: '#fff',
+              background: fe.bg,
               zIndex: 10
             }}>
               {(isEditing || (isMobile && currentPath !== rootPath)) && (
@@ -934,19 +939,19 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                     size="small"
                     icon={isSidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
                     onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                    style={{ color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ color: fe.textMuted, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   />
                 )}
                 {!isMobile && (
                   <div 
-                    style={{ background: '#f0f9ff', padding: 8, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ background: fe.folderChipBg, padding: 8, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onClick={() => handleFolderClick(rootPath)}
                   >
-                    <FolderOpen size={20} color="#0ea5e9" />
+                    <FolderOpen size={20} color={fe.link} />
                   </div>
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.2, marginBottom: 2 }}>{title}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.2, marginBottom: 2, color: fe.text }}>{title}</div>
                   <Breadcrumb
                     style={{ fontSize: 12 }}
                     items={breadcrumbs.map((crumb, idx) => ({
@@ -954,7 +959,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                         <span 
                           style={{ 
                             cursor: 'pointer',
-                            color: idx < breadcrumbs.length - 1 ? '#0ea5e9' : '#94a3b8',
+                            color: idx < breadcrumbs.length - 1 ? fe.link : fe.crumbCurrent,
                             transition: 'color 0.2s'
                           }}
                           onClick={() => handleFolderClick(crumb.path)}
@@ -996,11 +1001,11 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
           {(!isEditing || isMobile || simplified) && (
             <div style={{ 
               padding: '8px 16px', 
-              borderBottom: '1px solid #f1f5f9',
+              borderBottom: `1px solid ${fe.border}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              background: '#f8fafc',
+              background: fe.bgMuted,
               flexShrink: 0,
               flexWrap: isMobile ? 'wrap' : 'nowrap',
               rowGap: isMobile ? 8 : 0
@@ -1018,7 +1023,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                 )}
                 <Input
                   placeholder={simplified ? t('common.search', { defaultValue: '搜索' }) : (searchMode === 'current' ? t('common.searchPlaceholder') : t('common.globalSearch', { defaultValue: '全局搜索...' }))}
-                  prefix={<Search size={14} color="#94a3b8" />}
+                  prefix={<Search size={14} color={fe.textFaint} />}
                   value={filterText}
                   onChange={e => setFilterText(e.target.value)}
                   onPressEnter={() => searchMode === 'global' && loadFiles(currentPath)}
@@ -1028,7 +1033,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                     height: 32, 
                     flex: 1,
                     width: simplified ? 'auto' : (isMobile ? '100%' : 180),
-                    border: simplified ? '1px solid #e2e8f0' : undefined
+                    border: simplified ? `1px solid ${fe.borderStrong}` : undefined
                   }}
                 />
                 {!simplified && (
@@ -1040,7 +1045,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                       { value: 'current', label: <Tooltip title={t('common.currentDir', { defaultValue: '当前目录' })}><Folder size={14}/></Tooltip> },
                       { value: 'global', label: <Tooltip title={t('common.globalRecursive', { defaultValue: '全局递归' })}><Search size={14}/></Tooltip> }
                     ]}
-                    style={{ borderRadius: '0 8px 8px 0', background: '#f1f5f9' }}
+                    style={{ borderRadius: '0 8px 8px 0', background: fe.segmentedBg }}
                   />
                 )}
               </div>
@@ -1114,7 +1119,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                         { value: 'list', icon: <ListIcon size={14} /> },
                         { value: 'grid', icon: <Grid size={14} /> }
                       ]}
-                      style={{ borderRadius: 8, background: '#f1f5f9' }}
+                      style={{ borderRadius: 8, background: fe.segmentedBg }}
                     />
                     <Tooltip title={t('common.newFile', { defaultValue: '新建文件' })}>
                       <Button 
@@ -1143,13 +1148,13 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
 
       {pendingSaveContent && (
         <div style={{ 
-          background: '#fff7ed', 
-          borderBottom: '1px solid #fed7aa', 
+          background: fe.pendingBg, 
+          borderBottom: `1px solid ${fe.pendingBorder}`, 
           padding: '8px 16px', 
           display: 'flex', 
           alignItems: 'center', 
           gap: 8,
-          color: '#c2410c',
+          color: fe.pendingText,
           fontSize: 12,
           fontWeight: 600
         }}>
@@ -1161,24 +1166,24 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
         </div>
       )}
 
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: '#fff' }}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: fe.bg }}>
         {!isMobile && !simplified && (
           <div style={{ 
             width: isSidebarCollapsed ? 0 : 280, 
             display: 'flex', 
             flexDirection: 'column', 
-            background: '#fcfdfe', 
-            borderRight: isSidebarCollapsed ? 'none' : '1px solid #f1f5f9',
+            background: fe.bgTree, 
+            borderRight: isSidebarCollapsed ? 'none' : `1px solid ${fe.border}`,
             transition: 'all 0.3s ease-in-out',
             overflow: 'hidden',
             opacity: isSidebarCollapsed ? 0 : 1,
             pointerEvents: isSidebarCollapsed ? 'none' : 'auto'
           }}>
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: 4, overflow: 'hidden' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${fe.border}`, display: 'flex', flexDirection: 'column', gap: 4, overflow: 'hidden' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: fe.textMuted, display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
                 <LayoutList size={14} /> {t('common.directory')}
               </div>
-              <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={rootPath}>
+              <div style={{ fontSize: 10, color: fe.textFaint, fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={rootPath}>
                 {rootPath}
               </div>
             </div>
@@ -1201,7 +1206,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
           </div>
         )}
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f8fafc' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: fe.bgMuted }}>
 
 
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -1210,9 +1215,9 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                 <Spin size="large" tip={t('common.loading')} />
               </div>
             ) : isEditing ? (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#fff' }}>
-                <div style={{ padding: '8px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#475569', overflow: 'hidden' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: fe.bg }}>
+                <div style={{ padding: '8px 16px', background: fe.editHeaderBg, borderBottom: `1px solid ${fe.editHeaderBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: fe.textSecondary, overflow: 'hidden' }}>
                     {simplified && (
                       <Button 
                         size="small" type="text" icon={<ChevronLeft size={16} />} 
@@ -1220,12 +1225,12 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                           setIsEditing(false);
                           setSelectedFile(null);
                         }}
-                        style={{ color: '#64748b' }}
+                        style={{ color: fe.textMuted }}
                       />
                     )}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
                       {getFileIcon(selectedFile?.name || '', false, 16)}
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedFile?.name}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: fe.text }}>{selectedFile?.name}</span>
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1260,7 +1265,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                         style={{ marginBottom: -12 }}
                       />
                     ) : (
-                      <div style={{ fontSize: 12, color: '#94a3b8' }}>{t('common.unsupported')}</div>
+                      <div style={{ fontSize: 12, color: fe.textFaint }}>{t('common.unsupported')}</div>
                     )}
                     <Tooltip title={t('common.download')}>
                       <Button type="text" size="small" icon={<Download size={16} />} onClick={() => handleDownload(selectedFile)} />
@@ -1274,13 +1279,13 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                 </div>
                 <div style={{ flex: 1, overflow: 'hidden' }}>
                   {!canView ? (
-                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: fe.centerWell }}>
                       <Empty 
                         image={Empty.PRESENTED_IMAGE_SIMPLE}
                         description={
                           <div style={{ textAlign: 'center' }}>
-                            <p style={{ color: '#64748b', marginBottom: 12 }}>{t('common.unsupportedFile')}</p>
-                            <Button type="primary" icon={<Download size={14} />} onClick={() => handleDownload(selectedFile)} style={{ background: '#0ea5e9' }}>
+                            <p style={{ color: fe.unsupportedText, marginBottom: 12 }}>{t('common.unsupportedFile')}</p>
+                            <Button type="primary" icon={<Download size={14} />} onClick={() => handleDownload(selectedFile)} style={{ background: fe.link }}>
                               {t('common.download')}
                             </Button>
                           </div>
@@ -1288,8 +1293,8 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                       />
                     </div>
                   ) : activeTab === 'preview' && isMarkdown ? (
-                    <div style={{ height: '100%', padding: 24, overflowY: 'auto', background: '#f1f5f9' }}>
-                      <div style={{ maxWidth: 900, margin: '0 auto', background: '#fff', padding: 40, borderRadius: 12, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                    <div style={{ height: '100%', padding: 24, overflowY: 'auto', background: fe.previewOuter }}>
+                      <div style={{ maxWidth: 900, margin: '0 auto', background: fe.previewInner, padding: 40, borderRadius: 12, boxShadow: fe.docShadow }}>
                         <div className="file-explorer-markdown">
                           <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeSanitize]}>
                             {fileContent}
@@ -1300,19 +1305,19 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                   ) : activeTab === 'preview' && isHTML ? (
                     <iframe srcDoc={fileContent} style={{ width: '100%', height: '100%', border: 'none' }} title="HTML Preview" sandbox="allow-scripts" />
                   ) : activeTab === 'preview' && isImage ? (
-                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', padding: 20 }}>
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: fe.imgBackdrop, padding: 20 }}>
                       {imagePreviewUrl ? (
                         <img 
                           src={imagePreviewUrl} 
                           alt={selectedFile?.name} 
-                          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', borderRadius: 4, background: '#fff' }} 
+                          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', boxShadow: fe.docShadow, borderRadius: 4, background: fe.imgBg }} 
                         />
                       ) : (
                         <Spin />
                       )}
                     </div>
                   ) : activeTab === 'preview' && isPDF ? (
-                    <div style={{ height: '100%', background: '#f1f5f9' }}>
+                    <div style={{ height: '100%', background: fe.previewOuter }}>
                       {pdfPreviewUrl ? (
                         <object data={pdfPreviewUrl} type="application/pdf" style={{ width: '100%', height: '100%', border: 'none' }}>
                           <div style={{ padding: 40, textAlign: 'center' }}>
@@ -1325,8 +1330,8 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                       )}
                     </div>
                   ) : activeTab === 'preview' && isExcel ? (
-                    <div style={{ height: '100%', overflowY: 'auto', background: '#f1f5f9', padding: 20 }}>
-                      <div style={{ background: '#fff', padding: 12, borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    <div style={{ height: '100%', overflowY: 'auto', background: fe.previewOuter, padding: 20 }}>
+                      <div style={{ background: fe.excelWrap, padding: 12, borderRadius: 8, boxShadow: fe.excelShadow }}>
                         {excelData ? (
                           <Table 
                             columns={excelData.columns} 
@@ -1341,8 +1346,8 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                       </div>
                     </div>
                   ) : activeTab === 'preview' && isWord ? (
-                    <div style={{ height: '100%', padding: 24, overflowY: 'auto', background: '#f1f5f9' }}>
-                      <div style={{ maxWidth: 900, margin: '0 auto', background: '#fff', padding: '40px 60px', borderRadius: 12, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                    <div style={{ height: '100%', padding: 24, overflowY: 'auto', background: fe.previewOuter }}>
+                      <div style={{ maxWidth: 900, margin: '0 auto', background: fe.previewInner, padding: '40px 60px', borderRadius: 12, boxShadow: fe.docShadow }}>
                         {wordHtml ? (
                           <div className="word-preview-v3" dangerouslySetInnerHTML={{ __html: wordHtml }} />
                         ) : (
@@ -1374,12 +1379,12 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                             width: 44,
                             padding: 0,
                             boxShadow: '0 4px 14px rgba(100, 116, 139, 0.3)',
-                            background: 'rgba(255,255,255,0.95)',
-                            border: '1px solid #e2e8f0',
+                            background: fe.copyFloatBg,
+                            border: `1px solid ${fe.copyFloatBorder}`,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#475569',
+                            color: fe.copyFloatColor,
                             transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
                           }}
                           className="copy-float-btn"
@@ -1417,7 +1422,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                         defaultLanguage={getEditorLanguage(selectedFile?.name || '')}
                         value={fileContent}
                         onChange={(val) => setFileContent(val || '')}
-                        theme="vs-light"
+                        theme={isDarkMode ? 'vs-dark' : 'vs-light'}
                         options={{
                           fontSize: 13,
                           minimap: { enabled: false },
@@ -1438,7 +1443,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                 onContextMenu={(e) => handleRightClick(e, currentPath, true)}
               >
                 {selectedBulkKeys.length > 0 && (
-                  <div style={{ padding: '8px 24px', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ padding: '8px 24px', background: fe.bulkBar, borderBottom: `1px solid ${fe.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
                     <Checkbox 
                       indeterminate={selectedBulkKeys.length > 0 && selectedBulkKeys.length < filteredFiles.filter(f => !isProtected(f.name, f.path) && f.name !== '..').length}
                       checked={selectedBulkKeys.length === filteredFiles.filter(f => !isProtected(f.name, f.path) && f.name !== '..').length && filteredFiles.length > 0}
@@ -1451,7 +1456,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                         }
                       }}
                     />
-                    <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
+                    <span style={{ fontSize: 13, color: fe.textMuted, fontWeight: 600 }}>
                       {t('common.selectedCount', { count: selectedBulkKeys.length, defaultValue: `已选择 ${selectedBulkKeys.length} 项` })}
                     </span>
                     <Button size="small" type="link" onClick={() => setSelectedBulkKeys([])}>{t('common.cancelSelect', { defaultValue: '取消选择' })}</Button>
@@ -1479,14 +1484,14 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                         key={item.path + index}
                         style={{ 
                           padding: isMobile ? '4px 12px' : '4px 24px',
-                          background: selectedFile?.path === item.path ? '#eff6ff' : 'transparent',
+                          background: selectedFile?.path === item.path ? fe.rowSelected : 'transparent',
                           cursor: 'pointer',
                           display: 'flex',
                           flexDirection: 'row',
                           alignItems: 'center',
                           gap: 12,
                           transition: 'all 0.2s',
-                          borderBottom: '1px solid #f8fafc',
+                          borderBottom: `1px solid ${fe.rowBorder}`,
                           position: 'relative'
                         }}
                         onClick={() => item.is_dir ? handleFolderClick(item.path) : loadFileContent(item)}
@@ -1512,22 +1517,22 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                           onClick={(e) => e.stopPropagation()}
                         />
                         <div style={{ 
-                          background: item.is_dir ? '#e0f2fe' : isProtected(item.name, item.path) ? '#f5f3ff' : '#f8fafc', 
+                          background: item.is_dir ? fe.iconDir : isProtected(item.name, item.path) ? fe.iconProt : fe.iconFile, 
                           padding: 8, borderRadius: 8,
                           display: 'flex', alignItems: 'center', justifyContent: 'center'
                         }}>
                           {getFileIcon(item.name, item.is_dir, 20, isProtected(item.name, item.path))}
                         </div>
                         <div style={{ flex: 1, overflow: 'hidden' }}>
-                          <div style={{ fontSize: 14, color: '#1e293b', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
-                          <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                          <div style={{ fontSize: 14, color: fe.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
+                          <div style={{ fontSize: 11, color: fe.textFaint }}>
                             {item.is_dir ? t('common.folder', { defaultValue: '文件夹' }) : `${(item.size / 1024).toFixed(1)} KB · ${item.mod_time}`}
                           </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} className="action-btns">
                           {item.name !== '..' && (
                             <Tooltip title={t('common.download')}>
-                              <Button type="text" size="small" icon={<Download size={14} />} onClick={(e) => { e.stopPropagation(); handleDownload(item); }} className="action-btn-hover" style={{ color: '#0ea5e9' }} />
+                              <Button type="text" size="small" icon={<Download size={14} />} onClick={(e) => { e.stopPropagation(); handleDownload(item); }} className="action-btn-hover" style={{ color: fe.link }} />
                             </Tooltip>
                           )}
                           {item.name !== '..' && !isProtected(item.name, item.path) && (
@@ -1570,8 +1575,8 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                           style={{ 
                             borderRadius: 12, 
                             textAlign: 'center', 
-                            background: selectedBulkKeys.includes(item.path) ? '#f0f9ff' : '#fff',
-                            border: selectedBulkKeys.includes(item.path) ? '1px solid #0ea5e9' : '1px solid #f1f5f9'
+                            background: selectedBulkKeys.includes(item.path) ? fe.cardSelected : fe.cardBg,
+                            border: selectedBulkKeys.includes(item.path) ? `1px solid ${fe.cardBorderSel}` : `1px solid ${fe.cardBorder}`
                           }}
                           onClick={() => item.is_dir ? handleFolderClick(item.path) : loadFileContent(item)}
                           onContextMenu={(e) => handleRightClick(e, item.path, item.is_dir)}
@@ -1598,8 +1603,8 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                           }
                         >
                           <Card.Meta 
-                            title={<div style={{ fontSize: 13, fontWeight: 600 }}>{item.name}</div>}
-                            description={!item.is_dir ? `${(item.size / 1024).toFixed(0)} KB` : t('common.folder')}
+                            title={<div style={{ fontSize: 13, fontWeight: 600, color: fe.text }}>{item.name}</div>}
+                            description={<span style={{ color: fe.textFaint }}>{!item.is_dir ? `${(item.size / 1024).toFixed(0)} KB` : t('common.folder')}</span>}
                           />
                         </Card>
                       ))}
@@ -1631,8 +1636,8 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
       <style>{`
         .file-item-hover:hover {
           transform: scale(1.005);
-          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-          background: #fff;
+          box-shadow: 0 4px 12px ${fe.hoverShadow};
+          background: ${fe.rowHover};
         }
         .action-btn-hover { opacity: 0; transition: opacity 0.2s; }
         .file-item-hover:hover .action-btn-hover { opacity: 1; }
@@ -1643,9 +1648,9 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
         .copy-float-btn:hover {
           transform: translateY(-2px) scale(1.05);
           box-shadow: 0 8px 20px rgba(100, 116, 139, 0.35) !important;
-          background: #fff !important;
-          border-color: #94a3b8 !important;
-          color: #0ea5e9 !important;
+          background: ${fe.copyFloatHoverBg} !important;
+          border-color: ${fe.copyFloatHoverBorder} !important;
+          color: ${fe.copyFloatHoverColor} !important;
         }
         .custom-directory-tree .ant-tree-node-content-wrapper {
           border-radius: 6px;
@@ -1655,28 +1660,28 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
           align-items: center;
         }
         .custom-directory-tree .ant-tree-node-selected {
-          background-color: #3b82f6 !important;
+          background-color: ${fe.treeNodeSelBg} !important;
         }
         .custom-directory-tree .ant-tree-node-selected .ant-tree-title {
-          color: #fff !important;
+          color: ${fe.treeTitleSelColor} !important;
           font-weight: 600;
         }
-        /* Ensure non-selected nodes have proper color */
         .custom-directory-tree .ant-tree-node-content-wrapper:not(.ant-tree-node-selected) .ant-tree-title {
-          color: #475569 !important;
+          color: ${fe.treeTitle} !important;
         }
         .file-explorer-markdown {
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-          font-size: 15px; line-height: 1.6; color: #24292f;
+          font-size: 15px; line-height: 1.6;
+          color: ${isDarkMode ? 'rgba(255,255,255,0.88)' : '#24292f'};
         }
         .file-explorer-markdown h1, .file-explorer-markdown h2, .file-explorer-markdown h3 { margin-top: 24px; margin-bottom: 16px; font-weight: 600; line-height: 1.25; }
-        .file-explorer-markdown code { background: #afb8c133; padding: .2em .4em; border-radius: 6px; font-size: 85%; font-family: monospace; }
-        .file-explorer-markdown pre { background: #f6f8fa; padding: 16px; border-radius: 8px; overflow: auto; margin-bottom: 16px; border: 1px solid #e2e8f0; }
-        .word-preview-v3 { font-family: "Times New Roman", Times, serif; font-size: 16px; line-height: 1.5; color: #333; }
+        .file-explorer-markdown code { background: ${isDarkMode ? 'rgba(255,255,255,0.1)' : '#afb8c133'}; padding: .2em .4em; border-radius: 6px; font-size: 85%; font-family: monospace; }
+        .file-explorer-markdown pre { background: ${isDarkMode ? '#0f172a' : '#f6f8fa'}; padding: 16px; border-radius: 8px; overflow: auto; margin-bottom: 16px; border: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}; }
+        .word-preview-v3 { font-family: "Times New Roman", Times, serif; font-size: 16px; line-height: 1.5; color: ${isDarkMode ? 'rgba(255,255,255,0.85)' : '#333'}; }
         .word-preview-v3 h1, .word-preview-v3 h2, .word-preview-v3 h3 { margin-top: 1.2em; margin-bottom: 0.6em; }
         .word-preview-v3 p { margin-bottom: 1em; text-align: justify; }
         .word-preview-v3 table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
-        .word-preview-v3 table td, .word-preview-v3 table th { border: 1px solid #ddd; padding: 8px; }
+        .word-preview-v3 table td, .word-preview-v3 table th { border: 1px solid ${isDarkMode ? 'rgba(255,255,255,0.15)' : '#ddd'}; padding: 8px; }
       `}</style>
       </div>
 
@@ -1691,7 +1696,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
         destroyOnClose
       >
         <div style={{ paddingTop: 10 }}>
-          <div style={{ marginBottom: 8, fontSize: 12, color: '#64748b' }}>
+          <div style={{ marginBottom: 8, fontSize: 12, color: fe.textMuted }}>
             {createType === 'file' ? t('common.enterFileName', { defaultValue: '请输入文件名' }) : t('common.enterFolderName', { defaultValue: '请输入文件夹名' })}
           </div>
           <Input 
@@ -1714,7 +1719,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
         destroyOnClose
       >
         <div style={{ paddingTop: 10 }}>
-          <div style={{ marginBottom: 8, fontSize: 12, color: '#64748b' }}>{t('common.enterNewName', { defaultValue: '请输入新名称' })}</div>
+          <div style={{ marginBottom: 8, fontSize: 12, color: fe.textMuted }}>{t('common.enterNewName', { defaultValue: '请输入新名称' })}</div>
           <Input 
             autoFocus 
             value={renameTargetName} 
@@ -1728,6 +1733,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
 };
 
 const FileExplorer: React.FC<FileExplorerProps> = (props) => {
+  const modalFe = props.isDarkMode ? FE_THEME_DARK : FE_THEME_LIGHT;
   const [isMaximized, setIsMaximized] = useState(false);
   const [dragDisabled, setDragDisabled] = useState(true);
   const [bounds, setBounds] = useState<DraggableBounds>({ left: 0, top: 0, bottom: 0, right: 0 });
@@ -1794,9 +1800,9 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
       centered={!isMaximized}
       destroyOnClose
       styles={{
-        body: { padding: 0, height: isMaximized ? 'calc(100vh - 44px)' : 'calc(100vh - 120px)', background: '#fff', overflow: 'hidden', borderRadius: isMaximized ? 0 : '0 0 12px 12px' },
-        content: { padding: 0, background: '#fff', borderRadius: isMaximized ? 0 : 12, overflow: 'hidden' },
-        header: { padding: 0, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', marginBottom: 0, borderRadius: isMaximized ? 0 : '12px 12px 0 0' }
+        body: { padding: 0, height: isMaximized ? 'calc(100vh - 44px)' : 'calc(100vh - 120px)', background: modalFe.modalBody, overflow: 'hidden', borderRadius: isMaximized ? 0 : '0 0 12px 12px' },
+        content: { padding: 0, background: modalFe.modalBody, borderRadius: isMaximized ? 0 : 12, overflow: 'hidden' },
+        header: { padding: 0, background: modalFe.modalHeader, borderBottom: `1px solid ${modalFe.editHeaderBorder}`, marginBottom: 0, borderRadius: isMaximized ? 0 : '12px 12px 0 0' }
       }}
       style={isMaximized ? { top: 0, maxWidth: '100vw', margin: 0, padding: 0 } : {}}
       modalRender={(modal) => (
@@ -1817,7 +1823,7 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
             alignItems: 'center', 
             justifyContent: 'space-between', 
             padding: '8px 16px',
-            background: '#f8fafc',
+            background: modalFe.modalHeader,
             borderRadius: isMaximized ? 0 : '12px 12px 0 0',
             cursor: isMaximized ? 'default' : 'move'
           }}
@@ -1831,8 +1837,8 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <FolderOpen size={18} color="#0ea5e9" />
-            <span style={{ fontSize: 15, fontWeight: 700 }}>{props.title || props.t('common.fileExplorer', { defaultValue: '文件浏览器' })}</span>
+            <FolderOpen size={18} color={modalFe.link} />
+            <span style={{ fontSize: 15, fontWeight: 700, color: modalFe.text }}>{props.title || props.t('common.fileExplorer', { defaultValue: '文件浏览器' })}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Tooltip title={isMaximized ? props.t('common.minimize') : props.t('common.maximize')}>
@@ -1841,7 +1847,7 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
                 size="small" 
                 icon={isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />} 
                 onClick={toggleMaximized}
-                style={{ color: '#64748b' }}
+                style={{ color: modalFe.textMuted }}
                 onMouseEnter={() => setDragDisabled(true)}
                 onMouseLeave={() => setDragDisabled(false)}
               />
@@ -1851,7 +1857,7 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
               size="small" 
               icon={<X size={18} />} 
               onClick={props.onClose} 
-              style={{ color: '#64748b' }}
+              style={{ color: modalFe.textMuted }}
               onMouseEnter={() => setDragDisabled(true)}
               onMouseLeave={() => setDragDisabled(false)}
             />

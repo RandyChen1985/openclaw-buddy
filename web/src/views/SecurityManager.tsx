@@ -23,10 +23,11 @@ interface SecurityManagerProps {
   onNavigateToDashboard?: () => void;
   bots: any[];
   activeTasks: Task[];
+  isDarkMode?: boolean;
 }
 
 const SecurityManager: React.FC<SecurityManagerProps> = ({
-  isMobile, bots, activeTasks
+  isMobile, bots, activeTasks, isDarkMode = false
 }) => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
@@ -221,7 +222,7 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
     }}>
       {/* 允许在网关停止时配置安全审核策略 */}
       <div style={{ marginBottom: isMobile ? 8 : 16 }}>
-        <Title level={isMobile ? 3 : 2} style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, flexWrap: 'wrap' }}>
+        <Title level={isMobile ? 3 : 2} style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, flexWrap: 'wrap', color: isDarkMode ? '#f1f5f9' : 'inherit' }}>
           <ShieldCheck size={isMobile ? 22 : 28} color="#2563eb" />
           {t('security.title')}
           <Button 
@@ -258,7 +259,7 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
         flex: 1
       }}>
         <Card 
-          title={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Zap size={18} /> {t('security.policyCardTitle')}</div>}
+          title={<div style={{ display: 'flex', alignItems: 'center', gap: 8, color: isDarkMode ? '#f1f5f9' : 'inherit' }}><Zap size={18} /> {t('security.policyCardTitle')}</div>}
           extra={
             <Space>
               {effectiveScope && (
@@ -276,6 +277,7 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
             </Space>
           }
           loading={loading}
+          style={{ background: isDarkMode ? '#1e293b' : '#fff', border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, borderRadius: 16 }}
           styles={{ body: { height: '100%', display: 'flex', flexDirection: 'column', padding: isMobile ? '16px' : '32px' } }}
         >
           {effectiveScope ? (
@@ -285,15 +287,15 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
                 display: 'flex', 
                 flexDirection: 'row',
                 justifyContent: 'space-around', 
-                background: '#f8fafc', 
+                background: isDarkMode ? '#0f172a' : '#f8fafc', 
                 padding: isMobile ? '16px 8px' : '32px 24px', 
                 borderRadius: 16, 
-                border: '1px solid #e2e8f0',
+                border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
                 gap: isMobile ? 8 : 0
               }}>
                 <div style={{ textAlign: 'center', flex: 1, minWidth: 0 }}>
                   <Space style={{ marginBottom: isMobile ? 4 : 8 }}>
-                    <Text type="secondary" style={{ fontSize: isMobile ? 11 : 12 }}>{t('security.askLabel')}</Text>
+                    <Text type="secondary" style={{ fontSize: isMobile ? 11 : 12, color: isDarkMode ? '#94a3b8' : 'inherit' }}>{t('security.askLabel')}</Text>
                     <Tooltip title={isMobile ? "" : t('security.clickForHelp')}>
                       <HelpCircle size={isMobile ? 12 : 14} style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => showHelp('ask')} />
                     </Tooltip>
@@ -325,14 +327,14 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
                 <div style={{ 
                   height: isMobile ? 32 : 64, 
                   width: 1, 
-                  background: '#e2e8f0', 
+                  background: isDarkMode ? '#334155' : '#e2e8f0', 
                   margin: isMobile ? '0 8px' : '0 24px',
                   alignSelf: 'center',
                   flexShrink: 0
                 }} />
                 <div style={{ textAlign: 'center', flex: 1, minWidth: 0 }}>
                   <Space style={{ marginBottom: isMobile ? 4 : 12 }}>
-                    <Text type="secondary" style={{ fontSize: isMobile ? 11 : 12 }}>{t('security.securityLabel')}</Text>
+                    <Text type="secondary" style={{ fontSize: isMobile ? 11 : 12, color: isDarkMode ? '#94a3b8' : 'inherit' }}>{t('security.securityLabel')}</Text>
                     <Tooltip title={isMobile ? "" : t('security.clickForHelp')}>
                       <HelpCircle size={isMobile ? 12 : 14} style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => showHelp('security')} />
                     </Tooltip>
@@ -364,7 +366,7 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
               </div>
 
               <div style={{ flex: 1 }}>
-                <Text strong style={{ display: 'block', marginBottom: 16, fontSize: 15 }}>{t('security.presetTitle')}</Text>
+                <Text strong style={{ display: 'block', marginBottom: 16, fontSize: 15, color: isDarkMode ? '#f1f5f9' : 'inherit' }}>{t('security.presetTitle')}</Text>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <Button 
                     block type="primary" loading={isOperating} disabled={isOperating}
@@ -427,18 +429,18 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
               justifyContent: 'center', 
               gap: 16,
               padding: '40px 20px',
-              background: 'rgba(240, 242, 245, 0.5)',
+              background: isDarkMode ? '#0f172a' : 'rgba(240, 242, 245, 0.5)',
               borderRadius: 12,
-              border: '1px dashed #d9d9d9'
+              border: `1px dashed ${isDarkMode ? '#334155' : '#d9d9d9'}`
             }}>
                <ShieldAlert size={48} color="#ef4444" style={{ opacity: 0.8 }} />
-               <Text strong style={{ fontSize: 18 }}>当前版本过低 (Version Upgrade Required)</Text>
+               <Text strong style={{ fontSize: 18, color: isDarkMode ? '#f1f5f9' : 'inherit' }}>当前版本过低 (Version Upgrade Required)</Text>
                <div style={{ textAlign: 'center', maxWidth: 400 }}>
-                 <Text type="secondary" style={{ fontSize: 14 }}>
+                 <Text type="secondary" style={{ fontSize: 14, color: isDarkMode ? '#94a3b8' : 'inherit' }}>
                    当前 OpenClaw 核心版本暂不支持执行策略（Exec Policy）管理。为了保障您的操作安全并启用此功能，请在终端执行以下命令进行升级：
                  </Text>
                  <div style={{ 
-                   background: '#1e293b', 
+                   background: isDarkMode ? '#0f172a' : '#1e293b', 
                    color: '#f8fafc', 
                    padding: '12px 20px', 
                    borderRadius: 8, 
@@ -446,7 +448,8 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
                    fontFamily: 'monospace',
                    fontSize: 14,
                    position: 'relative',
-                   textAlign: 'left'
+                   textAlign: 'left',
+                   border: isDarkMode ? '1px solid #334155' : 'none'
                  }}>
                    <span style={{ color: '#94a3b8' }}>$</span> openclaw upgrade
                  </div>
@@ -457,7 +460,7 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
 
         <Card 
           title={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: isDarkMode ? '#f1f5f9' : 'inherit' }}>
               <Settings2 size={18} /> 
               {t('security.allowlistTitle')}
               <Tooltip title={isMobile ? "" : t('security.clickForHelp')}>
@@ -466,6 +469,7 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
             </div>
           }
           loading={loading}
+          style={{ background: isDarkMode ? '#1e293b' : '#fff', border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, borderRadius: 16 }}
           styles={{ body: { height: '100%', display: 'flex', flexDirection: 'column', padding: isMobile ? '16px' : '32px' } }}
         >
           <div style={{ marginBottom: 16 }}>
@@ -512,7 +516,7 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({
               <Table 
                 dataSource={safeAllowlistData.map((p: any, i: number) => ({ key: i, pattern: typeof p === 'string' ? p : (p?.pattern || '') }))}
                 columns={[
-                  { title: 'Pattern', dataIndex: 'pattern', key: 'pattern', render: (text) => <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: 4 }}>{text}</code> },
+                  { title: 'Pattern', dataIndex: 'pattern', key: 'pattern', render: (text) => <code style={{ background: isDarkMode ? '#0f172a' : '#f1f5f9', color: isDarkMode ? '#e2e8f0' : undefined, border: isDarkMode ? '1px solid #334155' : undefined, padding: '2px 6px', borderRadius: 4 }}>{text}</code> },
                   { 
                     title: t('common.action'), key: 'action', width: 80, align: 'center',
                     render: (_, record: { key: number, pattern: string }) => (

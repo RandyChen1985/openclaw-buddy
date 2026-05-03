@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode } from 'antd';
+import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode, theme } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
   Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone, Rocket,
-  ShieldCheck, Clock, Activity
+  ShieldCheck, Clock, Activity, Sun, Moon
 } from 'lucide-react';
 import api from './api';
 import storage from './utils/storage';
@@ -42,7 +42,7 @@ import { V3GatewayProvider, useV3Gateway } from './context/V3GatewayContext';
 const { Content, Sider, Header } = Layout;
 
 // --- Dashboard Component (Internal Layout) ---------------------------------------
-const Dashboard = () => {
+const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleTheme: () => void }) => {
   const { t } = useTranslation();
   const queryParams = new URLSearchParams(window.location.search);
   const isEmbed = queryParams.get('embed') === 'true';
@@ -1010,9 +1010,10 @@ const Dashboard = () => {
           onRefreshVersion={checkVersionUpdate}
           onUpgrade={handleUpgrade}
           onRestart={handleRestart}
+          isDarkMode={isDarkMode}
           />
           ),
-          'audit': <AuditDashboard />,
+          'audit': <AuditDashboard isDarkMode={isDarkMode} />,
           'bots-models': (
           <BotsManager          modelsConfig={modelsConfig}
           loadingConfig={loadingModelsConfig}
@@ -1027,6 +1028,7 @@ const Dashboard = () => {
           onSetDefaultModel={handleSetDefaultModel}
           activeTasks={activeTasks}
           isRunning={isRunning}
+          isDarkMode={isDarkMode}
           onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
@@ -1049,6 +1051,7 @@ const Dashboard = () => {
           activeTasks={activeTasks}
           isMobile={isMobile}
           isRunning={isRunning}
+          isDarkMode={isDarkMode}
           onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
@@ -1062,22 +1065,23 @@ const Dashboard = () => {
           onRefresh={() => fetchDevices(true)}
           isMobile={isMobile}
           isRunning={isRunning}
+          isDarkMode={isDarkMode}
           onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
           }}
         />
       ),
-      'logs': <LogsViewer wsLogs={wsLogs} activeSource={logSource} onSourceChange={setLogSource} isRunning={isRunning} onNavigateToDashboard={() => {
+      'logs': <LogsViewer wsLogs={wsLogs} activeSource={logSource} onSourceChange={setLogSource} isRunning={isRunning} isDarkMode={isDarkMode} onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
           }} />,
-      'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} ocInstalled={ocInstalled} />,
-      'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} isRunning={isRunning} onNavigateToDashboard={() => {
+      'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} ocInstalled={ocInstalled} isDarkMode={isDarkMode} />,
+      'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} isRunning={isRunning} isDarkMode={isDarkMode} onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
           }} />,
-      'tui': <TuiView isRunning={isRunning} onNavigateToDashboard={() => {
+      'tui': <TuiView isRunning={isRunning} isDarkMode={isDarkMode} onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
           }} />,
@@ -1089,6 +1093,7 @@ const Dashboard = () => {
         skills={skills}
         activeTasks={activeTasks}
         isRunning={isRunning}
+        isDarkMode={isDarkMode}
         onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
@@ -1103,12 +1108,13 @@ const Dashboard = () => {
         onTaskUpdate={handleTaskUpdate}
         activeTasks={activeTasks}
         isRunning={isRunning}
+        isDarkMode={isDarkMode}
         onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
           }}
       />,
-      'experts': <ExpertMarket isMobile={isMobile} onNavigate={setActiveTab} isRunning={isRunning} onNavigateToDashboard={() => {
+      'experts': <ExpertMarket isMobile={isMobile} onNavigate={setActiveTab} isRunning={isRunning} isDarkMode={isDarkMode} onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
           }} />,
@@ -1118,13 +1124,14 @@ const Dashboard = () => {
           isRunning={isRunning}
           bots={botsModels?.data?.bots || []}
           activeTasks={activeTasks}
+          isDarkMode={isDarkMode}
           onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
           }}
         />
       ),
-      'cron': <CronJobsView />
+      'cron': <CronJobsView isDarkMode={isDarkMode} />
     };
 
     return (
@@ -1134,20 +1141,20 @@ const Dashboard = () => {
     );
   };
 
-  if (fetching && !status) return <CrayfishLoading />;
+  if (fetching && !status) return <CrayfishLoading isDarkMode={isDarkMode} />;
 
   const globalLoadingMask = (globalLoadingMessage || dashboardProcessing) && (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(2px)',
+      background: isDarkMode ? 'rgba(15, 23, 42, 0.8)' : 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(2px)',
       zIndex: 9999, display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', padding: 20,
       animation: 'fadeIn 0.3s ease-out'
     }}>
       <div style={{
         padding: isMobile ? '24px 20px' : '32px 40px', 
-        background: '#fff', borderRadius: 24,
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+        background: isDarkMode ? '#1e293b' : '#fff', borderRadius: 24,
+        boxShadow: isDarkMode ? '0 25px 50px -12px rgba(0, 0, 0, 0.5)' : '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20,
         width: isMobile ? '100%' : 'auto', maxWidth: 340, minWidth: isMobile ? 0 : 320
       }}>
@@ -1155,40 +1162,40 @@ const Dashboard = () => {
         <div style={{ textAlign: 'center' }}>
           {isTransitioning ? (
             <>
-              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>
+              <div style={{ fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#1e293b', fontSize: 16 }}>
                 {targetStatus && t(`chat.status.${targetStatus}`)}
                 {!targetStatus && t('chat.status.syncing')}
               </div>
-              <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>
+              <div style={{ color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 13, marginTop: 6 }}>
                 {targetStatus && t(`chat.status.${targetStatus}_desc`)}
                 {!targetStatus && t('common.waitingGateway')}
               </div>
               <div style={{
-                marginTop: 16, padding: '6px 16px', background: '#eff6ff',
+                marginTop: 16, padding: '6px 16px', background: isDarkMode ? '#1e293b' : '#eff6ff',
                 borderRadius: 20, fontSize: 13, color: '#2563eb',
-                fontWeight: 700, display: 'inline-block', border: '1px solid #dbeafe'
+                fontWeight: 700, display: 'inline-block', border: `1px solid ${isDarkMode ? '#334155' : '#dbeafe'}`
               }}>
                 {t('common.secondsElapsed', { seconds: transitionSeconds })}
               </div>
             </>
           ) : globalLoadingMessage ? (
             <>
-              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 16 }}>{globalLoadingMessage}</div>
-              <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>{t('common.waiting')}</div>
+              <div style={{ fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#1e293b', fontSize: 16 }}>{globalLoadingMessage}</div>
+              <div style={{ color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 13, marginTop: 6 }}>{t('common.waiting')}</div>
               <div style={{
-                marginTop: 16, padding: '6px 16px', background: '#eff6ff',
+                marginTop: 16, padding: '6px 16px', background: isDarkMode ? '#1e293b' : '#eff6ff',
                 borderRadius: 20, fontSize: 13, color: '#2563eb',
-                fontWeight: 700, display: 'inline-block', border: '1px solid #dbeafe'
+                fontWeight: 700, display: 'inline-block', border: `1px solid ${isDarkMode ? '#334155' : '#dbeafe'}`
               }}>
                 {globalLoadingCountdown > 0 ? t('common.loadingCountdown', { seconds: globalLoadingCountdown }) : t('common.syncing')}
               </div>
             </>
           ) : dashboardProcessing ? (
             <>
-              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 18, marginBottom: 4 }}>
+              <div style={{ fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#1e293b', fontSize: 18, marginBottom: 4 }}>
                 {t('common.lobsterPanel')}
               </div>
-              <div style={{ color: '#64748b', fontSize: 13, lineHeight: 1.6 }}>
+              <div style={{ color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 13, lineHeight: 1.6 }}>
                 正在提取安全管理地址...<br />
                 这可能需要几秒钟时间
               </div>
@@ -1220,7 +1227,7 @@ const Dashboard = () => {
 
   const headerEl = (onMenuClick?: () => void) => (
     <Header style={{
-      background: '#fff', height: 56, padding: isMobile ? '0 12px' : '0 24px', borderBottom: '1px solid #e2e8f0',
+      background: isDarkMode ? '#1e293b' : '#fff', height: 56, padding: isMobile ? '0 12px' : '0 24px', borderBottom: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       position: 'sticky', top: 0, zIndex: 20, flexShrink: 0, lineHeight: 'normal',
     }}>
@@ -1229,14 +1236,14 @@ const Dashboard = () => {
           type="text" 
           icon={<MenuIcon size={20} />} 
           onClick={onMenuClick} 
-          style={{ marginLeft: -8, color: '#64748b' }} 
+          style={{ marginLeft: -8, color: isDarkMode ? '#94a3b8' : '#64748b' }} 
         />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: '#64748b' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: isDarkMode ? '#94a3b8' : '#64748b' }}>
           <span 
-            style={{ fontWeight: 600, color: '#1e293b', cursor: 'pointer', transition: 'color 0.2s' }} 
+            style={{ fontWeight: 600, color: isDarkMode ? '#f1f5f9' : '#1e293b', cursor: 'pointer', transition: 'color 0.2s' }} 
             onClick={() => setActiveTab('dashboard')}
             onMouseEnter={(e) => (e.currentTarget.style.color = '#2563eb')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = '#1e293b')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = isDarkMode ? '#f1f5f9' : '#1e293b')}
           >
             {t('common.console')}
           </span>
@@ -1250,17 +1257,24 @@ const Dashboard = () => {
         <TaskTray 
           tasks={activeTasks} 
           isMobile={isMobile} 
+          isDarkMode={isDarkMode}
           loading={tasksLoading} 
           onRefresh={() => fetchActiveTasks(false, true)}
         />
         <LanguageSwitcher isMobile={isMobile} />
+        <Button
+          type="text"
+          icon={isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+          onClick={toggleTheme}
+          style={{ color: isDarkMode ? '#94a3b8' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        />
         <Badge
           status={
             isRunning ? 'success' : 
             (['challenging', 'authorizing'].includes(v3Status) ? 'processing' : 'error')
           }
           text={
-            <span style={{ color: '#64748b', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>
+            <span style={{ color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>
               {!isMobile && 'Gateway '}
               {isRunning ? t('dashboard.running') : t('dashboard.stopped')}
               {isRunning && lastHealth?.latency !== undefined && (
@@ -1282,7 +1296,7 @@ const Dashboard = () => {
       {isEmbed ? (
         <div style={{ 
           height: '100vh', 
-          background: '#f8fafc', 
+          background: isDarkMode ? '#0f172a' : '#f8fafc', 
           display: 'flex', 
           flexDirection: 'column',
           padding: activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell' ? 0 : 24,
@@ -1294,7 +1308,7 @@ const Dashboard = () => {
         <Layout style={{ 
           height: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? '100vh' : 'auto', 
           minHeight: '100vh',
-          background: '#f8fafc', 
+          background: isDarkMode ? '#0f172a' : '#f8fafc', 
           overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? 'hidden' : 'auto' 
         }}>
           {headerEl(() => setMobileMenuOpen(true))}
@@ -1325,7 +1339,7 @@ const Dashboard = () => {
         <Layout style={{ 
           height: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? '100vh' : 'auto', 
           minHeight: '100vh',
-          background: '#f8fafc', 
+          background: isDarkMode ? '#0f172a' : '#f8fafc', 
           overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? 'hidden' : 'auto' 
         }}>
           <Sider
@@ -1354,7 +1368,7 @@ const Dashboard = () => {
             {headerEl(() => setCollapsed(!collapsed))}
             <Content style={{ 
               padding: activeTab === 'logs' || activeTab === 'chat' || activeTab === 'tui' || activeTab === 'shell' ? 0 : 24, 
-              background: '#f8fafc', 
+              background: isDarkMode ? '#0f172a' : '#f8fafc', 
               flex: 1,
               display: 'flex', 
               flexDirection: 'column', 
@@ -1384,7 +1398,7 @@ const Dashboard = () => {
         styles={{ body: { padding: 0 } }}
         style={{ borderRadius: 16 }}
       >
-        <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center', borderRadius: 16 }}>
+        <div style={{ background: isDarkMode ? '#1e293b' : '#fff', padding: '32px 24px', textAlign: 'center', borderRadius: 16 }}>
           <div style={{ 
             width: 56, height: 56, borderRadius: '50%', background: `${confirmModal.color}15`,
             display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px'
@@ -1394,8 +1408,8 @@ const Dashboard = () => {
             {confirmModal.action === 'restart' && <RefreshCw size={24} color={confirmModal.color} />}
             {confirmModal.action === 'wechat' && <Smartphone size={24} color={confirmModal.color} />}
           </div>
-          <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>{confirmModal.title}</h3>
-          <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#1e293b', marginBottom: 8 }}>{confirmModal.title}</h3>
+          <p style={{ fontSize: 13, color: isDarkMode ? '#94a3b8' : '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
             {confirmModal.action === 'stop' && t('chat.stopGatewayWarning')}
             {confirmModal.action === 'wechat' && (
               <span style={{ textAlign: 'left', display: 'inline-block', whiteSpace: 'pre-line' }}>
@@ -1429,14 +1443,14 @@ const Dashboard = () => {
         width={isMobile ? '90%' : 340}
         styles={{ body: { padding: 0, overflow: 'hidden', borderRadius: 16 } }}
       >
-        <div style={{ background: '#fff', padding: '32px 24px', textAlign: 'center' }}>
+        <div style={{ background: isDarkMode ? '#1e293b' : '#fff', padding: '32px 24px', textAlign: 'center' }}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>🦞</div>
-          <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>{t('chat.wechatAuth')}</h3>
-          <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#1e293b', marginBottom: 8 }}>{t('chat.wechatAuth')}</h3>
+          <p style={{ fontSize: 13, color: isDarkMode ? '#94a3b8' : '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
             {t('chat.wechatAuthDesc')}
           </p>
-          <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #f1f5f9', display: 'inline-block', marginBottom: 12 }}>
-            {qrData && <QRCode value={qrData.qrcode_url} size={isMobile ? 160 : 180} bordered={false} color="#1e293b" />}
+          <div style={{ background: isDarkMode ? '#0f172a' : '#f8fafc', padding: 16, borderRadius: 12, border: `1px solid ${isDarkMode ? '#334155' : '#f1f5f9'}`, display: 'inline-block', marginBottom: 12 }}>
+            {qrData && <QRCode value={qrData.qrcode_url} size={isMobile ? 160 : 180} bordered={false} color={isDarkMode ? '#f1f5f9' : '#1e293b'} bgColor={isDarkMode ? '#0f172a' : '#fff'} />}
           </div>
           <div style={{ marginBottom: 20 }}>
               <Button type="link" size="small" onClick={() => window.open(qrData?.qrcode_url, '_blank')}>{t('chat.openInBrowser')}</Button>
@@ -1461,6 +1475,7 @@ const Dashboard = () => {
         onClose={() => setCommandPaletteVisible(false)} 
         onAction={handleCommandAction}
         bots={botsModels?.data?.bots || []}
+        isDarkMode={isDarkMode}
       />
     </>
   );
@@ -1472,6 +1487,28 @@ export default function App() {
   // 只从持久化存储获取初始 Token (不再信任 URL 传来的未经验证的 Token)
   const [token, setToken] = useState<string | null>(storage.getItem('guardian_token'));
   const [isValidating, setIsValidating] = useState(false);
+
+  // Theme state
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    return storage.getItem('theme') === 'dark' || 
+           (!storage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  });
+
+  const toggleTheme = () => {
+    setIsDarkMode(prev => {
+      const newVal = !prev;
+      storage.setItem('theme', newVal ? 'dark' : 'light');
+      return newVal;
+    });
+  };
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
 
   useEffect(() => {
     const interceptor = api.interceptors.response.use(
@@ -1534,17 +1571,18 @@ export default function App() {
   }, [t]);
 
   if (isValidating) {
-    return <CrayfishLoading />;
+    return <CrayfishLoading isDarkMode={isDarkMode} />;
   }
 
   return (
     <ConfigProvider theme={{
+      algorithm: isDarkMode ? theme.darkAlgorithm : theme.defaultAlgorithm,
       token: {
         colorPrimary: '#2563eb',
         borderRadius: 8,
         fontFamily: "'Inter', sans-serif",
-        colorBgContainer: '#ffffff',
-        colorText: '#334155',
+        colorBgContainer: isDarkMode ? '#1e293b' : '#ffffff',
+        colorText: isDarkMode ? '#f1f5f9' : '#334155',
       },
       components: {
         Menu: {
@@ -1554,14 +1592,30 @@ export default function App() {
           darkItemColor: '#94a3b8',
           darkItemSelectedColor: '#fff',
         },
+        ...(isDarkMode
+          ? {
+              Message: {
+                contentBg: '#1e293b',
+                colorText: '#f1f5f9',
+                colorSuccess: '#4ade80',
+                colorError: '#f87171',
+                colorWarning: '#fbbf24',
+                colorInfo: '#93c5fd',
+              },
+              Notification: {
+                colorBgElevated: '#1e293b',
+                colorText: '#f1f5f9',
+              },
+            }
+          : {}),
       },
     }}>
       {token ? (
         <V3GatewayProvider>
-          <Dashboard />
+          <Dashboard isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
         </V3GatewayProvider>
       ) : (
-        <LoginView onLoginSuccess={setToken} />
+        <LoginView onLoginSuccess={setToken} isDarkMode={isDarkMode} />
       )}
     </ConfigProvider>
   );

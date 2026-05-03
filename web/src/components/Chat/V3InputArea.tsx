@@ -17,6 +17,8 @@ export interface InputAreaHandle {
 interface V3InputAreaProps {
   status: string;
   isMobile: boolean;
+  /** 与 App 全局暗色同步（输入区、附件条、实体 Chip） */
+  isDarkMode?: boolean;
   isTyping: boolean;
   /** 与 isTyping 类似锁定发送，但不切换为「停止」按钮（如新会话 sessions.create 进行中） */
   sessionComposeBlocked?: boolean;
@@ -33,7 +35,7 @@ interface V3InputAreaProps {
 }
 
 const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputAreaProps> = ({ 
-  status, isMobile, isTyping, sessionComposeBlocked = false, onSend, onStop, t, isComposing, setIsComposing, isFocused, setIsFocused, selectedBot, supportsImage = false, botsModels
+  status, isMobile, isDarkMode = false, isTyping, sessionComposeBlocked = false, onSend, onStop, t, isComposing, setIsComposing, isFocused, setIsFocused, selectedBot, supportsImage = false, botsModels
 }, ref) => {
   const inputLocked = isTyping || sessionComposeBlocked;
   const [text, setText] = useState('');
@@ -158,9 +160,9 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
     if (disabled) {
       return {
         width: isMobile ? 36 : 40, height: isMobile ? 36 : 40, borderRadius: 12,
-        background: '#e2e8f0', border: 'none', flexShrink: 0,
+        background: isDarkMode ? '#334155' : '#e2e8f0', border: 'none', flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#94a3b8', transition: 'all 0.2s'
+        color: isDarkMode ? '#64748b' : '#94a3b8', transition: 'all 0.2s'
       };
     }
     
@@ -173,10 +175,10 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
       transition: 'all 0.2s',
       color: '#fff'
     };
-  }, [isTyping, text, status, isMobile, files, uploading, sessionComposeBlocked, canSend]);
+  }, [isTyping, text, status, isMobile, files, uploading, sessionComposeBlocked, canSend, isDarkMode]);
 
   return (
-    <div className={`v3-input-wrapper ${isFocused ? 'focused' : ''}`} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 0, position: 'relative', overflow: 'visible' }}>
+    <div className={`v3-input-wrapper ${isFocused ? 'focused' : ''} ${isDarkMode ? 'v3-input-wrapper--dark' : ''}`} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 0, position: 'relative', overflow: 'visible' }}>
       
       {/* 提及选择器弹出层 */}
       {showMentionSelector && (
@@ -193,8 +195,8 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
       {/* 图像能力告警 */}
       {files.some(f => f.ext.replace(/^\./, '').match(/^(jpg|jpeg|png|gif|webp|svg)$/i) && !f.type) && !supportsImage && (
         <div style={{ 
-          background: '#fff7ed', 
-          borderTop: '1px solid #ffedd5', 
+          background: isDarkMode ? 'rgba(251, 191, 36, 0.12)' : '#fff7ed', 
+          borderTop: isDarkMode ? '1px solid rgba(251, 191, 36, 0.35)' : '1px solid #ffedd5', 
           padding: '6px 16px', 
           display: 'flex', 
           alignItems: 'center', 
@@ -204,7 +206,7 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
           <div style={{ background: '#f59e0b', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <X size={10} color="#fff" />
           </div>
-          <span style={{ fontSize: 11, color: '#9a3412', fontWeight: 500 }}>
+          <span style={{ fontSize: 11, color: isDarkMode ? '#fcd34d' : '#9a3412', fontWeight: 500 }}>
             {t('chat.modelNoImageSupport', { defaultValue: '当前模型不支持图片，请切换到“图片型”模型后再发送。' })}
           </span>
         </div>
@@ -217,8 +219,8 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
           flexWrap: 'wrap', 
           gap: 8, 
           padding: '8px 16px', 
-          background: 'rgba(248, 250, 252, 0.5)', 
-          borderTop: '1px solid #f1f5f9',
+          background: isDarkMode ? 'rgba(15, 23, 42, 0.65)' : 'rgba(248, 250, 252, 0.5)', 
+          borderTop: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9',
           maxHeight: 120,
           overflowY: 'auto'
         }}>
@@ -244,7 +246,7 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
               ) : (
                 /* 传统文件预览样式 */
                 <div style={{ 
-                  position: 'relative', width: 60, height: 60, borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' 
+                  position: 'relative', width: 60, height: 60, borderRadius: 8, border: isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0', background: isDarkMode ? '#0f172a' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', boxShadow: isDarkMode ? 'none' : '0 2px 4px rgba(0,0,0,0.02)' 
                 }}>
                   {file.ext.replace(/^\./, '').match(/^(jpg|jpeg|png|gif|webp|svg)$/i) ? (
                     <img src={file.thumbUrl || file.url} alt={file.filename} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -278,8 +280,8 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
               width: 60, 
               height: 60, 
               borderRadius: 8, 
-              border: '1px dashed #3b82f6',
-              background: '#eff6ff',
+              border: isDarkMode ? '1px dashed #60a5fa' : '1px dashed #3b82f6',
+              background: isDarkMode ? 'rgba(30, 58, 138, 0.35)' : '#eff6ff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -350,12 +352,14 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
               icon={<Plus size={20} />} 
               disabled={uploading || inputLocked}
               style={{ 
-                color: (uploading || inputLocked) ? '#cbd5e1' : '#64748b', 
+                color: (uploading || inputLocked)
+                  ? (isDarkMode ? '#475569' : '#cbd5e1')
+                  : (isDarkMode ? '#94a3b8' : '#64748b'), 
                 borderRadius: 12, 
                 height: 38, width: 38, 
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: '#f1f5f9',
-                border: 'none',
+                background: isDarkMode ? '#1e293b' : '#f1f5f9',
+                border: isDarkMode ? '1px solid #334155' : 'none',
                 opacity: (uploading || inputLocked) ? 0.5 : 1,
                 transition: 'all 0.2s'
               }} 
@@ -412,7 +416,14 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
             }}
             disabled={status !== 'authenticated' || inputLocked || uploading}
             variant="borderless"
-            style={{ padding: '4px 0', fontSize: 13, opacity: inputLocked ? 0.6 : 1, minHeight: 32 }}
+            style={{
+              padding: '4px 0',
+              fontSize: 13,
+              opacity: inputLocked ? 0.6 : 1,
+              minHeight: 32,
+              color: isDarkMode ? '#e2e8f0' : undefined,
+              background: 'transparent'
+            }}
           />
         </div>
         <Button
@@ -431,6 +442,7 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
 const V3InputArea = React.memo(forwardRef(V3InputAreaInner), (prev, next) => {
   return prev.status === next.status &&
          prev.isMobile === next.isMobile &&
+         prev.isDarkMode === next.isDarkMode &&
          prev.isTyping === next.isTyping &&
          prev.sessionComposeBlocked === next.sessionComposeBlocked &&
          prev.isComposing === next.isComposing &&

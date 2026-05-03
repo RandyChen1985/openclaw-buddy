@@ -37,6 +37,7 @@ interface V3MessageItemProps {
   msg: any;
   index: number;
   isMobile: boolean;
+  isDarkMode?: boolean;
   showThinking: boolean;
   selectedBot: string;
   editingMsgIndex: number | null;
@@ -263,7 +264,7 @@ const getCleanQuoteContent = (content: string, role: string) => {
 };
 
 const V3MessageItem: React.FC<V3MessageItemProps> = ({ 
-  msg, index, isMobile, showThinking,
+  msg, index, isMobile, isDarkMode = false, showThinking,
   editingMsgIndex, editContent, setEditContent,
   onEdit, onSaveEdit, onCancelEdit, onQuote, onSend, onSaveToWorkspace, onRegenerate,
   copyToClipboard, isTyping, isLast, isStalled, tpsData, mainHasTranscript, metaContent, t
@@ -501,7 +502,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         onClick={() => window.open(props.title || props.src, '_blank')}
       />
     ),
-    pre: ({children}: any) => <pre style={{ overflowX: 'auto', maxWidth: '100%', margin: '8px 0', padding: '10px', background: '#f8fafc', borderRadius: 8 }}>{children}</pre>,
+    pre: ({children}: any) => <pre style={{ overflowX: 'auto', maxWidth: '100%', margin: '8px 0', padding: '10px', background: isDarkMode ? '#0f172a' : '#f8fafc', borderRadius: 8, color: isDarkMode ? '#e2e8f0' : undefined }}>{children}</pre>,
     blockquote: ({ children }: any) => {
       const extractText = (node: any): string => {
         if (typeof node === 'string') return node;
@@ -615,12 +616,12 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         const isDisabled = alreadyResolved || isClicked;
 
         return (
-          <div style={{ margin: '12px 0', padding: '16px', background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: 12, boxShadow: '0 2px 8px rgba(239, 68, 68, 0.05)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: '#ef4444' }}>
+          <div style={{ margin: '12px 0', padding: '16px', background: isDarkMode ? 'rgba(127, 29, 29, 0.35)' : '#fef2f2', border: isDarkMode ? '1px solid #991b1b' : '1px solid #fee2e2', borderRadius: 12, boxShadow: isDarkMode ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: isDarkMode ? '#fca5a5' : '#ef4444' }}>
               <ShieldAlert size={18} />
               <span style={{ fontWeight: 600, fontSize: 14 }}>{t('chat.approvalRequired')}</span>
             </div>
-            <div style={{ marginBottom: 12, opacity: 0.9 }}>{cleanChildren}</div>
+            <div style={{ marginBottom: 12, opacity: 0.9, color: isDarkMode ? '#fecaca' : undefined }}>{cleanChildren}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <Button type="primary" danger block icon={<ShieldCheck size={16} />} disabled={isDisabled} onClick={() => { if (!approvalId || isDisabled) return; setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true })); onSend(`/approve ${approvalId} allow-once`); message.success(t('chat.approvalSent', { defaultValue: '已提交审批指令' })); }} style={{ borderRadius: 8, fontWeight: 600, height: 36 }}>{t('chat.approveNow')}</Button>
               <Button block icon={<ShieldCheck size={16} />} disabled={isDisabled} onClick={() => { if (!approvalId || isDisabled) return; setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true })); onSend(`/approve ${approvalId} allow-always`); message.success(t('chat.approvalSentAlways', { defaultValue: '已提交永久审批' })); }} style={{ borderRadius: 8, fontWeight: 600, height: 36 }}>{t('chat.approveAllowAlways')}</Button>
@@ -632,8 +633,8 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         const titleLine = fullText.split('\n').find(l => l.includes(':::warning')) || '';
         const title = titleLine.replace(/^>\s?:::warning\s?/, '').trim() || 'Warning';
         return (
-          <div style={{ margin: '12px 0', padding: '12px', background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: 8, fontSize: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: '#d97706' }}>
+          <div style={{ margin: '12px 0', padding: '12px', background: isDarkMode ? 'rgba(120, 53, 15, 0.35)' : '#fffbeb', border: isDarkMode ? '1px solid #b45309' : '1px solid #fef3c7', borderRadius: 8, fontSize: 12, color: isDarkMode ? '#fde68a' : undefined }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: isDarkMode ? '#fbbf24' : '#d97706' }}>
               <ShieldAlert size={14} />
               <span style={{ fontWeight: 600 }}>{title}</span>
             </div>
@@ -642,7 +643,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         );
       }
       return (
-        <blockquote className="v3-quote" style={{ borderLeft: `4px solid ${isUser ? 'var(--v3-user-border, rgba(255,255,255,0.7))' : 'var(--v3-border, #e2e8f0)'}`, padding: '8px 10px', paddingLeft: 12, color: isUser ? 'var(--v3-user-text, rgba(255,255,255,0.92))' : 'var(--v3-text-muted, #64748b)', background: isUser ? 'var(--v3-user-surface, rgba(255,255,255,0.12))' : 'rgba(241, 245, 249, 0.6)', borderRadius: 10, margin: '8px 0', fontStyle: 'normal' }}>
+        <blockquote className="v3-quote" style={{ borderLeft: `4px solid ${isUser ? 'var(--v3-user-border, rgba(255,255,255,0.7))' : 'var(--v3-border, #e2e8f0)'}`, padding: '8px 10px', paddingLeft: 12, color: isUser ? 'var(--v3-user-text, rgba(255,255,255,0.92))' : (isDarkMode ? 'var(--v3-text-muted, #94a3b8)' : 'var(--v3-text-muted, #64748b)'), background: isUser ? 'var(--v3-user-surface, rgba(255,255,255,0.12))' : (isDarkMode ? 'rgba(51, 65, 85, 0.45)' : 'rgba(241, 245, 249, 0.6)'), borderRadius: 10, margin: '8px 0', fontStyle: 'normal' }}>
           {children}
         </blockquote>
       );
@@ -653,7 +654,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       if (!inline && language === 'mermaid') return <Mermaid chart={String(children).replace(/\n$/, '')} />;
       if (!inline && isEchartsCodeFenceLanguage(language)) return <ECharts optionStr={String(children).replace(/\n$/, '')} isTyping={isLast && isTyping} />;
       if (!inline && language) return <CodeBlock language={language} value={String(children).replace(/\n$/, '')} isMobile={isMobile} {...props} />;
-      return <code {...props} style={{ padding: '0.2em 0.4em', backgroundColor: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(175, 184, 193, 0.2)', borderRadius: '6px', fontSize: '85%' }}>{children}</code>;
+      return <code {...props} style={{ padding: '0.2em 0.4em', backgroundColor: isUser ? 'rgba(255,255,255,0.1)' : (isDarkMode ? 'rgba(148, 163, 184, 0.18)' : 'rgba(175, 184, 193, 0.2)'), borderRadius: '6px', fontSize: '85%' }}>{children}</code>;
     },
     a: ({ node, href, children, ...props }: any) => {
         const isQuick = href?.startsWith('quick:') || href?.includes('quick:');
@@ -729,10 +730,10 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         borderRadius: isUser ? '18px 18px 4px 18px' : (isMetaOnly ? 12 : '4px 18px 18px 18px'),
         background: isUser
           ? 'var(--v3-user-bubble, #4b5bdc)'
-          : (isMetaOnly ? '#f8fafc' : 'var(--v3-surface, #fff)'),
+          : (isMetaOnly ? (isDarkMode ? '#0f172a' : '#f8fafc') : 'var(--v3-surface, #fff)'),
         color: isUser ? 'var(--v3-user-text, #fff)' : 'var(--v3-text, #1e293b)',
-        boxShadow: isUser ? '0 4px 15px var(--v3-user-bubble-shadow, rgba(79, 70, 229, 0.15))' : (isMetaOnly ? 'none' : '0 4px 12px rgba(0,0,0,0.03)'),
-        border: !isUser ? `1px ${isMetaOnly ? 'dashed #cbd5e1' : 'solid var(--v3-border, #e8eff6)'}` : 'none',
+        boxShadow: isUser ? '0 4px 15px var(--v3-user-bubble-shadow, rgba(79, 70, 229, 0.15))' : (isMetaOnly ? 'none' : (isDarkMode ? '0 4px 12px rgba(0,0,0,0.35)' : '0 4px 12px rgba(0,0,0,0.03)')),
+        border: !isUser ? `1px ${isMetaOnly ? (isDarkMode ? 'dashed #475569' : 'dashed #cbd5e1') : 'solid var(--v3-border, #e8eff6)'}` : 'none',
         position: 'relative', wordBreak: 'break-word', overflowWrap: 'anywhere', minWidth: 0,
       }}>
         {isMetaOnly && (() => {
@@ -780,18 +781,18 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
             <Input.TextArea
               autoFocus autoSize={{ minRows: 2, maxRows: 15 }} value={editContent}
               onChange={e => setEditContent(e.target.value)}
-              style={{ borderRadius: 12, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: isUser ? '#fff' : '#1e293b', fontSize: isMobile ? 13 : 14 }}
+              style={{ borderRadius: 12, border: isUser ? '1px solid rgba(255,255,255,0.3)' : (isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0'), background: isUser ? 'rgba(255,255,255,0.1)' : (isDarkMode ? '#0f172a' : 'rgba(255,255,255,0.95)'), color: isUser ? '#fff' : (isDarkMode ? '#e2e8f0' : '#1e293b'), fontSize: isMobile ? 13 : 14 }}
             />
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <Button size="small" ghost={isUser} onClick={onCancelEdit}>{t('common.cancel')}</Button>
-              <Button size="small" style={{ background: '#fff', color: '#2563eb', border: 'none', fontWeight: 600 }} onClick={onSaveEdit}>{t('chat.saveAndRegenerate', { defaultValue: '重新生成' })}</Button>
+              <Button size="small" style={isUser ? { background: '#fff', color: '#2563eb', border: 'none', fontWeight: 600 } : (isDarkMode ? { background: '#334155', color: '#e0e7ff', border: '1px solid #475569', fontWeight: 600 } : { background: '#fff', color: '#2563eb', border: 'none', fontWeight: 600 })} onClick={onSaveEdit}>{t('chat.saveAndRegenerate', { defaultValue: '重新生成' })}</Button>
             </div>
           </div>
         ) : (
           // 主气泡尚无嵌入 meta、且仍处于思考占位时：显示思考文案 + 转圈；已有嵌入 meta 时走正文与底部折叠区（默认折叠）。
           isThinkingState && !hasEmbeddedMeta ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, color: isDeepThinking ? '#7c3aed' : '#64748b', fontWeight: isDeepThinking ? 600 : 400 }}>
+              <span style={{ fontSize: 13, color: isDeepThinking ? '#7c3aed' : (isDarkMode ? '#94a3b8' : '#64748b'), fontWeight: isDeepThinking ? 600 : 400 }}>
                 {thinkingLabel}
                 {thinkingSeconds > 0 ? ` (${thinkingSeconds}s)` : ''}
               </span>
@@ -866,8 +867,8 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                       <div
                         className="markdown-body-v3 v3-meta-embedded"
                         style={{
-                          background: '#f8fafc',
-                          border: '1px dashed #cbd5e1',
+                          background: isDarkMode ? '#0f172a' : '#f8fafc',
+                          border: isDarkMode ? '1px dashed #475569' : '1px dashed #cbd5e1',
                           borderRadius: 10,
                           padding: '8px 12px',
                         }}
@@ -907,11 +908,11 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: isUser ? 'flex-end' : 'flex-start', gap: 6, marginTop: 6, fontSize: 10, color: isUser ? 'rgba(255,255,255,0.7)' : '#94a3b8' }} className="msg-footer">
                 {!(isTyping && isLast) && (
                   <div style={{ display: 'flex', gap: 2 }}>
-                    <Tooltip title={t('chat.copy')}><Button type="text" size="small" icon={<Copy size={11} />} onClick={() => copyToClipboard(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
-                    <Tooltip title={t('chat.reply')}><Button type="text" size="small" icon={<Quote size={11} />} onClick={() => onQuote(getCleanQuoteContent(msg.content, msg.role))} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : '#64748b' }} /></Tooltip>
+                    <Tooltip title={t('chat.copy')}><Button type="text" size="small" icon={<Copy size={11} />} onClick={() => copyToClipboard(msg.content)} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : (isDarkMode ? '#94a3b8' : '#64748b') }} /></Tooltip>
+                    <Tooltip title={t('chat.reply')}><Button type="text" size="small" icon={<Quote size={11} />} onClick={() => onQuote(getCleanQuoteContent(msg.content, msg.role))} style={{ color: isUser ? 'rgba(255,255,255,0.85)' : (isDarkMode ? '#94a3b8' : '#64748b') }} /></Tooltip>
                     {!isUser && onSaveToWorkspace && (
                       <Tooltip title={t('chat.saveToWorkspace', { defaultValue: '保存到工作区' })}>
-                        <Button type="text" size="small" icon={<Save size={11} />} onClick={() => onSaveToWorkspace(msg.content)} style={{ color: '#64748b' }} />
+                        <Button type="text" size="small" icon={<Save size={11} />} onClick={() => onSaveToWorkspace(msg.content)} style={{ color: isDarkMode ? '#94a3b8' : '#64748b' }} />
                       </Tooltip>
                     )}
                     {!isUser && (
@@ -937,18 +938,18 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                               message.success(t('chat.exportSuccess'));
                             } catch (err) { message.error(t('chat.exportFailed')); } finally { hide(); }
                           }} 
-                          style={{ color: '#64748b' }} 
+                          style={{ color: isDarkMode ? '#94a3b8' : '#64748b' }} 
                         />
                       </Tooltip>
                     )}
                     {isUser && <Tooltip title={t('common.edit')}><Button type="text" size="small" icon={<Pencil size={11} />} onClick={() => onEdit(index, msg.content)} style={{ color: 'rgba(255,255,255,0.85)' }} /></Tooltip>}
-                    {!isUser && isLast && <Tooltip title={t('chat.retry')}><Button type="text" size="small" icon={<RefreshCw size={11} />} onClick={onRegenerate} style={{ color: '#64748b' }} /></Tooltip>}
+                    {!isUser && isLast && <Tooltip title={t('chat.retry')}><Button type="text" size="small" icon={<RefreshCw size={11} />} onClick={onRegenerate} style={{ color: isDarkMode ? '#94a3b8' : '#64748b' }} /></Tooltip>}
                   </div>
                 )}
                 <span>{msg.timestamp}</span>
                 {!isMobile && !isUser && msg.metrics && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4 }}>
-                    <div style={{ width: 1, height: 8, background: '#e2e8f0' }}></div>
+                    <div style={{ width: 1, height: 8, background: isDarkMode ? '#334155' : '#e2e8f0' }}></div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 9, fontFamily: 'monospace' }}>
                       <Zap size={10} color="#f59e0b" fill="#f59e0b" /><span>{msg.metrics.ttft}ms</span>
                     </div>
@@ -973,6 +974,7 @@ export default React.memo(V3MessageItem, (prev, next) => {
   const nextMetrics = next.msg.metrics || {};
 
   return prev.isMobile === next.isMobile &&
+         prev.isDarkMode === next.isDarkMode &&
          prev.index === next.index &&
          prev.editContent === next.editContent && 
          prev.editingMsgIndex === next.editingMsgIndex &&

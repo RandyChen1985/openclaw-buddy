@@ -16,6 +16,7 @@ import TokenBadge from './TokenBadge';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import { Table } from 'antd';
+import { FE_THEME_DARK, FE_THEME_LIGHT } from '../theme/feSurfaceTheme';
 
 const { DirectoryTree } = Tree;
 
@@ -42,6 +43,7 @@ interface SkillFileExplorerProps {
   skillName: string;
   t: any;
   isMobile: boolean;
+  isDarkMode?: boolean;
 }
 
 const getFileIcon = (name: string, isDir: boolean, size: number = 20) => {
@@ -73,7 +75,8 @@ const getFileIcon = (name: string, isDir: boolean, size: number = 20) => {
   }
 };
 
-const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, rootPath, skillName, t, isMobile }) => {
+const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, rootPath, skillName, t, isMobile, isDarkMode = false }) => {
+  const fe = useMemo(() => (isDarkMode ? FE_THEME_DARK : FE_THEME_LIGHT), [isDarkMode]);
   const [currentPath, setCurrentPath] = useState(rootPath);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -416,7 +419,7 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                 size="small"
                 icon={isSidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
                 onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                style={{ color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ color: fe.textMuted, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               />
             )}
             {(isEditing || (isMobile && currentPath !== rootPath)) && (
@@ -438,12 +441,12 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
               />
             )}
             {!isMobile && (
-              <div style={{ background: '#eff6ff', padding: 8, borderRadius: 10 }}>
-                <FileCode size={20} color="#2563eb" />
+              <div style={{ background: fe.folderChipBg, padding: 8, borderRadius: 10 }}>
+                <FileCode size={20} color={isDarkMode ? fe.link : '#2563eb'} />
               </div>
             )}
             <div style={{ flex: isMobile ? 1 : 'none' }}>
-              <div style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, lineHeight: 1.2 }}>{skillName} {t('skills.resourceExplorer')}</div>
+              <div style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, lineHeight: 1.2, color: fe.text }}>{skillName} {t('skills.resourceExplorer')}</div>
               <Breadcrumb
                 style={{ fontSize: isMobile ? 10 : 11, marginTop: isMobile ? 1 : 2 }}
                 items={breadcrumbs.map((crumb, idx) => ({
@@ -451,7 +454,7 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                     <span 
                       style={{ 
                         cursor: idx < breadcrumbs.length - 1 ? 'pointer' : 'default',
-                        color: idx < breadcrumbs.length - 1 ? '#3b82f6' : '#94a3b8'
+                        color: idx < breadcrumbs.length - 1 ? fe.link : fe.crumbCurrent
                       }}
                       onClick={() => idx < breadcrumbs.length - 1 && handleFolderClick(crumb.path)}
                     >
@@ -473,7 +476,7 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
             {!isEditing && (
               <Input
                 placeholder={t('common.searchPlaceholder')}
-                prefix={<Search size={isMobile ? 14 : 16} color="#94a3b8" style={{ marginRight: 4 }} />}
+                prefix={<Search size={isMobile ? 14 : 16} color={fe.textFaint} style={{ marginRight: 4 }} />}
                 value={filterText}
                 onChange={e => setFilterText(e.target.value)}
                 allowClear
@@ -491,7 +494,7 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
               size={isMobile ? 'small' : undefined}
               icon={isFullscreen ? <Minimize2 size={isMobile ? 16 : 18} /> : <Maximize2 size={isMobile ? 16 : 18} />}
               onClick={() => setIsFullscreen(!isFullscreen)}
-              style={{ color: '#64748b' }}
+              style={{ color: fe.textMuted }}
             />
             {isEditing && (
               <Button 
@@ -534,26 +537,27 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
       style={isFullscreen ? { top: 0, paddingBottom: 0, maxWidth: 'none' } : {}}
       footer={null}
       styles={{ 
-        body: { padding: 0, height: isFullscreen ? 'calc(100vh - 110px)' : (isMobile ? 'calc(100vh - 120px)' : 550), display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-        header: { padding: isMobile ? '12px 12px' : '16px 24px', borderBottom: '1px solid #f1f5f9' }
+        body: { padding: 0, height: isFullscreen ? 'calc(100vh - 110px)' : (isMobile ? 'calc(100vh - 120px)' : 550), display: 'flex', flexDirection: 'column', overflow: 'hidden', background: fe.modalBody },
+        content: { background: fe.modalBody },
+        header: { padding: isMobile ? '12px 12px' : '16px 24px', borderBottom: `1px solid ${fe.border}`, background: fe.modalHeader }
       }}
       centered={!isFullscreen}
       destroyOnClose
     >
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: '#fff' }}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: fe.bg, color: fe.text }}>
         {!isMobile && (
           <div style={{ 
             width: isSidebarCollapsed ? 0 : 260, 
-            borderRight: isSidebarCollapsed ? 'none' : '1px solid #f1f5f9', 
+            borderRight: isSidebarCollapsed ? 'none' : `1px solid ${fe.border}`, 
             display: 'flex', 
             flexDirection: 'column', 
-            background: '#fcfdfe',
+            background: fe.bgTree,
             transition: 'all 0.3s ease-in-out',
             overflow: 'hidden',
             opacity: isSidebarCollapsed ? 0 : 1,
             pointerEvents: isSidebarCollapsed ? 'none' : 'auto'
           }}>
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', fontSize: 12, fontWeight: 700, color: '#64748b', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${fe.border}`, fontSize: 12, fontWeight: 700, color: fe.textMuted, display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
                <LayoutList size={14} /> {t('common.directory')}
             </div>
             <Dropdown menu={{ items: contextMenuItems }} trigger={['contextMenu']} open={contextMenuVisible} onOpenChange={(visible) => setContextMenuVisible(visible)}>
@@ -569,7 +573,7 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
           </div>
         )}
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f8fafc' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: fe.bgMuted }}>
 
 
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -578,9 +582,9 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                 <Spin size="large" tip={t('common.loading')} />
               </div>
             ) : isEditing ? (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#fff' }}>
-                <div style={{ padding: '8px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#475569' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: fe.bg }}>
+                <div style={{ padding: '8px 16px', background: fe.editHeaderBg, borderBottom: `1px solid ${fe.editHeaderBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: fe.textSecondary }}>
                     {getFileIcon(selectedFile?.name || '', false, 16)}
                     {selectedFile?.name}
                   </div>
@@ -594,18 +598,18 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                         style={{ marginBottom: -12 }}
                     />
                   ) : (
-                    <div style={{ fontSize: 12, color: '#94a3b8' }}>{t('common.unsupported')}</div>
+                    <div style={{ fontSize: 12, color: fe.textFaint }}>{t('common.unsupported')}</div>
                   )}
                 </div>
                 <div style={{ flex: 1, overflow: 'hidden' }}>
                   {!canView ? (
-                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: fe.centerWell }}>
                       <Empty 
                         image={Empty.PRESENTED_IMAGE_SIMPLE}
                         description={
                           <div style={{ textAlign: 'center' }}>
-                            <p style={{ color: '#64748b', marginBottom: 12 }}>{t('common.unsupportedFile')}</p>
-                            <Button type="primary" icon={<Download size={14} />} onClick={() => selectedFile && handleDownload(selectedFile)} style={{ background: '#0ea5e9' }}>
+                            <p style={{ color: fe.unsupportedText, marginBottom: 12 }}>{t('common.unsupportedFile')}</p>
+                            <Button type="primary" icon={<Download size={14} />} onClick={() => selectedFile && handleDownload(selectedFile)} style={{ background: fe.link }}>
                               {t('common.download')}
                             </Button>
                           </div>
@@ -613,8 +617,8 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                       />
                     </div>
                   ) : activeTab === 'preview' && isMarkdown ? (
-                      <div style={{ height: '100%', overflowY: 'auto', background: '#f8fafc', padding: '24px' }}>
-                        <div style={{ maxWidth: 800, margin: '0 auto', background: '#fff', padding: 32, borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                      <div style={{ height: '100%', overflowY: 'auto', background: fe.previewOuter, padding: '24px' }}>
+                        <div style={{ maxWidth: 800, margin: '0 auto', background: fe.previewInner, padding: 32, borderRadius: 8, boxShadow: fe.docShadow }}>
                           <div className="markdown-body-v3">
                             <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeSanitize]}>
                               {fileContent}
@@ -623,19 +627,19 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                         </div>
                       </div>
                     ) : activeTab === 'preview' && isImage ? (
-                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', padding: 20 }}>
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: fe.imgBackdrop, padding: 20 }}>
                       {imagePreviewUrl ? (
                         <img 
                           src={imagePreviewUrl} 
                           alt={selectedFile?.name} 
-                          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', borderRadius: 4, background: '#fff' }} 
+                          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', boxShadow: fe.docShadow, borderRadius: 4, background: fe.imgBg }} 
                         />
                       ) : (
                         <Spin />
                       )}
                       </div>
                     ) : activeTab === 'preview' && isPDF ? (
-                    <div style={{ height: '100%', background: '#f1f5f9' }}>
+                    <div style={{ height: '100%', background: fe.previewOuter }}>
                       {pdfPreviewUrl ? (
                         <object data={pdfPreviewUrl} type="application/pdf" style={{ width: '100%', height: '100%', border: 'none' }}>
                           <div style={{ padding: 40, textAlign: 'center' }}>
@@ -648,8 +652,8 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                       )}
                       </div>
                     ) : activeTab === 'preview' && isExcel ? (
-                    <div style={{ height: '100%', overflowY: 'auto', background: '#f1f5f9', padding: 20 }}>
-                      <div style={{ background: '#fff', padding: 12, borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    <div style={{ height: '100%', overflowY: 'auto', background: fe.previewOuter, padding: 20 }}>
+                      <div style={{ background: fe.excelWrap, padding: 12, borderRadius: 8, boxShadow: fe.excelShadow }}>
                         {excelData ? (
                           <Table 
                             columns={excelData.columns} 
@@ -664,8 +668,8 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                       </div>
                       </div>
                     ) : activeTab === 'preview' && isWord ? (
-                      <div style={{ height: '100%', padding: 24, overflowY: 'auto', background: '#f1f5f9' }}>
-                      <div style={{ maxWidth: 900, margin: '0 auto', background: '#fff', padding: '40px 60px', borderRadius: 12, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                      <div style={{ height: '100%', padding: 24, overflowY: 'auto', background: fe.previewOuter }}>
+                      <div style={{ maxWidth: 900, margin: '0 auto', background: fe.previewInner, padding: '40px 60px', borderRadius: 12, boxShadow: fe.docShadow }}>
                         {wordHtml ? (
                           <div className="word-preview-v3" dangerouslySetInnerHTML={{ __html: wordHtml }} />
                         ) : (
@@ -680,7 +684,7 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                         value={fileContent} onChange={(e) => setFileContent(e.target.value)} spellCheck={false}
                         style={{
                           height: '100%', border: 'none', borderRadius: 0, resize: 'none', fontFamily: 'monospace',
-                          fontSize: 13, padding: 16, background: '#fff', outline: 'none', boxShadow: 'none'
+                          fontSize: 13, padding: 16, background: fe.bg, color: fe.text, outline: 'none', boxShadow: 'none'
                         }}
                       />
                     </div>
@@ -695,27 +699,27 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                   <List.Item
                     style={{ 
                       cursor: 'pointer', borderRadius: 12, border: 'none', padding: '10px 16px', marginBottom: 8,
-                      transition: 'all 0.2s', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                      transition: 'all 0.2s', background: fe.cardBg, boxShadow: isDarkMode ? '0 1px 2px rgba(0,0,0,0.25)' : '0 1px 2px rgba(0,0,0,0.05)'
                     }}
                     className="file-item-hover"
                     onClick={() => item.is_dir ? handleFolderClick(item.path) : loadFileContent(item)}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
                       <div style={{ 
-                        background: item.is_dir ? '#eff6ff' : '#f8fafc', padding: 8, borderRadius: 8,
+                        background: item.is_dir ? fe.iconDir : fe.iconFile, padding: 8, borderRadius: 8,
                         display: 'flex', alignItems: 'center', justifyContent: 'center'
                       }}>
                         {getFileIcon(item.name, item.is_dir)}
                       </div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, color: '#334155', fontWeight: 600 }}>{item.name}</div>
+                        <div style={{ fontSize: 14, color: fe.text, fontWeight: 600 }}>{item.name}</div>
                         {!item.is_dir && (
-                          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                          <div style={{ fontSize: 11, color: fe.textFaint, marginTop: 2 }}>
                             {(item.size / 1024).toFixed(1)} KB · {item.mod_time}
                           </div>
                         )}
                       </div>
-                      <ChevronRight size={16} color="#cbd5e1" />
+                      <ChevronRight size={16} color={fe.textFaint} />
                     </div>
                   </List.Item>
                 )}
@@ -731,8 +735,8 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
       <style>{`
         .file-item-hover:hover {
           transform: scale(1.005);
-          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-          background: #fff;
+          box-shadow: 0 4px 12px ${fe.hoverShadow};
+          background: ${fe.rowHover};
         }
         .custom-directory-tree .ant-tree-node-content-wrapper {
           border-radius: 6px;
@@ -742,28 +746,28 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
           align-items: center;
         }
         .custom-directory-tree .ant-tree-node-selected {
-          background-color: #2563eb !important;
+          background-color: ${fe.treeNodeSelBg} !important;
         }
         .custom-directory-tree .ant-tree-node-selected .ant-tree-title {
-          color: #fff !important;
+          color: ${fe.treeTitleSelColor} !important;
           font-weight: 600;
         }
-        /* Ensure non-selected nodes have proper color */
         .custom-directory-tree .ant-tree-node-content-wrapper:not(.ant-tree-node-selected) .ant-tree-title {
-          color: #475569 !important;
+          color: ${fe.treeTitle} !important;
         }
         .markdown-body-v3 {
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-          font-size: 14px; line-height: 1.6; color: #24292f;
+          font-size: 14px; line-height: 1.6;
+          color: ${isDarkMode ? 'rgba(255,255,255,0.88)' : '#24292f'};
         }
         .markdown-body-v3 h1, .markdown-body-v3 h2, .markdown-body-v3 h3 { margin-top: 24px; margin-bottom: 16px; font-weight: 600; line-height: 1.25; }
-        .markdown-body-v3 code { background: #afb8c133; padding: .2em .4em; border-radius: 6px; font-size: 85%; font-family: monospace; }
-        .markdown-body-v3 pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow: auto; margin-bottom: 16px; border: 1px solid #e2e8f0; }
-        .word-preview-v3 { font-family: "Times New Roman", Times, serif; font-size: 16px; line-height: 1.5; color: #333; }
+        .markdown-body-v3 code { background: ${isDarkMode ? 'rgba(255,255,255,0.1)' : '#afb8c133'}; padding: .2em .4em; border-radius: 6px; font-size: 85%; font-family: monospace; }
+        .markdown-body-v3 pre { background: ${isDarkMode ? '#262626' : '#f6f8fa'}; padding: 16px; border-radius: 6px; overflow: auto; margin-bottom: 16px; border: 1px solid ${isDarkMode ? 'rgba(255,255,255,0.12)' : '#e2e8f0'}; }
+        .word-preview-v3 { font-family: "Times New Roman", Times, serif; font-size: 16px; line-height: 1.5; color: ${isDarkMode ? 'rgba(255,255,255,0.85)' : '#333'}; }
         .word-preview-v3 h1, .word-preview-v3 h2, .word-preview-v3 h3 { margin-top: 1.2em; margin-bottom: 0.6em; }
         .word-preview-v3 p { margin-bottom: 1em; text-align: justify; }
         .word-preview-v3 table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
-        .word-preview-v3 table td, .word-preview-v3 table th { border: 1px solid #ddd; padding: 8px; }
+        .word-preview-v3 table td, .word-preview-v3 table th { border: 1px solid ${isDarkMode ? 'rgba(255,255,255,0.15)' : '#ddd'}; padding: 8px; }
       `}</style>
 
       <Modal

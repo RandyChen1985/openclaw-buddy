@@ -7,6 +7,8 @@ import type { V3ThemeMode, V3ThemePresetId, V3ThemeTokens } from '../../hooks/ch
 export interface V3ChatHeaderProps {
   t: any;
   isMobile: boolean;
+  /** App 全局暗色：顶栏与设置/主题弹层表面 */
+  isDarkMode?: boolean;
 
   // left
   showSider: boolean;
@@ -87,6 +89,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
   const {
     t,
     isMobile,
+    isDarkMode = false,
     showSider,
     onToggleSider,
     status,
@@ -139,7 +142,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     const isHex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value);
     return (
       <div key={token} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-        <div style={{ width: 120, fontSize: 12, color: '#64748b', fontWeight: 600 }}>{label}</div>
+        <div style={{ width: 120, fontSize: 12, color: isDarkMode ? '#94a3b8' : '#64748b', fontWeight: 600 }}>{label}</div>
         <input
           type="color"
           value={isHex ? value : '#4f46e5'}
@@ -147,7 +150,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
             const next = e.target.value;
             v3Theme.setCustomTokens(prev => ({ ...prev, [token]: next }));
           }}
-          style={{ width: 34, height: 28, padding: 0, border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff' }}
+          style={{ width: 34, height: 28, padding: 0, border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, borderRadius: 6, background: isDarkMode ? '#1e293b' : '#fff' }}
         />
         <Input
           size="small"
@@ -182,7 +185,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
   const reasoningModes = ['on', 'off'] as const;
 
   /** 设置浮层：移动端挂 body + 可滚动，避免被 chat 区域 overflow 裁剪或贴边溢出 */
-  const settingsPanelStyle: React.CSSProperties = {
+  const settingsPanelStyle: React.CSSProperties = useMemo(() => ({
     width: isMobile ? 'calc(100vw - 20px)' : 360,
     maxWidth: isMobile ? 'calc(100vw - 20px)' : 'min(360px, calc(100vw - 16px))',
     maxHeight: isMobile ? 'min(88dvh, 720px)' : 'min(78vh, 680px)',
@@ -190,16 +193,19 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     WebkitOverflowScrolling: 'touch',
     padding: isMobile ? 10 : 12,
     boxSizing: 'border-box',
-    background: '#fff',
+    background: isDarkMode ? '#1e293b' : '#fff',
     borderRadius: 12,
-    border: '1px solid #e2e8f0',
-    boxShadow: '0 12px 30px rgba(0,0,0,0.12)'
-  };
+    border: isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0',
+    boxShadow: isDarkMode ? '0 12px 30px rgba(0,0,0,0.45)' : '0 12px 30px rgba(0,0,0,0.12)'
+  }), [isMobile, isDarkMode]);
+
+  const settingsDivider = isDarkMode ? '#334155' : '#f1f5f9';
+  const settingsLabel = isDarkMode ? '#94a3b8' : '#64748b';
 
   const settingsOverlay = (
     <div style={settingsPanelStyle} onClick={(e) => e.stopPropagation()}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <div style={{ fontSize: 12, fontWeight: 900, color: '#0f172a' }}>
+        <div style={{ fontSize: 12, fontWeight: 900, color: isDarkMode ? '#f1f5f9' : '#0f172a' }}>
           {t('chat.settings', { defaultValue: '设置' })}
         </div>
         <Button size="small" type="text" onClick={() => setSettingsOpen(false)} style={{ color: '#94a3b8' }}>
@@ -217,7 +223,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
             gap: isMobile ? 8 : 8
           }}
         >
-          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+          <div style={{ fontSize: 12, color: settingsLabel, fontWeight: 700 }}>
             {t('chat.theme', { defaultValue: '主题' })}
           </div>
           <Button
@@ -234,20 +240,20 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           </Button>
         </div>
 
-        <div style={{ height: 1, background: '#f1f5f9' }} />
+        <div style={{ height: 1, background: settingsDivider }} />
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+          <div style={{ fontSize: 12, color: settingsLabel, fontWeight: 700 }}>
             {t('chat.showThinking', { defaultValue: '显示思考或工具调用' })}
           </div>
           <Switch size="small" checked={showThinking} onChange={(val) => setShowThinking(val)} />
         </div>
 
-        <div style={{ height: 1, background: '#f1f5f9' }} />
+        <div style={{ height: 1, background: settingsDivider }} />
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <div>
-            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+            <div style={{ fontSize: 12, color: settingsLabel, fontWeight: 700 }}>
               {t('chat.showDebug', { defaultValue: '显示推送日志' })}
             </div>
             <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
@@ -259,10 +265,10 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
 
         {!isMobile && (
           <>
-            <div style={{ height: 1, background: '#f1f5f9' }} />
+            <div style={{ height: 1, background: settingsDivider }} />
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+              <div style={{ fontSize: 12, color: settingsLabel, fontWeight: 700 }}>
                 {t('common.showTerminal', { defaultValue: '显示终端' })}
               </div>
               <Switch
@@ -275,10 +281,10 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
               />
             </div>
 
-            <div style={{ height: 1, background: '#f1f5f9' }} />
+            <div style={{ height: 1, background: settingsDivider }} />
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+              <div style={{ fontSize: 12, color: settingsLabel, fontWeight: 700 }}>
                 {t('common.showFolder', { defaultValue: '显示文件夹' })}
               </div>
               <Switch
@@ -293,10 +299,10 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           </>
         )}
 
-        <div style={{ height: 1, background: '#f1f5f9' }} />
+        <div style={{ height: 1, background: settingsDivider }} />
 
         <div>
-          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700, marginBottom: 4 }}>
+          <div style={{ fontSize: 12, color: settingsLabel, fontWeight: 700, marginBottom: 4 }}>
             {t('chat.reasoningMode', { defaultValue: '思考模式' })}
           </div>
           <div
@@ -316,17 +322,17 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
               <button
                 key={mode}
                 type="button"
-                className="v3-settings-reasoning-btn"
+                className={`v3-settings-reasoning-btn${isDarkMode ? ' v3-settings-reasoning-btn--dark' : ''}`}
                 onClick={() => {
                   onSendReasoningCommand?.(`/reasoning ${mode}`);
                   setSettingsOpen(false);
                 }}
               >
-                <code style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#334155' }}>/reasoning {mode}</code>
+                <code style={{ display: 'block', fontSize: 12, fontWeight: 800, color: isDarkMode ? '#e2e8f0' : '#334155' }}>/reasoning {mode}</code>
                 <div
                   style={{
                     fontSize: 11,
-                    color: '#64748b',
+                    color: isDarkMode ? '#cbd5e1' : settingsLabel,
                     lineHeight: 1.45,
                     marginTop: 6,
                     overflowWrap: 'break-word',
@@ -347,7 +353,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           </div>
         </div>
 
-        <div style={{ height: 1, background: '#f1f5f9' }} />
+        <div style={{ height: 1, background: settingsDivider }} />
 
         <div>
           <div
@@ -359,7 +365,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
               gap: 8
             }}
           >
-            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+            <div style={{ fontSize: 12, color: settingsLabel, fontWeight: 700 }}>
               {t('chat.thinkingLevel', { defaultValue: '思考等级' })}
             </div>
             <Select
@@ -384,7 +390,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
 );
 
   return (
-    <div style={{ padding: isMobile ? '6px 10px' : '10px 16px', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 10, gap: 8, width: '100%', boxSizing: 'border-box' }}>
+    <div style={{ padding: isMobile ? '6px 10px' : '10px 16px', background: isDarkMode ? '#1e293b' : '#fff', borderBottom: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 10, gap: 8, width: '100%', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 10, minWidth: 0, flex: 1 }}>
         <Button
           type="text"
@@ -439,14 +445,20 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                   onBlur={() => { onUpdateLabel(editingLabelText); setIsEditingLabel(false); }}
                   onPressEnter={() => { onUpdateLabel(editingLabelText); setIsEditingLabel(false); }}
                   disabled={isUpdatingLabel}
-                  style={{ height: 22, fontSize: 13, width: isMobile ? 120 : 220, borderRadius: 6 }}
+                  style={{
+                    height: 22,
+                    fontSize: 13,
+                    width: isMobile ? 120 : 220,
+                    borderRadius: 6,
+                    ...(isDarkMode ? { background: '#0f172a', borderColor: '#334155', color: '#e2e8f0' } : {})
+                  }}
                 />
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                   <span style={{ 
                     fontSize: isMobile ? 13 : 14, 
                     fontWeight: 800, 
-                    color: '#0f172a', 
+                    color: isDarkMode ? '#f1f5f9' : '#0f172a', 
                     whiteSpace: 'nowrap', 
                     overflow: 'hidden', 
                     textOverflow: 'ellipsis', 
@@ -466,7 +478,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                           icon={isSummarizing ? <RefreshCw size={11} className="animate-spin" /> : <Wand2 size={11} />}
                           onClick={onAutoSummarize}
                           disabled={isSummarizing}
-                          style={{ padding: 0, height: 18, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isSummarizing ? '#94a3b8' : '#6366f1' }}
+                          style={{ padding: 0, height: 18, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isSummarizing ? (isDarkMode ? '#64748b' : '#94a3b8') : (isDarkMode ? '#a5b4fc' : '#6366f1') }}
                         />
                       </Tooltip>
                       <Tooltip title={t('common.edit', { defaultValue: '编辑名称' })}>
@@ -478,7 +490,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                             setEditingLabelText(sessionLabel || '');
                             setIsEditingLabel(true);
                           }}
-                          style={{ padding: 0, height: 18, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}
+                          style={{ padding: 0, height: 18, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isDarkMode ? '#cbd5e1' : '#94a3b8' }}
                         />
                       </Tooltip>
                     </div>
@@ -492,18 +504,18 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                           display: 'flex',
                           alignItems: 'center',
                           gap: 4,
-                          background: 'rgba(79, 70, 229, 0.08)',
+                          background: isDarkMode ? 'rgba(129, 140, 248, 0.14)' : 'rgba(79, 70, 229, 0.08)',
                           padding: '1px 8px',
                           borderRadius: 999,
-                          border: '1px solid rgba(79, 70, 229, 0.12)',
+                          border: isDarkMode ? '1px solid rgba(165, 180, 252, 0.28)' : '1px solid rgba(79, 70, 229, 0.12)',
                           transition: 'all 0.2s ease',
                           cursor: 'default'
                         }}
                       >
-                        <span style={{ color: '#4f46e5', display: 'flex', alignItems: 'center', opacity: 0.85 }}>
-                          {sessionMeta.isMain ? <Shield size={10} fill="#4f46e5" /> : React.cloneElement(sessionMeta.sourceMeta.icon as React.ReactElement, { size: 10 })}
+                        <span style={{ color: isDarkMode ? '#c7d2fe' : '#4f46e5', display: 'flex', alignItems: 'center', opacity: 0.9 }}>
+                          {sessionMeta.isMain ? <Shield size={10} fill={isDarkMode ? '#c7d2fe' : '#4f46e5'} /> : React.cloneElement(sessionMeta.sourceMeta.icon as React.ReactElement, { size: 10 })}
                         </span>
-                        <span style={{ fontSize: 9, fontWeight: 800, color: '#4f46e5', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>
+                        <span style={{ fontSize: 9, fontWeight: 800, color: isDarkMode ? '#c7d2fe' : '#4f46e5', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>
                           {sessionMeta.sourceMeta.label}
                         </span>
                       </div>
@@ -517,11 +529,11 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                           alignItems: 'center', 
                           gap: 4, 
                           fontSize: 9, 
-                          color: '#475569', 
-                          background: '#f1f5f9', 
+                          color: isDarkMode ? '#cbd5e1' : '#475569', 
+                          background: isDarkMode ? '#1e293b' : '#f1f5f9', 
                           padding: '1px 8px', 
                           borderRadius: 999,
-                          border: '1px solid #e2e8f0',
+                          border: isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0',
                           transition: 'all 0.2s ease',
                           cursor: 'default'
                         }}>
@@ -552,12 +564,12 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                   <span
                     style={{
                       fontSize: 9,
-                      color: '#94a3b8',
+                      color: isDarkMode ? '#e2e8f0' : '#94a3b8',
                       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
                       cursor: 'pointer',
                       whiteSpace: 'nowrap',
                       lineHeight: '12px',
-                      opacity: 0.8
+                      opacity: isDarkMode ? 1 : 0.8
                     }}
                     className="v3-session-id-header"
                     onClick={() => onCopy(sessionKey)}
@@ -568,7 +580,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
               )}
               {/* OpenAI User Metadata if present */}
               {!isMobile && (sessionMeta.source || '').toLowerCase() === 'openai-user' && sessionMeta.openAIUser && (
-                <div style={{ fontSize: 9, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 3 }}>
+                <div style={{ fontSize: 9, color: isDarkMode ? '#cbd5e1' : '#94a3b8', display: 'flex', alignItems: 'center', gap: 3 }}>
                    <span style={{ opacity: 0.5 }}>•</span>
                    <span>{sessionMeta.openAIUser}</span>
                 </div>
@@ -627,6 +639,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           icon={isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />} 
           title={isFullscreen ? t('common.exitFullscreen', { defaultValue: '退出全屏' }) : t('common.fullscreen', { defaultValue: '全屏' })}
           onClick={onToggleFullscreen}
+          style={isDarkMode ? { color: '#cbd5e1' } : undefined}
         />
 
         <Button 
@@ -637,7 +650,9 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           onClick={onOpenWorkspace}
           disabled={!sessionMeta?.bot?.workspace}
           style={{ 
-            color: !sessionMeta?.bot?.workspace ? '#cbd5e1' : 'var(--v3-primary, #4f46e5)',
+            color: !sessionMeta?.bot?.workspace
+              ? (isDarkMode ? '#475569' : '#cbd5e1')
+              : (isDarkMode ? '#a5b4fc' : 'var(--v3-primary, #4f46e5)'),
             opacity: !sessionMeta?.bot?.workspace ? 0.5 : 1
           }}
         />
@@ -651,7 +666,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           getPopupContainer={() => document.body}
           destroyPopupOnHide
         >
-          <Button size="small" type="text" icon={<Settings size={14} />} title={t('chat.settings', { defaultValue: '设置' })} />
+          <Button size="small" type="text" icon={<Settings size={14} />} title={t('chat.settings', { defaultValue: '设置' })} style={isDarkMode ? { color: '#cbd5e1' } : undefined} />
         </Dropdown>
       </div>
 
@@ -665,11 +680,24 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
         width={isMobile ? 'calc(100vw - 16px)' : 720}
         centered={!isMobile}
         style={isMobile ? { top: 12, paddingBottom: 0 } : undefined}
-        styles={{ body: { paddingTop: 12, maxHeight: isMobile ? 'calc(100dvh - 120px)' : undefined, overflowY: isMobile ? 'auto' : undefined } }}
+        styles={{
+          body: {
+            paddingTop: 12,
+            maxHeight: isMobile ? 'calc(100dvh - 120px)' : undefined,
+            overflowY: isMobile ? 'auto' : undefined,
+            ...(isDarkMode ? { background: '#1e293b' } : {})
+          },
+          ...(isDarkMode
+            ? {
+                content: { background: '#1e293b' },
+                header: { background: '#1e293b', borderBottom: '1px solid #334155', color: '#f1f5f9' }
+              }
+            : {})
+        }}
       >
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', width: '100%', boxSizing: 'border-box' }}>
           <div style={{ minWidth: isMobile ? 0 : 320, flex: 1, width: isMobile ? '100%' : undefined, maxWidth: '100%' }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: isDarkMode ? '#f1f5f9' : '#0f172a', marginBottom: 8 }}>
               {t('chat.themeMode', { defaultValue: '主题模式' })}
             </div>
             <Radio.Group
@@ -683,7 +711,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
 
             {v3Theme.mode === 'preset' ? (
               <>
-                <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: isDarkMode ? '#f1f5f9' : '#0f172a', marginBottom: 8 }}>
                   {t('chat.themePresetSelect', { defaultValue: '选择预设' })}
                 </div>
                 <Select
@@ -703,7 +731,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
                           <span style={{ fontWeight: 800 }}>{p.name}</span>
-                          <span style={{ fontSize: 11, color: '#64748b' }}>{p.description}</span>
+                          <span style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b' }}>{p.description}</span>
                         </div>
                       </div>
                     </Select.Option>
@@ -713,7 +741,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
             ) : (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: isDarkMode ? '#f1f5f9' : '#0f172a' }}>
                     {t('chat.themeCustomPalette', { defaultValue: '自定义调色盘' })}
                   </div>
                   <Button size="small" onClick={() => v3Theme.resetCustomTokens()}>
@@ -731,17 +759,17 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           </div>
 
           <div style={{ minWidth: isMobile ? 0 : 280, flex: isMobile ? '1 1 100%' : '0 0 300px', width: isMobile ? '100%' : undefined, maxWidth: '100%' }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: isDarkMode ? '#f1f5f9' : '#0f172a', marginBottom: 8 }}>
               {t('chat.themePreview', { defaultValue: '预览' })}
             </div>
             <div style={{
               borderRadius: 14,
-              border: '1px solid #e2e8f0',
-              background: '#fff',
+              border: isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0',
+              background: isDarkMode ? '#0f172a' : '#fff',
               padding: 12
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 900, color: '#0f172a' }}>V3</div>
+                <div style={{ fontSize: 12, fontWeight: 900, color: isDarkMode ? '#f1f5f9' : '#0f172a' }}>V3</div>
                 <div style={{
                   height: 24,
                   padding: '0 10px',
@@ -759,9 +787,9 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
               <div style={{ display: 'flex', gap: 10, flexDirection: 'column' }}>
                 <div style={{
                   alignSelf: 'flex-start',
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  color: '#0f172a',
+                  background: isDarkMode ? '#1e293b' : '#f8fafc',
+                  border: isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0',
+                  color: isDarkMode ? '#f1f5f9' : '#0f172a',
                   borderRadius: 14,
                   padding: '10px 12px',
                   maxWidth: 240
@@ -769,7 +797,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                   <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 6 }}>
                     {t('chat.themeAssistant', { defaultValue: '助手消息' })}
                   </div>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>
+                  <div style={{ fontSize: 12, color: isDarkMode ? '#94a3b8' : '#64748b' }}>
                     {t('chat.themeQuotePreview', { defaultValue: '引用/链接/代码在这里会更清晰。' })}
                   </div>
                 </div>
@@ -797,7 +825,7 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
                 </div>
               </div>
             </div>
-            <div style={{ marginTop: 10, fontSize: 11, color: '#64748b' }}>
+            <div style={{ marginTop: 10, fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b' }}>
               {t('chat.themeHint', { defaultValue: '提示：自定义模式会用你设置的 tokens 覆盖预设。' })}
             </div>
           </div>

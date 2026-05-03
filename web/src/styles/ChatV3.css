@@ -246,6 +246,22 @@ button.v3-settings-reasoning-btn:active {
   filter: brightness(0.98);
 }
 
+/* 设置浮层挂 body，需独立暗色类（与 .chat-v3-root[data-app-dark] 无关） */
+button.v3-settings-reasoning-btn--dark {
+  border-color: #334155;
+  background: #0f172a;
+  box-shadow: none;
+}
+button.v3-settings-reasoning-btn--dark:hover {
+  border-color: #6366f1;
+  background: #1e293b;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+button.v3-settings-reasoning-btn--dark:active {
+  filter: none;
+  background: #172554;
+}
+
 @media (max-width: 767px) {
   button.v3-settings-reasoning-btn {
     min-height: 44px;
@@ -309,6 +325,31 @@ button.v3-settings-reasoning-btn:active {
 .session-id-container { 
   transition: all 0.2s; 
   max-width: 100%; 
+}
+
+/* 全局暗色：侧栏会话行悬停与右侧操作区渐变（避免白边盖住文案） */
+.chat-v3-root[data-app-dark="true"] .session-item:hover {
+  background: rgba(99, 102, 241, 0.14);
+  border-color: rgba(165, 180, 252, 0.35) !important;
+}
+
+.chat-v3-root[data-app-dark="true"] .session-item .session-actions {
+  background: linear-gradient(to right, transparent, #1e293b 30%, #1e293b);
+}
+
+.chat-v3-root[data-app-dark="true"] .session-item:hover .session-actions {
+  background: linear-gradient(to right, transparent, rgba(99, 102, 241, 0.18) 30%, rgba(99, 102, 241, 0.26));
+}
+
+.chat-v3-root[data-app-dark="true"] .session-item-main:hover {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(165, 180, 252, 0.35) !important;
+}
+
+.chat-v3-root[data-app-dark="true"] .session-item-main:hover .session-actions {
+  display: flex !important;
+  opacity: 1 !important;
+  background: linear-gradient(to right, transparent, rgba(99, 102, 241, 0.18) 30%, rgba(99, 102, 241, 0.26));
 }
 
 .typing-indicator { 
@@ -706,6 +747,38 @@ button.v3-settings-reasoning-btn:active {
   color: #2563eb;
 }
 
+/* Soul 预览暗色：全局 .markdown-body-v3 strong 写死 #1e293b，在此覆盖（Drawer 不在 chat-v3-root 内） */
+.v3-soul-preview-md--dark.markdown-body-v3 strong,
+.v3-soul-preview-md--dark.markdown-body-v3 b {
+  color: #f1f5f9;
+  font-weight: 800;
+}
+.v3-soul-preview-md--dark.markdown-body-v3 h1 {
+  border-bottom-color: #334155;
+}
+.v3-soul-preview-md--dark.markdown-body-v3 hr {
+  background: #334155;
+}
+.v3-soul-preview-md--dark.markdown-body-v3 th,
+.v3-soul-preview-md--dark.markdown-body-v3 td {
+  border-color: #334155;
+}
+.v3-soul-preview-md--dark.markdown-body-v3 th {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+.v3-soul-preview-md--dark.markdown-body-v3 blockquote:not([class]) {
+  border-left-color: #475569;
+  color: #94a3b8;
+}
+.v3-soul-preview-md--dark.markdown-body-v3 :not(pre) > code {
+  background: #334155;
+  color: #e2e8f0;
+}
+.v3-soul-preview-md--dark.markdown-body-v3 a {
+  color: #93c5fd;
+}
+
 /* Command Output：终端深色区，覆盖 .markdown-body-v3 下 strong/table/pre 等浅色主题，避免浅底浅字 */
 .markdown-body-v3 .v3-command-output-shell,
 .v3-meta-content .v3-command-output-shell {
@@ -818,6 +891,25 @@ button.v3-settings-reasoning-btn:active {
     linear-gradient(90deg, rgba(37, 99, 235, 0.03) 1px, transparent 1px);
   background-size: 40px 40px;
   animation: v3-grid-move 6s linear infinite;
+}
+
+.v3-auth-container--dark {
+  background-color: #0f172a;
+  background-image:
+    linear-gradient(rgba(59, 130, 246, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59, 130, 246, 0.07) 1px, transparent 1px);
+}
+
+.v3-auth-container--dark .v3-auth-card {
+  background: rgba(30, 41, 59, 0.82);
+  border: 1px solid rgba(59, 130, 246, 0.28);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
+  animation: v3-glow-dark 4s ease-in-out infinite;
+}
+
+@keyframes v3-glow-dark {
+  0%, 100% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4); }
+  50% { box-shadow: 0 16px 52px rgba(37, 99, 235, 0.18); }
 }
 
 .v3-auth-card {
@@ -936,6 +1028,32 @@ button.v3-settings-reasoning-btn:active {
 
 .v3-sidebar-toggle-btn:active {
   transform: scale(0.95);
+}
+
+.chat-v3-root[data-app-dark="true"] .v3-header-tag-source:hover {
+  background: rgba(129, 140, 248, 0.22) !important;
+  border-color: rgba(165, 180, 252, 0.35) !important;
+}
+
+.chat-v3-root[data-app-dark="true"] .v3-header-tag-bot:hover {
+  background: #334155 !important;
+  border-color: #475569 !important;
+}
+
+/* 顶栏机器人药丸：暗色下强制表面与字色（避免浅色 hover 规则或浅底药丸像「白条」） */
+.chat-v3-root[data-app-dark="true"] .v3-header-tag-bot {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+
+.chat-v3-root[data-app-dark="true"] .v3-session-id-header {
+  color: #e2e8f0 !important;
+  opacity: 1 !important;
+}
+
+.chat-v3-root[data-app-dark="true"] .v3-sidebar-toggle-btn:hover {
+  background: rgba(129, 140, 248, 0.14) !important;
 }
 
 /* --- 7. Mention Selector & Plus Menu --- */
@@ -1072,6 +1190,18 @@ button.v3-settings-reasoning-btn:active {
   white-space: nowrap;
 }
 
+.v3-mention-footer {
+  padding: 8px 12px;
+  border-top: 1px solid #f1f5f9;
+  background: #f8fafc;
+  font-size: 10px;
+  color: #94a3b8;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
 /* --- Entity Chips --- */
 
 .v3-entity-chip {
@@ -1155,4 +1285,249 @@ button.v3-settings-reasoning-btn:active {
   align-items: center;
   justify-content: center;
   color: #64748b;
+}
+
+/* --- App 全局暗色：覆盖 V3 token（含浅色 V3 主题下的 surface，避免输入区白条） --- */
+.chat-v3-root[data-app-dark="true"],
+.chat-v3-root[data-app-dark="true"][data-v3-theme] {
+  --v3-surface: #1e293b;
+  --v3-surface-muted: #0f172a;
+  --v3-border: #334155;
+  --v3-text: #f1f5f9;
+  --v3-text-muted: #94a3b8;
+  --v3-primary-strong: #e0e7ff;
+  --v3-link: #93c5fd;
+  --v3-link-user: rgba(255, 255, 255, 0.95);
+  --v3-input-idle-ring: rgba(129, 140, 248, 0.14);
+  --v3-input-focus-ring: rgba(165, 180, 252, 0.32);
+  --v3-input-focus-glow: rgba(99, 102, 241, 0.22);
+  --v3-pinned-bg: #0f172a;
+  --v3-pinned-border: #334155;
+  --v3-pinned-bg-active: linear-gradient(135deg, rgba(99, 102, 241, 0.16) 0%, rgba(99, 102, 241, 0.28) 100%);
+  --v3-pinned-border-active: rgba(165, 180, 252, 0.45);
+}
+
+.chat-v3-root[data-app-dark="true"] .input-container-v3 .ant-select-selector,
+.chat-v3-root[data-app-dark="true"] .input-container-v3 .ant-select-selection-item,
+.chat-v3-root[data-app-dark="true"] .input-container-v3 .ant-select-selection-placeholder,
+.chat-v3-root[data-app-dark="true"] .input-container-v3 .ant-select-selection-search-input {
+  color: #e2e8f0 !important;
+}
+
+.chat-v3-root[data-app-dark="true"] .input-container-v3 .ant-select-arrow {
+  color: #94a3b8 !important;
+}
+
+/* V3 输入区：暗色下 TextArea / placeholder（Ant 5 内部类名） */
+.v3-input-wrapper--dark .ant-input,
+.v3-input-wrapper--dark textarea.ant-input {
+  color: #e2e8f0 !important;
+  background: transparent !important;
+}
+
+.v3-input-wrapper--dark .ant-input::placeholder,
+.v3-input-wrapper--dark textarea.ant-input::placeholder {
+  color: #64748b !important;
+  opacity: 1;
+}
+
+.v3-input-wrapper--dark .v3-entity-chip {
+  background: #0f172a;
+  border-color: #334155;
+  box-shadow: none;
+}
+
+.v3-input-wrapper--dark .v3-entity-chip:hover {
+  border-color: #475569;
+}
+
+.v3-input-wrapper--dark .v3-entity-chip-icon {
+  color: #94a3b8;
+}
+
+.v3-input-wrapper--dark .v3-entity-chip-label {
+  color: #e2e8f0;
+}
+
+.v3-input-wrapper--dark .v3-entity-chip-remove {
+  color: #94a3b8;
+}
+
+.v3-input-wrapper--dark .v3-entity-chip-remove:hover {
+  background: #334155;
+  color: #f87171;
+}
+
+.v3-input-wrapper--dark .v3-entity-chip.skill {
+  background: rgba(13, 148, 136, 0.18);
+  border-color: rgba(45, 212, 191, 0.35);
+}
+
+.v3-input-wrapper--dark .v3-entity-chip.skill .v3-entity-chip-label,
+.v3-input-wrapper--dark .v3-entity-chip.skill .v3-entity-chip-icon {
+  color: #5eead4;
+}
+
+/* --- App 暗色：meta 折叠、@ 面板、助手 Markdown 等（与 data-app-dark 同步） --- */
+.chat-v3-root[data-app-dark="true"] .v3-meta-collapsible {
+  border-color: #334155;
+  background: #1e293b;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-collapsible:hover {
+  border-color: #475569;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-header {
+  color: #e2e8f0;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border-bottom-color: #334155;
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-collapsible.expanded .v3-meta-header {
+  border-bottom-color: #334155;
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-header:hover {
+  background: linear-gradient(180deg, #334155 0%, #1e293b 100%);
+  color: #f8fafc;
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-copy-btn.ant-btn.ant-btn-text.ant-btn-sm {
+  color: #94a3b8;
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-copy-btn.ant-btn.ant-btn-text.ant-btn-sm:hover {
+  color: #e2e8f0;
+  background: rgba(99, 102, 241, 0.2) !important;
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-fold-chip {
+  border-color: #334155;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  color: #cbd5e1;
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-fold-chip:hover {
+  border-color: #475569;
+  background: linear-gradient(180deg, #334155 0%, #1e293b 100%);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-fold-chip--live {
+  border-color: rgba(129, 140, 248, 0.45);
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.22) 0%, rgba(99, 102, 241, 0.12) 100%);
+  color: #c7d2fe;
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-fold-chip--live:hover {
+  border-color: #818cf8;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.35) 0%, rgba(79, 70, 229, 0.2) 100%);
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-fold-chip--expanded {
+  border-bottom-color: #475569;
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-fold-chip-spinner {
+  color: #94a3b8;
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-fold-chip--live .v3-meta-fold-chip-spinner {
+  color: #a5b4fc;
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-fold-chip-thinking {
+  color: #cbd5e1;
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-fold-chip--live .v3-meta-fold-chip-thinking {
+  color: #e0e7ff;
+}
+.chat-v3-root[data-app-dark="true"] .v3-stream-stall-hint {
+  border-color: #475569;
+  border-left-color: #818cf8;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.chat-v3-root[data-app-dark="true"] .v3-stream-stall-hint-text {
+  color: #cbd5e1;
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-content {
+  color: #94a3b8;
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-collapsible:has(.lucide-terminal) {
+  border-left-color: #94a3b8;
+  background: #0f172a;
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-collapsible:has(.lucide-check-circle) {
+  background: rgba(16, 185, 129, 0.12);
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-collapsible:has(.lucide-search) {
+  background: rgba(8, 145, 178, 0.14);
+}
+
+.chat-v3-root[data-app-dark="true"] .v3-mention-selector {
+  background: #1e293b;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(99, 102, 241, 0.25);
+}
+.chat-v3-root[data-app-dark="true"] .v3-mention-search-wrapper {
+  border-bottom-color: #334155;
+  background: #0f172a;
+}
+.chat-v3-root[data-app-dark="true"] .v3-mention-search {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+.chat-v3-root[data-app-dark="true"] .v3-mention-tabs {
+  background: #0f172a;
+  border-bottom-color: #334155;
+}
+.chat-v3-root[data-app-dark="true"] .v3-mention-tab {
+  color: #94a3b8;
+}
+.chat-v3-root[data-app-dark="true"] .v3-mention-tab.active {
+  color: #a5b4fc;
+}
+.chat-v3-root[data-app-dark="true"] .v3-mention-tab.active::after {
+  background: #818cf8;
+}
+.chat-v3-root[data-app-dark="true"] .v3-mention-item:hover,
+.chat-v3-root[data-app-dark="true"] .v3-mention-item.active {
+  background: rgba(79, 70, 229, 0.2);
+}
+.chat-v3-root[data-app-dark="true"] .v3-mention-item-icon {
+  background: #0f172a;
+  border-color: #334155;
+}
+.chat-v3-root[data-app-dark="true"] .v3-mention-item-name {
+  color: #f1f5f9;
+}
+.chat-v3-root[data-app-dark="true"] .v3-mention-item-desc {
+  color: #94a3b8;
+}
+
+.chat-v3-root[data-app-dark="true"] .v3-mention-footer {
+  border-top-color: #334155;
+  background: #0f172a;
+  color: #94a3b8;
+}
+
+.chat-v3-root[data-app-dark="true"] .v3-plus-menu-icon {
+  background: #0f172a;
+  color: #94a3b8;
+}
+
+.chat-v3-root[data-app-dark="true"] .v3-message-assistant .markdown-body-v3 h1 {
+  border-bottom-color: #334155;
+}
+.chat-v3-root[data-app-dark="true"] .v3-message-assistant .markdown-body-v3 hr {
+  background: #334155;
+}
+.chat-v3-root[data-app-dark="true"] .v3-message-assistant .markdown-body-v3 strong {
+  color: #f1f5f9;
+}
+.chat-v3-root[data-app-dark="true"] .v3-message-assistant .markdown-body-v3 th,
+.chat-v3-root[data-app-dark="true"] .v3-message-assistant .markdown-body-v3 td {
+  border-color: #334155;
+}
+.chat-v3-root[data-app-dark="true"] .v3-message-assistant .markdown-body-v3 th {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+.chat-v3-root[data-app-dark="true"] .v3-message-assistant .markdown-body-v3 blockquote:not([class]) {
+  border-left-color: #475569;
+  color: #94a3b8;
+}
+.chat-v3-root[data-app-dark="true"] .v3-meta-embedded.markdown-body-v3 {
+  background: #0f172a !important;
+  border-color: #475569 !important;
 }

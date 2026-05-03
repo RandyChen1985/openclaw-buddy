@@ -12,6 +12,7 @@ interface DeviceManagerProps {
   isMobile?: boolean; // 新增移动端标记
   isRunning?: boolean;
   onNavigateToDashboard?: () => void;
+  isDarkMode?: boolean;
 }
 
 const DeviceManager: React.FC<DeviceManagerProps> = ({ 
@@ -19,7 +20,8 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
   loadingDevices, 
   onApproveDevice,
   onRefresh,
-  isMobile
+  isMobile,
+  isDarkMode = false
 }) => {
   const { t } = useTranslation();
   const deviceList = devices?.data || [];
@@ -34,7 +36,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
       <Card
         title={
           <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', width: '100%', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 12 }}>
-            <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Smartphone size={isMobile ? 18 : 20} color="#f59e0b" /> {t('devices.pendingRequests')}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
@@ -57,9 +59,9 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
           </div>
         }
         styles={{ body: { padding: '0 24px' } }}
-        style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
+        style={{ borderRadius: 16, border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, background: isDarkMode ? '#1e293b' : '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
       >
-        <div style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9', marginBottom: 0, color: '#64748b', fontSize: 13 }}>
+        <div style={{ padding: '12px 0', borderBottom: `1px solid ${isDarkMode ? '#334155' : '#f1f5f9'}`, marginBottom: 0, color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 13 }}>
           {t('devices.description')}
         </div>
         {loadingDevices && !devices?.data ? (
@@ -75,7 +77,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
             dataSource={pendingDevices}
             renderItem={(item: any) => (
               <List.Item 
-                style={{ padding: '20px 0', borderBottom: '1px solid #f8fafc' }}
+                style={{ padding: '20px 0', borderBottom: `1px solid ${isDarkMode ? '#334155' : '#f8fafc'}` }}
                 actions={[
                   <Button 
                     key="approve"
@@ -109,7 +111,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
                   }
                   title={
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 15 }}>{item.displayName || t('devices.unknownDevice')}</span>
+                      <span style={{ fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#1e293b', fontSize: 15 }}>{item.displayName || t('devices.unknownDevice')}</span>
                       <Tag color="orange" style={{ borderRadius: 4, margin: 0, fontSize: 11 }}>{t('devices.status.pending')}</Tag>
                     </div>
                   }
@@ -117,12 +119,12 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
                     <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '80px 1fr', gap: '4px 12px', fontSize: 12 }}>
                       <span style={{ color: '#94a3b8' }}>{t('devices.requestId')}:</span>
                       <Tooltip title={item.requestId}>
-                        <span style={{ fontFamily: 'monospace', color: '#2563eb', background: '#eff6ff', padding: '1px 6px', borderRadius: 4, cursor: 'help' }}>
+                        <span style={{ fontFamily: 'monospace', color: isDarkMode ? '#60a5fa' : '#2563eb', background: isDarkMode ? '#0f172a' : '#eff6ff', padding: '1px 6px', borderRadius: 4, cursor: 'help' }}>
                           {item.requestId?.substring(0, 12)}...
                         </span>
                       </Tooltip>
                       <span style={{ color: '#94a3b8' }}>{t('devices.os')}:</span>
-                      <span style={{ color: '#475569' }}>{item.platform || '—'}</span>
+                      <span style={{ color: isDarkMode ? '#cbd5e1' : '#475569' }}>{item.platform || '—'}</span>
                     </div>
                   }
                 />
@@ -134,11 +136,11 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
 
       {/* 2. 已成功配对设备 */}
       <Card
-        title={<span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={isMobile ? 18 : 20} color="#10b981" /> {t('devices.pairedDevices')}</span>}
+        title={<span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={isMobile ? 18 : 20} color="#10b981" /> {t('devices.pairedDevices')}</span>}
         styles={{ body: { padding: isMobile ? '0 16px' : '0 24px' } }}
-        style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
+        style={{ borderRadius: 16, border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, background: isDarkMode ? '#1e293b' : '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
       >
-        <div style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9', marginBottom: 0, color: '#64748b', fontSize: 13 }}>
+        <div style={{ padding: '12px 0', borderBottom: `1px solid ${isDarkMode ? '#334155' : '#f1f5f9'}`, marginBottom: 0, color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 13 }}>
           {t('devices.pairedDescription')}
         </div>
         {loadingDevices && !devices?.data ? (
@@ -153,11 +155,11 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
           <List
             dataSource={pairedDevices}
             renderItem={(item: any) => (
-              <List.Item style={{ padding: '20px 0', borderBottom: '1px solid #f8fafc' }}>
+              <List.Item style={{ padding: '20px 0', borderBottom: `1px solid ${isDarkMode ? '#334155' : '#f8fafc'}` }}>
                 <List.Item.Meta
                   avatar={
                     <div style={{ 
-                      width: 40, height: 40, borderRadius: 10, background: '#f0fdf4',
+                      width: 40, height: 40, borderRadius: 10, background: isDarkMode ? '#0f172a' : '#f0fdf4',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981'
                     }}>
                       <Smartphone size={20} />
@@ -165,7 +167,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
                   }
                   title={
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 15 }}>{item.displayName || t('devices.unknownDevice')}</span>
+                      <span style={{ fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#1e293b', fontSize: 15 }}>{item.displayName || t('devices.unknownDevice')}</span>
                       <Tag color="success" style={{ borderRadius: 4, margin: 0, fontSize: 11 }}>{t('devices.status.paired')}</Tag>
                     </div>
                   }
@@ -173,12 +175,12 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({
                     <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '80px 1fr', gap: '4px 12px', fontSize: 12 }}>
                       <span style={{ color: '#94a3b8' }}>{t('devices.deviceId')}:</span>
                       <Tooltip title={item.deviceId}>
-                        <span style={{ fontFamily: 'monospace', color: '#2563eb', background: '#eff6ff', padding: '1px 6px', borderRadius: 4, cursor: 'help' }}>
+                        <span style={{ fontFamily: 'monospace', color: isDarkMode ? '#60a5fa' : '#2563eb', background: isDarkMode ? '#0f172a' : '#eff6ff', padding: '1px 6px', borderRadius: 4, cursor: 'help', border: isDarkMode ? '1px solid #334155' : 'none' }}>
                           {item.deviceId?.substring(0, 12)}...
                         </span>
                       </Tooltip>
                       <span style={{ color: '#94a3b8' }}>{t('devices.os')}:</span>
-                      <span style={{ color: '#475569' }}>{item.platform || '—'}</span>
+                      <span style={{ color: isDarkMode ? '#cbd5e1' : '#475569' }}>{item.platform || '—'}</span>
                       <span style={{ color: '#94a3b8' }}>{t('devices.clientMode')}:</span>
                       <span><Tag color="blue" style={{ margin: 0, fontSize: 10 }}>{item.clientMode || '—'}</Tag></span>
                     </div>

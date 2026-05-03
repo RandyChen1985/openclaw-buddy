@@ -11,10 +11,15 @@ interface V3ExplorerPaneProps {
   onClose: () => void;
   onSendToChat?: (content: string, fileName: string, fileInfo?: any) => void;
   transition?: string;
+  isDarkMode?: boolean;
 }
 
-export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({ t, rootPath, width = 400, onWidthChange, onClose, onSendToChat, transition: customTransition }) => {
+export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({ t, rootPath, width = 400, onWidthChange, onClose, onSendToChat, transition: customTransition, isDarkMode = false }) => {
   const [refreshKey, setRefreshKey] = React.useState(0);
+  /** 与 V3TerminalPane 侧栏一致（slate） */
+  const shell = isDarkMode
+    ? { bg: '#0f172a', border: '#334155', headerBg: '#1e293b', text: '#f8fafc', sub: '#94a3b8', icon: '#94a3b8' }
+    : { bg: '#fff', border: '#e2e8f0', headerBg: '#f8fafc', text: '#475569', sub: '#94a3b8', icon: '#64748b' };
 
   const handleBackToRoot = () => {
     setRefreshKey(prev => prev + 1);
@@ -24,23 +29,23 @@ export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({ t, rootPath, wid
     <div className="v3-explorer-pane" style={{
       width: width,
       height: '100%',
-      background: '#fff',
-      borderLeft: '1px solid #e2e8f0',
+      background: shell.bg,
+      borderLeft: `1px solid ${shell.border}`,
       display: 'flex',
       flexDirection: 'column',
-      boxShadow: '-4px 0 15px rgba(0,0,0,0.1)',
+      boxShadow: isDarkMode ? '-4px 0 15px rgba(0,0,0,0.2)' : '-4px 0 15px rgba(0,0,0,0.1)',
       zIndex: 20,
       transition: customTransition !== undefined ? customTransition : 'width 0.2s ease-in-out'
     }}>
       <div style={{ 
         padding: '12px 16px', 
-        borderBottom: '1px solid #e2e8f0', 
+        borderBottom: `1px solid ${shell.border}`, 
         display: 'flex', 
         alignItems: 'center', 
         justifyContent: 'space-between',
-        background: '#f8fafc'
+        background: shell.headerBg
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#475569', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: shell.text, overflow: 'hidden' }}>
           <Folder size={14} className="text-sky-500" style={{ flexShrink: 0 }} />
           <div 
             onClick={handleBackToRoot}
@@ -58,7 +63,7 @@ export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({ t, rootPath, wid
             className="hover:text-sky-600 transition-colors"
           >
             <span style={{ flexShrink: 0 }}>{t('bots.workspace', { defaultValue: '工作区' })}</span>
-            <span style={{ color: '#94a3b8', fontWeight: 400, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span style={{ color: shell.sub, fontWeight: 400, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis' }}>
               ({rootPath})
             </span>
           </div>
@@ -73,7 +78,7 @@ export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({ t, rootPath, wid
                 const target = width > 600 ? 400 : 800;
                 onWidthChange?.(target);
               }}
-              style={{ color: '#64748b' }}
+              style={{ color: shell.icon }}
             />
           </Tooltip>
           <Button 
@@ -81,7 +86,7 @@ export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({ t, rootPath, wid
             type="text" 
             icon={<X size={16} />} 
             onClick={onClose} 
-            style={{ color: '#64748b' }}
+            style={{ color: shell.icon }}
           />
         </div>
       </div>
@@ -96,6 +101,7 @@ export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({ t, rootPath, wid
           isMobile={false}
           onSendToChat={onSendToChat}
           simplified={true}
+          isDarkMode={isDarkMode}
         />
       </div>
       <style>{`

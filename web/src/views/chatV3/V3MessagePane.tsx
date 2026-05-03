@@ -9,6 +9,7 @@ import V3MessageItem from '../../components/Chat/V3MessageItem';
 export interface V3MessagePaneProps {
   t: any;
   isMobile: boolean;
+  isDarkMode?: boolean;
   messages: Message[];
   isTyping: boolean;
   showThinking: boolean;
@@ -59,6 +60,7 @@ export interface V3MessagePaneProps {
 export function V3MessagePane({
   t,
   isMobile,
+  isDarkMode = false,
   messages,
   isTyping,
   showThinking,
@@ -266,9 +268,9 @@ export function V3MessagePane({
       {isDragging && (
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(79, 70, 229, 0.08)',
+          background: isDarkMode ? 'rgba(99, 102, 241, 0.12)' : 'rgba(79, 70, 229, 0.08)',
           backdropFilter: 'blur(4px)',
-          border: '3px dashed #6366f1',
+          border: isDarkMode ? '3px dashed #818cf8' : '3px dashed #6366f1',
           borderRadius: 16,
           zIndex: 200,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -276,13 +278,13 @@ export function V3MessagePane({
           pointerEvents: 'none',
           animation: 'v3-fade-in 0.2s'
         }}>
-          <div style={{ width: 64, height: 64, borderRadius: 20, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Plus size={32} color="#4f46e5" />
+          <div style={{ width: 64, height: 64, borderRadius: 20, background: isDarkMode ? 'rgba(79, 70, 229, 0.25)' : '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Plus size={32} color={isDarkMode ? '#a5b4fc' : '#4f46e5'} />
           </div>
-          <span style={{ fontSize: 16, fontWeight: 700, color: '#4f46e5' }}>
+          <span style={{ fontSize: 16, fontWeight: 700, color: isDarkMode ? '#c7d2fe' : '#4f46e5' }}>
             {t('chat.dropToUpload', { defaultValue: '松开即可上传文件' })}
           </span>
-          <span style={{ fontSize: 12, color: '#94a3b8' }}>
+          <span style={{ fontSize: 12, color: isDarkMode ? '#94a3b8' : '#94a3b8' }}>
             {t('chat.dropHint', { defaultValue: '支持图片、文档等文件类型' })}
           </span>
         </div>
@@ -291,7 +293,7 @@ export function V3MessagePane({
       {isLoadingHistory && (
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(248, 250, 252, 0.85)',
+          background: isDarkMode ? 'rgba(15, 23, 42, 0.88)' : 'rgba(248, 250, 252, 0.85)',
           backdropFilter: 'blur(4px)',
           zIndex: 50,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -299,7 +301,7 @@ export function V3MessagePane({
           animation: 'v3-fade-in 0.2s'
         }}>
           <Spin size="large" />
-          <span style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500 }}>
+          <span style={{ fontSize: 13, color: isDarkMode ? '#cbd5e1' : '#94a3b8', fontWeight: 500 }}>
             {t('chat.loadingHistory', { defaultValue: '加载会话历史...' })}
           </span>
         </div>
@@ -359,6 +361,7 @@ export function V3MessagePane({
                   msg={msg as any}
                   index={realIndex !== -1 ? realIndex : index}
                   isMobile={!!isMobile}
+                  isDarkMode={isDarkMode}
                   showThinking={showThinking}
                   selectedBot={selectedBot}
                   editingMsgIndex={editingMsgIndex}
