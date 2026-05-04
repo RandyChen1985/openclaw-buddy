@@ -47,6 +47,7 @@ interface ChannelsManagerProps {
   onNavigateToDashboard?: () => void;
   loadingBots?: boolean;
   loadingConfig?: boolean;
+  isDarkMode?: boolean;
 }
 
 const ChannelsManager: React.FC<ChannelsManagerProps> = ({ 
@@ -62,9 +63,16 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
   onUnbindWeixin,
   isMobile,
   loadingBots = false,
-  loadingConfig = false
+  loadingConfig = false,
+  isDarkMode = false
 }) => {
   const { t } = useTranslation();
+  const borderDefault = isDarkMode ? '#334155' : '#e2e8f0';
+  const cardBg = isDarkMode ? '#1e293b' : '#fff';
+  const pageHeading = isDarkMode ? '#f1f5f9' : '#0f172a';
+  const pageMuted = isDarkMode ? '#94a3b8' : '#64748b';
+  const dividerSubtle = isDarkMode ? '#334155' : '#f1f5f9';
+  const iconBgMuted = isDarkMode ? '#0f172a' : '#f8fafc';
   const channelsList = chatChannels?.data || [];
   const configuredChannels = channelsList.filter((c: any) => c.configured);
 
@@ -176,11 +184,11 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
         
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
           <div>
-            <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, color: pageHeading, margin: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
               <LayoutGrid size={isMobile ? 24 : 28} color="#2563eb" />
               {t('channels.title') || '渠道绑定管理'}
             </h1>
-            <p style={{ color: '#64748b', fontSize: 13, marginTop: 4 }}>{t('channels.description') || '管理 OpenClaw 与各类社交平台的连接状态'}</p>
+            <p style={{ color: pageMuted, fontSize: 13, marginTop: 4 }}>{t('channels.description') || '管理 OpenClaw 与各类社交平台的连接状态'}</p>
           </div>
           <Button 
             icon={<RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />} 
@@ -190,16 +198,16 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
               void Promise.all([fetchStatus(), fetchOpenClawPlugins()]);
             }}
             loading={isRefreshing}
-            style={{ borderRadius: 8 }}
+            style={{ borderRadius: 8, background: isDarkMode ? '#0f172a' : undefined, borderColor: isDarkMode ? '#334155' : undefined, color: isDarkMode ? pageMuted : undefined }}
           >
             {t('common.refresh')}
           </Button>
         </div>
 
         {pluginsListError && (
-          <div style={{ marginBottom: 16, padding: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, color: '#64748b' }}>
+          <div style={{ marginBottom: 16, padding: 12, background: isDarkMode ? '#0f172a' : '#f8fafc', borderRadius: 8, border: `1px solid ${borderDefault}`, fontSize: 13, color: pageMuted }}>
             {t('channels.pluginHintUnknown')}
-            <span style={{ color: '#94a3b8', marginLeft: 8 }}>({pluginsListError})</span>
+            <span style={{ color: isDarkMode ? '#64748b' : '#94a3b8', marginLeft: 8 }}>({pluginsListError})</span>
           </div>
         )}
 
@@ -207,22 +215,21 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
           
           <Card
             styles={{ body: { padding: 16 } }}
-            style={{ borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}
+            style={{ borderRadius: 12, border: `1px solid ${borderDefault}`, background: cardBg, boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                  <div style={{ padding: 10, background: '#f0fdf4', borderRadius: 10, flexShrink: 0 }}>
+                  <div style={{ padding: 10, background: isDarkMode ? '#0f172a' : '#f0fdf4', borderRadius: 10, flexShrink: 0 }}>
                     <Smartphone size={24} color="#16a34a" />
                   </div>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {t('channels.weixinPlugin')}
+                    <div style={{ fontWeight: 600, color: isDarkMode ? '#f1f5f9' : '#1e293b', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>                      {t('channels.weixinPlugin')}
                       <a href={HELP_URLS.weixin} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ display: 'flex' }}>
                         <HelpCircle size={14} color="#94a3b8" style={{ cursor: 'pointer' }} />
                       </a>
                     </div>
-                    <div style={{ color: '#64748b', fontSize: 11, marginTop: 2, lineHeight: 1.45 }}>
+                    <div style={{ color: pageMuted, fontSize: 11, marginTop: 2, lineHeight: 1.45 }}>
                       {t('channels.weixinCardDescription')}
                     </div>
                     <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, fontFamily: 'monospace' }}>
@@ -245,14 +252,14 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                   justifyContent: 'flex-end',
                   gap: 8,
                   paddingTop: 8,
-                  borderTop: '1px solid #f1f5f9',
+                  borderTop: `1px solid ${dividerSubtle}`,
                 }}
               >
                 <Button
                   size="small"
                   icon={<Users size={13} />}
                   onClick={() => showManagement({ id: 'weixin', name: t('channels.weixinPlugin') })}
-                  style={{ fontSize: 12, borderRadius: 6 }}
+                  style={{ fontSize: 12, borderRadius: 6, ...(isDarkMode ? { borderColor: '#334155', color: '#cbd5e1' } : {}) }}
                 >
                   {t('channels.manageAccounts')}
                 </Button>
@@ -299,12 +306,15 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
             const installCmd = `openclaw plugins install @openclaw/${ch.id}`;
             const enableCmd = `openclaw plugins enable ${ch.id}`;
 
-            const hintBg =
-              pluginUi === 'disabled' ? '#fffbeb' : pluginUi === 'unknown' ? '#f8fafc' : '#fef2f2';
-            const hintBorder =
-              pluginUi === 'disabled' ? '#fde68a' : pluginUi === 'unknown' ? '#e2e8f0' : '#fecaca';
-            const hintColor =
-              pluginUi === 'disabled' ? '#d97706' : pluginUi === 'unknown' ? '#64748b' : '#dc2626';
+            const hintBg = isDarkMode
+              ? (pluginUi === 'disabled' ? 'rgba(245,158,11,0.12)' : pluginUi === 'unknown' ? '#0f172a' : 'rgba(239,68,68,0.12)')
+              : (pluginUi === 'disabled' ? '#fffbeb' : pluginUi === 'unknown' ? '#f8fafc' : '#fef2f2');
+            const hintBorder = isDarkMode
+              ? (pluginUi === 'disabled' ? 'rgba(245,158,11,0.35)' : pluginUi === 'unknown' ? '#334155' : 'rgba(248,113,113,0.45)')
+              : (pluginUi === 'disabled' ? '#fde68a' : pluginUi === 'unknown' ? '#e2e8f0' : '#fecaca');
+            const hintColor = isDarkMode
+              ? (pluginUi === 'disabled' ? '#fbbf24' : pluginUi === 'unknown' ? '#94a3b8' : '#fca5a5')
+              : (pluginUi === 'disabled' ? '#d97706' : pluginUi === 'unknown' ? '#64748b' : '#dc2626');
 
             const statusTag = (() => {
               if (isLoaded) return null;
@@ -328,16 +338,16 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                   }
                 }}
                 styles={{ body: { padding: 16 } }}
-                style={{ borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', opacity: isLoaded ? 1 : 0.85 }}
+                style={{ borderRadius: 12, border: `1px solid ${borderDefault}`, background: cardBg, opacity: isLoaded ? 1 : 0.85 }}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                      <div style={{ padding: 10, background: '#f8fafc', borderRadius: 10, flexShrink: 0, opacity: isLoaded ? 1 : 0.5 }}>
+                      <div style={{ padding: 10, background: iconBgMuted, borderRadius: 10, flexShrink: 0, opacity: isLoaded ? 1 : 0.5 }}>
                         {getIcon(ch.icon)}
                       </div>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ fontWeight: 600, color: isDarkMode ? '#f1f5f9' : '#1e293b', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
                           {ch.name}
                           {HELP_URLS[ch.id.toLowerCase()] && (
                             <a href={HELP_URLS[ch.id.toLowerCase()]} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ display: 'flex' }}>
@@ -345,7 +355,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                             </a>
                           )}
                         </div>
-                        <div style={{ color: '#64748b', fontSize: 11, marginTop: 2 }}>{ch.description}</div>
+                        <div style={{ color: pageMuted, fontSize: 11, marginTop: 2 }}>{ch.description}</div>
                         {isLoaded && status?.credentialHint && (
                           <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, fontFamily: 'monospace' }}>{status.credentialHint}</div>
                         )}
@@ -353,7 +363,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
                       {isLoaded && isConfigured && (
-                        <Tag color="success" style={{ borderRadius: 4, margin: 0, border: 'none', background: '#f0fdf4', color: '#16a34a' }}>
+                        <Tag color="success" style={{ borderRadius: 4, margin: 0, border: 'none', background: isDarkMode ? 'rgba(22,163,74,0.2)' : '#f0fdf4', color: '#16a34a' }}>
                           {t('channels.configured')}
                         </Tag>
                       )}
@@ -368,7 +378,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                         justifyContent: 'flex-end',
                         gap: 8,
                         paddingTop: 8,
-                        borderTop: '1px solid #f1f5f9',
+                        borderTop: `1px solid ${dividerSubtle}`,
                       }}
                     >
                       <Button
@@ -381,7 +391,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                           setRouteAccountsChannel(ch);
                           setRouteAccountsOpen(true);
                         }}
-                        style={{ fontSize: 12, borderRadius: 6 }}
+                        style={{ fontSize: 12, borderRadius: 6, ...(isDarkMode && isConfigured ? { borderColor: '#334155', color: '#cbd5e1' } : {}) }}
                       >
                         {t('channels.manageAccounts')}
                       </Button>
@@ -396,11 +406,10 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                       {pluginUi === 'unknown' && t('channels.pluginHintUnknown')}
                       {pluginUi === 'missing' && t('channels.pluginHintMissing')}
                       {pluginUi === 'disabled' && t('channels.pluginHintDisabled')}
-                      {pluginUi === 'disabled' && t('channels.pluginHintDisabled')}
                     </div>
                     {(pluginUi === 'missing' || pluginUi === 'disabled') && (
-                      <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.03)', borderRadius: 6, padding: '6px 10px', gap: 8 }}>
-                        <code style={{ fontSize: 11, color: '#334155', flex: 1, fontFamily: 'monospace', userSelect: 'all', wordBreak: 'break-all' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', background: isDarkMode ? 'rgba(15,23,42,0.6)' : 'rgba(0,0,0,0.03)', borderRadius: 6, padding: '6px 10px', gap: 8 }}>
+                        <code style={{ fontSize: 11, color: isDarkMode ? '#cbd5e1' : '#334155', flex: 1, fontFamily: 'monospace', userSelect: 'all', wordBreak: 'break-all' }}>
                           {pluginUi === 'disabled' ? enableCmd : installCmd}
                         </code>
                         <Button 
@@ -412,7 +421,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                             void navigator.clipboard.writeText(cmd);
                             message.success(t('common.copySuccess'));
                           }}
-                          style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: '#64748b' }}
+                          style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: pageMuted }}
                         />
                       </div>
                     )}
@@ -430,10 +439,15 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
           footer={null}
           width={600}
           centered
+          styles={{
+            content: { background: isDarkMode ? '#0f172a' : undefined },
+            header: isDarkMode ? { background: '#1e293b', borderBottom: `1px solid ${borderDefault}`, color: pageHeading } : undefined,
+            body: { background: isDarkMode ? '#0f172a' : undefined },
+          }}
         >
           <div style={{ padding: '8px 0' }}>
             {activeChannelAccounts.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
+              <div style={{ textAlign: 'center', padding: '40px 0', color: pageMuted }}>
                 <Cloud size={48} strokeWidth={1} style={{ marginBottom: 12 }} />
                 <p>{t('channels.noAccountsInChannel') || '该渠道暂无已绑定账号'}</p>
               </div>
@@ -443,15 +457,15 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
                   <Card 
                     key={index} 
                     styles={{ body: { padding: '12px 16px' } }}
-                    style={{ borderRadius: 12, border: '1px solid #f1f5f9', background: '#f8fafc' }}
+                    style={{ borderRadius: 12, border: `1px solid ${dividerSubtle}`, background: isDarkMode ? '#0f172a' : '#f8fafc' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: 8, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e2e8f0' }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 8, background: isDarkMode ? '#1e293b' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${borderDefault}` }}>
                           {selectedChannel?.id === 'weixin' ? <Smartphone size={18} color="#16a34a" /> : getIcon(selectedChannel?.icon)}
                         </div>
                         <div>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: '#1e293b' }}>{channel.name}</div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: isDarkMode ? '#f1f5f9' : '#1e293b' }}>{channel.name}</div>
                         </div>
                       </div>
                       <Button 
@@ -482,6 +496,7 @@ const ChannelsManager: React.FC<ChannelsManagerProps> = ({
             void Promise.all([fetchStatus(), fetchOpenClawPlugins()]);
             onRefreshChannels();
           }}
+          isDarkMode={isDarkMode}
         />
 
 

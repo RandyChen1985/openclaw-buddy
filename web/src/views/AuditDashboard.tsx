@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, DatePicker, Space, Table, Tag, Spin, Typography, Badge, Empty, Tabs, Input, Select, Modal, Radio } from 'antd';
-import { ShieldAlert, Zap, Cpu, Activity, Search, Terminal, ExternalLink, MessageSquare } from 'lucide-react';
+import { ShieldAlert, Zap, Cpu, Activity, Search, Terminal, ExternalLink, MessageSquare, type LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import * as echarts from 'echarts';
 import dayjs from 'dayjs';
@@ -10,7 +10,11 @@ const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
 const { Option } = Select;
 
-const AuditDashboard: React.FC = () => {
+interface AuditDashboardProps {
+  isDarkMode?: boolean;
+}
+
+const AuditDashboard: React.FC<AuditDashboardProps> = ({ isDarkMode = false }) => {
   const { t } = useTranslation();
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
@@ -124,14 +128,16 @@ const AuditDashboard: React.FC = () => {
 
     const chartTheme = {
       color: ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'],
-      textStyle: { fontFamily: 'inherit' }
+      textStyle: { fontFamily: 'inherit', color: isDarkMode ? '#94a3b8' : '#64748b' }
     };
 
     charts.current.trend.setOption({
       ...chartTheme,
       tooltip: { 
         trigger: 'axis', 
-        backgroundColor: 'rgba(255, 255, 255, 0.9)', 
+        backgroundColor: isDarkMode ? 'rgba(30, 41, 59, 0.9)' : 'rgba(255, 255, 255, 0.9)', 
+        borderColor: isDarkMode ? '#334155' : '#e2e8f0',
+        textStyle: { color: isDarkMode ? '#f1f5f9' : '#334155' },
         borderRadius: 8, 
         shadowBlur: 10,
         formatter: (params: any) => {
@@ -145,15 +151,15 @@ const AuditDashboard: React.FC = () => {
         type: 'category', 
         boundaryGap: false, 
         data: xAxisData,
-        axisLine: { lineStyle: { color: '#e2e8f0' } },
-        axisLabel: { fontSize: 10, color: '#64748b' }
+        axisLine: { lineStyle: { color: isDarkMode ? '#334155' : '#e2e8f0' } },
+        axisLabel: { fontSize: 10, color: isDarkMode ? '#94a3b8' : '#64748b' }
       },
       yAxis: { 
         type: 'value', 
-        splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } }, 
+        splitLine: { lineStyle: { type: 'dashed', color: isDarkMode ? '#334155' : '#f1f5f9' } }, 
         axisLabel: { 
           fontSize: 10, 
-          color: '#64748b',
+          color: isDarkMode ? '#94a3b8' : '#64748b',
           formatter: (val: number) => {
             if (val >= 1000) return (val / 1000).toFixed(0) + 'K';
             return val;
@@ -182,7 +188,7 @@ const AuditDashboard: React.FC = () => {
   const renderTabCharts = () => {
     const chartTheme = {
       color: ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'],
-      textStyle: { fontFamily: 'inherit' }
+      textStyle: { fontFamily: 'inherit', color: isDarkMode ? '#94a3b8' : '#64748b' }
     };
 
     // 2. Model Chart
@@ -191,14 +197,14 @@ const AuditDashboard: React.FC = () => {
       charts.current.model = echarts.init(modelChartRef.current);
       charts.current.model.setOption({
         ...chartTheme,
-        tooltip: { trigger: 'item' },
-        legend: { bottom: '0', icon: 'circle', itemWidth: 6, textStyle: { fontSize: 10, color: '#64748b' } },
+        tooltip: { trigger: 'item', backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', textStyle: { color: isDarkMode ? '#f1f5f9' : '#334155' } },
+        legend: { bottom: '0', icon: 'circle', itemWidth: 6, textStyle: { fontSize: 10, color: isDarkMode ? '#94a3b8' : '#64748b' } },
         series: [{
           type: 'pie',
           radius: ['45%', '70%'],
           center: ['50%', '40%'],
           avoidLabelOverlap: false,
-          itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
+          itemStyle: { borderRadius: 4, borderColor: isDarkMode ? '#1e293b' : '#fff', borderWidth: 2 },
           label: { show: false },
           data: summary.model_distribution.map((i: any) => ({ value: i.tokens, name: i.model }))
         }]
@@ -211,13 +217,14 @@ const AuditDashboard: React.FC = () => {
       charts.current.agent = echarts.init(agentChartRef.current);
       charts.current.agent.setOption({
         ...chartTheme,
-        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', textStyle: { color: isDarkMode ? '#f1f5f9' : '#334155' } },
         grid: { left: '10', right: '30', top: '10', bottom: '10', containLabel: true },
         xAxis: { 
           type: 'value', 
           splitLine: { show: false }, 
           axisLabel: { 
             fontSize: 9,
+            color: isDarkMode ? '#94a3b8' : '#64748b',
             formatter: (val: number) => {
               if (val >= 1000000) return (val / 1000000).toFixed(1) + 'M';
               if (val >= 1000) return (val / 1000).toFixed(0) + 'K';
@@ -228,9 +235,9 @@ const AuditDashboard: React.FC = () => {
         yAxis: { 
           type: 'category', 
           data: summary.agent_distribution.map((i: any) => i.agent).reverse(), 
-          axisLine: { lineStyle: { color: '#e2e8f0' } }, 
+          axisLine: { lineStyle: { color: isDarkMode ? '#334155' : '#e2e8f0' } }, 
           axisTick: { show: false },
-          axisLabel: { fontSize: 9, color: '#64748b' }
+          axisLabel: { fontSize: 9, color: isDarkMode ? '#94a3b8' : '#64748b' }
         },
         series: [{
           name: 'Tokens',
@@ -251,13 +258,14 @@ const AuditDashboard: React.FC = () => {
       charts.current.tools = echarts.init(toolsChartRef.current);
       charts.current.tools.setOption({
         ...chartTheme,
-        tooltip: { trigger: 'axis' },
+        tooltip: { trigger: 'axis', backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', textStyle: { color: isDarkMode ? '#f1f5f9' : '#334155' } },
         grid: { left: '10', right: '30', top: '10', bottom: '0', containLabel: true },
         xAxis: { 
           type: 'value', 
           splitLine: { show: false }, 
           axisLabel: { 
             fontSize: 9,
+            color: isDarkMode ? '#94a3b8' : '#64748b',
             formatter: (val: number) => {
               if (val >= 1000) return (val / 1000).toFixed(0) + 'K';
               return val;
@@ -267,9 +275,9 @@ const AuditDashboard: React.FC = () => {
         yAxis: { 
           type: 'category', 
           data: tools.map((i: any) => i.name).reverse(), 
-          axisLine: { lineStyle: { color: '#e2e8f0' } }, 
+          axisLine: { lineStyle: { color: isDarkMode ? '#334155' : '#e2e8f0' } }, 
           axisTick: { show: false },
-          axisLabel: { fontSize: 9, color: '#64748b' }
+          axisLabel: { fontSize: 9, color: isDarkMode ? '#94a3b8' : '#64748b' }
         },
         series: [{
           data: tools.map((i: any) => i.count).reverse(),
@@ -302,7 +310,9 @@ const AuditDashboard: React.FC = () => {
       title: t('common.time'),
       dataIndex: 'timestamp',
       key: 'timestamp',
-      render: (ts: string) => <Text style={{ fontSize: '11px', color: '#64748b' }}>{dayjs(ts).format('MM-DD HH:mm:ss')}</Text>,
+      render: (ts: string) => (
+        <Text style={{ fontSize: '11px', color: isDarkMode ? '#94a3b8' : '#64748b' }}>{dayjs(ts).format('MM-DD HH:mm:ss')}</Text>
+      ),
       width: 120,
     },
     {
@@ -321,7 +331,27 @@ const AuditDashboard: React.FC = () => {
           onClick={() => { setSelectedLog(record); setDetailVisible(true); }}
           style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
         >
-          <Text code style={{ fontSize: '11px', background: '#f1f5f9', whiteSpace: 'nowrap', padding: '1px 4px', flex: 1 }} ellipsis>{cmd}</Text>
+          <span
+            title={cmd}
+            style={{
+              display: 'block',
+              minWidth: 0,
+              flex: 1,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+              fontSize: '11px',
+              lineHeight: 1.45,
+              padding: '2px 6px',
+              borderRadius: 4,
+              background: isDarkMode ? '#0f172a' : '#f1f5f9',
+              color: isDarkMode ? '#7dd3fc' : '#0f172a',
+              border: isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0',
+            }}
+          >
+            {cmd}
+          </span>
           <ExternalLink size={10} style={{ marginLeft: 4, color: '#94a3b8' }} />
         </div>
       ),
@@ -356,7 +386,7 @@ const AuditDashboard: React.FC = () => {
             <Title level={4} style={{ margin: 0, fontSize: isMobile ? '16px' : '18px', whiteSpace: 'nowrap' }}>{t('audit.title')}</Title>
             <Space size="small" style={{ fontSize: '10px', color: '#64748b' }} wrap>
               <span>{t('audit.lastUpdated')}: {lastSync}</span>
-              <Divider type="vertical" />
+              <Divider type="vertical" isDarkMode={isDarkMode} />
               <span>{t('audit.retentionTip')}</span>
             </Space>
           </div>
@@ -375,25 +405,47 @@ const AuditDashboard: React.FC = () => {
       <Spin spinning={loadingSummary}>
         {/* Metric Ribbons (Compact) */}
         <div className="audit-metrics-grid" style={{ marginBottom: 16 }}>
-          {[
-            { title: t('audit.totalTokens'), value: summary?.summary?.total_tokens, icon: <Zap size={14} color="#f59e0b" /> },
-            { title: t('audit.activeAgents'), value: summary?.summary?.active_agents, icon: <Activity size={14} color="#3b82f6" /> },
-            { title: t('audit.sessionCount', { defaultValue: '会话数' }), value: sessionCount, icon: <MessageSquare size={14} color="#06b6d4" /> },
-            { title: t('audit.securityHits'), value: summary?.summary?.security_hits, icon: <ShieldAlert size={14} color="#ef4444" />, isAlert: (summary?.summary?.security_hits > 0) },
-            { title: t('audit.modelCoverage'), value: summary?.model_distribution?.length, icon: <Cpu size={14} color="#8b5cf6" /> },
-          ].map((item, idx) => (
-            <Card key={idx} bodyStyle={{ padding: '10px 12px' }} style={{ borderRadius: '8px', border: '1px solid #f1f5f9' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {([
+            { title: t('audit.totalTokens'), value: summary?.summary?.total_tokens, Icon: Zap, iconColor: '#f59e0b' },
+            { title: t('audit.activeAgents'), value: summary?.summary?.active_agents, Icon: Activity, iconColor: '#3b82f6' },
+            { title: t('audit.sessionCount', { defaultValue: '会话数' }), value: sessionCount, Icon: MessageSquare, iconColor: '#06b6d4' },
+            { title: t('audit.securityHits'), value: summary?.summary?.security_hits, Icon: ShieldAlert, iconColor: '#ef4444', isAlert: (summary?.summary?.security_hits > 0) },
+            { title: t('audit.modelCoverage'), value: summary?.model_distribution?.length, Icon: Cpu, iconColor: '#8b5cf6' },
+          ] as { title: string; value: any; Icon: LucideIcon; iconColor: string; isAlert?: boolean }[]).map((item, idx) => {
+            const MetricIcon = item.Icon;
+            const iconSize = isMobile ? 18 : 24;
+            const iconWrap = isMobile ? 36 : 46;
+            const iconRadius = isMobile ? 10 : 12;
+            return (
+            <Card key={idx} bodyStyle={{ padding: isMobile ? '10px 10px' : '10px 12px' }} style={{ borderRadius: '8px', border: `1px solid ${isDarkMode ? '#334155' : '#f1f5f9'}`, background: isDarkMode ? '#1e293b' : '#fff' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: isMobile ? 8 : 10 }}>
                 <div style={{ minWidth: 0 }}>
-                  <Text type="secondary" style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 600, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</Text>
-                  <div style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 700, color: item.isAlert ? '#ef4444' : '#1e293b', marginTop: 0 }}>
+                  <Text type="secondary" style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 600, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: isDarkMode ? '#94a3b8' : 'inherit' }}>{item.title}</Text>
+                  <div style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 700, color: item.isAlert ? '#ef4444' : (isDarkMode ? '#f1f5f9' : '#1e293b'), marginTop: 0 }}>
                     {item.value?.toLocaleString() || 0}
                   </div>
                 </div>
-                {!isMobile && <div style={{ opacity: 0.6, flexShrink: 0 }}>{item.icon}</div>}
+                <div
+                  aria-hidden
+                  style={{
+                    width: iconWrap,
+                    height: iconWrap,
+                    minWidth: iconWrap,
+                    borderRadius: iconRadius,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    background: isDarkMode ? 'rgba(148, 163, 184, 0.1)' : '#f8fafc',
+                    border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+                  }}
+                >
+                  <MetricIcon size={iconSize} color={item.iconColor} strokeWidth={isMobile ? 2 : 2.25} aria-hidden />
+                </div>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
 
         {/* Middle Section: Charts (Density + Integration) */}
@@ -401,7 +453,7 @@ const AuditDashboard: React.FC = () => {
           <div>
             <Card 
               size="small"
-              title={<span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>{t('audit.trendTitle')}</span>}
+              title={<span style={{ fontSize: '11px', fontWeight: 600, color: isDarkMode ? '#94a3b8' : '#64748b' }}>{t('audit.trendTitle')}</span>}
               extra={
                 <Radio.Group 
                   size="small" 
@@ -414,7 +466,7 @@ const AuditDashboard: React.FC = () => {
                 </Radio.Group>
               }
               bodyStyle={{ padding: '8px' }}
-              style={{ borderRadius: '8px', height: isMobile ? '260px' : '300px', border: '1px solid #f1f5f9' }}
+              style={{ borderRadius: '8px', height: isMobile ? '260px' : '300px', border: `1px solid ${isDarkMode ? '#334155' : '#f1f5f9'}`, background: isDarkMode ? '#1e293b' : '#fff' }}
             >
               {summary?.trend && summary.trend.length > 0 ? (
                 <div ref={trendChartRef} style={{ width: '100%', height: isMobile ? '200px' : '240px' }} />
@@ -427,9 +479,9 @@ const AuditDashboard: React.FC = () => {
             <Card 
               size="small"
               bodyStyle={{ padding: '0 8px 8px 8px' }}
-              style={{ borderRadius: '8px', height: isMobile ? '260px' : '300px', border: '1px solid #f1f5f9' }}
+              style={{ borderRadius: '8px', height: isMobile ? '260px' : '300px', border: `1px solid ${isDarkMode ? '#334155' : '#f1f5f9'}`, background: isDarkMode ? '#1e293b' : '#fff' }}
             >
-              <Tabs activeKey={activeTab} onChange={setActiveTab} size="small" centered className="compact-tabs">
+              <Tabs activeKey={activeTab} onChange={setActiveTab} size="small" centered className={`compact-tabs ${isDarkMode ? 'dark-tabs' : ''}`}>
                 <Tabs.TabPane tab={<span style={{ fontSize: '10px' }}>{t('audit.modelDistTitle')}</span>} key="model">
                   {summary?.model_distribution && summary.model_distribution.length > 0 ? (
                     <div ref={modelChartRef} style={{ width: '100%', height: isMobile ? '180px' : '220px' }} />
@@ -459,14 +511,14 @@ const AuditDashboard: React.FC = () => {
         {/* Bottom Section: Logs (Flat & Compact) */}
         <Card 
           size="small"
-          title={<span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>{t('audit.securityLogs')}</span>}
+          title={<span style={{ fontSize: '11px', fontWeight: 600, color: isDarkMode ? '#94a3b8' : '#64748b' }}>{t('audit.securityLogs')}</span>}
           extra={
             <Space size="small">
               <Input 
                 size="small"
                 placeholder="搜索..." 
                 prefix={<Search size={10} />} 
-                style={{ width: isMobile ? 100 : 160, borderRadius: '4px' }} 
+                style={{ width: isMobile ? 100 : 160, borderRadius: '4px', background: isDarkMode ? '#0f172a' : '#fff', borderColor: isDarkMode ? '#334155' : '#d9d9d9', color: isDarkMode ? '#f1f5f9' : 'inherit' }} 
                 allowClear
                 onChange={(e) => setLogKeyword(e.target.value)}
               />
@@ -476,13 +528,14 @@ const AuditDashboard: React.FC = () => {
                 style={{ width: 70 }} 
                 allowClear
                 onChange={setLogLevel}
+                dropdownStyle={{ background: isDarkMode ? '#1e293b' : '#fff' }}
               >
                 <Option value="high">HIGH</Option>
                 <Option value="low">LOW</Option>
               </Select>
             </Space>
           }
-          style={{ marginTop: '12px', borderRadius: '8px', border: '1px solid #f1f5f9' }}
+          style={{ marginTop: '12px', borderRadius: '8px', border: `1px solid ${isDarkMode ? '#334155' : '#f1f5f9'}`, background: isDarkMode ? '#1e293b' : '#fff' }}
           bodyStyle={{ padding: '0 4px' }}
         >
           <Table 
@@ -523,8 +576,48 @@ const AuditDashboard: React.FC = () => {
       <style dangerouslySetInnerHTML={{ __html: `
         .compact-tabs .ant-tabs-nav { margin-bottom: 4px !important; }
         .compact-tabs .ant-tabs-tab { padding: 4px 0 !important; }
-        .ant-table-thead > tr > th { font-size: 10px !important; background: #fafafa !important; }
-        .ant-table-cell { font-size: 10px !important; }
+        .ant-table-thead > tr > th { 
+          font-size: 10px !important; 
+          background: ${isDarkMode ? '#0f172a' : '#fafafa'} !important; 
+          color: ${isDarkMode ? '#94a3b8' : 'inherit'} !important; 
+          border-bottom: 1px solid ${isDarkMode ? '#334155' : '#f0f0f0'} !important; 
+        }
+        .ant-table-cell { 
+          font-size: 10px !important; 
+          background: ${isDarkMode ? '#1e293b' : 'inherit'} !important;
+          color: ${isDarkMode ? '#cbd5e1' : 'inherit'} !important;
+          border-bottom: 1px solid ${isDarkMode ? '#334155' : '#f0f0f0'} !important; 
+        }
+        /* Strongly override code block backgrounds */
+        .ant-table-cell code, 
+        .ant-typography-code,
+        [class*="ant-typography-code"] {
+          background: ${isDarkMode ? '#0f172a' : '#f1f5f9'} !important;
+          color: ${isDarkMode ? '#60a5fa' : 'inherit'} !important;
+          border: ${isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0'} !important;
+        }
+        .ant-table {
+          background: ${isDarkMode ? '#1e293b' : 'inherit'} !important;
+        }
+        /* Pagination Styling */
+        .ant-pagination-item, .ant-pagination-prev, .ant-pagination-next, .ant-pagination-jump-prev, .ant-pagination-jump-next {
+          background: ${isDarkMode ? '#0f172a' : '#fff'} !important;
+          border-color: ${isDarkMode ? '#334155' : '#d9d9d9'} !important;
+        }
+        .ant-pagination-item a {
+          color: ${isDarkMode ? '#94a3b8' : 'inherit'} !important;
+        }
+        .ant-pagination-item-active {
+          border-color: #2563eb !important;
+        }
+        .ant-pagination-item-active a {
+          color: #2563eb !important;
+        }
+        .ant-pagination-options-quick-jumper input {
+          background: ${isDarkMode ? '#0f172a' : '#fff'} !important;
+          border-color: ${isDarkMode ? '#334155' : '#d9d9d9'} !important;
+          color: ${isDarkMode ? '#f1f5f9' : 'inherit'} !important;
+        }
         .audit-metrics-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
         @media (min-width: 768px) { .audit-metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
         @media (min-width: 1024px) { .audit-metrics-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
@@ -533,8 +626,8 @@ const AuditDashboard: React.FC = () => {
   );
 };
 
-const Divider = ({ type }: { type: 'vertical' }) => (
-  <div style={{ display: 'inline-block', width: '1px', height: '10px', background: '#e2e8f0', margin: '0 8px', verticalAlign: 'middle' }}>{type === 'vertical' ? '' : ''}</div>
+const Divider = ({ type, isDarkMode }: { type: 'vertical', isDarkMode?: boolean }) => (
+  <div style={{ display: 'inline-block', width: '1px', height: '10px', background: isDarkMode ? '#334155' : '#e2e8f0', margin: '0 8px', verticalAlign: 'middle' }}>{type === 'vertical' ? '' : ''}</div>
 );
 
 export default AuditDashboard;

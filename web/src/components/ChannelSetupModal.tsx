@@ -26,9 +26,10 @@ interface ChannelSetupModalProps {
   channel: ChannelMetadata | null;
   onClose: () => void;
   onSuccess: () => void;
+  isDarkMode?: boolean;
 }
 
-const ChannelSetupModal: React.FC<ChannelSetupModalProps> = ({ visible, channel, onClose, onSuccess }) => {
+const ChannelSetupModal: React.FC<ChannelSetupModalProps> = ({ visible, channel, onClose, onSuccess, isDarkMode = false }) => {
   const { t } = useTranslation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -109,6 +110,16 @@ const ChannelSetupModal: React.FC<ChannelSetupModalProps> = ({ visible, channel,
 
   if (!channel) return null;
 
+  const shell = {
+    muted: isDarkMode ? '#94a3b8' : '#64748b',
+    label: isDarkMode ? '#cbd5e1' : '#334155',
+    fieldLabel: isDarkMode ? '#cbd5e1' : '#334155',
+    qrCardBg: isDarkMode ? '#1e293b' : '#fff',
+    qrCardBorder: isDarkMode ? '#334155' : '#f1f5f9',
+    dashedTop: isDarkMode ? '#334155' : '#e2e8f0',
+    spinHint: isDarkMode ? '#94a3b8' : '#94a3b8'
+  };
+
   return (
     <Modal
       title={`${t('channels.setup')} - ${channel.name}`}
@@ -118,13 +129,15 @@ const ChannelSetupModal: React.FC<ChannelSetupModalProps> = ({ visible, channel,
       width={channel.setupType === 'qr' ? 450 : 550}
       centered
       destroyOnClose
+      styles={{ content: isDarkMode ? { background: '#0f172a' } : undefined }}
+      bodyStyle={isDarkMode ? { background: '#0f172a' } : undefined}
     >
       <div style={{ padding: '12px 0' }}>
-        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>{channel.description}</p>
+        <p style={{ color: shell.muted, fontSize: 13, marginBottom: 20 }}>{channel.description}</p>
 
         <Form form={form} layout="vertical" onFinish={handleFinish} requiredMark="optional">
           <Form.Item 
-            label={<span style={{ fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: 6 }}><Bot size={14} /> {t('channels.targetBot') || '目标机器人 (Target Agent)'}</span>}
+            label={<span style={{ fontWeight: 600, color: shell.label, display: 'flex', alignItems: 'center', gap: 6 }}><Bot size={14} /> {t('channels.targetBot') || '目标机器人 (Target Agent)'}</span>}
             name="agentId"
             rules={[{ required: true }]}
             tooltip={t('channels.targetBotTip') || '指定该渠道的消息由哪个机器人响应'}
@@ -143,11 +156,11 @@ const ChannelSetupModal: React.FC<ChannelSetupModalProps> = ({ visible, channel,
               {qrLoading ? (
                 <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
                   <Spin size="large" />
-                  <span style={{ color: '#94a3b8', fontSize: 12 }}>{t('channels.qrLoading') || '正在生成授权二维码...'}</span>
+                  <span style={{ color: shell.spinHint, fontSize: 12 }}>{t('channels.qrLoading') || '正在生成授权二维码...'}</span>
                 </div>
               ) : qrUrl ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
-                  <div style={{ padding: 12, background: '#fff', borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
+                  <div style={{ padding: 12, background: shell.qrCardBg, borderRadius: 12, boxShadow: isDarkMode ? '0 4px 12px rgba(0,0,0,0.35)' : '0 4px 12px rgba(0,0,0,0.05)', border: `1px solid ${shell.qrCardBorder}` }}>
                     <QRCode value={qrUrl} size={220} bordered={false} />
                   </div>
                   <div style={{ color: '#16a34a', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -164,8 +177,8 @@ const ChannelSetupModal: React.FC<ChannelSetupModalProps> = ({ visible, channel,
               )}
               
               {channel.fields && channel.fields.length > 0 && (
-                <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px dashed #e2e8f0' }}>
-                  <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 16 }}>{t('channels.orManual') || '或者手动配置凭证'}</p>
+                <div style={{ marginTop: 32, paddingTop: 24, borderTop: `1px dashed ${shell.dashedTop}` }}>
+                  <p style={{ fontSize: 12, color: shell.muted, marginBottom: 16 }}>{t('channels.orManual') || '或者手动配置凭证'}</p>
                   {channel.fields.map(field => (
                     <Form.Item key={field.key} label={field.label} name={field.key} rules={[{ required: field.required }]}>
                       {field.type === 'password' ? <Input.Password placeholder={field.placeholder} /> : <Input placeholder={field.placeholder} />}
@@ -186,7 +199,7 @@ const ChannelSetupModal: React.FC<ChannelSetupModalProps> = ({ visible, channel,
                   key={field.key} 
                   label={
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontWeight: 500, color: '#334155' }}>{field.label}</span>
+                      <span style={{ fontWeight: 500, color: shell.fieldLabel }}>{field.label}</span>
                       {field.helpUrl && (
                         <a 
                           href={field.helpUrl} 

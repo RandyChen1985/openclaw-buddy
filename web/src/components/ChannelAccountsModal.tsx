@@ -49,6 +49,7 @@ interface ChannelAccountsModalProps {
   channel: ChannelLite | null;
   onClose: () => void;
   onAfterChange: () => void;
+  isDarkMode?: boolean;
 }
 
 const ChannelAccountsModal: React.FC<ChannelAccountsModalProps> = ({
@@ -56,8 +57,34 @@ const ChannelAccountsModal: React.FC<ChannelAccountsModalProps> = ({
   channel,
   onClose,
   onAfterChange,
+  isDarkMode = false,
 }) => {
   const { t } = useTranslation();
+
+  const shell = React.useMemo(
+    () => ({
+      border: isDarkMode ? '#334155' : '#e2e8f0',
+      hairline: isDarkMode ? '#334155' : '#f1f5f9',
+      infoBg: isDarkMode ? '#0f172a' : '#f8fafc',
+      infoTitle: isDarkMode ? '#e2e8f0' : '#475569',
+      infoText: isDarkMode ? '#94a3b8' : '#64748b',
+      emptyBg: isDarkMode ? '#0f172a' : '#f8fafc',
+      emptyText: isDarkMode ? '#94a3b8' : '#94a3b8',
+      keyIconBg: isDarkMode ? '#334155' : '#f1f5f9',
+      heading: isDarkMode ? '#f1f5f9' : '#1e293b',
+      editCardBg: isDarkMode ? 'rgba(37, 99, 235, 0.14)' : '#eff6ff',
+      bindHintBg: isDarkMode ? 'rgba(22, 101, 52, 0.22)' : '#f0fdf4',
+      bindHintBorder: isDarkMode ? '#166534' : '#dcfce7',
+      bindHintTitle: isDarkMode ? '#86efac' : '#166534',
+      bindHintBody: isDarkMode ? '#cbd5e1' : '#64748b',
+      agentAvatarBg: isDarkMode ? '#0f172a' : '#f8fafc',
+      cardBg: isDarkMode ? '#1e293b' : '#fff',
+      modalContent: isDarkMode ? '#0f172a' : undefined,
+      modalHeader: isDarkMode ? '#1e293b' : undefined,
+      modalBody: isDarkMode ? '#0f172a' : undefined,
+    }),
+    [isDarkMode]
+  );
   const [loading, setLoading] = React.useState(false);
   const [data, setData] = React.useState<Overview | null>(null);
   const [unbinding, setUnbinding] = React.useState<string | null>(null);
@@ -227,23 +254,23 @@ const ChannelAccountsModal: React.FC<ChannelAccountsModalProps> = ({
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ fontSize: 13, color: '#64748b', background: '#f8fafc', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-          <div style={{ fontWeight: 600, color: '#475569', marginBottom: 4 }}>{t('channels.credentialManagement')}</div>
+        <div style={{ fontSize: 13, color: shell.infoText, background: shell.infoBg, padding: '10px 14px', borderRadius: 8, border: `1px solid ${shell.border}` }}>
+          <div style={{ fontWeight: 600, color: shell.infoTitle, marginBottom: 4 }}>{t('channels.credentialManagement')}</div>
           {t('channels.credentialManagementHint')}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {!data?.credentials?.length ? (
-            <div style={{ padding: '24px 0', textAlign: 'center', color: '#94a3b8', fontSize: 12, background: '#f8fafc', borderRadius: 10, border: '1px dashed #e2e8f0' }}>暂无已配置账号，请点击下方按钮添加</div>
+            <div style={{ padding: '24px 0', textAlign: 'center', color: shell.emptyText, fontSize: 12, background: shell.emptyBg, borderRadius: 10, border: `1px dashed ${shell.border}` }}>暂无已配置账号，请点击下方按钮添加</div>
           ) : (
             data.credentials.map((acc) => (
-              <Card key={acc.id} size="small" styles={{ body: { padding: '8px 12px' } }} style={{ borderRadius: 10 }}>
+              <Card key={acc.id} size="small" styles={{ body: { padding: '8px 12px' } }} style={{ borderRadius: 10, background: shell.cardBg, borderColor: shell.border }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ background: '#f1f5f9', width: 32, height: 32, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Key size={14} style={{ color: '#64748b' }} /></div>
+                    <div style={{ background: shell.keyIconBg, width: 32, height: 32, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Key size={14} style={{ color: shell.infoText }} /></div>
                     <div>
-                      <div style={{ fontWeight: 600, color: '#1e293b' }}>{acc.name}</div>
-                      <div style={{ fontSize: 11, color: '#94a3b8' }}>ID: {acc.id}</div>
+                      <div style={{ fontWeight: 600, color: shell.heading }}>{acc.name}</div>
+                      <div style={{ fontSize: 11, color: shell.emptyText }}>ID: {acc.id}</div>
                     </div>
                   </div>
                   <Space>
@@ -263,7 +290,7 @@ const ChannelAccountsModal: React.FC<ChannelAccountsModalProps> = ({
             {t('channels.addCredential')}
           </Button>
         ) : (
-          <Card size="small" title={editingAccount === 'new' ? t('channels.addCredential') : `${t('common.edit')} ${editingAccount}`} style={{ border: '1px solid #3b82f6', background: '#eff6ff', borderRadius: 10 }}>
+          <Card size="small" title={editingAccount === 'new' ? t('channels.addCredential') : `${t('common.edit')} ${editingAccount}`} style={{ border: '1px solid #3b82f6', background: shell.editCardBg, borderRadius: 10 }} styles={{ header: { background: 'transparent', borderBottomColor: shell.border, color: shell.heading } }}>
             <Space direction="vertical" style={{ width: '100%' }} size={12}>
               {editingAccount === 'new' && (
                 <Input placeholder={t('channels.newAccountIdPlaceholder')} value={newAccId} onChange={(e) => setNewAccId(e.target.value)} style={{ borderRadius: 6 }} />
@@ -299,16 +326,16 @@ const ChannelAccountsModal: React.FC<ChannelAccountsModalProps> = ({
 
   const renderBindingsTab = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ fontSize: 13, color: '#64748b', background: '#f0fdf4', padding: '10px 14px', borderRadius: 8, border: '1px solid #dcfce7' }}>
-        <div style={{ fontWeight: 600, color: '#166534', marginBottom: 4 }}>关联机器人 (Agent Routing)</div>
+      <div style={{ fontSize: 13, color: shell.bindHintBody, background: shell.bindHintBg, padding: '10px 14px', borderRadius: 8, border: `1px solid ${shell.bindHintBorder}` }}>
+        <div style={{ fontWeight: 600, color: shell.bindHintTitle, marginBottom: 4 }}>关联机器人 (Agent Routing)</div>
         {t('channels.bindRelationshipHint')}
       </div>
 
-      <Card size="small" title="添加新关联" style={{ borderRadius: 10, border: '1px solid #e2e8f0' }}>
+      <Card size="small" title="添加新关联" style={{ borderRadius: 10, border: `1px solid ${shell.border}`, background: shell.cardBg }} styles={{ header: { background: 'transparent', borderBottomColor: shell.border, color: shell.heading } }}>
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>1. 接收消息的机器人</div>
+              <div style={{ fontSize: 11, color: shell.emptyText, marginBottom: 4 }}>1. 接收消息的机器人</div>
               <Select
                 showSearch
                 optionFilterProp="label"
@@ -322,7 +349,7 @@ const ChannelAccountsModal: React.FC<ChannelAccountsModalProps> = ({
               />
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>2. 关联的账号凭据</div>
+              <div style={{ fontSize: 11, color: shell.emptyText, marginBottom: 4 }}>2. 关联的账号凭据</div>
               <Select
                 placeholder={accountOptions.length > 0 ? "请选择凭据..." : "请先配置凭据"}
                 style={{ width: '100%' }}
@@ -340,24 +367,24 @@ const ChannelAccountsModal: React.FC<ChannelAccountsModalProps> = ({
         </Space>
       </Card>
 
-      <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b', marginTop: 4 }}>当前已生效关联</div>
+      <div style={{ fontWeight: 600, fontSize: 13, color: shell.heading, marginTop: 4 }}>当前已生效关联</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!data?.bindings?.length ? (
-          <div style={{ padding: '24px 0', textAlign: 'center', color: '#94a3b8', fontSize: 12, background: '#f8fafc', borderRadius: 10, border: '1px dashed #e2e8f0' }}>{t('channels.noAgentBindings')}</div>
+          <div style={{ padding: '24px 0', textAlign: 'center', color: shell.emptyText, fontSize: 12, background: shell.emptyBg, borderRadius: 10, border: `1px dashed ${shell.border}` }}>{t('channels.noAgentBindings')}</div>
         ) : (
           data.bindings.map((b) => (
-            <Card key={`${b.agentId}-${b.accountId}`} size="small" style={{ borderRadius: 10, border: '1px solid #f1f5f9' }}>
+            <Card key={`${b.agentId}-${b.accountId}`} size="small" style={{ borderRadius: 10, border: `1px solid ${shell.hairline}`, background: shell.cardBg }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 8, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e2e8f0' }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 8, background: shell.agentAvatarBg, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${shell.border}` }}>
                     <span style={{ fontSize: 18 }}>{b.emoji || '🤖'}</span>
                   </div>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontWeight: 600, color: '#1e293b' }}>{b.agentName}</span>
+                      <span style={{ fontWeight: 600, color: shell.heading }}>{b.agentName}</span>
                       <Tag color="cyan" style={{ fontSize: 10, margin: 0 }}>{b.accountId || 'default'}</Tag>
                     </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8' }}>Agent ID: {b.agentId}</div>
+                    <div style={{ fontSize: 11, color: shell.emptyText }}>Agent ID: {b.agentId}</div>
                   </div>
                 </div>
                 <Button danger type="text" size="small" icon={<Trash2 size={14} />} loading={unbinding === `${b.agentId}\x1e${(b.accountId || '').trim()}`} onClick={() => handleUnbindAgent(b.agentId, b.accountId)}>
@@ -380,7 +407,12 @@ const ChannelAccountsModal: React.FC<ChannelAccountsModalProps> = ({
       width={720}
       centered
       destroyOnClose
-      styles={{ body: { padding: '0 24px 24px 24px' } }}
+      wrapClassName={isDarkMode ? 'channel-accounts-modal--dark' : undefined}
+      styles={{
+        content: { background: shell.modalContent },
+        header: { background: shell.modalHeader, borderBottom: `1px solid ${shell.border}`, color: shell.heading },
+        body: { padding: '0 24px 24px 24px', background: shell.modalBody },
+      }}
     >
       {loading && !data ? (
         <div style={{ textAlign: 'center', padding: 48 }}><Spin /></div>
@@ -393,6 +425,26 @@ const ChannelAccountsModal: React.FC<ChannelAccountsModalProps> = ({
             { key: 'bindings', label: <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} /> 关联机器人</span>, children: renderBindingsTab() },
           ]}
         />
+      )}
+      {isDarkMode && (
+        <style>{`
+          .channel-accounts-modal--dark .ant-tabs-nav::before { border-bottom-color: #334155 !important; }
+          .channel-accounts-modal--dark .ant-tabs-tab { color: #94a3b8 !important; }
+          .channel-accounts-modal--dark .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn { color: #f1f5f9 !important; }
+          .channel-accounts-modal--dark .ant-tabs-ink-bar { background: #3b82f6 !important; }
+          .channel-accounts-modal--dark .ant-select .ant-select-selector {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+            color: #e2e8f0 !important;
+          }
+          .channel-accounts-modal--dark .ant-input,
+          .channel-accounts-modal--dark .ant-input-password {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+            color: #e2e8f0 !important;
+          }
+          .channel-accounts-modal--dark .ant-card-head-title { color: #f1f5f9 !important; }
+        `}</style>
       )}
     </Modal>
   );

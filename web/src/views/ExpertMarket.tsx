@@ -35,9 +35,10 @@ interface ExpertMarketProps {
   onNavigate: (tab: string) => void;
   isRunning?: boolean;
   onNavigateToDashboard?: () => void;
+  isDarkMode?: boolean;
 }
 
-const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => {
+const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate, isDarkMode = false }) => {
   const { t, i18n } = useTranslation();
   const currentLang = i18n.language.split('-')[0]; // 处理 zh-CN 等情况
 
@@ -66,7 +67,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
 
   // 类别配色方案
   const getCategoryColor = (category: string) => {
-    const colors: Record<string, { bg: string, border: string, tag: string, iconBg: string }> = {
+    const lightColors: Record<string, { bg: string, border: string, tag: string, iconBg: string }> = {
       technical: { bg: '#eff6ff', border: '#dbeafe', tag: 'blue', iconBg: '#fff' },
       creative: { bg: '#f5f3ff', border: '#ede9fe', tag: 'purple', iconBg: '#fff' },
       selfmedia: { bg: '#fff7ed', border: '#ffedd5', tag: 'orange', iconBg: '#fff' },
@@ -77,7 +78,20 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
       lifestyle: { bg: '#fff1f2', border: '#ffe4e6', tag: 'rose', iconBg: '#fff' },
       all: { bg: '#ffffff', border: '#e2e8f0', tag: 'blue', iconBg: '#f8fafc' }
     };
-    return colors[category] || colors.all;
+
+    const darkColors: Record<string, { bg: string, border: string, tag: string, iconBg: string }> = {
+      technical: { bg: '#1e293b', border: '#334155', tag: 'blue', iconBg: '#0f172a' },
+      creative: { bg: '#1e293b', border: '#334155', tag: 'purple', iconBg: '#0f172a' },
+      selfmedia: { bg: '#1e293b', border: '#334155', tag: 'orange', iconBg: '#0f172a' },
+      finance: { bg: '#1e293b', border: '#334155', tag: 'green', iconBg: '#0f172a' },
+      management: { bg: '#1e293b', border: '#334155', tag: 'indigo', iconBg: '#0f172a' },
+      legal: { bg: '#1e293b', border: '#334155', tag: 'default', iconBg: '#0f172a' },
+      education: { bg: '#1e293b', border: '#334155', tag: 'amber', iconBg: '#0f172a' },
+      lifestyle: { bg: '#1e293b', border: '#334155', tag: 'rose', iconBg: '#0f172a' },
+      all: { bg: '#1e293b', border: '#334155', tag: 'blue', iconBg: '#0f172a' }
+    };
+
+    return isDarkMode ? (darkColors[category] || darkColors.all) : (lightColors[category] || lightColors.all);
   };
 
   useEffect(() => {
@@ -115,6 +129,32 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
     { label: t('experts.education'), value: 'education', icon: <GraduationCap size={14} /> },
     { label: t('experts.lifestyle'), value: 'lifestyle', icon: <Heart size={14} /> }
   ];
+
+  const borderDefault = isDarkMode ? '#334155' : '#e2e8f0';
+  const pageHeading = isDarkMode ? '#f1f5f9' : '#1e293b';
+  const pageMuted = isDarkMode ? '#94a3b8' : '#64748b';
+  const bodyText = isDarkMode ? '#cbd5e1' : '#475569';
+
+  const wizard = {
+    editorBg: isDarkMode ? '#0f172a' : '#f8fafc',
+    tokenChipBg: isDarkMode ? '#334155' : '#f1f5f9',
+    previewPanelBg: isDarkMode ? '#1e293b' : '#fff',
+    previewHeaderBg: isDarkMode ? '#0f172a' : '#f8fafc',
+    estimateBarBg: isDarkMode ? '#0f172a' : '#f8fafc',
+    estimateBarBorder: isDarkMode ? '#334155' : '#f1f5f9',
+    step2SummaryBg: isDarkMode ? '#0f172a' : '#f8fafc',
+    step2IconBg: isDarkMode ? 'rgba(34,197,94,0.15)' : '#f0fdf4',
+    step0PanelBg: isDarkMode ? '#0f172a' : '#f8fafc',
+    step0PanelBorder: isDarkMode ? '#334155' : '#f1f5f9',
+    formLabel: isDarkMode ? '#cbd5e1' : '#334155',
+    valueStrong: isDarkMode ? '#f1f5f9' : '#1e293b',
+    drawerIdentityBg: isDarkMode ? '#0f172a' : '#f8fafc',
+    drawerIdentityBorder: isDarkMode ? '#334155' : '#f1f5f9',
+    drawerSoulBg: isDarkMode ? 'linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%)' : 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
+    drawerSoulBorder: isDarkMode ? '#4338ca' : '#ddd6fe',
+    skillTagBg: isDarkMode ? 'rgba(37,99,235,0.22)' : '#eff6ff',
+    skillTagColor: isDarkMode ? '#93c5fd' : '#2563eb'
+  };
 
   const filteredExperts = experts.filter(e => {
     const name = (currentLang === 'zh' && e.name) ? e.name : (e.name_en || e.name);
@@ -181,11 +221,11 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
       {/* 允许在网关停止时浏览并导入专家模型 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0 4px' : '0 8px', display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div style={{ padding: isMobile ? '0 4px' : '0 8px' }}>
-        <h2 style={{ fontSize: isMobile ? 18 : 22, fontWeight: 800, color: '#1e293b', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h2 style={{ fontSize: isMobile ? 18 : 22, fontWeight: 800, color: pageHeading, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
           <Rocket size={isMobile ? 22 : 26} color="#2563eb" />
           {t('experts.title')}
         </h2>
-        <p style={{ color: '#64748b', fontSize: 13, maxWidth: 800, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <p style={{ color: pageMuted, fontSize: 13, maxWidth: 800, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
           {t('experts.description')}
           <a 
             href="https://github.com/jnMetaCode/agency-agents-zh" 
@@ -201,14 +241,14 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
         </p>
       </div>
 
-      <Card bodyStyle={{ padding: isMobile ? 12 : 16 }} style={{ borderRadius: 16, border: '1px solid #e2e8f0' }}>
+      <Card bodyStyle={{ padding: isMobile ? 12 : 16 }} style={{ borderRadius: 16, border: `1px solid ${borderDefault}`, background: isDarkMode ? '#1e293b' : '#fff' }} className={isDarkMode ? 'expert-market-filter' : undefined}>
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 16, alignItems: 'center' }}>
           <Input 
             prefix={<Search size={16} color="#94a3b8" />}
             placeholder={t('experts.searchPlaceholder')}
             value={searchText}
             onChange={e => setSearchText(e.target.value)}
-            style={{ borderRadius: 10, flex: isMobile ? 'none' : 1 }}
+            style={{ borderRadius: 10, flex: isMobile ? 'none' : 1, background: isDarkMode ? '#0f172a' : undefined, borderColor: isDarkMode ? '#334155' : undefined, color: isDarkMode ? '#f1f5f9' : undefined }}
           />
           <div style={{ width: isMobile ? '100%' : 'auto', overflowX: 'auto' }}>
             <div style={{ display: 'flex', gap: 8, padding: '4px 0' }}>
@@ -219,10 +259,12 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
                   onChange={() => setCategoryFilter(cat.value)}
                   style={{ 
                     padding: '4px 12px', borderRadius: 8, 
-                    border: categoryFilter === cat.value ? '1px solid #2563eb' : '1px solid #e2e8f0',
+                    border: categoryFilter === cat.value ? '1px solid #2563eb' : `1px solid ${borderDefault}`,
                     display: 'flex', alignItems: 'center', gap: 6, fontSize: 13,
-                    background: categoryFilter === cat.value ? '#eff6ff' : '#fff',
-                    color: categoryFilter === cat.value ? '#2563eb' : '#64748b',
+                    background: categoryFilter === cat.value
+                      ? (isDarkMode ? 'rgba(37, 99, 235, 0.25)' : '#eff6ff')
+                      : (isDarkMode ? '#0f172a' : '#fff'),
+                    color: categoryFilter === cat.value ? (isDarkMode ? '#93c5fd' : '#2563eb') : pageMuted,
                     fontWeight: categoryFilter === cat.value ? 700 : 400,
                     transition: 'all 0.2s ease'
                   }}
@@ -236,6 +278,15 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
           </div>
         </div>
       </Card>
+      {isDarkMode && (
+        <style>{`
+          .expert-market-filter .ant-input-affix-wrapper {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+          }
+          .expert-market-filter .ant-input-affix-wrapper input { color: #f1f5f9 !important; }
+        `}</style>
+      )}
 
       {loading ? (
         <div style={{ padding: '60px 0', textAlign: 'center' }}><Spin size="large" /></div>
@@ -270,8 +321,8 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
                   </div>
                   <div style={{ 
                     borderRadius: 8, padding: '4px 8px', fontSize: 11, fontWeight: 800, 
-                    background: 'rgba(255,255,255,0.7)', 
-                    color: '#334155',
+                    background: isDarkMode ? 'rgba(15,23,42,0.85)' : 'rgba(255,255,255,0.7)', 
+                    color: isDarkMode ? '#cbd5e1' : '#334155',
                     border: `1px solid ${theme.border}`,
                     boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
                     textTransform: 'uppercase',
@@ -280,16 +331,16 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
                     {currentLang === 'zh' ? expert.category_zh : expert.category.toUpperCase()}
                   </div>
                 </div>
-                <h3 style={{ fontSize: 16, fontWeight: 800, color: '#1e293b', marginBottom: 8, letterSpacing: '-0.01em' }}>
-                  {(currentLang === 'zh' && expert.name) ? expert.name : (selectedExpert?.name_en || expert.name)}
+                <h3 style={{ fontSize: 16, fontWeight: 800, color: pageHeading, marginBottom: 8, letterSpacing: '-0.01em' }}>
+                  {(currentLang === 'zh' && expert.name) ? expert.name : (expert.name_en || expert.name)}
                 </h3>
-                <p style={{ color: '#475569', fontSize: 13, lineHeight: 1.7, flex: 1, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', opacity: 0.85 }}>
+                <p style={{ color: bodyText, fontSize: 13, lineHeight: 1.7, flex: 1, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', opacity: 0.85 }}>
                   {(currentLang === 'zh' && expert.description) ? expert.description : (expert.description_en || expert.description)}
                 </p>
                 <div style={{ display: 'flex', gap: 12, marginTop: 24, paddingTop: 16, borderTop: `1px dashed ${theme.border}` }}>
                   <Button 
                     block 
-                    style={{ borderRadius: 10, fontWeight: 600, border: `1px solid ${theme.border}`, background: 'rgba(255,255,255,0.6)' }}
+                    style={{ borderRadius: 10, fontWeight: 600, border: `1px solid ${theme.border}`, background: isDarkMode ? 'rgba(15,23,42,0.65)' : 'rgba(255,255,255,0.6)', color: isDarkMode ? '#e2e8f0' : undefined }}
                     onClick={(e) => { e.stopPropagation(); setSelectedExpert(expert); setIsDrawerOpen(true); }}
                   >
                     {t('experts.viewDetail')}
@@ -314,17 +365,17 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ fontSize: 24, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}>{selectedExpert?.emoji}</span>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: pageHeading }}>
                 {(currentLang === 'zh' && selectedExpert?.name) ? selectedExpert?.name : (selectedExpert?.name_en || selectedExpert?.name)}
               </div>
-              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>{t('experts.templateType')}</div>
+              <div style={{ fontSize: 12, color: pageMuted, fontWeight: 500 }}>{t('experts.templateType')}</div>
             </div>
           </div>
         } 
         width={isMobile ? '100%' : 520} 
         onClose={() => setIsDrawerOpen(false)} 
         open={isDrawerOpen} 
-        bodyStyle={{ padding: '0 24px 24px' }}
+        bodyStyle={{ padding: '0 24px 24px', background: isDarkMode ? '#0f172a' : undefined }}
         extra={<Button type="primary" size="large" style={{ borderRadius: 10, fontWeight: 600, padding: '0 20px' }} onClick={() => { setIsDrawerOpen(false); if(selectedExpert) handleUseTemplate(selectedExpert); }}>{t('experts.useTemplate')}</Button>}
       >
         {selectedExpert && (
@@ -332,14 +383,14 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
             {/* 1. 身份定义区域 */}
             <section>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <h4 style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#1e293b', fontSize: 15, fontWeight: 700, margin: 0 }}>
+                <h4 style={{ display: 'flex', alignItems: 'center', gap: 8, color: isDarkMode ? '#f1f5f9' : '#1e293b', fontSize: 15, fontWeight: 700, margin: 0 }}>
                   <ShieldCheck size={20} color="#2563eb" /> 
                   {t('experts.identityLabel')}
                 </h4>
                 <Button type="text" size="small" icon={<Copy size={14} />} onClick={() => selectedExpert.identity_md && handleCopySoul(selectedExpert.identity_md)} style={{ color: '#94a3b8' }}>{t('common.copy')}</Button>
               </div>
               <div style={{ 
-                padding: '20px', background: '#f8fafc', borderRadius: 16, border: '1px solid #f1f5f9',
+                padding: '20px', background: wizard.drawerIdentityBg, borderRadius: 16, border: `1px solid ${wizard.drawerIdentityBorder}`,
                 boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
               }}>
                 <div className="markdown-content expert-md">
@@ -353,14 +404,14 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
             {/* 2. 核心之魂区域 */}
             <section>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <h4 style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#1e293b', fontSize: 15, fontWeight: 700, margin: 0 }}>
+                <h4 style={{ display: 'flex', alignItems: 'center', gap: 8, color: pageHeading, fontSize: 15, fontWeight: 700, margin: 0 }}>
                   <Brain size={20} color="#8b5cf6" /> 
                   {t('experts.soulLabel')}
                 </h4>
                 <Button type="text" size="small" icon={<Copy size={14} />} onClick={() => handleCopySoul(selectedExpert.soul)} style={{ color: '#94a3b8' }}>{t('common.copy')}</Button>
               </div>
               <div style={{ 
-                padding: '20px', background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', borderRadius: 16, border: '1px solid #ddd6fe',
+                padding: '20px', background: wizard.drawerSoulBg, borderRadius: 16, border: `1px solid ${wizard.drawerSoulBorder}`,
                 boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
               }}>
                 <div className="markdown-content expert-md">
@@ -373,18 +424,28 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
 
             {/* 3. 技能视图建议 */}
             <section>
-              <h4 style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#1e293b', marginBottom: 16, fontSize: 15, fontWeight: 700 }}>
+              <h4 style={{ display: 'flex', alignItems: 'center', gap: 8, color: pageHeading, marginBottom: 16, fontSize: 15, fontWeight: 700 }}>
                 <CheckCircle2 size={20} color="#22c55e" /> {t('experts.skills')}
               </h4>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 {selectedExpert.skills.map(s => (
-                  <Tag key={s} color="blue" style={{ borderRadius: 8, padding: '6px 12px', fontSize: 13, border: 'none', background: '#eff6ff', color: '#2563eb', fontWeight: 600 }}>{s}</Tag>
+                  <Tag key={s} color="blue" style={{ borderRadius: 8, padding: '6px 12px', fontSize: 13, border: 'none', background: wizard.skillTagBg, color: wizard.skillTagColor, fontWeight: 600 }}>{s}</Tag>
                 ))}
               </div>
             </section>
 
             {/* 样式定义 */}
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{ __html: isDarkMode ? `
+              .expert-md h1 { font-size: 1.4em; margin-bottom: 16px; color: #f1f5f9; border-bottom: 2px solid #334155; padding-bottom: 8px; }
+              .expert-md h2 { font-size: 1.2em; margin-top: 20px; margin-bottom: 12px; color: #e2e8f0; display: flex; align-items: center; gap: 8px; }
+              .expert-md h3 { font-size: 1.1em; margin-top: 16px; margin-bottom: 8px; color: #cbd5e1; }
+              .expert-md p { font-size: 13px; line-height: 1.8; color: #cbd5e1; margin-bottom: 12px; }
+              .expert-md ul, .expert-md ol { padding-left: 18px; margin-bottom: 16px; }
+              .expert-md li { font-size: 13px; color: #cbd5e1; margin-bottom: 6px; line-height: 1.6; }
+              .expert-md blockquote { border-left: 4px solid #475569; padding-left: 12px; color: #94a3b8; font-style: italic; margin: 12px 0; }
+              .expert-md code { background: #334155; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; color: #93c5fd; }
+              .expert-md strong { color: #f1f5f9; font-weight: 700; }
+            ` : `
               .expert-md h1 { font-size: 1.4em; margin-bottom: 16px; color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
               .expert-md h2 { font-size: 1.2em; margin-top: 20px; margin-bottom: 12px; color: #334155; display: flex; align-items: center; gap: 8px; }
               .expert-md h3 { font-size: 1.1em; margin-top: 16px; margin-bottom: 8px; color: #475569; }
@@ -392,7 +453,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
               .expert-md ul, .expert-md ol { padding-left: 18px; margin-bottom: 16px; }
               .expert-md li { font-size: 13px; color: #475569; margin-bottom: 6px; line-height: 1.6; }
               .expert-md blockquote { border-left: 4px solid #cbd5e1; padding-left: 12px; color: #64748b; font-style: italic; margin: 12px 0; }
-              .expert-md code { background: #f1f5f9; padding: 2px 6px; borderRadius: 4px; font-family: monospace; font-size: 12px; color: #2563eb; }
+              .expert-md code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; color: #2563eb; }
               .expert-md strong { color: #1e293b; font-weight: 700; }
             ` }} />
           </div>
@@ -406,8 +467,8 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
               <Sparkles size={18} color="#fff" />
             </div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>{t('experts.createBotTitle')}</div>
-              <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>{t('experts.cloneFrom', { name: (currentLang === 'zh' && selectedExpert?.name) ? selectedExpert?.name : (selectedExpert?.name_en || selectedExpert?.name) })} · {t('experts.templateType')}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: pageHeading }}>{t('experts.createBotTitle')}</div>
+              <div style={{ fontSize: 11, color: pageMuted, fontWeight: 500 }}>{t('experts.cloneFrom', { name: (currentLang === 'zh' && selectedExpert?.name) ? selectedExpert?.name : (selectedExpert?.name_en || selectedExpert?.name) })} · {t('experts.templateType')}</div>
             </div>
           </div>
         } 
@@ -416,7 +477,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
         footer={null}
         width={currentStep === 1 ? (isMobile ? '100%' : 1100) : 600}
         centered 
-        bodyStyle={{ padding: '24px' }}
+        bodyStyle={{ padding: '24px', background: isDarkMode ? '#0f172a' : undefined }}
       >
         <Steps 
           current={currentStep} 
@@ -433,9 +494,9 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
           {/* Step 0: 基础配置 */}
           {currentStep === 0 && (
             <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div style={{ background: '#f8fafc', padding: 24, borderRadius: 20, border: '1px solid #f1f5f9' }}>
+              <div style={{ background: wizard.step0PanelBg, padding: 24, borderRadius: 20, border: `1px solid ${wizard.step0PanelBorder}` }}>
                 <Form.Item 
-                  label={<span style={{ fontWeight: 700, color: '#334155' }}>{t('experts.idLabel')}</span>} 
+                  label={<span style={{ fontWeight: 700, color: wizard.formLabel }}>{t('experts.idLabel')}</span>} 
                   name="botId" 
                   rules={[{ required: true, message: t('experts.idPlaceholder') }]}
                   extra={t('experts.idTip')}
@@ -448,7 +509,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
                 </Form.Item>
                 
                 <Form.Item 
-                  label={<span style={{ fontWeight: 700, color: '#334155' }}>{t('experts.modelLabel')}</span>} 
+                  label={<span style={{ fontWeight: 700, color: wizard.formLabel }}>{t('experts.modelLabel')}</span>} 
                   name="modelId" 
                   rules={[{ required: true, message: t('experts.modelPlaceholder') }]}
                 >
@@ -513,7 +574,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <ShieldCheck size={16} />
                             <span>{t('experts.identityLabel')}</span>
-                            <span style={{ fontSize: 10, background: '#f1f5f9', padding: '1px 6px', borderRadius: 6, color: '#64748b', fontWeight: 400 }}>
+                            <span style={{ fontSize: 10, background: wizard.tokenChipBg, padding: '1px 6px', borderRadius: 6, color: pageMuted, fontWeight: 400 }}>
                               ~{idTokens} Tokens
                             </span>
                           </div>
@@ -527,9 +588,10 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
                                 style={{ 
                                   height: '100%', borderRadius: '0 0 12px 12px', 
                                   fontFamily: 'monospace', fontSize: 13, 
-                                  background: '#f8fafc', border: '1px solid #e2e8f0', 
+                                  background: wizard.editorBg, border: `1px solid ${borderDefault}`, 
                                   borderTop: 'none', resize: 'none', padding: '16px 20px',
-                                  lineHeight: 1.7, overflowY: 'auto'
+                                  lineHeight: 1.7, overflowY: 'auto',
+                                  color: isDarkMode ? '#e2e8f0' : undefined
                                 }} 
                               />
                             </div>
@@ -542,7 +604,7 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Brain size={16} />
                             <span>{t('experts.soulLabel')}</span>
-                            <span style={{ fontSize: 10, background: '#f1f5f9', padding: '1px 6px', borderRadius: 6, color: '#64748b', fontWeight: 400 }}>
+                            <span style={{ fontSize: 10, background: wizard.tokenChipBg, padding: '1px 6px', borderRadius: 6, color: pageMuted, fontWeight: 400 }}>
                               ~{soulTokens} Tokens
                             </span>
                           </div>
@@ -556,9 +618,10 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
                                 style={{ 
                                   height: '100%', borderRadius: '0 0 12px 12px', 
                                   fontFamily: 'monospace', fontSize: 13, 
-                                  background: '#f8fafc', border: '1px solid #e2e8f0', 
+                                  background: wizard.editorBg, border: `1px solid ${borderDefault}`, 
                                   borderTop: 'none', resize: 'none', padding: '16px 20px',
-                                  lineHeight: 1.7, overflowY: 'auto'
+                                  lineHeight: 1.7, overflowY: 'auto',
+                                  color: isDarkMode ? '#e2e8f0' : undefined
                                 }} 
                               />
                             </div>
@@ -571,13 +634,13 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
                 </div>
 
                 {!isMobile && (
-                  <div style={{ flex: 1, border: '1px solid #f1f5f9', borderRadius: 16, background: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                    <div style={{ padding: '12px 16px', background: '#f8fafc', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Code size={14} color="#64748b" />
-                      <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>{t('experts.realtimePreview')}</span>
+                  <div style={{ flex: 1, border: `1px solid ${borderDefault}`, borderRadius: 16, background: wizard.previewPanelBg, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                    <div style={{ padding: '12px 16px', background: wizard.previewHeaderBg, borderBottom: `1px solid ${borderDefault}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Code size={14} color={pageMuted} />
+                      <span style={{ fontSize: 12, fontWeight: 600, color: pageMuted }}>{t('experts.realtimePreview')}</span>
                     </div>
                     <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
-                      <div className="expert-md">
+                      <div className={isDarkMode ? 'expert-md expert-md-wizard-preview' : 'expert-md'}>
                         <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
                           {`${form.getFieldValue('identity_md')}\n\n---\n\n${form.getFieldValue('soul')}`}
                         </ReactMarkdown>
@@ -589,10 +652,10 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <Button onClick={() => setCurrentStep(0)} style={{ borderRadius: 10 }}>{t('experts.prevStep')}</Button>
-                  <div style={{ padding: '4px 12px', background: '#f8fafc', borderRadius: 20, border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ padding: '4px 12px', background: wizard.estimateBarBg, borderRadius: 20, border: `1px solid ${wizard.estimateBarBorder}`, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: (idTokens + soulTokens) > 3000 ? '#f59e0b' : '#22c55e' }} />
-                    <span style={{ fontSize: 12, color: '#64748b' }}>
-                      {t('experts.estimateTokens')}: <strong style={{ color: (idTokens + soulTokens) > 3000 ? '#f59e0b' : '#1e293b' }}>{idTokens + soulTokens}</strong> Tokens
+                    <span style={{ fontSize: 12, color: pageMuted }}>
+                      {t('experts.estimateTokens')}: <strong style={{ color: (idTokens + soulTokens) > 3000 ? '#f59e0b' : wizard.valueStrong }}>{idTokens + soulTokens}</strong> Tokens
                     </span>
                   </div>
                 </div>
@@ -604,19 +667,19 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
           {/* Step 2: 最终确认 */}
           {currentStep === 2 && (
             <div className="animate-in" style={{ textAlign: 'center', padding: '20px 0' }}>
-              <div style={{ width: 80, height: 80, background: '#f0fdf4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+              <div style={{ width: 80, height: 80, background: wizard.step2IconBg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
                 <CheckCircle2 size={40} color="#22c55e" />
               </div>
-              <h3 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 8 }}>{t('experts.ready')}</h3>
-              <p style={{ color: '#64748b', marginBottom: 32 }}>{t('experts.readyDesc', { name: (currentLang === 'zh' && selectedExpert?.name) ? selectedExpert?.name : (selectedExpert?.name_en || selectedExpert?.name) })}</p>
+              <h3 style={{ fontSize: 20, fontWeight: 800, color: pageHeading, marginBottom: 8 }}>{t('experts.ready')}</h3>
+              <p style={{ color: pageMuted, marginBottom: 32 }}>{t('experts.readyDesc', { name: (currentLang === 'zh' && selectedExpert?.name) ? selectedExpert?.name : (selectedExpert?.name_en || selectedExpert?.name) })}</p>
               
-              <div style={{ background: '#f8fafc', padding: 20, borderRadius: 16, textAlign: 'left', marginBottom: 32 }}>
+              <div style={{ background: wizard.step2SummaryBg, padding: 20, borderRadius: 16, textAlign: 'left', marginBottom: 32, border: isDarkMode ? `1px solid ${borderDefault}` : undefined }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <span style={{ color: '#94a3b8' }}>{t('experts.idLabel')}:</span>
-                  <span style={{ fontWeight: 700, color: '#1e293b' }}>{form.getFieldValue('botId')}</span>
+                  <span style={{ color: pageMuted }}>{t('experts.idLabel')}:</span>
+                  <span style={{ fontWeight: 700, color: wizard.valueStrong }}>{form.getFieldValue('botId')}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94a3b8' }}>{t('experts.modelLabel')}:</span>
+                  <span style={{ color: pageMuted }}>{t('experts.modelLabel')}:</span>
                   <Tag color="geekblue" style={{ borderRadius: 4, margin: 0 }}>{form.getFieldValue('modelId')}</Tag>
                 </div>
               </div>
@@ -640,6 +703,15 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate }) => 
             transform: translateY(-8px);
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
           }
+          ${isDarkMode ? `
+          .expert-md-wizard-preview h1 { font-size: 1.4em; margin-bottom: 12px; color: #f1f5f9; border-bottom: 2px solid #334155; padding-bottom: 8px; }
+          .expert-md-wizard-preview h2 { font-size: 1.2em; margin-top: 16px; margin-bottom: 10px; color: #e2e8f0; }
+          .expert-md-wizard-preview h3 { font-size: 1.05em; margin-top: 12px; color: #cbd5e1; }
+          .expert-md-wizard-preview p, .expert-md-wizard-preview li { color: #cbd5e1; line-height: 1.75; }
+          .expert-md-wizard-preview code { background: #334155; color: #93c5fd; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+          .expert-md-wizard-preview blockquote { border-left: 4px solid #475569; color: #94a3b8; padding-left: 12px; }
+          .expert-md-wizard-preview hr { border-color: #334155; }
+          ` : ''}
         ` }} />
       </Modal>
       </div>

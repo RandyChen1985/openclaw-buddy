@@ -40,11 +40,12 @@ interface PluginManagementProps {
   activeTasks?: Task[];
   isRunning?: boolean;
   onNavigateToDashboard?: () => void;
+  isDarkMode?: boolean;
 }
 
 const PluginManagement: React.FC<PluginManagementProps> = ({ 
   isMobile, plugins: globalPlugins, loading, onRefresh, updatedAt, onTaskUpdate, 
-  activeTasks = []
+  activeTasks = [], isDarkMode = false
 }) => {
   const { t } = useTranslation();
   const [searchText, setSearchText] = useState('');
@@ -251,6 +252,11 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
     return matchesSearch && matchesStatus;
   });
 
+  const borderDefault = isDarkMode ? '#334155' : '#e2e8f0';
+  const dividerSubtle = isDarkMode ? '#334155' : '#f1f5f9';
+  const pageHeading = isDarkMode ? '#f1f5f9' : '#1e293b';
+  const pageMuted = isDarkMode ? '#94a3b8' : '#64748b';
+
   const getStatusTag = (plugin: Plugin) => {
     const ui = channelPluginUiState(plugin);
     if (ui === 'loaded') {
@@ -268,12 +274,12 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
       key: 'name',
       render: (_: any, record: Plugin) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ padding: 8, background: '#f8fafc', borderRadius: 8, color: '#f59e0b' }}>
+          <div style={{ padding: 8, background: isDarkMode ? '#0f172a' : '#f8fafc', borderRadius: 8, color: '#f59e0b' }}>
             <Zap size={18} />
           </div>
           <div>
-            <div style={{ fontWeight: 600, color: '#1e293b' }}>{record.name || record.id}</div>
-            <div style={{ fontSize: 11, color: '#94a3b8' }}>ID: {record.id}</div>
+            <div style={{ fontWeight: 600, color: isDarkMode ? '#f1f5f9' : '#1e293b' }}>{record.name || record.id}</div>
+            <div style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#94a3b8' }}>ID: {record.id}</div>
           </div>
         </div>
       ),
@@ -363,7 +369,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
       <Card 
         title={
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12 }}>
-            <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: pageHeading, display: 'flex', alignItems: 'center', gap: 8 }}>
               <Zap size={isMobile ? 18 : 20} color="#f59e0b" /> {isMobile ? t('plugins.title') : t('plugins.fullTitle')}
             </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12 }}>
@@ -375,7 +381,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                       onClick={handleUpdate}
                       loading={updating}
                       disabled={updating || reloading}
-                      style={{ fontSize: 12, borderRadius: 6 }}
+                      style={{ fontSize: 12, borderRadius: 6, background: isDarkMode ? '#0f172a' : undefined, borderColor: isDarkMode ? '#334155' : undefined, color: isDarkMode ? '#cbd5e1' : undefined }}
                     >
                       {t('plugins.update')}
                     </Button>
@@ -385,7 +391,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                       onClick={handleReload}
                       loading={reloading}
                       disabled={updating || reloading}
-                      style={{ fontSize: 12, borderRadius: 6 }}
+                      style={{ fontSize: 12, borderRadius: 6, background: isDarkMode ? '#0f172a' : undefined, borderColor: isDarkMode ? '#334155' : undefined, color: isDarkMode ? '#cbd5e1' : undefined }}
                     >
                       {t('plugins.reload')}
                     </Button>
@@ -402,7 +408,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                   icon={<RefreshCw size={14} className={loading ? 'animate-spin' : ''} />} 
                   onClick={() => onRefresh(true)}
                   loading={loading}
-                  style={{ color: '#64748b', display: 'flex', alignItems: 'center', padding: isMobile ? '0 4px' : '0 8px' }}
+                  style={{ color: pageMuted, display: 'flex', alignItems: 'center', padding: isMobile ? '0 4px' : '0 8px' }}
                 >
                    {isMobile ? '' : t('common.refresh')}
                 </Button>
@@ -410,62 +416,81 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
           </div>
         }
         bodyStyle={{ padding: 0 }} 
-        style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0', overflow: 'hidden' }}
-      >
-        <div style={{ padding: isMobile ? '10px 16px' : '12px 24px', borderBottom: '1px solid #f1f5f9', color: '#64748b', fontSize: 12 }}>
-          {t('plugins.description')}
+        style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.02)', border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, background: isDarkMode ? '#1e293b' : '#fff', overflow: 'hidden' }}
+        >
+        <div style={{ padding: isMobile ? '10px 16px' : '12px 24px', borderBottom: `1px solid ${isDarkMode ? '#334155' : '#f1f5f9'}`, color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 12 }}>          {t('plugins.description')}
         </div>
         
         <div style={{ 
           padding: isMobile ? '12px 16px' : '16px 24px', 
-          borderBottom: '1px solid #f1f5f9',
+          borderBottom: `1px solid ${dividerSubtle}`,
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
-          alignItems: isMobile ? 'flex-start' : 'center',
-          gap: 12
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: isMobile ? '100%' : 'auto', flex: 1 }}>
+          alignItems: isMobile ? 'stretch' : 'center',
+          gap: 12,
+          minWidth: 0
+        }} className={isDarkMode ? 'plugin-mgmt-toolbar' : undefined}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: isMobile ? '100%' : 'auto', flex: 1, minWidth: 0 }}>
             <Input 
               prefix={<Search size={16} color="#94a3b8" />} 
               placeholder={t('plugins.search')} 
               value={searchText}
               onChange={e => setSearchText(e.target.value)}
-              style={{ flex: 1, borderRadius: 8 }}
+              style={{ flex: 1, borderRadius: 8, background: isDarkMode ? '#0f172a' : undefined, borderColor: isDarkMode ? '#334155' : undefined, color: isDarkMode ? '#f1f5f9' : undefined }}
               allowClear
             />
             {!isMobile && (
               <div style={{ 
-                fontSize: 12, color: '#f59e0b', background: '#fffbeb', 
-                padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap'
+                fontSize: 12, color: '#f59e0b', background: isDarkMode ? 'rgba(245,158,11,0.12)' : '#fffbeb', 
+                padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap', border: isDarkMode ? '1px solid #334155' : undefined
               }}>
                 {t('plugins.count', { count: filteredPlugins.length })}
               </div>
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
+          <div style={{
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: isMobile ? 'stretch' : 'center',
+            gap: 12,
+            width: isMobile ? '100%' : 'auto',
+            minWidth: 0,
+            justifyContent: isMobile ? 'flex-start' : 'flex-end'
+          }}>
             {isMobile && (
               <Button 
                 size="small" 
                 icon={<ArrowUpCircle size={14} />} 
                 onClick={handleUpdate}
                 loading={updating}
-                style={{ fontSize: 11, borderRadius: 6 }}
+                style={{ alignSelf: 'flex-start', fontSize: 11, borderRadius: 6, background: isDarkMode ? '#0f172a' : undefined, borderColor: isDarkMode ? '#334155' : undefined, color: isDarkMode ? '#cbd5e1' : undefined }}
               >
                 {t('plugins.update')}
               </Button>
             )}
-            <Segmented
-              options={[
-                { label: t('plugins.loaded'), value: 'loaded' },
-                { label: t('plugins.filterEnabled'), value: 'enabled' },
-                { label: t('common.all'), value: 'all' },
-                { label: t('plugins.filterDisabled'), value: 'disabled' }
-              ]}
-              value={statusFilter}
-              onChange={(value) => setStatusFilter(value)}
-              style={{ background: '#f1f5f9', borderRadius: 8, padding: 2 }}
-            />
+            <div
+              style={
+                isMobile
+                  ? { width: '100%', minWidth: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' as const }
+                  : undefined
+              }
+            >
+              <Segmented
+                block={isMobile}
+                size={isMobile ? 'small' : 'middle'}
+                className={[isDarkMode ? 'plugin-mgmt-seg' : '', isMobile ? 'plugin-mgmt-filter-seg-mobile' : ''].filter(Boolean).join(' ') || undefined}
+                options={[
+                  { label: t('plugins.loaded'), value: 'loaded' },
+                  { label: t('plugins.filterEnabled'), value: 'enabled' },
+                  { label: t('common.all'), value: 'all' },
+                  { label: t('plugins.filterDisabled'), value: 'disabled' }
+                ]}
+                value={statusFilter}
+                onChange={(value) => setStatusFilter(value)}
+                style={{ background: isDarkMode ? '#0f172a' : '#f1f5f9', borderRadius: 8, padding: 2, border: isDarkMode ? '1px solid #334155' : undefined }}
+              />
+            </div>
           </div>
         </div>
 
@@ -477,17 +502,17 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
               filteredPlugins.map((plugin: Plugin) => {
                 const isExpanded = expandedIds.includes(plugin.id);
                 return (
-                  <div key={plugin.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <div key={plugin.id} style={{ borderBottom: `1px solid ${dividerSubtle}` }}>
                     <div 
                       onClick={() => toggleExpand(plugin.id)}
                       style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
                     >
-                      <div style={{ padding: 8, background: '#f8fafc', borderRadius: 8, color: '#f59e0b', flexShrink: 0 }}>
+                      <div style={{ padding: 8, background: isDarkMode ? '#0f172a' : '#f8fafc', borderRadius: 8, color: '#f59e0b', flexShrink: 0 }}>
                         <Zap size={18} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                          <span style={{ fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontWeight: 600, color: pageHeading, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {plugin.name || plugin.id}
                           </span>
                           {getStatusTag(plugin)}
@@ -504,23 +529,23 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                     </div>
                     
                     {isExpanded && (
-                      <div style={{ padding: '0 16px 16px 16px', background: '#f8fafc' }}>
-                        <div style={{ padding: 12, background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 13 }}>
+                      <div style={{ padding: '0 16px 16px 16px', background: isDarkMode ? '#0f172a' : '#f8fafc' }}>
+                        <div style={{ padding: 12, background: isDarkMode ? '#1e293b' : '#fff', borderRadius: 12, border: `1px solid ${borderDefault}`, fontSize: 13 }}>
                           <div style={{ marginBottom: 12 }}>
-                            <div style={{ fontWeight: 600, color: '#64748b', fontSize: 11, marginBottom: 4 }}>{t('plugins.functionDesc')}</div>
-                            <div style={{ color: '#445469', lineHeight: 1.5 }}>{plugin.description || t('plugins.noDescription')}</div>
+                            <div style={{ fontWeight: 600, color: pageMuted, fontSize: 11, marginBottom: 4 }}>{t('plugins.functionDesc')}</div>
+                            <div style={{ color: isDarkMode ? '#cbd5e1' : '#445469', lineHeight: 1.5 }}>{plugin.description || t('plugins.noDescription')}</div>
                           </div>
                           
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                             <div>
-                              <div style={{ fontWeight: 600, color: '#64748b', fontSize: 11, marginBottom: 4 }}>{t('plugins.origin')}</div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#1e293b' }}>
+                              <div style={{ fontWeight: 600, color: pageMuted, fontSize: 11, marginBottom: 4 }}>{t('plugins.origin')}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: pageHeading }}>
                                 {plugin.origin === 'bundled' ? <ShieldCheck size={14} color="#10b981" /> : <Globe size={14} color="#3b82f6" />}
                                 {plugin.origin}
                               </div>
                             </div>
                             <div>
-                               <div style={{ fontWeight: 600, color: '#64748b', fontSize: 11, marginBottom: 4 }}>{t('plugins.enable')}</div>
+                               <div style={{ fontWeight: 600, color: pageMuted, fontSize: 11, marginBottom: 4 }}>{t('plugins.enable')}</div>
                                <Tooltip title={processingIds.has(plugin.id) || hasActiveTask(plugin.id) ? t('common.processing') : ''}>
                                   <Switch 
                                     checked={plugin.enabled} 
@@ -534,7 +559,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                             </div>
                           </div>
 
-                          <div style={{ display: 'flex', gap: 8, marginBottom: 12, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+                          <div style={{ display: 'flex', gap: 8, marginBottom: 12, paddingTop: 12, borderTop: `1px solid ${dividerSubtle}` }}>
                             <Button 
                               size="small" 
                               icon={<Info size={14} />} 
@@ -567,10 +592,10 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                           </div>
 
                           {(plugin.channelIds?.length > 0 || plugin.providerIds?.length > 0) && (
-                            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #e2e8f0' }}>
+                            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px dashed ${borderDefault}` }}>
                               {plugin.channelIds?.length > 0 && (
                                 <div style={{ marginBottom: 8 }}>
-                                  <div style={{ fontWeight: 600, color: '#64748b', fontSize: 11, marginBottom: 4 }}>{t('plugins.channels')}</div>
+                                  <div style={{ fontWeight: 600, color: pageMuted, fontSize: 11, marginBottom: 4 }}>{t('plugins.channels')}</div>
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                                     {plugin.channelIds.map((c: string) => <Tag key={c} style={{ margin: 0, fontSize: 10 }}>{c}</Tag>)}
                                   </div>
@@ -578,7 +603,7 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
                               )}
                               {plugin.providerIds?.length > 0 && (
                                 <div>
-                                  <div style={{ fontWeight: 600, color: '#64748b', fontSize: 11, marginBottom: 4 }}>{t('plugins.providers')}</div>
+                                  <div style={{ fontWeight: 600, color: pageMuted, fontSize: 11, marginBottom: 4 }}>{t('plugins.providers')}</div>
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                                     {plugin.providerIds.map((p: string) => <Tag key={p} style={{ margin: 0, fontSize: 10 }}>{p}</Tag>)}
                                   </div>
@@ -605,10 +630,10 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
             style={{ padding: '8px' }}
             expandable={{
               expandedRowRender: record => (
-                <div style={{ padding: '12px 20px', background: '#f8fafc', borderRadius: 8 }}>
+                <div style={{ padding: '12px 20px', background: isDarkMode ? '#0f172a' : '#f8fafc', borderRadius: 8, border: isDarkMode ? `1px solid ${borderDefault}` : undefined }}>
                   <div style={{ marginBottom: 8 }}>
                     <Typography.Text type="secondary" strong style={{ fontSize: 12 }}>{t('plugins.functionDesc')}:</Typography.Text>
-                    <div style={{ color: '#475569', marginTop: 4 }}>{record.description || t('plugins.noDescription')}</div>
+                    <div style={{ color: isDarkMode ? '#cbd5e1' : '#475569', marginTop: 4 }}>{record.description || t('plugins.noDescription')}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 24 }}>
                     {record.channelIds?.length > 0 && (
@@ -636,6 +661,30 @@ const PluginManagement: React.FC<PluginManagementProps> = ({
         )}
       </Card>
       </div>
+      <style>{`
+        ${isDarkMode ? `
+        .plugin-mgmt-toolbar .ant-input-affix-wrapper {
+          background: #0f172a !important;
+          border-color: #334155 !important;
+        }
+        .plugin-mgmt-toolbar .ant-input-affix-wrapper input { color: #f1f5f9 !important; }
+        .plugin-mgmt-seg.ant-segmented .ant-segmented-thumb {
+          background: #2563eb !important;
+          box-shadow: none !important;
+        }
+        .plugin-mgmt-seg.ant-segmented .ant-segmented-item-selected {
+          background: #2563eb !important;
+          color: #f8fafc !important;
+          box-shadow: none !important;
+        }
+        ` : ''}
+        .plugin-mgmt-filter-seg-mobile.ant-segmented.ant-segmented-sm .ant-segmented-item-label {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          max-width: 100%;
+        }
+      `}</style>
     </div>
   );
 };

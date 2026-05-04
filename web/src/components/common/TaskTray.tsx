@@ -8,16 +8,20 @@ import dayjs from 'dayjs';
 interface TaskTrayProps {
   tasks: Task[];
   isMobile?: boolean;
+  isDarkMode?: boolean;
   loading?: boolean;
   onRefresh?: () => void;
 }
 
-const TaskTray: React.FC<TaskTrayProps> = ({ tasks, isMobile, loading, onRefresh }) => {
+const TaskTray: React.FC<TaskTrayProps> = ({ tasks, isMobile, isDarkMode = false, loading, onRefresh }) => {
   const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
   
   const activeTasks = tasks.filter(t => t.status === 'Running');
   const hasActive = activeTasks.length > 0;
+  const trayHeaderBg = isDarkMode ? '#1e293b' : '#f8fafc';
+  const trayHeaderBorder = isDarkMode ? '#334155' : '#f1f5f9';
+  const trayTitleColor = isDarkMode ? '#f1f5f9' : undefined;
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -96,7 +100,7 @@ const TaskTray: React.FC<TaskTrayProps> = ({ tasks, isMobile, loading, onRefresh
           height="70vh"
           styles={{ body: { padding: 0 } }}
         >
-          <div style={{ padding: '8px 16px', background: '#f8fafc', fontSize: 12, color: '#64748b', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ padding: '8px 16px', background: trayHeaderBg, borderBottom: `1px solid ${trayHeaderBorder}`, fontSize: 12, color: isDarkMode ? '#94a3b8' : '#64748b', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>{hasActive ? `${activeTasks.length} 个任务正在后台处理` : '历史任务轨迹'}</span>
             <Button 
               type="text" 
@@ -116,9 +120,9 @@ const TaskTray: React.FC<TaskTrayProps> = ({ tasks, isMobile, loading, onRefresh
     <Popover 
       content={(
         <div style={{ width: 320, maxHeight: 480, overflowY: 'auto' }}>
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ padding: '12px 16px', borderBottom: `1px solid ${trayHeaderBorder}`, background: trayHeaderBg, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Space size={8}>
-              <Typography.Text strong>{t('common.monitor_center')}</Typography.Text>
+              <Typography.Text strong style={{ color: trayTitleColor }}>{t('common.monitor_center')}</Typography.Text>
               <Button 
                 type="text" 
                 size="small" 

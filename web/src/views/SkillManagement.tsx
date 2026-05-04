@@ -31,11 +31,12 @@ interface SkillManagementProps {
   activeTasks?: any[];
   isRunning?: boolean;
   onNavigateToDashboard?: () => void;
+  isDarkMode?: boolean;
 }
 
 const SkillManagement: React.FC<SkillManagementProps> = ({ 
   isMobile, onRefresh, loading: globalLoading, skills: globalSkills, 
-  activeTasks = []
+  activeTasks = [], isDarkMode = false
 }) => {
   const { t } = useTranslation();
   const [localSkills, setLocalSkills] = useState<Skill[]>([]);
@@ -51,6 +52,9 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
 
   const loading = globalLoading !== undefined ? globalLoading : localLoading;
   const skills = globalSkills !== undefined ? globalSkills : localSkills;
+  const dividerSubtle = isDarkMode ? '#334155' : '#f1f5f9';
+  const pageHeading = isDarkMode ? '#f1f5f9' : '#1e293b';
+  const pageMuted = isDarkMode ? '#94a3b8' : '#64748b';
 
   // 必须导入遮罩组件
   // (我在 import 处会补上)
@@ -296,7 +300,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
       <Card 
         title={
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12 }}>
-            <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: pageHeading, display: 'flex', alignItems: 'center', gap: 8 }}>
               <Puzzle size={isMobile ? 18 : 20} color="#2563eb" /> {isMobile ? t('skills.title') : t('skills.fullTitle')}
             </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12 }}>
@@ -320,38 +324,37 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
                   size="small" 
                   icon={<HelpCircle size={16} />} 
                   onClick={() => setIsHelpModalOpen(true)}
-                  style={{ color: '#2563eb', background: '#eff6ff', borderRadius: 8, display: 'flex', alignItems: 'center' }}
+                  style={{ color: '#60a5fa', background: isDarkMode ? 'rgba(37,99,235,0.2)' : '#eff6ff', borderRadius: 8, display: 'flex', alignItems: 'center', border: isDarkMode ? '1px solid #334155' : undefined }}
                 />
               </div>
           </div>
         }
         bodyStyle={{ padding: 0 }} 
-        style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0', overflow: 'hidden' }}
-      >
-        <div style={{ padding: isMobile ? '10px 16px' : '12px 24px', borderBottom: '1px solid #f1f5f9', color: '#64748b', fontSize: 12 }}>
-          {t('skills.description')}
+        style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.02)', border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, background: isDarkMode ? '#1e293b' : '#fff', overflow: 'hidden' }}
+        >
+        <div style={{ padding: isMobile ? '10px 16px' : '12px 24px', borderBottom: `1px solid ${isDarkMode ? '#334155' : '#f1f5f9'}`, color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 12 }}>          {t('skills.description')}
         </div>
         <div style={{ 
             padding: isMobile ? '12px 16px' : '16px 24px', 
-            borderBottom: '1px solid #f1f5f9', 
+            borderBottom: `1px solid ${dividerSubtle}`, 
             display: 'flex', 
             flexDirection: isMobile ? 'column' : 'row',
             alignItems: isMobile ? 'flex-start' : 'center', 
             gap: 12 
-        }}>
+        }} className={isDarkMode ? 'skill-mgmt-toolbar' : undefined}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: isMobile ? '100%' : 'auto', flex: 1 }}>
             <Input 
               prefix={<Search size={16} color="#94a3b8" />} 
               placeholder={t('skills.search')} 
               value={searchText}
               onChange={e => setSearchText(e.target.value)}
-              style={{ flex: 1, borderRadius: 8 }}
+              style={{ flex: 1, borderRadius: 8, background: isDarkMode ? '#0f172a' : undefined, borderColor: isDarkMode ? '#334155' : undefined, color: isDarkMode ? '#f1f5f9' : undefined }}
               allowClear
             />
             {!isMobile && (
                 <div style={{ 
-                    fontSize: 12, color: '#2563eb', background: '#eff6ff', 
-                    padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap'
+                    fontSize: 12, color: isDarkMode ? '#93c5fd' : '#2563eb', background: isDarkMode ? 'rgba(37,99,235,0.15)' : '#eff6ff', 
+                    padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap', border: isDarkMode ? '1px solid #334155' : undefined
                 }}>
                     {t('skills.count', { count: filteredSkills.length })}
                 </div>
@@ -360,6 +363,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
           
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end', flexWrap: 'wrap' }}>
             <Segmented
+              className={isDarkMode ? 'skill-mgmt-seg' : undefined}
               options={[
                 { label: t('skills.all'), value: 'all' },
                 { label: t('skills.builtin'), value: 'builtin' },
@@ -367,21 +371,22 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
               ]}
               value={typeFilter}
               onChange={(value) => setTypeFilter(value)}
-              style={{ background: '#f1f5f9', borderRadius: 8, padding: 2 }}
+              style={{ background: isDarkMode ? '#0f172a' : '#f1f5f9', borderRadius: 8, padding: 2, border: isDarkMode ? '1px solid #334155' : undefined }}
             />
             <Segmented
+              className={isDarkMode ? 'skill-mgmt-seg' : undefined}
               options={[
                 { label: t('skills.ready'), value: 'ready' },
                 { label: t('skills.all'), value: 'all' }
               ]}
               value={statusFilter}
               onChange={(value) => setStatusFilter(value)}
-              style={{ background: '#f1f5f9', borderRadius: 8, padding: 2 }}
+              style={{ background: isDarkMode ? '#0f172a' : '#f1f5f9', borderRadius: 8, padding: 2, border: isDarkMode ? '1px solid #334155' : undefined }}
             />
             {isMobile && (
                 <div style={{ 
-                    fontSize: 11, color: '#2563eb', background: '#eff6ff', 
-                    padding: '2px 8px', borderRadius: 20
+                    fontSize: 11, color: isDarkMode ? '#93c5fd' : '#2563eb', background: isDarkMode ? 'rgba(37,99,235,0.15)' : '#eff6ff', 
+                    padding: '2px 8px', borderRadius: 20, border: isDarkMode ? '1px solid #334155' : undefined
                 }}>
                     {t('skills.count', { count: filteredSkills.length })}
                 </div>
@@ -396,13 +401,13 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
             ) : (
                 filteredSkills.map(skill => (
                     <div key={skill.name} style={{ 
-                        padding: 16, borderBottom: '1px solid #f1f5f9', 
+                        padding: 16, borderBottom: `1px solid ${dividerSubtle}`, 
                         display: 'flex', flexDirection: 'column', gap: 8 
                     }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                                 <span style={{ fontSize: 20 }}>{skill.emoji || '🧩'}</span>
-                                <span style={{ fontWeight: 600, color: '#1e293b' }}>{skill.name}</span>
+                                <span style={{ fontWeight: 600, color: pageHeading }}>{skill.name}</span>
                             </div>
                             {!skill.bundled && (
                                 <Tooltip title={processingNames.has(skill.name) || hasActiveTask(skill.name, 'uninstall') ? t('common.processing') : ''}>
@@ -423,7 +428,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
                                 <Tag color="warning" style={{ margin: 0, borderRadius: 4 }}>{t('skills.needsConfig')}</Tag>
                             ) }
                         </div>
-                        <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.5 }}>{skill.description}</div>
+                        <div style={{ fontSize: 13, color: pageMuted, lineHeight: 1.5 }}>{skill.description}</div>
                         <div style={{ fontSize: 11, color: '#94a3b8' }}>{t('skills.source')}: {skill.source}</div>
                         {skill.path && <div style={{ fontSize: 10, color: '#cbd5e1', fontFamily: 'monospace', wordBreak: 'break-all', marginTop: 4 }}>{skill.path}</div>}
                     </div>
@@ -446,10 +451,10 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
       <Modal
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ padding: 8, background: '#eff6ff', borderRadius: 10, color: '#2563eb' }}><HelpCircle size={20} /></div>
+            <div style={{ padding: 8, background: isDarkMode ? 'rgba(79, 70, 229, 0.22)' : '#eff6ff', borderRadius: 10, color: isDarkMode ? '#a5b4fc' : '#2563eb', border: isDarkMode ? '1px solid #334155' : undefined }}><HelpCircle size={20} /></div>
             <div>
-                <div style={{ fontSize: 16, fontWeight: 700 }}>{t('skills.help.title')}</div>
-                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 400 }}>{t('skills.help.subtitle')}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: isDarkMode ? '#f1f5f9' : undefined }}>{t('skills.help.title')}</div>
+                <div style={{ fontSize: 12, color: isDarkMode ? '#94a3b8' : '#64748b', fontWeight: 400 }}>{t('skills.help.subtitle')}</div>
             </div>
           </div>
         }
@@ -459,11 +464,12 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
           <Button key="close" type="primary" onClick={() => setIsHelpModalOpen(false)} style={{ borderRadius: 8 }}>{t('common.confirm')}</Button>
         ]}
         width={580}
-        bodyStyle={{ padding: '24px 24px 10px' }}
+        bodyStyle={{ padding: '24px 24px 10px', background: isDarkMode ? '#0f172a' : undefined }}
+        styles={isDarkMode ? { content: { background: '#0f172a' }, header: { background: '#1e293b', borderBottom: '1px solid #334155' } } : undefined}
         style={{ borderRadius: 20, overflow: 'hidden' }}
-        maskStyle={{ backdropFilter: 'blur(10px)', background: 'rgba(255,255,255,0.4)' }}
+        maskStyle={{ backdropFilter: 'blur(10px)', background: isDarkMode ? 'rgba(15, 23, 42, 0.72)' : 'rgba(255,255,255,0.4)' }}
       >
-        <div style={{ marginBottom: 24, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #f1f5f9' }}>
+        <div style={{ marginBottom: 24, padding: 16, background: isDarkMode ? '#1e293b' : '#f8fafc', borderRadius: 12, border: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9' }}>
             <Typography.Text type="secondary" style={{ fontSize: 13 }}>
                 {t('skills.help.description')}
             </Typography.Text>
@@ -514,6 +520,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
           skillName={selectedSkill.name}
           t={t}
           isMobile={!!isMobile}
+          isDarkMode={isDarkMode}
         />
       )}
 
@@ -525,6 +532,24 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
         .hover-bg-slate:hover {
           background: #f1f5f9;
         }
+        ${isDarkMode ? `
+        .skill-mgmt-toolbar .ant-input-affix-wrapper {
+          background: #0f172a !important;
+          border-color: #334155 !important;
+        }
+        .skill-mgmt-toolbar .ant-input-affix-wrapper input { color: #f1f5f9 !important; }
+        .skill-mgmt-toolbar .ant-input-affix-wrapper .ant-input-clear-icon { color: #94a3b8 !important; }
+        .skill-mgmt-seg.ant-segmented .ant-segmented-thumb {
+          background: #2563eb !important;
+          box-shadow: none !important;
+        }
+        .skill-mgmt-seg.ant-segmented .ant-segmented-item-selected {
+          background: #2563eb !important;
+          color: #f8fafc !important;
+          box-shadow: none !important;
+        }
+        .hover-bg-slate:hover { background: #334155 !important; }
+        ` : ''}
       `}</style>
     </div>
   );

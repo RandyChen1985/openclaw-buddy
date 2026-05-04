@@ -35,13 +35,21 @@ type CronJobsResponse = {
   total?: number;
 };
 
+export type CronJobsViewProps = {
+  isDarkMode?: boolean;
+};
+
 const formatMs = (ms?: number) => {
   if (!ms || ms <= 0) return '-';
   return dayjs(ms).format('YYYY-MM-DD HH:mm:ss');
 };
 
-export default function CronJobsView() {
+export default function CronJobsView({ isDarkMode = false }: CronJobsViewProps) {
   const { t } = useTranslation();
+  const borderDefault = isDarkMode ? '#334155' : '#e2e8f0';
+  const cardBg = isDarkMode ? '#1e293b' : '#fff';
+  const pageHeading = isDarkMode ? '#f1f5f9' : '#0f172a';
+  const pageMuted = isDarkMode ? '#94a3b8' : '#64748b';
   const [loading, setLoading] = useState(false);
   const [operatingId, setOperatingId] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState('');
@@ -108,7 +116,7 @@ export default function CronJobsView() {
         responsive: ['md'],
         render: (_: any, row: CronJob) => (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Text style={{ color: '#0f172a', fontWeight: 700 }} ellipsis={{ tooltip: row.name || row.id }}>
+            <Text style={{ color: pageHeading, fontWeight: 700 }} ellipsis={{ tooltip: row.name || row.id }}>
               {row.name || row.id}
             </Text>
             <Text
@@ -155,7 +163,7 @@ export default function CronJobsView() {
                 <Text type="secondary" style={{ fontSize: 12, flex: '0 0 auto' }}>
                   {t('cron.schedule', { defaultValue: '计划' })}:
                 </Text>
-                <Text style={{ fontFamily: 'monospace', fontSize: 12, minWidth: 0 }} ellipsis={{ tooltip: expr }}>
+                <Text style={{ fontFamily: 'monospace', fontSize: 12, minWidth: 0, color: pageHeading }} ellipsis={{ tooltip: expr }}>
                   {expr}
                 </Text>
                 <Text type="secondary" style={{ fontSize: 11, flex: '0 0 auto' }} ellipsis={{ tooltip: tz }}>
@@ -167,14 +175,14 @@ export default function CronJobsView() {
                 <Text type="secondary" style={{ fontSize: 12, flex: '0 0 auto' }}>
                   {t('cron.lastRun', { defaultValue: '上次执行' })}:
                 </Text>
-                <Text style={{ fontSize: 12 }}>{last}</Text>
+                <Text style={{ fontSize: 12, color: pageHeading }}>{last}</Text>
               </div>
 
               <div style={{ display: 'flex', gap: 8 }}>
                 <Text type="secondary" style={{ fontSize: 12, flex: '0 0 auto' }}>
                   {t('cron.nextRun', { defaultValue: '下次执行' })}:
                 </Text>
-                <Text style={{ fontSize: 12 }}>{next}</Text>
+                <Text style={{ fontSize: 12, color: pageHeading }}>{next}</Text>
               </div>
             </div>
           );
@@ -202,7 +210,7 @@ export default function CronJobsView() {
           const to = d.to;
           return (
             <Tooltip title={to ? `to: ${to}` : ''}>
-              <Text style={{ whiteSpace: 'nowrap' }} ellipsis={{ tooltip: text }}>
+              <Text style={{ whiteSpace: 'nowrap', color: pageHeading }} ellipsis={{ tooltip: text }}>
                 {text}
               </Text>
             </Tooltip>
@@ -242,7 +250,7 @@ export default function CronJobsView() {
         },
       },
     ],
-    [t]
+    [t, pageHeading]
   );
 
   const renderMobileCard = (job: CronJob) => {
@@ -258,16 +266,16 @@ export default function CronJobsView() {
       <Card
         key={id}
         size="small"
-        style={{ borderRadius: 12, border: '1px solid #e2e8f0' }}
+        style={{ borderRadius: 12, border: `1px solid ${borderDefault}`, background: cardBg }}
         styles={{ body: { padding: 14 } }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13, lineHeight: 1.3 }}>
+              <div style={{ fontWeight: 800, color: pageHeading, fontSize: 13, lineHeight: 1.3 }}>
                 {job.name || job.id}
               </div>
-              <div style={{ color: '#64748b', fontSize: 11, marginTop: 2, wordBreak: 'break-all' }}>
+              <div style={{ color: pageMuted, fontSize: 11, marginTop: 2, wordBreak: 'break-all' }}>
                 <Text
                   type="secondary"
                   style={{ fontSize: 11 }}
@@ -299,7 +307,7 @@ export default function CronJobsView() {
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {t('cron.schedule', { defaultValue: '计划' })}
               </Text>
-              <Text style={{ fontFamily: 'monospace', fontSize: 12, textAlign: 'right' }}>
+              <Text style={{ fontFamily: 'monospace', fontSize: 12, textAlign: 'right', color: pageHeading }}>
                 {job.schedule?.expr || '-'}
               </Text>
             </div>
@@ -307,20 +315,20 @@ export default function CronJobsView() {
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {t('cron.nextRun', { defaultValue: '下次执行' })}
               </Text>
-              <Text style={{ fontSize: 12, textAlign: 'right' }}>{formatMs(job.state?.nextRunAtMs)}</Text>
+              <Text style={{ fontSize: 12, textAlign: 'right', color: pageHeading }}>{formatMs(job.state?.nextRunAtMs)}</Text>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {t('cron.lastRun', { defaultValue: '上次执行' })}
               </Text>
-              <Text style={{ fontSize: 12, textAlign: 'right' }}>{formatMs(job.state?.lastRunAtMs)}</Text>
+              <Text style={{ fontSize: 12, textAlign: 'right', color: pageHeading }}>{formatMs(job.state?.lastRunAtMs)}</Text>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {t('cron.delivery', { defaultValue: '投递' })}
               </Text>
               <Tooltip title={job.delivery?.to ? `to: ${job.delivery?.to}` : ''}>
-                <Text style={{ fontSize: 12, textAlign: 'right' }}>{deliveryText}</Text>
+                <Text style={{ fontSize: 12, textAlign: 'right', color: pageHeading }}>{deliveryText}</Text>
               </Tooltip>
             </div>
           </div>
@@ -354,7 +362,7 @@ export default function CronJobsView() {
       <Card
         title={
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, color: pageHeading }}>
               <Clock size={16} />
               <span style={{ fontWeight: 800 }}>{t('cron.title', { defaultValue: '定时任务' })}</span>
             </div>
@@ -371,6 +379,7 @@ export default function CronJobsView() {
               size="small"
               icon={<RefreshCw size={14} className={loading ? 'animate-spin' : ''} />}
               onClick={() => fetchData(true)}
+              style={isDarkMode ? { background: '#0f172a', borderColor: '#334155', color: pageMuted } : undefined}
             >
               {t('common.refresh', { defaultValue: '刷新' })}
             </Button>
@@ -380,11 +389,11 @@ export default function CronJobsView() {
               icon={<HelpCircle size={16} />}
               onClick={() => setHelpOpen(true)}
               aria-label={t('cron.helpTitle', { defaultValue: '如何创建定时任务？' })}
-              style={{ color: '#64748b' }}
+              style={{ color: pageMuted }}
             />
           </Space>
         }
-        style={{ borderRadius: 12 }}
+        style={{ borderRadius: 12, border: `1px solid ${borderDefault}`, background: cardBg }}
       >
         {loading ? (
           <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -422,7 +431,7 @@ export default function CronJobsView() {
           height="78vh"
           styles={{ body: { padding: 16 } }}
         >
-          <CronHelpContent />
+          <CronHelpContent isDarkMode={isDarkMode} />
         </Drawer>
       ) : (
         <Modal
@@ -432,26 +441,29 @@ export default function CronJobsView() {
           footer={null}
           width={820}
         >
-          <CronHelpContent />
+          <CronHelpContent isDarkMode={isDarkMode} />
         </Modal>
       )}
     </div>
   );
 }
 
-function CronHelpContent() {
+function CronHelpContent({ isDarkMode = false }: { isDarkMode?: boolean }) {
   const { t } = useTranslation();
+  const textPrimary = isDarkMode ? '#f1f5f9' : '#0f172a';
+  const textSecondary = isDarkMode ? '#cbd5e1' : '#334155';
+  const textBody = isDarkMode ? '#94a3b8' : '#475569';
 
   return (
-    <div style={{ color: '#0f172a' }}>
-      <Paragraph style={{ color: '#334155' }}>
+    <div style={{ color: textPrimary }}>
+      <Paragraph style={{ color: textSecondary }}>
         {t('cron.helpIntro', {
           defaultValue:
             '目前控制台暂不支持在此页面直接“新增定时任务”。推荐做法是：用自然语言告诉 AI 你的需求，由 AI 在后台调用 openclaw 的 cron add 来创建任务。',
         })}
       </Paragraph>
 
-      <Paragraph style={{ color: '#334155' }}>
+      <Paragraph style={{ color: textSecondary }}>
         {t('cron.helpMentalModel', {
           defaultValue:
             '创建定时任务（Cron Job）可以理解为给 AI 设定一个“闹钟”：时间到了，就让它执行特定指令，并按你的要求通知你。',
@@ -465,31 +477,31 @@ function CronHelpContent() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div>
           <Text strong>1) schedule — 什么时候运行？</Text>
-          <Paragraph style={{ marginBottom: 0, color: '#475569' }}>
+          <Paragraph style={{ marginBottom: 0, color: textBody }}>
             支持三种模式：<Text code>at</Text>（单次）、<Text code>every</Text>（间隔）、<Text code>cron</Text>（Cron 表达式）。
           </Paragraph>
-          <Paragraph style={{ marginBottom: 0, color: '#475569' }}>
+          <Paragraph style={{ marginBottom: 0, color: textBody }}>
             例：<Text code>{`{"kind":"cron","expr":"0 9 * * 1-5","tz":"Asia/Shanghai"}`}</Text>
           </Paragraph>
         </div>
 
         <div>
           <Text strong>2) payload — 到点做什么？</Text>
-          <Paragraph style={{ marginBottom: 0, color: '#475569' }}>
+          <Paragraph style={{ marginBottom: 0, color: textBody }}>
             推荐 <Text code>kind: "agentTurn"</Text>，提供 <Text code>message</Text>，让 AI 像正常对话一样执行任务并汇报。
           </Paragraph>
         </div>
 
         <div>
           <Text strong>3) sessionTarget — 在哪里运行？</Text>
-          <Paragraph style={{ marginBottom: 0, color: '#475569' }}>
+          <Paragraph style={{ marginBottom: 0, color: textBody }}>
             常见：<Text code>current</Text>（当前会话）、<Text code>isolated</Text>（隔离会话）、或 <Text code>session:&lt;id&gt;</Text>（指定会话）。
           </Paragraph>
         </div>
 
         <div>
           <Text strong>4) delivery — 结果怎么通知？</Text>
-          <Paragraph style={{ marginBottom: 0, color: '#475569' }}>
+          <Paragraph style={{ marginBottom: 0, color: textBody }}>
             常见：<Text code>announce</Text>（发到对话频道）、<Text code>webhook</Text>（回调 URL）、<Text code>none</Text>（静默）。
           </Paragraph>
         </div>
@@ -499,7 +511,7 @@ function CronHelpContent() {
         {t('cron.helpExampleTitle', { defaultValue: '示例：每小时提醒喝水' })}
       </Title>
 
-      <Paragraph style={{ color: '#475569' }}>
+      <Paragraph style={{ color: textBody }}>
         你只需要说：<Text code>“帮我创建一个每小时提醒我喝水的任务，提醒方式发到当前群聊。”</Text>
       </Paragraph>
 
@@ -525,7 +537,7 @@ function CronHelpContent() {
   }
 }`}</pre>
 
-      <Paragraph style={{ marginTop: 12, color: '#334155' }}>
+      <Paragraph style={{ marginTop: 12, color: textSecondary }}>
         <Text strong>总结：</Text>你只要讲清楚 “多久一次 → 做什么 → 怎么通知”，剩下的 JSON/命令细节交给 AI 处理即可。
       </Paragraph>
     </div>

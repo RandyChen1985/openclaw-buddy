@@ -1532,20 +1532,25 @@ export function useV3Messages({
       const payload = data.payload || {};
       const evtKey = payload.sessionKey || payload.key || payload.session?.key;
       if (evtKey) {
-        const oldStatus = sessionStatusMapRef.current.get(evtKey);
-        const newStatus = payload.status || payload.session?.status || payload.data?.status;
-        sessionStatusMapRef.current.set(evtKey, newStatus);
+        // transcript 落盘会推 phase "message"，快照里 status 常仍为 running（lifecycle end 尚未写库）。
+        // 若仍写入 sessionStatusMapRef 并 setIsTyping(true)，会在 chat.final 之后把 UI 重新锁死；
+        // releaseTypingLock 又因 globalStatus === 'running' 直接 return，形成永久卡住。
+        if (payload.phase !== 'message') {
+          const oldStatus = sessionStatusMapRef.current.get(evtKey);
+          const newStatus = payload.status || payload.session?.status || payload.data?.status;
+          sessionStatusMapRef.current.set(evtKey, newStatus);
 
-        // 如果状态变更为 done/error，且当前会话无活跃运行中 run，尝试触发延时解锁。
-        if (evtKey === sessionKeyRef.current && newStatus === 'running') {
-          setIsTyping(true);
-          // 仅当状态从非 running 切换到 running 时才重置 stall 计时器（初始化）。
-          // 后续在该状态下的元数据更新（如 token count 变化）不应重置它，否则会遮蔽“文字流停顿”的提示
-          if (oldStatus !== 'running') {
-            resetStallTimer();
+          // 如果状态变更为 done/error，且当前会话无活跃运行中 run，尝试触发延时解锁。
+          if (evtKey === sessionKeyRef.current && newStatus === 'running') {
+            setIsTyping(true);
+            // 仅当状态从非 running 切换到 running 时才重置 stall 计时器（初始化）。
+            // 后续在该状态下的元数据更新（如 token count 变化）不应重置它，否则会遮蔽“文字流停顿”的提示
+            if (oldStatus !== 'running') {
+              resetStallTimer();
+            }
+          } else if (newStatus === 'done' || newStatus === 'error' || newStatus === 'failed') {
+            releaseTypingLock(evtKey);
           }
-        } else if (newStatus === 'done' || newStatus === 'error') {
-          releaseTypingLock(evtKey);
         }
       }
       return;

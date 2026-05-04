@@ -8,6 +8,8 @@ import { V3SoulEditorDrawer } from './V3SoulEditorDrawer';
 export interface V3ComposerBarProps {
   t: any;
   isMobile: boolean;
+  /** App 全局暗色：头像圈与输入条外沿 */
+  isDarkMode?: boolean;
   status: 'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error';
   isTyping: boolean;
   /** 新建会话创建中等：锁输入，但不视为「生成中」（不显示停止按钮） */
@@ -50,6 +52,7 @@ export interface V3ComposerBarProps {
 export function V3ComposerBar({
   t,
   isMobile,
+  isDarkMode = false,
   status,
   isTyping,
   sessionComposeBlocked = false,
@@ -79,8 +82,8 @@ export function V3ComposerBar({
       width: size,
       height: size,
       borderRadius: '50%',
-      background: '#fff',
-      border: '1px solid #e2e8f0',
+      background: isDarkMode ? '#1e293b' : '#fff',
+      border: isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -100,8 +103,12 @@ export function V3ComposerBar({
     background: 'var(--v3-surface, #fff)',
     borderRadius: 20,
     boxShadow: isFocused
-      ? '0 20px 40px -10px var(--v3-input-focus-glow, rgba(99, 102, 241, 0.25)), 0 0 0 4px var(--v3-input-focus-ring, rgba(99, 102, 241, 0.3))'
-      : '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 0 0 2px var(--v3-input-idle-ring, rgba(99, 102, 241, 0.1))',
+      ? (isDarkMode
+        ? '0 20px 40px -10px var(--v3-input-focus-glow, rgba(99, 102, 241, 0.22)), 0 0 0 4px var(--v3-input-focus-ring, rgba(165, 180, 252, 0.28))'
+        : '0 20px 40px -10px var(--v3-input-focus-glow, rgba(99, 102, 241, 0.25)), 0 0 0 4px var(--v3-input-focus-ring, rgba(99, 102, 241, 0.3))')
+      : (isDarkMode
+        ? '0 10px 28px -6px rgba(0, 0, 0, 0.45), 0 0 0 2px var(--v3-input-idle-ring, rgba(99, 102, 241, 0.14))'
+        : '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 0 0 2px var(--v3-input-idle-ring, rgba(99, 102, 241, 0.1))'),
     border: 'none',
     flexDirection: 'column' as const,
     overflow: 'visible',
@@ -109,7 +116,21 @@ export function V3ComposerBar({
     width: '100%',
     boxSizing: 'border-box' as const,
     transform: isFocused ? 'translateY(-4px)' : 'none'
-  }), [isFocused]);
+  }), [isFocused, isDarkMode]);
+
+  const selectBarStyle = useMemo(() => ({
+    display: 'flex' as const,
+    alignItems: 'center' as const,
+    background: isDarkMode ? '#0f172a' : '#f8fafc',
+    borderRadius: 10,
+    border: isDarkMode ? '1px solid #334155' : 'none',
+    padding: '2px 4px',
+    height: 38,
+    flex: 1,
+    maxWidth: isMobile ? 'none' : 510,
+    minWidth: 0,
+    boxShadow: 'none' as const
+  }), [isDarkMode, isMobile]);
 
   const currentModelInfo = useMemo(() => {
     const models = botsModels?.data?.models || [];
@@ -156,22 +177,10 @@ export function V3ComposerBar({
   return (
     <div style={containerStyle} className="input-container-v3">
       <div style={{ width: '100%', display: 'flex', alignItems: 'center', padding: isMobile ? '6px 12px 0' : '12px 16px 0', gap: 8, boxSizing: 'border-box' }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          background: '#f8fafc',
-          borderRadius: 10,
-          border: 'none',
-          padding: '2px 4px',
-          height: 38,
-          flex: isMobile ? 1 : '0 0 auto',
-          width: isMobile ? 'auto' : 510,
-          minWidth: 0,
-          boxShadow: 'none'
-        }}>
+        <div style={selectBarStyle}>
           <Select
             placeholder={t('chat.selectBotTip')}
-            style={{ width: isMobile ? '50%' : 220, fontSize: isMobile ? 11 : 13 }}
+            style={{ flex: 1, minWidth: 0, fontSize: isMobile ? 11 : 13 }} // 改为 flex: 1
             value={selectedBot}
             onChange={onRequestNewSessionWithBot}
             loading={loadingBots}
@@ -189,7 +198,7 @@ export function V3ComposerBar({
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2', minWidth: 0, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontWeight: 600, color: '#1e293b', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontWeight: 600, color: isDarkMode ? '#e2e8f0' : '#1e293b', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {bot.name || bot.id}
                       </span>
                       {(bot.capabilities?.includes('image') || bot.input?.includes('image')) && <Image size={11} color="#0ea5e9" style={{ flexShrink: 0 }} />}
@@ -217,7 +226,7 @@ export function V3ComposerBar({
                           alignItems: 'center',
                           justifyContent: 'center',
                           borderRadius: 8,
-                          color: '#64748b'
+                          color: isDarkMode ? '#94a3b8' : '#64748b'
                         }}
                       />
                     </Tooltip>
@@ -226,10 +235,10 @@ export function V3ComposerBar({
               </Select.Option>
             ))}
           </Select>
-          <div style={{ width: 1, height: 16, background: '#bfdbfe', margin: '0 4px' }} />
+          <div style={{ width: 1, height: 16, background: isDarkMode ? '#475569' : '#bfdbfe', margin: '0 4px' }} />
           <Select
             placeholder={t('chat.sessionModelPlaceholder', { defaultValue: '自由切换会话模型' })}
-            style={{ width: isMobile ? '50%' : 260, fontSize: isMobile ? 11 : 13, minWidth: 0 }}
+            style={{ flex: 1.2, minWidth: 0, fontSize: isMobile ? 11 : 13 }} // 改为 flex: 1.2 并保持 minWidth: 0
             value={sessionModel}
             onChange={onSessionModelChange}
             loading={loadingBots}
@@ -280,6 +289,7 @@ export function V3ComposerBar({
           <V3SoulEditorDrawer
             t={t}
             isMobile={!!isMobile}
+            isDarkMode={isDarkMode}
             selectedBot={selectedBot}
             botsModels={botsModels}
             status={status}
@@ -311,11 +321,13 @@ export function V3ComposerBar({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  background: '#f5f3ff',
-                  border: 'none',
+                  background: isDarkMode ? '#1e293b' : '#f5f3ff',
+                  border: isDarkMode ? '1px solid #334155' : 'none',
                   padding: 0,
-                  boxShadow: '0 2px 4px rgba(124, 58, 237, 0.06)',
-                  color: (status !== 'authenticated' || !sessionKey || isTyping || isLoadingHistory) ? '#cbd5e1' : '#64748b',
+                  boxShadow: isDarkMode ? 'none' : '0 2px 4px rgba(124, 58, 237, 0.06)',
+                  color: (status !== 'authenticated' || !sessionKey || isTyping || isLoadingHistory)
+                    ? (isDarkMode ? '#475569' : '#cbd5e1')
+                    : (isDarkMode ? '#c4b5fd' : '#64748b'),
                   opacity: (status !== 'authenticated' || !sessionKey || isTyping || isLoadingHistory) ? 0.55 : 1
                 }}
               />
@@ -339,11 +351,13 @@ export function V3ComposerBar({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  background: '#f0f9ff',
-                  border: 'none',
+                  background: isDarkMode ? '#0f172a' : '#f0f9ff',
+                  border: isDarkMode ? '1px solid #334155' : 'none',
                   padding: 0,
-                  boxShadow: '0 2px 4px rgba(14, 165, 233, 0.06)',
-                  color: (status !== 'authenticated' || !sessionKey) ? '#cbd5e1' : '#0ea5e9',
+                  boxShadow: isDarkMode ? 'none' : '0 2px 4px rgba(14, 165, 233, 0.06)',
+                  color: (status !== 'authenticated' || !sessionKey)
+                    ? (isDarkMode ? '#475569' : '#cbd5e1')
+                    : (isDarkMode ? '#38bdf8' : '#0ea5e9'),
                   opacity: (status !== 'authenticated' || !sessionKey) ? 0.55 : 1
                 }}
               />
@@ -354,7 +368,20 @@ export function V3ComposerBar({
 
       {quotedMsg && (
         <div style={{ padding: isMobile ? '6px 12px 0' : '8px 16px 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6, boxSizing: 'border-box', width: '100%', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, color: '#64748b', background: '#f1f5f9', padding: '4px 8px', borderRadius: 6, minWidth: 0, flex: 1, overflow: 'hidden' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 6,
+            fontSize: 12,
+            color: isDarkMode ? '#94a3b8' : '#64748b',
+            background: isDarkMode ? '#0f172a' : '#f1f5f9',
+            border: isDarkMode ? '1px solid #334155' : 'none',
+            padding: '4px 8px',
+            borderRadius: 6,
+            minWidth: 0,
+            flex: 1,
+            overflow: 'hidden'
+          }}>
             <Quote size={12} style={{ flexShrink: 0, marginTop: 2 }} />
             <span style={{ overflow: 'hidden', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, wordBreak: 'break-all' } as React.CSSProperties}>{quotedMsg}</span>
           </div>
@@ -366,6 +393,7 @@ export function V3ComposerBar({
         ref={inputAreaRef}
         status={status}
         isMobile={!!isMobile}
+        isDarkMode={isDarkMode}
         isTyping={isTyping}
         sessionComposeBlocked={sessionComposeBlocked}
         onSend={onSend}

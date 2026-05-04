@@ -12,7 +12,8 @@
     "toolsRanking": "Tool Usage Ranking",
     "securityLogs": "Security Audit Logs",
     "lastUpdated": "Last Updated",
-    "riskLevel": "Risk Level"
+    "riskLevel": "Risk Level",
+    "noData": "No data available"
   },
   "common": {
     "dashboard": "Dashboard",
@@ -95,7 +96,25 @@
     "maximize": "Maximize",
     "minimize": "Minimize",
     "sessionClosed": "Session closed",
-    "cron": "Scheduled Jobs"
+    "cron": "Scheduled Jobs",
+    "all": "All",
+    "command": "Command Content",
+    "createSuccess": "Created successfully",
+    "enterFileName": "Please enter file name",
+    "enterFolderName": "Please enter folder name",
+    "newFile": "New File",
+    "newFolder": "New Folder",
+    "pdfSupportError": "Your browser does not support online PDF preview. Please download to view.",
+    "restarting": "Performing silent restart...",
+    "systemRestartFailed": "System self-restart failed",
+    "systemUpgrade": "System Version Upgrade",
+    "systemUpgradeFailed": "System upgrade failed",
+    "unsupported": "Preview/Edit currently not supported",
+    "unsupportedFile": "This file format currently does not support online preview or editing",
+    "up": "Up",
+    "upgradeStarted": "Download started, please check progress",
+    "upload": "Upload",
+    "uploadSuccess": "Uploaded successfully"
   },
   "cron": {
     "title": "Scheduled Jobs",
@@ -488,7 +507,9 @@
       "cron": "Cron",
       "openaiUser": "OpenAI API",
       "fallback": "Other"
-    }
+    },
+    "analysisProcess": "Analysis Process",
+    "noLabel": "Untitled Session"
   },
   "channels": {
     "title": "Channel Management",
@@ -559,7 +580,18 @@
     "bindRouteSubmit": "Add binding",
     "bindRouteSuccess": "Route binding added",
     "bindingSourceRoot": "Root bindings",
-    "bindingSourceAgentsList": "Inside agents.list (may be ignored)"
+    "bindingSourceAgentsList": "Inside agents.list (may be ignored)",
+    "addCredential": "Add New Account Credential",
+    "appIdPlaceholder": "App ID",
+    "appSecretPlaceholder": "App Secret",
+    "bindRelationshipHint": "Binding (route binding) determines which lobster handles messages received by this channel.",
+    "credentialManagement": "Account Credential Management",
+    "credentialManagementHint": "Manage AppID/Secret credentials for this channel here. The default account (default) is globally shared, while sub-accounts are used for multiple bots running independently.",
+    "deleteCredential": "Delete",
+    "editCredential": "Edit",
+    "newAccountIdPlaceholder": "Account ID (e.g., nomi_bot)",
+    "saveCredential": "Confirm Save",
+    "weixinRefreshed": "WeChat plugin status refreshed"
   },
   "devices": {
     "pendingRequests": "Pending Connection Requests",
@@ -735,7 +767,20 @@
     "protocolGoogleGenerativeAI": "Google Generative AI",
     "protocolGitHubCopilot": "GitHub Copilot",
     "protocolBedrockConverseStream": "Bedrock Converse Stream",
-    "protocolOllama": "Ollama"
+    "protocolOllama": "Ollama",
+    "addMemoryFile": "Add Date Record",
+    "addingBot": "Creating bot...",
+    "confirmDeleteMemory": "Are you sure you want to delete this date record?",
+    "dailyMemory": "Daily Memory",
+    "description": "Manage and configure your OpenClaw bot nodes, allocate AI cores and monitor status.",
+    "editMemory": "Memory Management (MEMORY)",
+    "longTermMemory": "Long-term Memory",
+    "memoryFileName": "Record Date (Filename)",
+    "memoryPlaceholder": "Please record important memory points for this bot here. This information will serve as the bot's long-term cognitive storage.",
+    "removingBot": "Removing bot...",
+    "settingDefaultModel": "Setting global model...",
+    "settingIdentity": "Updating identity...",
+    "settingModel": "Allocating model..."
   },
   "logs": {
     "searchPlaceholder": "Search log keywords...",
@@ -775,7 +820,29 @@
     "reportDetail": "Report Detail",
     "loadingReport": "Loading report content...",
     "readReportFailed": "Failed to read report content",
-    "toggleSuccess": "Self-healing is now {{status}}"
+    "toggleSuccess": "Self-healing is now {{status}}",
+    "configErrorTip": "Check JSON syntax or required fields. System has rolled back; your changes are not yet effective.",
+    "configErrorTitle": "Configuration validation failed",
+    "configModalTitle": "Gateway Core Config Editor",
+    "configSaveTip": "Deep format validation is performed before saving. If validation fails, changes won't be written. Backing up before modification is recommended.",
+    "coreConfigDesc": "Directly edit OpenClaw's core configuration openclaw.json with deep format validation.",
+    "coreConfigTitle": "Gateway Core Config Management",
+    "doctorFailed": "Failed to start healing repair",
+    "doctorFix": "One-click Healing Repair",
+    "doctorFixConfirm": "Confirm one-click healing repair?",
+    "doctorFixConfirmDesc": "Healing repair will automatically detect and fix environment/config issues. Gateway will restart during the process.",
+    "doctorLog": "Healing Repair Log",
+    "doctorSuccess": "Healing repair task started",
+    "editorMode": "Source Mode",
+    "manageConfig": "Manage Core Config",
+    "parseFailed": "JSON parsing failed, please check syntax",
+    "readConfigFailed": "Failed to read configuration",
+    "saveConfigConfirm": "Confirm save and apply configuration?",
+    "saveConfigConfirmDesc": "Saving will take effect immediately and trigger an OpenClaw Gateway restart. Ongoing conversations may be interrupted.",
+    "validate": "Validate Only",
+    "validateSuccess": "Configuration is valid",
+    "validating": "Deep validating configuration...",
+    "visualMode": "Visual Mode"
   },
   "skills": {
     "title": "Skills",
@@ -822,7 +889,8 @@
     },
     "path": "Path",
     "resources": "Resources",
-    "resourceExplorer": "Resource Explorer"
+    "resourceExplorer": "Resource Explorer",
+    "loadFailed": "Load Failed"
   },
   "plugins": {
     "title": "Plugins",
@@ -856,7 +924,9 @@
     "noDescription": "No description available",
     "channels": "Related Channels",
     "providers": "Related Providers",
-    "reload": "Reload Engine"
+    "reload": "Reload Engine",
+    "filterDisabled": "Disabled",
+    "filterEnabled": "Enabled"
   },
   "tasks": {
     "empty": "No task records",
@@ -908,7 +978,8 @@
       "policy_updated": "Policy updated",
       "preset_applied": "Preset applied",
       "allowlist_updated": "Allowlist updated",
-      "approvals_set": "Config updated"
+      "approvals_set": "Config updated",
+      "cloned_and_restarted": "Cloned and gateway restarted. If data is not displayed, please click refresh."
     }
   }
 }

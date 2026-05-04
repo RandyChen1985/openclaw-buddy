@@ -13,9 +13,10 @@ interface OnlineChatProps {
   onRestartGateway?: () => Promise<void>;
   isRunning?: boolean;
   onNavigateToDashboard?: () => void;
+  isDarkMode?: boolean;
 }
 
-const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, ...props }) => {
+const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, ...props }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('v3');
 
@@ -28,7 +29,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, ...props }) => {
           {t('chat.v3Mode', { defaultValue: 'V3 模式 (RPC)' })}
         </span>
       ),
-      children: <ChatV3Final {...props} isMobile={isMobile} />,
+      children: <ChatV3Final {...props} isMobile={isMobile} isDarkMode={isDarkMode} />,
     },
     {
       key: 'classic',
@@ -38,7 +39,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, ...props }) => {
           {t('chat.classicMode', { defaultValue: '经典模式 (HTTP)' })}
         </span>
       ),
-      children: <ChatClassic {...props} isMobile={isMobile} />,
+      children: <ChatClassic {...props} isMobile={isMobile} isDarkMode={isDarkMode} />,
     },
   ];
 
@@ -48,7 +49,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, ...props }) => {
       width: '100%', 
       display: 'flex', 
       flexDirection: 'column',
-      background: '#f8fafc',
+      background: isDarkMode ? '#0f172a' : '#f8fafc',
       overflow: 'hidden'
     }}>
       <Tabs
@@ -60,10 +61,10 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, ...props }) => {
         tabBarStyle={{ 
           margin: 0, 
           padding: isMobile ? '0 12px' : '0 20px', 
-          background: '#fff', 
-          borderBottom: '1px solid #f1f5f9' 
+          background: isDarkMode ? '#1e293b' : '#fff', 
+          borderBottom: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9' 
         }}
-        className="chat-tabs"
+        className={`chat-tabs${isDarkMode ? ' chat-tabs--dark' : ''}`}
       />
       <style>{`
         .chat-tabs .ant-tabs-content {
@@ -76,6 +77,12 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, ...props }) => {
         }
         .chat-tabs .ant-tabs-nav::before {
           border-bottom: none !important;
+        }
+        .chat-tabs--dark .ant-tabs-tab {
+          color: #94a3b8 !important;
+        }
+        .chat-tabs--dark .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+          color: #f1f5f9 !important;
         }
       `}</style>
     </div>

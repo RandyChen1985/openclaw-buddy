@@ -7,16 +7,23 @@ interface ChatV3AuthProps {
   isMobile: boolean;
   onConnect: () => void;
   t: any;
+  isDarkMode?: boolean;
 }
 
-const ChatV3Auth: React.FC<ChatV3AuthProps> = ({ status, isMobile, onConnect, t }) => {
+const ChatV3Auth: React.FC<ChatV3AuthProps> = ({ status, isMobile, onConnect, t, isDarkMode = false }) => {
   if (status === 'authenticated') return null;
 
+  const titleColor = isDarkMode ? '#f1f5f9' : '#1e293b';
+  const mutedColor = isDarkMode ? '#94a3b8' : '#64748b';
+  const footerWatermark = isDarkMode ? 'rgba(147, 197, 253, 0.18)' : 'rgba(37, 99, 235, 0.2)';
+
   return (
-    <div className="v3-auth-container" style={{
+    <div
+      className={`v3-auth-container${isDarkMode ? ' v3-auth-container--dark' : ''}`}
+      style={{
       position: 'absolute',
       top: 0, left: 0, right: 0, bottom: 0,
-      background: '#f8fafc',
+      background: isDarkMode ? undefined : '#f8fafc',
       zIndex: 1000,
       display: 'flex',
       alignItems: 'center',
@@ -40,16 +47,23 @@ const ChatV3Auth: React.FC<ChatV3AuthProps> = ({ status, isMobile, onConnect, t 
           )}
         </div>
         
-        <div style={{ fontWeight: 800, fontSize: isMobile ? 20 : 24, color: '#1e293b', marginBottom: 12, letterSpacing: '-0.02em', fontFamily: 'monospace' }}>
+        <div style={{ fontWeight: 800, fontSize: isMobile ? 20 : 24, color: titleColor, marginBottom: 12, letterSpacing: '-0.02em', fontFamily: 'monospace' }}>
           {status === 'error' ? t('chat.v3StatusAuthFailed', { defaultValue: 'AUTH_FAILED' }) :
             status === 'connecting' ? t('chat.v3StatusConnecting', { defaultValue: 'CONNECTING...' }) :
             status === 'challenging' ? t('chat.v3StatusHandshaking', { defaultValue: 'HANDSHAKING...' }) : 
             status === 'authorizing' ? t('chat.v3StatusAuthorizing', { defaultValue: 'AUTHORIZING...' }) : t('chat.v3StatusIdentifying', { defaultValue: 'IDENTIFYING...' })}
         </div>
         
-        <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6, marginBottom: 24, fontFamily: 'monospace' }}>
+        <div style={{ fontSize: 12, color: mutedColor, lineHeight: 1.6, marginBottom: 24, fontFamily: 'monospace' }}>
           {status === 'error' ? (
-            <div style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.05)', padding: '8px 12px', borderRadius: 8, fontSize: 11, border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+            <div style={{
+              color: '#f87171',
+              background: isDarkMode ? 'rgba(127, 29, 29, 0.35)' : 'rgba(239, 68, 68, 0.05)',
+              padding: '8px 12px',
+              borderRadius: 8,
+              fontSize: 11,
+              border: isDarkMode ? '1px solid rgba(248, 113, 113, 0.35)' : '1px solid rgba(239, 68, 68, 0.1)'
+            }}>
               [ERROR] {t('chat.v3ErrorDesc', { defaultValue: 'TARGET_UNREACHABLE_OR_DENIED' })}
             </div>
           ) : status === 'authorizing' ? (
@@ -76,7 +90,7 @@ const ChatV3Auth: React.FC<ChatV3AuthProps> = ({ status, isMobile, onConnect, t 
         </div>
       </div>
       
-      <div style={{ position: 'absolute', bottom: 24, fontSize: 10, color: 'rgba(37, 99, 235, 0.2)', fontWeight: 600, letterSpacing: '4px', fontFamily: 'monospace' }}>
+      <div style={{ position: 'absolute', bottom: 24, fontSize: 10, color: footerWatermark, fontWeight: 600, letterSpacing: '4px', fontFamily: 'monospace' }}>
         OPENCLAW_SECURE_TUNNEL_V3.0
       </div>
     </div>

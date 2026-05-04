@@ -9,6 +9,7 @@ import storage from '../utils/storage';
 
 interface LoginViewProps {
   onLoginSuccess: (token: string) => void;
+  isDarkMode?: boolean;
 }
 
 const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
