@@ -280,3 +280,105 @@ func IsProcessRunning(name string) bool {
 	err := cmd.Run()
 	return err == nil
 }
+
+// looksLikeOpenclawPackageInstallCommand detects package-manager installs of the openclaw npm package
+// (e.g. "npm i openclaw@latest", node .../npm-cli.js install openclaw).
+func looksLikeOpenclawPackageInstallCommand(cmd string) bool {
+	l := strings.ToLower(strings.TrimSpace(cmd))
+	if l == "" || !strings.Contains(l, "openclaw") {
+		return false
+	}
+	// Handled by dedicated process checks; avoid false positives on their argv.
+	if strings.Contains(l, "openclaw-update") || strings.Contains(l, "openclaw-doctor") {
+		return false
+	}
+	hasPM := strings.HasPrefix(l, "npm ") || strings.Contains(l, " npm ") ||
+		strings.Contains(l, "/npm ") || strings.Contains(l, "npm-cli") ||
+		strings.HasPrefix(l, "pnpm ") || strings.Contains(l, " pnpm ") ||
+		strings.HasPrefix(l, "yarn ") || strings.Contains(l, " yarn ")
+	if !hasPM {
+		return false
+	}
+	if strings.Contains(l, "openclaw@") {
+		return true
+	}
+	return strings.Contains(l, " install openclaw") ||
+		strings.Contains(l, " i openclaw") ||
+		strings.Contains(l, " add openclaw") ||
+		strings.Contains(l, " ci openclaw")
+}
+
+func readUnixProcessCommandLines() ([]string, error) {
+	argvCandidates := [][]string{
+		{"ps", "ax", "-ww", "-o", "command="},
+		{"ps", "-ewwo", "args="},
+		{"ps", "-eo", "args="},
+	}
+	for _, argv := range argvCandidates {
+		out, err := exec.Command(argv[0], argv[1:]...).Output()
+		if err != nil {
+			continue
+		}
+		s := strings.TrimSpace(string(out))
+		if s == "" {
+			continue
+		}
+		return strings.Split(s, "\n"), nil
+	}
+	return nil, fmt.Errorf("unable to list process command lines")
+}
+
+func isOpenClawPackageInstallRunningUnix() bool {
+	lines, err := readUnixProcessCommandLines()
+	if err != nil {
+		return false
+	}
+	for _, line := range lines {
+		if looksLikeOpenclawPackageInstallCommand(strings.TrimSpace(line)) {
+			return true
+		}
+	}
+	return false
+}
+
+func isOpenClawPackageInstallRunningWindows() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// One-shot filter avoids pulling every CommandLine into Go on large machines.
+	script := `$ErrorActionPreference = 'Stop'
+foreach ($p in Get-CimInstance Win32_Process) {
+  $l = $p.CommandLine
+  if ($null -eq $l) { continue }
+  $x = $l.ToLower()
+  if ($x -notlike '*openclaw*') { continue }
+  if ($x -notmatch 'npm|pnpm|yarn|npm-cli') { continue }
+  if ($x -like '*openclaw-update*' -or $x -like '*openclaw-doctor*') { continue }
+  if ($x -like '*openclaw@*') { exit 0 }
+  if ($x -match '\s(i|install|add|ci)\s+[^\s]{0,48}openclaw') { exit 0 }
+}
+exit 1`
+	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", script)
+	if err := cmd.Run(); err == nil {
+		return true
+	}
+	return false
+}
+
+func isOpenClawPackageInstallRunning() bool {
+	if runtime.GOOS == "windows" {
+		return isOpenClawPackageInstallRunningWindows()
+	}
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" && runtime.GOOS != "freebsd" {
+		return false
+	}
+	return isOpenClawPackageInstallRunningUnix()
+}
+
+// IsOpenClawUpgradeOrInstallBusy is true while official update/doctor or package-manager install
+// of openclaw is in progress. The guardian should defer self-healing in these windows.
+func IsOpenClawUpgradeOrInstallBusy() bool {
+	if IsProcessRunning("openclaw-update") || IsProcessRunning("openclaw-doctor") {
+		return true
+	}
+	return isOpenClawPackageInstallRunning()
+}
