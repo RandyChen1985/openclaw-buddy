@@ -1011,6 +1011,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
           onUpgrade={handleUpgrade}
           onRestart={handleRestart}
           isDarkMode={isDarkMode}
+          tag={tag}
           />
           ),
           'audit': <AuditDashboard isDarkMode={isDarkMode} />,
@@ -1429,7 +1430,6 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
               }} 
               onLogout={handleLogout} navItems={menuItems} 
               versionUpdate={versionUpdate}
-              tag={tag}
             />
           </Drawer>
         </Layout>
@@ -1451,7 +1451,6 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
               }} 
               onLogout={handleLogout} navItems={menuItems} 
               versionUpdate={versionUpdate}
-              tag={tag}
             />
           </Sider>
           <Layout style={{ 

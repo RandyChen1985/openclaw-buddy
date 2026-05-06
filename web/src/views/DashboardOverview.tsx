@@ -26,6 +26,8 @@ interface DashboardOverviewProps {
   onUpgrade?: (version: string) => void;
   onRestart?: () => void;
   isDarkMode?: boolean;
+  /** 来自 guardian_tag（URL 注入等），有值时在运行状态环境条展示 */
+  tag?: string;
 }
 
 interface SystemInfo {
@@ -44,7 +46,7 @@ interface OcStatus {
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({ 
   status, history, v3Status, isRunning, onControl, onNavigate,
   systemEvents = [], topBots = [], ocInstalled, activeTasks = [], isTransitioning = false, loading = false,
-  onRefreshVersion, onUpgrade, onRestart, isDarkMode = false
+  onRefreshVersion, onUpgrade, onRestart, isDarkMode = false, tag
 }) => {
   const { t } = useTranslation();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
@@ -269,7 +271,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', flexDirection: isMobile ? 'column' : 'row', width: '100%', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '16px' : '32px', flexDirection: isMobile ? 'column' : 'row', width: isMobile ? '100%' : 'auto' }}>
+            <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '16px' : '32px', flexDirection: isMobile ? 'column' : 'row', width: isMobile ? '100%' : 'auto', flex: isMobile ? undefined : 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ background: isDarkMode ? '#0f172a' : '#f0f9ff', padding: '8px', borderRadius: '10px' }}><Monitor size={18} style={{ color: '#0ea5e9' }} /></div>
                 <div>
@@ -377,6 +379,30 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 </div>
               </div>
             </div>
+            {tag && (
+              <span
+                style={{
+                  fontSize: 10,
+                  padding: '3px 10px',
+                  borderRadius: 10,
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  color: '#ffffff',
+                  fontWeight: 800,
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  whiteSpace: 'nowrap',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  boxShadow: '0 2px 6px rgba(99, 102, 241, 0.3)',
+                  flexShrink: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  lineHeight: '14px',
+                  alignSelf: 'center',
+                }}
+              >
+                {tag}
+              </span>
+            )}
           </div>
         )}
       </div>

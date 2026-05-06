@@ -18,14 +18,10 @@ interface SidebarProps {
   onLogout: () => void;
   navItems: any[];
   versionUpdate?: { latest: string, current: string, release_url: string } | null;
-  tag?: string;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLogout, navItems, versionUpdate, tag }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLogout, navItems, versionUpdate }) => {
   const { t } = useTranslation();
-  
-  // 处理标签截断逻辑
-  const displayTag = tag && tag.length > 10 ? tag.substring(0, 8) + '...' : tag;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: SIDEBAR_SHELL }}>
@@ -52,15 +48,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
           }}>
             <span style={{ fontSize: 20, lineHeight: 1 }}>🦞</span>
           </div>
-          {collapsed && tag && (
-            <div style={{ 
-              position: 'absolute', top: -1, right: -1, 
-              width: 10, height: 10, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #6366f1, #a855f7)',
-              border: `2px solid ${SIDEBAR_SHELL}`,
-              boxShadow: '0 0 6px rgba(99, 102, 241, 0.6)'
-            }} />
-          )}
         </div>
 
         {!collapsed && (
@@ -138,24 +125,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
                   </a>
                 )}
               </div>
-              {tag && (
-                <Tooltip title={tag} placement="bottom">
-                  <span style={{
-                    fontSize: 8, padding: '1px 6px', borderRadius: 10,
-                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                    color: '#ffffff', fontWeight: 800, border: '1px solid rgba(255, 255, 255, 0.1)',
-                    whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.05em',
-                    boxShadow: '0 2px 6px rgba(99, 102, 241, 0.3)',
-                    flexShrink: 0,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    lineHeight: '12px',
-                    animation: 'fadeIn 0.3s ease-out'
-                  }}>
-                    {displayTag}
-                  </span>
-                </Tooltip>
-              )}
             </div>
           </div>
         )}
