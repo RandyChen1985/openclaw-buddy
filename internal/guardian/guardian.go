@@ -172,10 +172,10 @@ func (g *Guardian) check() {
 			return
 		}
 
-		// [加固] 升级任务避让：如果发现 openclaw-update 进程正在运行，说明服务正在升级，跳过自愈
-		if process.IsProcessRunning("openclaw-update") {
-			log.Printf("⚠️  [自愈服务] 检测到系统升级进程 (openclaw-update) 正在运行，为避免损坏安装文件，自愈逻辑已主动跳过。")
-			utils.RecordSystemEvent("WARN", "检测到系统正在升级中，自愈逻辑已主动跳过")
+		// [加固] 升级/维护避让：openclaw-update、openclaw-doctor、npm/pnpm/yarn 安装 openclaw 等均视为安装中，跳过自愈
+		if process.IsOpenClawUpgradeOrInstallBusy() {
+			log.Printf("⚠️  [自愈服务] 检测到系统正在升级或维护（openclaw-update / openclaw-doctor / 包管理器安装 openclaw 等），为避免与安装流程冲突，自愈逻辑已主动跳过。")
+			utils.RecordSystemEvent("WARN", "检测到系统正在升级、doctor 或依赖安装中，自愈逻辑已主动跳过")
 			return
 		}
 

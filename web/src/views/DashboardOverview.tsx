@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Tag, Progress, Button, Timeline, Badge, Spin, Empty, message, notification, Tabs, Radio, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Server, Activity, Play, Square, RefreshCw, Trophy, Zap, Monitor, Mail, Loader2 } from 'lucide-react';
+import { Server, Activity, Play, Square, RefreshCw, Trophy, Zap, Monitor, Mail, Loader2, Layers } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import dayjs from 'dayjs';
 import api from '../api';
@@ -26,6 +26,8 @@ interface DashboardOverviewProps {
   onUpgrade?: (version: string) => void;
   onRestart?: () => void;
   isDarkMode?: boolean;
+  /** 来自 guardian_tag（URL 注入等），有值时在运行状态环境条展示 */
+  tag?: string;
 }
 
 interface SystemInfo {
@@ -44,7 +46,7 @@ interface OcStatus {
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({ 
   status, history, v3Status, isRunning, onControl, onNavigate,
   systemEvents = [], topBots = [], ocInstalled, activeTasks = [], isTransitioning = false, loading = false,
-  onRefreshVersion, onUpgrade, onRestart, isDarkMode = false
+  onRefreshVersion, onUpgrade, onRestart, isDarkMode = false, tag
 }) => {
   const { t } = useTranslation();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
@@ -269,7 +271,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', flexDirection: isMobile ? 'column' : 'row', width: '100%', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '16px' : '32px', flexDirection: isMobile ? 'column' : 'row', width: isMobile ? '100%' : 'auto' }}>
+            <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '16px' : '32px', flexDirection: isMobile ? 'column' : 'row', width: isMobile ? '100%' : 'auto', flex: isMobile ? undefined : 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ background: isDarkMode ? '#0f172a' : '#f0f9ff', padding: '8px', borderRadius: '10px' }}><Monitor size={18} style={{ color: '#0ea5e9' }} /></div>
                 <div>
@@ -376,7 +378,61 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   </div>
                 </div>
               </div>
+              {tag && isMobile && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
+                  <div style={{ background: isDarkMode ? '#0f172a' : '#f5f3ff', padding: '8px', borderRadius: '10px', flexShrink: 0 }}>
+                    <Layers size={18} style={{ color: '#8b5cf6' }} />
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: '#94a3b8',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                        fontWeight: 600,
+                      }}
+                    >
+                      环境
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 14,
+                        color: isDarkMode ? '#f1f5f9' : '#1e293b',
+                        fontWeight: 600,
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {tag}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
+            {tag && !isMobile && (
+              <span
+                style={{
+                  fontSize: 10,
+                  padding: '3px 10px',
+                  borderRadius: 10,
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  color: '#ffffff',
+                  fontWeight: 800,
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  whiteSpace: 'nowrap',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  boxShadow: '0 2px 6px rgba(99, 102, 241, 0.3)',
+                  flexShrink: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  lineHeight: '14px',
+                  alignSelf: 'center',
+                }}
+              >
+                {tag}
+              </span>
+            )}
           </div>
         )}
       </div>
