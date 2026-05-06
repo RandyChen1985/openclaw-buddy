@@ -57,6 +57,11 @@ export function useV3AutoSummarize({
         confirmedNamesRef.current.set(s.key, s.label);
       }
     });
+    while (confirmedNamesRef.current.size > 400) {
+      const k = confirmedNamesRef.current.keys().next().value;
+      if (k === undefined) break;
+      confirmedNamesRef.current.delete(k);
+    }
 
     /**
      * 当前会话优先用 state 里的 sessionLabel；若仍为「未命名」但列表里已有标题
@@ -123,7 +128,17 @@ export function useV3AutoSummarize({
         const res = await sendRPC('sessions.patch', { key: activeKey, label: newTitle });
         if (res.ok) {
           lastSummarizedAtRef.current.set(activeKey, Date.now());
+          while (lastSummarizedAtRef.current.size > 350) {
+            const k = lastSummarizedAtRef.current.keys().next().value;
+            if (k === undefined) break;
+            lastSummarizedAtRef.current.delete(k);
+          }
           confirmedNamesRef.current.set(activeKey, newTitle); // 记入已确认名称缓存
+          while (confirmedNamesRef.current.size > 400) {
+            const ck = confirmedNamesRef.current.keys().next().value;
+            if (ck === undefined) break;
+            confirmedNamesRef.current.delete(ck);
+          }
           onLocalLabelPatched?.(activeKey, newTitle);
           if (!silent) {
             antdMessage.success({ content: t('chat.titleSummarized'), key: `summarizing-${activeKey}` });

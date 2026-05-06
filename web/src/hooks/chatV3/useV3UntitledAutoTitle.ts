@@ -69,6 +69,11 @@ export function useV3UntitledAutoTitle({
 
           inFlightRef.current.add(key);
           processedSessionsRef.current.set(key, Date.now());
+          while (processedSessionsRef.current.size > 250) {
+            const oldest = processedSessionsRef.current.keys().next().value;
+            if (oldest === undefined) break;
+            processedSessionsRef.current.delete(oldest);
+          }
           try {
             const hRes = await sendRPC('chat.history', { sessionKey: key, limit: historyLimit });
             if (token !== runTokenRef.current) return;
