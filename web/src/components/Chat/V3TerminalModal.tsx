@@ -36,6 +36,7 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
   // 受控位置：进入全屏时重置为 (0,0)，退出时还原
   const [dragPos, setDragPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const savedDragPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const prevShowSiderOpenRef = useRef<boolean | null>(null);
 
   const onStart = (_event: DraggableEvent, uiData: DraggableData) => {
     const { clientWidth, clientHeight } = window.document.documentElement;
@@ -58,13 +59,24 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
     }
   }, [open]);
 
-  // 当左侧侧边栏展开时，如果当前是全屏，则自动退出全屏，避免界面过于拥挤
   useEffect(() => {
-    if (showSider && isFullscreen) {
-      setIsFullscreen(false);
-      setDragPos({ x: 0, y: 0 });
+    const open = !!showSider;
+    const prev = prevShowSiderOpenRef.current;
+    if (prev === null) {
+      prevShowSiderOpenRef.current = open;
+      return;
     }
-  }, [showSider, isFullscreen]);
+    if (prev === false && open) {
+      setIsFullscreen((m) => {
+        if (m) {
+          setDragPos({ x: 0, y: 0 });
+          return false;
+        }
+        return m;
+      });
+    }
+    prevShowSiderOpenRef.current = open;
+  }, [showSider]);
 
   const onDragStop = (_event: DraggableEvent, uiData: DraggableData) => {
     const newPos = { x: uiData.x, y: uiData.y };
