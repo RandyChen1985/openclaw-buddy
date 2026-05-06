@@ -220,6 +220,9 @@
 - [ ] **HOWTO 渲染**: 检查 `HOWTO.md` 在 GitHub 或 Markdown 预览器中是否能正确加载图片。
 - [ ] **图片完整性**: 验证 `docs/images/` 和 `docs/mobile/` 目录下的所有图片均在文档中被引用且路径正确。
 - [ ] **移动端概览**: 确保 `HOWTO.md` 中的“移动端体验”章节包含至少 7 张核心功能截图。
+- [x] **README 徽章与 Star History**: 验证 `README.md` 和 `README_en.md` 顶部的 Stars/Forks/Release 徽章显示正常，且末尾包含 Star History 图表与引导语。 `2026-05-06`
+
+
 
 ## 7.2 内容与文章生成 (Content Generation)
 - [x] **公众号文章模板**: 验证 `weixin/aitalk/AI_Programmer_Survival_Guide.html` 是否包含 Slogan、访谈录、编者案及深度思考。

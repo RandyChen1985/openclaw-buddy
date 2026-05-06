@@ -7,7 +7,7 @@
 >
 > **OpenClaw Buddy**, it's just 0.01 centimeters away from you. It doesn't speak; it just stays by your side, watching over those little shrimp babies. I hope one day, you too will find someone who makes you no longer need a 'Watchdog Sentinel'." [简体中文](README.md) | [English]
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/RandyChen1985/openclaw-buddy)](https://goreportcard.com/report/github.com/RandyChen1985/openclaw-buddy) [![Go Version](https://img.shields.io/github/go-mod/go-version/RandyChen1985/openclaw-buddy?color=blue)](https://github.com/RandyChen1985/openclaw-buddy/blob/main/go.mod) [![GitHub Release](https://img.shields.io/github/v/release/RandyChen1985/openclaw-buddy?label=release&logo=github)](https://github.com/RandyChen1985/openclaw-buddy/releases) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-orange.svg)](https://github.com/RandyChen1985/openclaw-buddy/pulls) [![Last Commit](https://img.shields.io/github/last-commit/RandyChen1985/openclaw-buddy)](https://github.com/RandyChen1985/openclaw-buddy/commits) [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](https://opensource.org/licenses/MIT)
+[![GitHub stars](https://img.shields.io/github/stars/RandyChen1985/openclaw-buddy?style=flat-square&logo=github)](https://github.com/RandyChen1985/openclaw-buddy/stargazers) [![GitHub forks](https://img.shields.io/github/forks/RandyChen1985/openclaw-buddy?style=flat-square&logo=github)](https://github.com/RandyChen1985/openclaw-buddy/network/members) [![GitHub Release](https://img.shields.io/github/v/release/RandyChen1985/openclaw-buddy?label=release&logo=github&style=flat-square)](https://github.com/RandyChen1985/openclaw-buddy/releases) [![Go Report Card](https://goreportcard.com/badge/github.com/RandyChen1985/openclaw-buddy?style=flat-square)](https://goreportcard.com/report/github.com/RandyChen1985/openclaw-buddy) [![Go Version](https://img.shields.io/github/go-mod/go-version/RandyChen1985/openclaw-buddy?color=blue&style=flat-square)](https://github.com/RandyChen1985/openclaw-buddy/blob/main/go.mod) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-orange.svg?style=flat-square)](https://github.com/RandyChen1985/openclaw-buddy/pulls) [![Last Commit](https://img.shields.io/github/last-commit/RandyChen1985/openclaw-buddy?style=flat-square)](https://github.com/RandyChen1985/openclaw-buddy/commits) [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
 **OpenClaw Buddy** is a professional-grade Out-of-band Management (OOB) and self-healing companion system designed specifically for **OpenClaw (Crawfish AI Agent)**.
 
@@ -268,3 +268,14 @@ This project is licensed under the **MIT License**. Maintained by randychen. Con
 If you have any questions, feature suggestions, or want to get the latest technical news about OpenClaw during use, you are welcome to scan the QR code to follow our **Official WeChat Account**:
 
 <img src="docs/images/%20gzh.png" width="200" alt="Official WeChat Account" />
+ 
+ ---
+ 
+ ## 📈 Star History
+ 
+ [![Star History Chart](https://api.star-history.com/svg?repos=RandyChen1985/openclaw-buddy&type=Date)](https://star-history.com/#RandyChen1985/openclaw-buddy&Date)
+ 
+ ### Point ⭐ to Support
+ 
+ If you find **OpenClaw Buddy** helpful, please give it a **Star** on GitHub 🌟. Your support is our motivation to keep improving!
+
