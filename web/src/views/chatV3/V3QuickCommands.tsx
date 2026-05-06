@@ -11,6 +11,8 @@ export interface V3QuickCommandsProps {
   isDarkMode?: boolean;
   /** 与新建会话等互斥：为 true 时禁用快捷指令发送 */
   sendBlocked?: boolean;
+  /** 折叠/展开状态变化通知（用于上层控制分割线等 UI） */
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 /**
@@ -20,7 +22,15 @@ export interface V3QuickCommandsProps {
  * - 保持原有接口：仍调用 `/v1/openclaw/chat/quick-commands` 的 get/post/delete
  * - 外部通过 `onSend` 决定发送行为（是否带引用/附件等）
  */
-export function V3QuickCommands({ t, status, onSend, isMobile, isDarkMode = false, sendBlocked = false }: V3QuickCommandsProps) {
+export function V3QuickCommands({
+  t,
+  status,
+  onSend,
+  isMobile,
+  isDarkMode = false,
+  sendBlocked = false,
+  onExpandedChange
+}: V3QuickCommandsProps) {
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
   const [showQuickActions, setShowQuickActions] = useState<boolean>(() => localStorage.getItem('v3_show_quick_actions') !== 'false');
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
@@ -46,6 +56,10 @@ export function V3QuickCommands({ t, status, onSend, isMobile, isDarkMode = fals
     fetchQuickCommands();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    onExpandedChange?.(showQuickActions);
+  }, [onExpandedChange, showQuickActions]);
 
   /**
    * 新增快捷指令。

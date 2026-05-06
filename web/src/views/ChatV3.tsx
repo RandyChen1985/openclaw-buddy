@@ -209,6 +209,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);
   const [showSider, setShowSider] = useState(!isMobile);
+  const [quickCommandsExpanded, setQuickCommandsExpanded] = useState<boolean>(() => localStorage.getItem('v3_show_quick_actions') !== 'false');
   const [quotedMsg, setQuotedMsg] = useState<string | null>(null);
   const [editingMsgIndex, setEditingMsgIndex] = useState<number | null>(null);
   const [editContent, setEditContent] = useState('');
@@ -714,7 +715,15 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
           }}
         />
 
-        <div style={{ padding: isMobile ? '8px 12px' : '0 24px 20px', background: isDarkMode ? '#0f172a' : '#fafafa', borderTop: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9', width: '100%', boxSizing: 'border-box' }}>
+        <div
+          style={{
+            padding: isMobile ? '8px 12px' : '0 24px 20px',
+            background: isDarkMode ? '#0f172a' : '#fafafa',
+            borderTop: quickCommandsExpanded ? (isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9') : 'none',
+            width: '100%',
+            boxSizing: 'border-box',
+          }}
+        >
 
            <V3QuickCommands
              t={t}
@@ -723,6 +732,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
              isMobile={!!isMobile}
              isDarkMode={isDarkMode}
              sendBlocked={isCreatingNewSession}
+             onExpandedChange={setQuickCommandsExpanded}
            />
 
             <V3ComposerBar
