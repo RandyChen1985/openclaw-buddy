@@ -14,7 +14,7 @@ import storage from '../utils/storage';
 import TokenBadge from './TokenBadge';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
-import Editor from '@monaco-editor/react';
+import { CodeMirrorTextEditor } from './CodeMirrorTextEditor';
 import { 
   Folder, FileText, ChevronLeft, Save, Eye, PenLine, Trash2, FolderOpen, 
   Upload, Download, Search, LayoutList, Maximize2, Minimize2, 
@@ -512,27 +512,6 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
       }
     } catch (err: any) {
       message.error(err.response?.data?.error || err.message);
-    }
-  };
-
-  const getEditorLanguage = (filename: string) => {
-    const ext = filename.split('.').pop()?.toLowerCase();
-    switch (ext) {
-      case 'js': return 'javascript';
-      case 'ts': return 'typescript';
-      case 'tsx': return 'typescript';
-      case 'json': return 'json';
-      case 'py': return 'python';
-      case 'go': return 'go';
-      case 'sh': return 'shell';
-      case 'yml':
-      case 'yaml': return 'yaml';
-      case 'css': return 'css';
-      case 'html': return 'html';
-      case 'md': return 'markdown';
-      case 'sql': return 'sql';
-      case 'xml': return 'xml';
-      default: return 'plaintext';
     }
   };
 
@@ -1417,21 +1396,11 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                       >
                         {t('common.save', { defaultValue: '保存' })}
                       </Button>
-                      <Editor
-                        height="100%"
-                        defaultLanguage={getEditorLanguage(selectedFile?.name || '')}
+                      <CodeMirrorTextEditor
+                        filename={selectedFile?.name || ''}
                         value={fileContent}
                         onChange={(val) => setFileContent(val || '')}
-                        theme={isDarkMode ? 'vs-dark' : 'vs-light'}
-                        options={{
-                          fontSize: 13,
-                          minimap: { enabled: false },
-                          scrollBeyondLastLine: false,
-                          automaticLayout: true,
-                          tabSize: 2,
-                          wordWrap: 'on',
-                          padding: { top: 16, bottom: 16 }
-                        }}
+                        isDarkMode={isDarkMode}
                       />
                     </div>
                   )}
