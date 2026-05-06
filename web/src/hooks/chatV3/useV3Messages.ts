@@ -831,7 +831,14 @@ export function useV3Messages({
   const hasApprovalCardForSlug = useCallback((slug: string): boolean => {
     if (!slug) return false;
     const current = messagesRef.current || [];
-    return current.some(m => m.role === 'assistant' && typeof m.content === 'string' && m.content.includes(':::approval') && m.content.includes(slug));
+    // 💡 优化：对于长列表，从后往前搜往往能更快命中（审批卡片通常在最后几条）
+    for (let i = current.length - 1; i >= 0; i--) {
+      const m = current[i];
+      if (m.role === 'assistant' && typeof m.content === 'string' && m.content.includes(':::approval') && m.content.includes(slug)) {
+        return true;
+      }
+    }
+    return false;
   }, []);
 
   /**
@@ -1757,16 +1764,15 @@ export function useV3Messages({
           title = agentData.title || agentData.name || agentData.tool || '';
 
           if (stream === 'tool') {
-            // tool 流：尽可能同时展示"参数"和"结果"
-            const argsRaw = pickFirst(agentData, ['arguments', 'args', 'input', 'params', 'command', 'cmd', 'request']);
-            const resultRaw = pickFirst(agentData, ['result', 'output', 'stdout', 'response', 'data']);
-            const errorRaw = pickFirst(agentData, ['error', 'stderr']);
             const status = (agentData.status as string) || (phase === 'end' ? 'done' : phase === 'error' ? 'failed' : 'running');
             const statusLine =
               status === 'done' ? `> ✅ \`${title || 'tool'}\` 完成` :
               status === 'failed' ? `> ❌ \`${title || 'tool'}\` 失败` :
               `> 🔧 \`${title || 'tool'}\` 执行中…<!-- tool:${itemId} -->`;
             const parts: string[] = [statusLine];
+            const argsRaw = pickFirst(agentData, ['arguments', 'args', 'input', 'params', 'command', 'cmd', 'request']);
+            const resultRaw = pickFirst(agentData, ['result', 'output', 'stdout', 'response', 'data']);
+            const errorRaw = pickFirst(agentData, ['error', 'stderr']);
             if (argsRaw !== undefined) parts.push(`**参数:**\n${formatAsCode(argsRaw)}`);
             if (resultRaw !== undefined) parts.push(`**结果:**\n${formatAsCode(resultRaw, '')}`);
             if (errorRaw !== undefined) parts.push(`**错误:**\n${formatAsCode(errorRaw, '')}`);
@@ -1885,8 +1891,24 @@ export function useV3Messages({
       return;
     }
 
-    const items = (res.payload.messages || res.payload.items || [])
-      .sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    const rawItems = res.payload.messages || res.payload.items || [];
+    const items = [...rawItems].sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+
+    // 💡 优化：提前收集 items 中所有的审批卡片 slug，避免在 map 循环中 O(N^2) 重复格式化与扫描
+    const approvalSlugs = new Set<string>();
+    for (const it of items) {
+      if (it.role === 'assistant' || it.role === 'bot') {
+        const c = formatMessageContent(it.content);
+        if (c && c.includes(':::approval')) {
+          const m = /\/approve\s+([a-f0-9-]+)\s+(allow-once|allow-always)/i.exec(c);
+          if (m) {
+            const id = m[1].replace(/-/g, '');
+            approvalSlugs.add(id.length >= 8 ? id.slice(0, 8) : id);
+          }
+        }
+      }
+    }
+
     const history = items.map((item: any) => {
       let content = formatMessageContent(item.content);
       if (item.role === 'toolResult' && !content.includes(':::toolResult')) {
@@ -1916,11 +1938,7 @@ export function useV3Messages({
       // 2) 审批提示语（与审批卡片重复）—— 直接丢弃
       if (isApprovalHintText(content)) {
         const slug = extractApprovalSlugFromHint(content);
-        const hasCard = items.some((it: any) => {
-          const c = formatMessageContent(it.content);
-          return c && c.includes(':::approval') && slug && c.includes(slug);
-        });
-        if (slug && hasCard) {
+        if (slug && approvalSlugs.has(slug)) {
           content = '';
         }
       }

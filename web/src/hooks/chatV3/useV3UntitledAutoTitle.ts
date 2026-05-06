@@ -33,7 +33,7 @@ export function useV3UntitledAutoTitle({
   sessions,
   sendRPC,
   handleAutoSummarize,
-  debounceMs = 600,
+  debounceMs = 3000,
   concurrency = 1,
   historyLimit = 10
 }: UseV3UntitledAutoTitleParams) {
@@ -47,7 +47,7 @@ export function useV3UntitledAutoTitle({
 
     const untitled = sessions
       .filter((s: any) => s?.key && s.key !== 'agent:main:main' && isUntitledSessionLabel(s.label))
-      .slice(0, 15); // 保护：一次最多处理 15 个
+      .slice(0, 5); // 保护：一次最多处理 5 个
 
     if (untitled.length === 0) return;
 
