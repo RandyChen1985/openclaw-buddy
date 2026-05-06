@@ -124,7 +124,7 @@ export const useChatV3WebSocket = ({
   const {
     sessions,
     setSessions,
-    loadingSessions,
+    sessionListLoading,
     isCreatingNewSession,
     isUpdatingLabel,
     fetchSessions,
@@ -137,7 +137,9 @@ export const useChatV3WebSocket = ({
     handleClearAllHistory,
     handleModelChange,
     handleThinkingLevelChange,
-    handleCompactSession
+    handleCompactSession,
+    fetchMoreSessions,
+    hasMoreSessions
   } = useV3Sessions({
     t,
     sendRPC,
@@ -323,7 +325,8 @@ export const useChatV3WebSocket = ({
     sessionModel, setSessionModel,
     thinkingLevel, setThinkingLevel,
     sessions,
-    loadingSessions,
+    /** 含首屏静默拉取：侧栏空列表时也会为 true，避免误以为「卡住」 */
+    loadingSessions: sessionListLoading,
     isCreatingNewSession,
     isLoadingHistory,
     isTyping,
@@ -353,6 +356,8 @@ export const useChatV3WebSocket = ({
     handleModelChange,
     handleThinkingLevelChange,
     handleCompactSession,
+    fetchMoreSessions,
+    hasMoreSessions,
     sendRPC,
     connect,
     showScrollBtnRef

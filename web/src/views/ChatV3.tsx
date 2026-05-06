@@ -184,6 +184,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
     handleSaveEdit,
     handleUpdateLabel,
     handleAutoSummarize,
+    fetchMoreSessions,
+    hasMoreSessions,
     handleModelChange,
     handleThinkingLevelChange,
     sendRPC,
@@ -512,6 +514,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
               onDeleteGroup={handleDeleteGroup}
               onClearAll={handleClearAllHistory}
               fetchSessions={fetchSessions}
+              fetchMoreSessions={fetchMoreSessions}
+              hasMoreSessions={hasMoreSessions}
               isMobile={!!isMobile}
               setShowSider={setShowSider}
               copyToClipboard={copyToClipboard}

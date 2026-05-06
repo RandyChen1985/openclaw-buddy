@@ -17,6 +17,8 @@ export interface V3SessionListProps {
   onDeleteGroup: (label: string, keys: string[]) => void;
   onClearAll: () => void;
   fetchSessions: (isSilent?: boolean) => void;
+  fetchMoreSessions?: () => void;
+  hasMoreSessions?: boolean;
   isMobile: boolean;
   setShowSider: (show: boolean) => void;
   copyToClipboard: (text: string) => void;
@@ -88,11 +90,22 @@ const SessionStatusIcon = ({ status, t }: { status: string, t: any }) => {
 const V3SessionList: React.FC<V3SessionListProps> = ({
   sessions, sessionKey, loadingSessions, sessionSearch, setSessionSearch,
   onSelectSession, onNewSession, onDeleteSession, onDeleteGroup, onClearAll, fetchSessions,
+  fetchMoreSessions, hasMoreSessions,
   isMobile, setShowSider, copyToClipboard, botsModels, t,
   typingSessionKeys = [],
   newSessionBusy = false,
   isDarkMode = false,
 }) => {
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  const handleScroll = React.useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (!fetchMoreSessions || !hasMoreSessions || loadingSessions || sessionSearch) return;
+    const target = e.currentTarget;
+    // 距离底部 50px 时触发加载更多
+    if (target.scrollHeight - target.scrollTop <= target.clientHeight + 50) {
+      fetchMoreSessions();
+    }
+  }, [fetchMoreSessions, hasMoreSessions, loadingSessions, sessionSearch]);
   const shell = React.useMemo(() => isDarkMode ? {
     rootBg: '#1e293b',
     hairline: '#334155',
@@ -296,7 +309,11 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
         )}
       </div>
       
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+      <div 
+        ref={scrollRef}
+        onScroll={handleScroll}
+        style={{ flex: 1, overflowY: 'auto', padding: '8px' }}
+      >
         {botsInSessions.length > 0 && (
           <div style={{ 
             padding: '4px 8px 10px', 
@@ -474,7 +491,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                               border: '1px solid', borderColor: isActive ? shell.sessionActiveBorder : 'transparent',
                               display: 'flex', alignItems: 'center', gap: 12, position: 'relative'
                           }}
-                          className="session-item"
+                          className={`session-item stagger-entry ${isActive ? 'active' : ''}`}
                       >
                           <div style={{ position: 'relative', flexShrink: 0 }}>
             <Avatar 
@@ -721,6 +738,18 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                   </div>
                 )}
                 {['today', 'yesterday', 'lastWeek', 'older'].map(key => renderGroup(key, groups[key]))}
+                
+                {/* 加载更多提示 */}
+                {hasMoreSessions && !sessionSearch && (
+                  <div style={{ textAlign: 'center', padding: '12px 0', opacity: 0.7 }}>
+                    {loadingSessions ? <Spin size="small" /> : <div className="animate-pulse-slow" style={{ fontSize: 12, color: shell.textMuted }}>{t('chat.scrollLoadMore', { defaultValue: '向上滑动加载更多' })}</div>}
+                  </div>
+                )}
+                {!hasMoreSessions && sessions.length > 10 && !sessionSearch && (
+                  <div style={{ textAlign: 'center', padding: '24px 0', opacity: 0.4, fontSize: 11, color: shell.textMuted }}>
+                    {t('chat.noMoreSessions', { defaultValue: '没有更多会话了' })}
+                  </div>
+                )}
               </>
             );
           })()

@@ -5,6 +5,9 @@ import type { Message } from '../useChatV3WebSocket';
 import { buildBuddyDirectSessionKey } from '../../utils/buddySessionKey';
 import { isUntitledSessionLabel } from './labelUtils';
 
+/** 会话列表每页条数（后端无 offset，通过增大 limit 模拟分页） */
+const V3_SESSION_LIST_PAGE_SIZE = 25;
+
 export interface UseV3SessionsParams {
   t: any;
   sendRPC: (method: string, params: any) => Promise<any>;
@@ -58,11 +61,6 @@ export function useV3Sessions({
   messageOpsRef,
   inputAreaRef
 }: UseV3SessionsParams) {
-  const [sessions, setSessions] = useState<any[]>([]);
-  // 实时同步 sessions 到 ref，供 fetchSessions 内部在闭包里读取最新快照（避免竞态保护失效）
-  const sessionsRef = useRef<any[]>([]);
-  useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
-  const [loadingSessions, setLoadingSessions] = useState(false);
   const [isUpdatingLabel, setIsUpdatingLabel] = useState(false);
   const didAutoSelectMainRef = useRef(false);
 
@@ -92,52 +90,127 @@ export function useV3Sessions({
   /**
    * 拉取会话列表。可在静默模式下避免 loading。
    */
-  const fetchSessions = useCallback(async (isSilent = false) => {
-    if (!isSilent) setLoadingSessions(true);
+  const [sessions, setSessions] = useState<any[]>([]);
+  /** 显式刷新（非静默）时的按钮 loading，与首屏列表无关 */
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  /** 是否已完成至少一次「非 append」的列表拉取（用于首屏空列表时展示加载态） */
+  const [initialSessionListFetched, setInitialSessionListFetched] = useState(false);
+  /** 当前加载的条数上限 */
+  const [sessionLimit, setSessionLimit] = useState(V3_SESSION_LIST_PAGE_SIZE);
+  /** 是否还有更多会话可供加载 */
+  const [hasMoreSessions, setHasMoreSessions] = useState(true);
 
-    const res = await sendRPC('sessions.list', { limit: 50 });
+  const sessionsRef = useRef<any[]>(sessions);
+  useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
 
-    if (res.ok) {
-      const list = res.payload?.items || res.payload?.sessions || (Array.isArray(res.payload) ? res.payload : []);
-      const patchedList = list.map((s: any) => {
-        // 保护当前会话：优先使用本地 sessionLabel（已被 sessionLabelRef 实时同步）
-        if (s.key === sessionKeyRef.current && (!s.label || s.label.trim() === '') && sessionLabelRef.current) {
-          return { ...s, label: sessionLabelRef.current };
-        }
-        // 🐛 Fix: 保护所有会话——若服务器返回空 label，但本地 sessions 里已记录了非空标题，
-        // 说明服务端本次响应存在竞态/压缩丢失，应以本地缓存为准，防止触发意外的 AI 重命名。
-        if (!s.label || s.label.trim() === '') {
-          const staleSession = sessionsRef.current.find((es: any) => es.key === s.key);
-          if (staleSession?.label && !isUntitledSessionLabel(staleSession.label)) {
-            return { ...s, label: staleSession.label };
-          }
-        }
-        return s;
-      });
-      setSessions(patchedList);
+  /** 避免 fetchSessions 依赖 loadingSessions/sessionLimit 导致引用抖动，进而反复触发认证后的 bootstrap effect（重复 sessions.list） */
+  const loadingSessionsRef = useRef(false);
+  const sessionLimitRef = useRef(V3_SESSION_LIST_PAGE_SIZE);
+  useEffect(() => {
+    sessionLimitRef.current = sessionLimit;
+  }, [sessionLimit]);
 
-      // 默认会话：如果首次进入且没有上次会话记录，则自动选中置顶主会话
-      if (!didAutoSelectMainRef.current && !sessionKeyRef.current) {
-        const main = patchedList.find((s: any) => s.key === 'agent:main:main');
-        if (main?.key) {
-          didAutoSelectMainRef.current = true;
-          messageOpsRef.current.resetTypingState?.(main.key);
-          setSessionKey(main.key);
-          // 订阅消息流并加载历史
-          sendRPC('sessions.messages.subscribe', { key: main.key }).catch(() => {});
-          setSessionModel(main.model || '');
-          setSelectedBot('openclaw:main');
-          const nextLabel = (main.label || '').trim();
-          if (!isUntitledSessionLabel(nextLabel)) setSessionLabel(nextLabel);
-          else setSessionLabel(null);
-          messageOpsRef.current.loadSessionHistory?.(main.key);
-          messageOpsRef.current.setHasNewMessages?.(false);
-        }
-      }
+  const statusRef = useRef(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  const sendRPCRef = useRef(sendRPC);
+  sendRPCRef.current = sendRPC;
+
+  useEffect(() => {
+    if (status !== 'authenticated') {
+      setInitialSessionListFetched(false);
+    }
+  }, [status]);
+
+  /**
+   * 拉取会话列表。
+   * @param isSilent 静默模式，不触发全局 loading 状态
+   * @param isAppend 追加模式（在动态 Limit 模式下，实际是扩大 Limit 重新抓取）
+   */
+  const fetchSessions = useCallback(async (isSilent = false, isAppend = false) => {
+    if (loadingSessionsRef.current && isAppend) return;
+    if (!isSilent) {
+      setLoadingSessions(true);
+      loadingSessionsRef.current = true;
     }
 
-    if (!isSilent) setLoadingSessions(false);
-  }, [messageOpsRef, sendRPC, setSelectedBot, setSessionKey, setSessionLabel, setSessionModel]);
+    // 💡 策略：由于后端 sessions.list 不支持 offset，我们通过逐渐增大 limit 来模拟分页
+    const nextLimit = isAppend ? (sessionLimitRef.current + V3_SESSION_LIST_PAGE_SIZE) : V3_SESSION_LIST_PAGE_SIZE;
+
+    try {
+      const res = await sendRPC('sessions.list', { limit: nextLimit });
+
+      if (res.ok) {
+        const list = res.payload?.items || res.payload?.sessions || (Array.isArray(res.payload) ? res.payload : []);
+
+        // 如果返回的数量小于请求的数量，说明到底了
+        if (list.length < nextLimit) {
+          setHasMoreSessions(false);
+        } else {
+          setHasMoreSessions(true);
+        }
+
+        const patchedList = list.map((s: any) => {
+          // 保护当前会话标题
+          if (s.key === sessionKeyRef.current && (!s.label || s.label.trim() === '') && sessionLabelRef.current) {
+            return { ...s, label: sessionLabelRef.current };
+          }
+          if (!s.label || s.label.trim() === '') {
+            const staleSession = sessionsRef.current.find((es: any) => es.key === s.key);
+            if (staleSession?.label && !isUntitledSessionLabel(staleSession.label)) {
+              return { ...s, label: staleSession.label };
+            }
+          }
+          return s;
+        });
+
+        setSessions(patchedList);
+        sessionLimitRef.current = nextLimit;
+        setSessionLimit(nextLimit);
+
+        // 默认会话逻辑（仅在首次非追加加载时执行）
+        if (!isAppend && !didAutoSelectMainRef.current && !sessionKeyRef.current) {
+          const main = patchedList.find((s: any) => s.key === 'agent:main:main');
+          if (main?.key) {
+            didAutoSelectMainRef.current = true;
+            messageOpsRef.current.resetTypingState?.(main.key);
+            setSessionKey(main.key);
+            sendRPC('sessions.messages.subscribe', { key: main.key }).catch(() => {});
+            setSessionModel(main.model || '');
+            setSelectedBot('openclaw:main');
+            const nextLabel = (main.label || '').trim();
+            if (!isUntitledSessionLabel(nextLabel)) setSessionLabel(nextLabel);
+            else setSessionLabel(null);
+            messageOpsRef.current.loadSessionHistory?.(main.key);
+            messageOpsRef.current.setHasNewMessages?.(false);
+          }
+        }
+      } else {
+        console.error('[Sessions] Failed to fetch sessions:', res.error);
+      }
+    } finally {
+      if (!isSilent) {
+        setLoadingSessions(false);
+        loadingSessionsRef.current = false;
+      }
+      if (!isAppend && statusRef.current === 'authenticated') {
+        setInitialSessionListFetched(true);
+      }
+    }
+  }, [sendRPC, setSessionKey, setSessionLabel, setSessionModel, setSelectedBot, messageOpsRef]);
+
+  const fetchSessionsRef = useRef(fetchSessions);
+  fetchSessionsRef.current = fetchSessions;
+
+  /**
+   * 加载下一页会话（供滚动到底部时调用）
+   */
+  const fetchMoreSessions = useCallback(() => {
+    if (!hasMoreSessions || loadingSessionsRef.current || !initialSessionListFetched) return;
+    fetchSessions(true, true);
+  }, [fetchSessions, hasMoreSessions, initialSessionListFetched]);
 
   /**
    * 统一处理网关 event（会话维度）。
@@ -434,36 +507,39 @@ export function useV3Sessions({
   }, [sendRPC, sessionKey, setThinkingLevel, t]);
 
   /**
-   * 当连接状态为 authenticated 且有 sessionKey 时，确保会话列表和历史被加载（对齐旧行为）。
+   * 当连接状态为 authenticated 时，订阅会话、恢复消息流并拉取列表。
+   * 仅依赖 `status`，通过 ref 读取最新的 sendRPC / fetchSessions，避免因 fetchSessions 引用变化导致重复 bootstrap（重复 sessions.list）。
    */
   useEffect(() => {
     if (status !== 'authenticated') return;
 
-    // 💡 性能优化：所有初始化 RPC 并发发出，不再等待前一个完成
+    const rpc = sendRPCRef.current;
     const currentKey = sessionKeyRef.current;
 
-    // 1. 订阅会话变更（网关订阅制）
-    void sendRPC('sessions.subscribe', {}).catch(() => {});
+    void rpc('sessions.subscribe', {}).catch(() => {});
 
-    // 2. 如果已有会话，并行订阅消息流并加载历史
     if (currentKey) {
-      void sendRPC('sessions.messages.subscribe', { key: currentKey }).catch(() => {});
-      
+      void rpc('sessions.messages.subscribe', { key: currentKey }).catch(() => {});
+
       const count = messageOpsRef.current.getMessagesCount?.() ?? 0;
       if (count === 0) {
         void messageOpsRef.current.loadSessionHistory?.(currentKey);
       }
     }
 
-    // 3. 并行拉取会话列表
-    void fetchSessions(true);
-  }, [fetchSessions, messageOpsRef, sendRPC, status]);
+    void fetchSessionsRef.current(true);
+  }, [status]);
+
+  const sessionListLoading =
+    loadingSessions || (status === 'authenticated' && !initialSessionListFetched);
 
   return useMemo(() => {
     return {
       sessions,
       setSessions,
       loadingSessions,
+      /** 首屏/静默拉取未完成或显式刷新中：侧栏列表与刷新按钮应显示加载态 */
+      sessionListLoading,
       isUpdatingLabel,
       isCreatingNewSession,
       fetchSessions,
@@ -476,7 +552,9 @@ export function useV3Sessions({
       handleClearAllHistory,
       handleModelChange,
       handleThinkingLevelChange,
-      handleCompactSession
+      handleCompactSession,
+      fetchMoreSessions,
+      hasMoreSessions
     };
   }, [
     fetchSessions,
@@ -492,8 +570,13 @@ export function useV3Sessions({
     isCreatingNewSession,
     isUpdatingLabel,
     loadingSessions,
+    sessionListLoading,
     sessions,
-    startNewSession
+    startNewSession,
+    fetchMoreSessions,
+    hasMoreSessions,
+    initialSessionListFetched,
+    status
   ]);
 }
 
