@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip, Upload } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2, ArrowDown, ZapOff, Activity, Paperclip, FileText, Loader2 } from 'lucide-react';
+import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2, ArrowDown, ZapOff, Activity, Paperclip, FileText, Loader2, Maximize2, Minimize2, Image } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -115,6 +115,8 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
   const [enabling, setEnabling] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [generatedSessionId, setGeneratedSessionId] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
   const [showQuickActions, setShowQuickActions] = useState<boolean>(() => {
@@ -127,6 +129,27 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
   const urlBot = queryParams.get('bot');
   const urlUser = queryParams.get('user');
   const isEmbedMode = queryParams.get('embed') === 'true';
+  const base = getBaseURL(); // "" or "/prefix"
+
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+      const el = rootRef.current || document.documentElement;
+      await (el as any).requestFullscreen?.();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to toggle fullscreen:', e);
+    }
+  };
 
   useEffect(() => {
     checkChatStatus();
@@ -693,7 +716,7 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
   }
 
   return (
-    <div style={{ 
+    <div ref={rootRef} style={{ 
       flex: 1,
       display: 'flex', 
       flexDirection: 'column', 
@@ -748,30 +771,55 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
           
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flex: isMobile ? 1 : 'none', justifyContent: 'flex-end', minWidth: 0 }}>
             {!isMobile && <span style={{ color: c.body, fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap' }}>{t('chat.selectBotTip')}:</span>}
-            <Select 
-              placeholder={t('chat.selectBotTip')} 
-              style={{ width: isMobile ? 'auto' : 240, flex: isMobile ? 1 : 'none', minWidth: isMobile ? 120 : 0, height: 40 }} 
-              value={selectedBot}
-              onChange={setSelectedBot}
-              loading={loadingBots}
-              variant="borderless"
-              dropdownStyle={{ borderRadius: 8, minWidth: 260 }}
-              listHeight={400}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0 10px',
+                height: 40,
+                borderRadius: 10,
+                background: isDarkMode ? '#0f172a' : '#f8fafc',
+                border: `1px solid ${c.hairline}`,
+                flex: isMobile ? 1 : 'none',
+                minWidth: isMobile ? 120 : 0,
+                boxSizing: 'border-box',
+              }}
             >
-              {botList.map((bot: any) => (
-                <Option key={bot.id} value={`openclaw:${bot.id}`}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0' }}>
-                    <ProviderIcon provider={bot.provider || (bot.id === 'main' ? 'openai' : '')} size={20} />
-                    <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2' }}>
-                      <span style={{ fontWeight: 600, color: c.heading, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bot.name || bot.id}</span>
-                      <span style={{ fontSize: 10, color: c.subtle, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {bot.model || t('common.loading')}
-                      </span>
-                    </div>
-                  </div>
-                </Option>
-              ))}
-            </Select>
+              <Select
+                placeholder={t('chat.selectBotTip')}
+                style={{ width: isMobile ? 'auto' : 240, flex: 1, minWidth: 0, height: 38 }}
+                value={selectedBot}
+                onChange={setSelectedBot}
+                loading={loadingBots}
+                variant="borderless"
+                dropdownStyle={{ borderRadius: 8, minWidth: 280 }}
+                listHeight={400}
+              >
+                {botList.map((bot: any) => {
+                  const supportsImage = !!(bot.capabilities?.includes?.('image') || bot.input?.includes?.('image'));
+                  return (
+                    <Option key={bot.id} value={`openclaw:${bot.id}`}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0' }}>
+                        <ProviderIcon provider={bot.provider || (bot.id === 'main' ? 'openai' : '')} size={20} />
+                        <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2', minWidth: 0, flex: 1 }}>
+                          <span style={{ fontWeight: 600, color: c.heading, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {bot.name || bot.id}
+                          </span>
+                          <span style={{ fontSize: 10, color: c.subtle, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {bot.model || t('common.loading')}
+                          </span>
+                        </div>
+                        {supportsImage && (
+                          <div style={{ display: 'flex', alignItems: 'center', color: '#0ea5e9', flexShrink: 0 }}>
+                            <Image size={12} />
+                          </div>
+                        )}
+                      </div>
+                    </Option>
+                  );
+                })}
+              </Select>
+            </div>
             <Button icon={<RefreshCw size={14} />} onClick={onRefreshBots} loading={loadingBots} title={t('common.refresh')} />
             {!isMobile && !isEmbedMode && (
               <Button 
@@ -780,7 +828,7 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                 onClick={() => {
                   const token = storage.getItem('guardian_token');
                   const botId = selectedBot.replace('openclaw:', '');
-                  const url = `${window.location.origin}/?page=chat&token=${token}&bot=${botId}&embed=true`;
+                  const url = `${window.location.origin}${base}/?page=chat&token=${token}&bot=${botId}&embed=true`;
                   window.open(url, '_blank');
                 }}
               />
@@ -792,7 +840,7 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                 onClick={() => {
                   const token = storage.getItem('guardian_token');
                   const botId = selectedBot.replace('openclaw:', '');
-                  const url = `${window.location.origin}/?page=chat&token=${token}&bot=${botId}&embed=true`;
+                  const url = `${window.location.origin}${base}/?page=chat&token=${token}&bot=${botId}&embed=true`;
                   const iframeCode = `<iframe src="${url}" width="100%" height="600" frameborder="0"></iframe>`;
                   Modal.info({
                     title: t('chat.shareTitle'),
@@ -824,6 +872,13 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                   });
                 }}
             />
+            )}
+            {!isEmbedMode && (
+              <Button
+                icon={isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                title={isFullscreen ? t('common.minimize', { defaultValue: '退出全屏' }) : t('common.maximize', { defaultValue: '全屏' })}
+                onClick={toggleFullscreen}
+              />
             )}
             <Button icon={<Plus size={14} />} onClick={clearHistory} disabled={messages.length === 0}>{isMobile ? '' : t('chat.newSession')}</Button>
           </div>
@@ -1219,7 +1274,7 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
         )}
 
         {/* Input Area */}
-        <div style={{ padding: isMobile ? '12px' : '16px 24px', background: c.inputFoot, borderTop: `1px solid ${c.hairline}`, position: 'relative' }}>
+        <div style={{ padding: isMobile ? '12px' : '16px 24px', background: c.inputFoot, borderTop: showQuickActions ? `1px solid ${c.hairline}` : 'none', position: 'relative' }}>
           {/* Quote Preview */}
           {quotedMsg && (
             <div style={{ 

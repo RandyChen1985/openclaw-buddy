@@ -13,6 +13,7 @@ import rehypeSanitize from 'rehype-sanitize';
 import api, { getFullUrl } from '../api';
 import storage from '../utils/storage';
 import TokenBadge from './TokenBadge';
+import { CodeMirrorTextEditor } from './CodeMirrorTextEditor';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import { Table } from 'antd';
@@ -680,13 +681,14 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                     ) : (
                       <div style={{ position: 'relative', height: '100%' }}>
                       <TokenBadge text={fileContent} />
-                      <Input.TextArea
-                        value={fileContent} onChange={(e) => setFileContent(e.target.value)} spellCheck={false}
-                        style={{
-                          height: '100%', border: 'none', borderRadius: 0, resize: 'none', fontFamily: 'monospace',
-                          fontSize: 13, padding: 16, background: fe.bg, color: fe.text, outline: 'none', boxShadow: 'none'
-                        }}
-                      />
+                      <div style={{ height: '100%', minHeight: 0 }}>
+                        <CodeMirrorTextEditor
+                          filename={selectedFile?.name || ''}
+                          value={fileContent}
+                          onChange={setFileContent}
+                          isDarkMode={isDarkMode}
+                        />
+                      </div>
                     </div>
                   )}
                 </div>

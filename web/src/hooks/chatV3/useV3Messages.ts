@@ -6,6 +6,12 @@ import { buildBuddyDirectSessionKey } from '../../utils/buddySessionKey';
 /** 收到 chat final 后延迟再松 typing，避免多段 final / 尾包 delta 时误以为已可输入 */
 const FINAL_UI_SETTLE_MS = 1000;
 
+/** 消息面板单次拉取条数；500 在长会话下解析与 React diff 成本很高，易导致「用久了切会话卡」 */
+const CHAT_HISTORY_PANEL_LIMIT = 200;
+
+/** 生成结束后的侧栏静默刷新防抖（ms），避免每条 assistant 完成都打 sessions.list */
+const SESSION_LIST_SILENT_REFRESH_DEBOUNCE_MS = 3000;
+
 const MAX_SESSION_CACHE_ENTRIES = 30;
 
 type SessionStreamCache = {
@@ -492,6 +498,7 @@ export function useV3Messages({
 
   const typingSessionsRef = useRef<Set<string>>(new Set());
   /** 追踪会话的全局状态 (running/done/error)，由于网关 chat.final 只是 run 结束，不能直接解锁 UI */
+  /** 网关 sessions.changed 中的 status；终态条目会 delete，避免长时间运行 Map 无限涨 */
   const sessionStatusMapRef = useRef<Map<string, string>>(new Map());
 
   /**
@@ -542,6 +549,8 @@ export function useV3Messages({
   const finalUiReleaseTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   // 已请求停止：从点击"停止"到收到 aborted/final 之间，屏蔽后续 delta 写入
   const abortRequestedRef = useRef<{ key: string; ts: number } | null>(null);
+  /** 合并多次「生成结束后的侧栏静默刷新」，避免长时间聊天反复打 sessions.list */
+  const sessionListSilentRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cancelPendingFinalUiRelease = useCallback((key?: string) => {
     if (key) {
@@ -557,6 +566,23 @@ export function useV3Messages({
   }, []);
 
   useEffect(() => () => cancelPendingFinalUiRelease(), [cancelPendingFinalUiRelease]);
+
+  useEffect(() => () => {
+    if (sessionListSilentRefreshTimerRef.current) {
+      clearTimeout(sessionListSilentRefreshTimerRef.current);
+      sessionListSilentRefreshTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleSilentSessionListRefresh = useCallback(() => {
+    if (sessionListSilentRefreshTimerRef.current) {
+      clearTimeout(sessionListSilentRefreshTimerRef.current);
+    }
+    sessionListSilentRefreshTimerRef.current = setTimeout(() => {
+      sessionListSilentRefreshTimerRef.current = null;
+      void fetchSessions(true);
+    }, SESSION_LIST_SILENT_REFRESH_DEBOUNCE_MS);
+  }, [fetchSessions]);
 
   const injectDiagnosticIfNoChatEvent = useCallback((reason: string) => {
     if (!hadTypingSinceSendRef.current) return;
@@ -705,14 +731,14 @@ export function useV3Messages({
       if (key === sessionKeyRef.current) {
         setIsTyping(false);
         streamingAssistantIndexRef.current = null;
-        fetchSessions(true);
+        scheduleSilentSessionListRefresh();
         setTimeout(() => inputAreaRef.current?.focus(), 100);
       } else {
-        fetchSessions(true);
+        scheduleSilentSessionListRefresh();
       }
     }, ms);
     finalUiReleaseTimersRef.current.set(key, timer);
-  }, [cancelPendingFinalUiRelease, fetchSessions, inputAreaRef, markSessionTyping]);
+  }, [cancelPendingFinalUiRelease, inputAreaRef, markSessionTyping, scheduleSilentSessionListRefresh]);
 
 
   /**
@@ -831,7 +857,14 @@ export function useV3Messages({
   const hasApprovalCardForSlug = useCallback((slug: string): boolean => {
     if (!slug) return false;
     const current = messagesRef.current || [];
-    return current.some(m => m.role === 'assistant' && typeof m.content === 'string' && m.content.includes(':::approval') && m.content.includes(slug));
+    // 💡 优化：对于长列表，从后往前搜往往能更快命中（审批卡片通常在最后几条）
+    for (let i = current.length - 1; i >= 0; i--) {
+      const m = current[i];
+      if (m.role === 'assistant' && typeof m.content === 'string' && m.content.includes(':::approval') && m.content.includes(slug)) {
+        return true;
+      }
+    }
+    return false;
   }, []);
 
   /**
@@ -1538,7 +1571,13 @@ export function useV3Messages({
         if (payload.phase !== 'message') {
           const oldStatus = sessionStatusMapRef.current.get(evtKey);
           const newStatus = payload.status || payload.session?.status || payload.data?.status;
-          sessionStatusMapRef.current.set(evtKey, newStatus);
+          const terminal =
+            newStatus === 'done' || newStatus === 'error' || newStatus === 'failed';
+          if (terminal) {
+            sessionStatusMapRef.current.delete(evtKey);
+          } else if (newStatus) {
+            sessionStatusMapRef.current.set(evtKey, newStatus);
+          }
 
           // 如果状态变更为 done/error，且当前会话无活跃运行中 run，尝试触发延时解锁。
           if (evtKey === sessionKeyRef.current && newStatus === 'running') {
@@ -1757,16 +1796,15 @@ export function useV3Messages({
           title = agentData.title || agentData.name || agentData.tool || '';
 
           if (stream === 'tool') {
-            // tool 流：尽可能同时展示"参数"和"结果"
-            const argsRaw = pickFirst(agentData, ['arguments', 'args', 'input', 'params', 'command', 'cmd', 'request']);
-            const resultRaw = pickFirst(agentData, ['result', 'output', 'stdout', 'response', 'data']);
-            const errorRaw = pickFirst(agentData, ['error', 'stderr']);
             const status = (agentData.status as string) || (phase === 'end' ? 'done' : phase === 'error' ? 'failed' : 'running');
             const statusLine =
               status === 'done' ? `> ✅ \`${title || 'tool'}\` 完成` :
               status === 'failed' ? `> ❌ \`${title || 'tool'}\` 失败` :
               `> 🔧 \`${title || 'tool'}\` 执行中…<!-- tool:${itemId} -->`;
             const parts: string[] = [statusLine];
+            const argsRaw = pickFirst(agentData, ['arguments', 'args', 'input', 'params', 'command', 'cmd', 'request']);
+            const resultRaw = pickFirst(agentData, ['result', 'output', 'stdout', 'response', 'data']);
+            const errorRaw = pickFirst(agentData, ['error', 'stderr']);
             if (argsRaw !== undefined) parts.push(`**参数:**\n${formatAsCode(argsRaw)}`);
             if (resultRaw !== undefined) parts.push(`**结果:**\n${formatAsCode(resultRaw, '')}`);
             if (errorRaw !== undefined) parts.push(`**错误:**\n${formatAsCode(errorRaw, '')}`);
@@ -1874,7 +1912,7 @@ export function useV3Messages({
     setIsLoadingHistory(true);
     streamingAssistantIndexRef.current = null;
 
-    const res = await sendRPC('chat.history', { sessionKey: key, limit: 500 });
+    const res = await sendRPC('chat.history', { sessionKey: key, limit: CHAT_HISTORY_PANEL_LIMIT });
     const isActiveRequest = () =>
       latestHistoryRequestRef.current === requestId && sessionKeyRef.current === key;
 
@@ -1885,8 +1923,24 @@ export function useV3Messages({
       return;
     }
 
-    const items = (res.payload.messages || res.payload.items || [])
-      .sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    const rawItems = res.payload.messages || res.payload.items || [];
+    const items = [...rawItems].sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+
+    // 💡 优化：提前收集 items 中所有的审批卡片 slug，避免在 map 循环中 O(N^2) 重复格式化与扫描
+    const approvalSlugs = new Set<string>();
+    for (const it of items) {
+      if (it.role === 'assistant' || it.role === 'bot') {
+        const c = formatMessageContent(it.content);
+        if (c && c.includes(':::approval')) {
+          const m = /\/approve\s+([a-f0-9-]+)\s+(allow-once|allow-always)/i.exec(c);
+          if (m) {
+            const id = m[1].replace(/-/g, '');
+            approvalSlugs.add(id.length >= 8 ? id.slice(0, 8) : id);
+          }
+        }
+      }
+    }
+
     const history = items.map((item: any) => {
       let content = formatMessageContent(item.content);
       if (item.role === 'toolResult' && !content.includes(':::toolResult')) {
@@ -1916,11 +1970,7 @@ export function useV3Messages({
       // 2) 审批提示语（与审批卡片重复）—— 直接丢弃
       if (isApprovalHintText(content)) {
         const slug = extractApprovalSlugFromHint(content);
-        const hasCard = items.some((it: any) => {
-          const c = formatMessageContent(it.content);
-          return c && c.includes(':::approval') && slug && c.includes(slug);
-        });
-        if (slug && hasCard) {
+        if (slug && approvalSlugs.has(slug)) {
           content = '';
         }
       }

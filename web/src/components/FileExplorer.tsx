@@ -14,7 +14,7 @@ import storage from '../utils/storage';
 import TokenBadge from './TokenBadge';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
-import Editor from '@monaco-editor/react';
+import { CodeMirrorTextEditor } from './CodeMirrorTextEditor';
 import { 
   Folder, FileText, ChevronLeft, Save, Eye, PenLine, Trash2, FolderOpen, 
   Upload, Download, Search, LayoutList, Maximize2, Minimize2, 
@@ -512,27 +512,6 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
       }
     } catch (err: any) {
       message.error(err.response?.data?.error || err.message);
-    }
-  };
-
-  const getEditorLanguage = (filename: string) => {
-    const ext = filename.split('.').pop()?.toLowerCase();
-    switch (ext) {
-      case 'js': return 'javascript';
-      case 'ts': return 'typescript';
-      case 'tsx': return 'typescript';
-      case 'json': return 'json';
-      case 'py': return 'python';
-      case 'go': return 'go';
-      case 'sh': return 'shell';
-      case 'yml':
-      case 'yaml': return 'yaml';
-      case 'css': return 'css';
-      case 'html': return 'html';
-      case 'md': return 'markdown';
-      case 'sql': return 'sql';
-      case 'xml': return 'xml';
-      default: return 'plaintext';
     }
   };
 
@@ -1417,21 +1396,11 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                       >
                         {t('common.save', { defaultValue: '保存' })}
                       </Button>
-                      <Editor
-                        height="100%"
-                        defaultLanguage={getEditorLanguage(selectedFile?.name || '')}
+                      <CodeMirrorTextEditor
+                        filename={selectedFile?.name || ''}
                         value={fileContent}
                         onChange={(val) => setFileContent(val || '')}
-                        theme={isDarkMode ? 'vs-dark' : 'vs-light'}
-                        options={{
-                          fontSize: 13,
-                          minimap: { enabled: false },
-                          scrollBeyondLastLine: false,
-                          automaticLayout: true,
-                          tabSize: 2,
-                          wordWrap: 'on',
-                          padding: { top: 16, bottom: 16 }
-                        }}
+                        isDarkMode={isDarkMode}
                       />
                     </div>
                   )}
@@ -1741,6 +1710,8 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
   // 受控位置：最大化时重置为 (0,0)，恢复时还原
   const [dragPos, setDragPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const savedDragPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  /** 仅用于检测侧栏从收起→展开，避免桌面默认 showSider=true 时一点最大化就被 effect 打回 */
+  const prevShowSiderOpenRef = useRef<boolean | null>(null);
 
   const onStart = (_event: DraggableEvent, uiData: DraggableData) => {
     const { clientWidth, clientHeight } = window.document.documentElement;
@@ -1763,13 +1734,25 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
     }
   }, [props.open]);
 
-  // 当左侧侧边栏展开时，如果当前是全屏，则自动退出全屏，避免界面过于拥挤
+  // 侧栏从收起变为展开时，若当前为全屏则退出（避免与侧栏叠在一起）；侧栏已展开时再点最大化不应被误杀
   useEffect(() => {
-    if (props.showSider && isMaximized) {
-      setIsMaximized(false);
-      setDragPos({ x: 0, y: 0 });
+    const open = !!props.showSider;
+    const prev = prevShowSiderOpenRef.current;
+    if (prev === null) {
+      prevShowSiderOpenRef.current = open;
+      return;
     }
-  }, [props.showSider, isMaximized]);
+    if (prev === false && open) {
+      setIsMaximized((m) => {
+        if (m) {
+          setDragPos({ x: 0, y: 0 });
+          return false;
+        }
+        return m;
+      });
+    }
+    prevShowSiderOpenRef.current = open;
+  }, [props.showSider]);
 
   const onDragStop = (_event: DraggableEvent, uiData: DraggableData) => {
     const newPos = { x: uiData.x, y: uiData.y };
@@ -1800,11 +1783,46 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
       centered={!isMaximized}
       destroyOnClose
       styles={{
-        body: { padding: 0, height: isMaximized ? 'calc(100vh - 44px)' : 'calc(100vh - 120px)', background: modalFe.modalBody, overflow: 'hidden', borderRadius: isMaximized ? 0 : '0 0 12px 12px' },
-        content: { padding: 0, background: modalFe.modalBody, borderRadius: isMaximized ? 0 : 12, overflow: 'hidden' },
-        header: { padding: 0, background: modalFe.modalHeader, borderBottom: `1px solid ${modalFe.editHeaderBorder}`, marginBottom: 0, borderRadius: isMaximized ? 0 : '12px 12px 0 0' }
+        ...(isMaximized
+          ? {
+              wrapper: { padding: 0 },
+            }
+          : {}),
+        body: {
+          padding: 0,
+          background: modalFe.modalBody,
+          overflow: 'hidden',
+          borderRadius: isMaximized ? 0 : '0 0 12px 12px',
+          ...(isMaximized
+            ? { flex: 1, minHeight: 0, height: 'auto' }
+            : { height: 'calc(100vh - 120px)' }),
+        },
+        content: {
+          padding: 0,
+          background: modalFe.modalBody,
+          borderRadius: isMaximized ? 0 : 12,
+          overflow: 'hidden',
+          ...(isMaximized
+            ? {
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100vh',
+                maxHeight: '100vh',
+                maxWidth: '100vw',
+                margin: 0,
+              }
+            : {}),
+        },
+        header: {
+          padding: 0,
+          background: modalFe.modalHeader,
+          borderBottom: `1px solid ${modalFe.editHeaderBorder}`,
+          marginBottom: 0,
+          borderRadius: isMaximized ? 0 : '12px 12px 0 0',
+          flexShrink: 0,
+        },
       }}
-      style={isMaximized ? { top: 0, maxWidth: '100vw', margin: 0, padding: 0 } : {}}
+      style={isMaximized ? { top: 0, maxWidth: '100vw', width: '100vw', margin: 0, padding: 0, paddingBottom: 0 } : {}}
       modalRender={(modal) => (
         <Draggable
           disabled={dragDisabled || isMaximized}
@@ -1813,19 +1831,23 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
           onStart={(event, uiData) => onStart(event, uiData)}
           onStop={(event, uiData) => onDragStop(event, uiData)}
         >
-          <div ref={draggleRef}>{modal}</div>
+          <div ref={draggleRef} style={isMaximized ? { width: '100%', minHeight: '100%' } : undefined}>
+            {modal}
+          </div>
         </Draggable>
       )}
       title={
-        <div 
-          style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between', 
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            width: '100%',
+            boxSizing: 'border-box',
             padding: '8px 16px',
             background: modalFe.modalHeader,
             borderRadius: isMaximized ? 0 : '12px 12px 0 0',
-            cursor: isMaximized ? 'default' : 'move'
+            cursor: isMaximized ? 'default' : 'move',
           }}
           onMouseOver={() => {
             if (dragDisabled) {
