@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Tag, Progress, Button, Timeline, Badge, Spin, Empty, message, notification, Tabs, Radio, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Server, Activity, Play, Square, RefreshCw, Trophy, Zap, Monitor, Mail, Loader2 } from 'lucide-react';
+import { Server, Activity, Play, Square, RefreshCw, Trophy, Zap, Monitor, Mail, Loader2, Layers } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import dayjs from 'dayjs';
 import api from '../api';
@@ -378,8 +378,38 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   </div>
                 </div>
               </div>
+              {tag && isMobile && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
+                  <div style={{ background: isDarkMode ? '#0f172a' : '#f5f3ff', padding: '8px', borderRadius: '10px', flexShrink: 0 }}>
+                    <Layers size={18} style={{ color: '#8b5cf6' }} />
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: '#94a3b8',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                        fontWeight: 600,
+                      }}
+                    >
+                      环境
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 14,
+                        color: isDarkMode ? '#f1f5f9' : '#1e293b',
+                        fontWeight: 600,
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {tag}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            {tag && (
+            {tag && !isMobile && (
               <span
                 style={{
                   fontSize: 10,
