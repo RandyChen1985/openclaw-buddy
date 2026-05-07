@@ -164,11 +164,16 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
   useEffect(() => {
     if (!urlUser) {
       let storedSessionId = storage.getItem('chat_session_id');
-      if (!storedSessionId) {
-        const rawU = (usernameForSessionId || '').trim();
-        const safeU = rawU
-          ? rawU.replace(/:/g, '_').replace(/\s+/g, '').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 48)
-          : '';
+      const rawU = (usernameForSessionId || '').trim();
+      const safeU = rawU
+        ? rawU.replace(/:/g, '_').replace(/\s+/g, '').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 48)
+        : '';
+
+      // 用户名登录时：如果当前 sessionId 不包含用户名，则自动更新（避免沿用历史随机段导致不可辨识）
+      const shouldForceUsernameSession =
+        !!safeU && (!storedSessionId || !storedSessionId.includes(safeU));
+
+      if (!storedSessionId || shouldForceUsernameSession) {
         storedSessionId = safeU
           ? `s-${Date.now()}-${safeU}`
           : `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -695,7 +700,13 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
       onOk: () => {
         setMessages([]);
         storage.removeItem('chat_history');
-        const newSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const rawU = (usernameForSessionId || '').trim();
+        const safeU = rawU
+          ? rawU.replace(/:/g, '_').replace(/\s+/g, '').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 48)
+          : '';
+        const newSessionId = safeU
+          ? `s-${Date.now()}-${safeU}`
+          : `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         storage.setItem('chat_session_id', newSessionId);
         setGeneratedSessionId(newSessionId);
         message.success(t('chat.historyCleared'));
