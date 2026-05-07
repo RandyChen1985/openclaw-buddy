@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip, Upload, Radio, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2, ArrowDown, ZapOff, Activity, Paperclip, FileText, Loader2, Maximize2, Minimize2, Image } from 'lucide-react';
+import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2, ArrowDown, ZapOff, Activity, Paperclip, FileText, Loader2, Maximize2, Minimize2, Image, Pencil } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -125,6 +125,9 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
   });
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [form] = Form.useForm();
+
+  const [editingUserMsgIndex, setEditingUserMsgIndex] = useState<number | null>(null);
+  const [editUserDraft, setEditUserDraft] = useState('');
 
   const [embedShareOpen, setEmbedShareOpen] = useState(false);
   const [embedOptions, setEmbedOptions] = useState<{
@@ -429,48 +432,17 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
     `}</style>
   ), [c]);
 
-  const handleSend = async (textOverride?: string) => {
-    const text = textOverride || inputText;
-    if ((!text.trim() && attachedFiles.length === 0) || isTyping || !selectedBot || isUploading) return;
-
-    if (!textOverride) setInputText('');
-    const currentQuoted = quotedMsg;
-    const currentFiles = [...attachedFiles];
-    
-    setQuotedMsg(null); 
-    setAttachedFiles([]); // 清空已上传文件
+  /** conversationMessages：必须以最后一条用户消息结尾（尚未追加本轮助手回复） */
+  const runStreamingCompletion = async (conversationMessages: Message[]) => {
     setIsTyping(true);
-    
     abortControllerRef.current = new AbortController();
 
-    // 整合文件信息到文本中 (Markdown 格式)
-    let finalContent = text;
-    if (currentFiles.length > 0) {
-      const fileLinks = currentFiles.map(f => {
-        const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
-        if (isImage) {
-          return `\n![${f.filename}](${f.thumbUrl || f.url} "${f.url}")\n(File path: ${f.path})`;
-        }
-        return `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
-      }).join('');
-      
-      // 增加明确的专家指令
-      const fileInstruction = `\n\n**System Note for Expert:** The user has uploaded files. For any file analysis, reading, or processing tasks, please access the files directly using the absolute **"File path"** provided above. Do not attempt to download via URL.`;
-      finalContent += fileLinks + fileInstruction;
-    }
-
-    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const newUserMessage: Message = { role: 'user', content: finalContent, timestamp, quotedMessage: currentQuoted || undefined };
-    const newMessages = [...messages, newUserMessage];
-    setMessages(newMessages);
-
-    // 1. 发送瞬间：先挂载一个带有“正在思考”标志的 Assistant 消息气泡
     const thinkingTip = t('chat.thinking');
     const assistantTimestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const assistantMessage: Message = { role: 'assistant', content: thinkingTip, timestamp: assistantTimestamp };
-    setMessages(prev => [...prev, assistantMessage]);
+    setMessages([...conversationMessages, assistantMessage]);
 
-    const formattedMessages = newMessages.map(m => {
+    const formattedMessages = conversationMessages.map(m => {
         let content = m.content;
         if (m.quotedMessage) {
             content = `> ${m.quotedMessage.split('\n')[0]}...\n\n${content}`;
@@ -630,6 +602,60 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
     }
   };
 
+  const handleSend = async (textOverride?: string) => {
+    const text = textOverride || inputText;
+    if ((!text.trim() && attachedFiles.length === 0) || isTyping || !selectedBot || isUploading) return;
+
+    if (!textOverride) setInputText('');
+    const currentQuoted = quotedMsg;
+    const currentFiles = [...attachedFiles];
+
+    setQuotedMsg(null);
+    setAttachedFiles([]);
+
+    let finalContent = text;
+    if (currentFiles.length > 0) {
+      const fileLinks = currentFiles.map((f) => {
+        const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
+        if (isImage) {
+          return `\n![${f.filename}](${f.thumbUrl || f.url} "${f.url}")\n(File path: ${f.path})`;
+        }
+        return `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
+      }).join('');
+      const fileInstruction = `\n\n**System Note for Expert:** The user has uploaded files. For any file analysis, reading, or processing tasks, please access the files directly using the absolute **"File path"** provided above. Do not attempt to download via URL.`;
+      finalContent += fileLinks + fileInstruction;
+    }
+
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const newUserMessage: Message = {
+      role: 'user',
+      content: finalContent,
+      timestamp,
+      quotedMessage: currentQuoted || undefined,
+    };
+    await runStreamingCompletion([...messages, newUserMessage]);
+  };
+
+  const handleEditAndResend = async (userIndex: number, draft: string) => {
+    const trimmed = draft.trim();
+    if (!trimmed) {
+      message.warning(t('chat.emptyMessage'));
+      return;
+    }
+    if (isTyping || !selectedBot) return;
+    const orig = messages[userIndex];
+    if (!orig || orig.role !== 'user') return;
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const editedMsg: Message = {
+      role: 'user',
+      content: trimmed,
+      timestamp,
+      quotedMessage: orig.quotedMessage,
+    };
+    setEditingUserMsgIndex(null);
+    await runStreamingCompletion([...messages.slice(0, userIndex), editedMsg]);
+  };
+
   const handleStopGeneration = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -643,18 +669,11 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
   };
 
   const handleRegenerate = () => {
-    // 找到最后一条用户消息
-    const lastUserIndex = [...messages].reverse().findIndex(m => m.role === 'user');
-    if (lastUserIndex !== -1) {
-      const actualIndex = messages.length - 1 - lastUserIndex;
-      const lastUserMsg = messages[actualIndex];
-      
-      // 移除该用户消息之后的所有 AI 消息
-      setMessages(prev => prev.slice(0, actualIndex + 1));
-      
-      // 重新触发发送
-      handleSend(lastUserMsg.content);
-    }
+    const lastUserIndexFromEnd = [...messages].reverse().findIndex((m) => m.role === 'user');
+    if (lastUserIndexFromEnd === -1) return;
+    const actualIndex = messages.length - 1 - lastUserIndexFromEnd;
+    const truncated = messages.slice(0, actualIndex + 1);
+    void runStreamingCompletion(truncated);
   };
 
   const clearHistory = () => {
@@ -1168,30 +1187,75 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                           </ReactMarkdown>
                         )}
                       </div>
+                    ) : editingUserMsgIndex === index ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', minWidth: isMobile ? 200 : 260 }}>
+                        <Input.TextArea
+                          value={editUserDraft}
+                          onChange={(e) => setEditUserDraft(e.target.value)}
+                          autoSize={{ minRows: 2, maxRows: 14 }}
+                          style={{ fontSize: 14 }}
+                        />
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          <Button size="small" onClick={() => setEditingUserMsgIndex(null)}>
+                            {t('chat.cancelEdit')}
+                          </Button>
+                          <Button
+                            type="primary"
+                            size="small"
+                            onClick={() => void handleEditAndResend(index, editUserDraft)}
+                          >
+                            {t('chat.saveAndResend')}
+                          </Button>
+                        </div>
+                      </div>
                     ) : (
                       msg.content
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 2, alignItems: 'center' }}>
-                    <Tooltip title={t('chat.reply')}>
-                      <Button 
-                        type="text" 
-                        size="small" 
-                        icon={<Quote size={12} />} 
-                        style={{ color: c.subtle, height: 22, fontSize: 11, padding: '0 4px' }} 
-                        onClick={() => {
-                          setQuotedMsg(msg.content);
-                          inputRef.current?.focus();
-                        }}
-                      >{t('chat.reply')}</Button>
-                    </Tooltip>
-                    <Button 
-                      type="text" 
-                      size="small" 
-                      icon={<Copy size={12} />} 
-                        style={{ color: c.subtle, height: 22, fontSize: 11, padding: '0 4px' }} 
-                      onClick={() => copyToClipboard(msg.content)}
-                    >{t('chat.copy')}</Button>
+                    {editingUserMsgIndex !== index && (
+                      <>
+                        <Tooltip title={t('chat.reply')}>
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<Quote size={12} />}
+                            style={{ color: c.subtle, height: 22, fontSize: 11, padding: '0 4px' }}
+                            onClick={() => {
+                              setQuotedMsg(msg.content);
+                              inputRef.current?.focus();
+                            }}
+                          >
+                            {t('chat.reply')}
+                          </Button>
+                        </Tooltip>
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<Copy size={12} />}
+                          style={{ color: c.subtle, height: 22, fontSize: 11, padding: '0 4px' }}
+                          onClick={() => copyToClipboard(msg.content)}
+                        >
+                          {t('chat.copy')}
+                        </Button>
+                        {msg.role === 'user' && !isTyping && (
+                          <Tooltip title={t('chat.editResend')}>
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={<Pencil size={12} />}
+                              style={{ color: c.subtle, height: 22, fontSize: 11, padding: '0 4px' }}
+                              onClick={() => {
+                                setEditingUserMsgIndex(index);
+                                setEditUserDraft(msg.content);
+                              }}
+                            >
+                              {isMobile ? '' : t('chat.editResend')}
+                            </Button>
+                          </Tooltip>
+                        )}
+                      </>
+                    )}
                     {msg.role === 'assistant' && index === messages.length - 1 && !isTyping && (
                       <Button 
                         type="text" 

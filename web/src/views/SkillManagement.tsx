@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, Search, CheckCircle2, AlertCircle, Puzzle, Trash2, HelpCircle, ExternalLink } from 'lucide-react';
 import SkillFileExplorer from '../components/SkillFileExplorer';
-import { Card, Table, Tag, Button, Input, message, Tooltip, Segmented, Modal, Steps, Typography } from 'antd';
+import { Card, Table, Tag, Button, Input, message, Tooltip, Segmented, Modal, Steps, Typography, Popover, Drawer } from 'antd';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import api from '../api';
@@ -45,7 +45,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
   const [updatedAt, setUpdatedAt] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | number>('ready');
   const [typeFilter, setTypeFilter] = useState<string | number>('all');
-  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [helpDrawerOpen, setHelpDrawerOpen] = useState(false);
   const [processingNames, setProcessingNames] = useState<Set<string>>(new Set());
   const processingRef = React.useRef(new Set<string>());
   const lastActionTimeRef = React.useRef<Record<string, number>>({});
@@ -55,9 +55,6 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
   const dividerSubtle = isDarkMode ? '#334155' : '#f1f5f9';
   const pageHeading = isDarkMode ? '#f1f5f9' : '#1e293b';
   const pageMuted = isDarkMode ? '#94a3b8' : '#64748b';
-
-  // 必须导入遮罩组件
-  // (我在 import 处会补上)
 
   // 检查是否有相同的任务正在进行中
   const hasActiveTask = (name: string, action?: string) => {
@@ -319,13 +316,44 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
                 >
                   {isMobile ? '' : t('common.refresh')}
                 </Button>
-                <Button 
-                  type="text" 
-                  size="small" 
-                  icon={<HelpCircle size={16} />} 
-                  onClick={() => setIsHelpModalOpen(true)}
-                  style={{ color: '#60a5fa', background: isDarkMode ? 'rgba(37,99,235,0.2)' : '#eff6ff', borderRadius: 8, display: 'flex', alignItems: 'center', border: isDarkMode ? '1px solid #334155' : undefined }}
-                />
+                {isMobile ? (
+                  <Button 
+                    type="text" 
+                    size="small" 
+                    icon={<HelpCircle size={16} />} 
+                    onClick={() => setHelpDrawerOpen(true)}
+                    style={{ color: '#60a5fa', background: isDarkMode ? 'rgba(37,99,235,0.2)' : '#eff6ff', borderRadius: 8, display: 'flex', alignItems: 'center', border: isDarkMode ? '1px solid #334155' : undefined }}
+                    aria-label={t('skills.help.title')}
+                  />
+                ) : (
+                  <Popover
+                    trigger="click"
+                    placement="bottomRight"
+                    arrow={false}
+                    overlayStyle={{ maxWidth: 580 }}
+                    styles={{
+                      body: {
+                        maxWidth: 580,
+                        maxHeight: 'min(78vh, 640px)',
+                        overflowY: 'auto',
+                        padding: 16,
+                        background: isDarkMode ? '#0f172a' : '#fff',
+                        border: isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0',
+                        borderRadius: 12,
+                        boxShadow: isDarkMode ? '0 8px 24px rgba(0,0,0,0.45)' : '0 8px 24px rgba(15,23,42,0.12)',
+                      },
+                    }}
+                    content={<SkillsHelpPanel variant="full" isDarkMode={isDarkMode} />}
+                  >
+                    <Button 
+                      type="text" 
+                      size="small" 
+                      icon={<HelpCircle size={16} />} 
+                      style={{ color: '#60a5fa', background: isDarkMode ? 'rgba(37,99,235,0.2)' : '#eff6ff', borderRadius: 8, display: 'flex', alignItems: 'center', border: isDarkMode ? '1px solid #334155' : undefined }}
+                      aria-label={t('skills.help.title')}
+                    />
+                  </Popover>
+                )}
               </div>
           </div>
         }
@@ -448,68 +476,21 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
         )}
       </Card>
       
-      <Modal
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ padding: 8, background: isDarkMode ? 'rgba(79, 70, 229, 0.22)' : '#eff6ff', borderRadius: 10, color: isDarkMode ? '#a5b4fc' : '#2563eb', border: isDarkMode ? '1px solid #334155' : undefined }}><HelpCircle size={20} /></div>
-            <div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: isDarkMode ? '#f1f5f9' : undefined }}>{t('skills.help.title')}</div>
-                <div style={{ fontSize: 12, color: isDarkMode ? '#94a3b8' : '#64748b', fontWeight: 400 }}>{t('skills.help.subtitle')}</div>
-            </div>
-          </div>
-        }
-        open={isHelpModalOpen}
-        onCancel={() => setIsHelpModalOpen(false)}
-        footer={[
-          <Button key="close" type="primary" onClick={() => setIsHelpModalOpen(false)} style={{ borderRadius: 8 }}>{t('common.confirm')}</Button>
-        ]}
-        width={580}
-        bodyStyle={{ padding: '24px 24px 10px', background: isDarkMode ? '#0f172a' : undefined }}
-        styles={isDarkMode ? { content: { background: '#0f172a' }, header: { background: '#1e293b', borderBottom: '1px solid #334155' } } : undefined}
-        style={{ borderRadius: 20, overflow: 'hidden' }}
-        maskStyle={{ backdropFilter: 'blur(10px)', background: isDarkMode ? 'rgba(15, 23, 42, 0.72)' : 'rgba(255,255,255,0.4)' }}
-      >
-        <div style={{ marginBottom: 24, padding: 16, background: isDarkMode ? '#1e293b' : '#f8fafc', borderRadius: 12, border: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9' }}>
-            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-                {t('skills.help.description')}
-            </Typography.Text>
-        </div>
-        
-        <Steps
-          direction="vertical"
-          size="small"
-          current={-1}
-          items={[
-            {
-              title: <span style={{ fontWeight: 700 }}>{t('skills.help.step1')}</span>,
-              description: (
-                <Button 
-                    type="link" 
-                    href="https://skills.sh/" 
-                    target="_blank" 
-                    icon={<ExternalLink size={14} />}
-                    style={{ padding: 0, height: 'auto', fontSize: 12 }}
-                >
-                    立即前往 skills.sh
-                </Button>
-              )
-            },
-            {
-              title: <span style={{ fontWeight: 600 }}>{t('skills.help.step2')}</span>
-            },
-            {
-              title: <span style={{ fontWeight: 600 }}>{t('skills.help.step3')}</span>,
-              description: <Typography.Text code>openclaw skill install [skill-id]</Typography.Text>
-            },
-            {
-              title: <span style={{ fontWeight: 600 }}>{t('skills.help.step4')}</span>
-            },
-            {
-              title: <span style={{ fontWeight: 600 }}>{t('skills.help.step5')}</span>
-            }
-          ]}
-        />
-      </Modal>
+      {isMobile && (
+        <Drawer
+          title={t('skills.help.title')}
+          open={helpDrawerOpen}
+          onClose={() => setHelpDrawerOpen(false)}
+          placement="bottom"
+          height="78vh"
+          styles={{
+            body: { padding: 16, background: isDarkMode ? '#0f172a' : undefined },
+            header: isDarkMode ? { background: '#1e293b', borderBottom: '1px solid #334155' } : undefined,
+          }}
+        >
+          <SkillsHelpPanel variant="drawer" isDarkMode={isDarkMode} />
+        </Drawer>
+      )}
       </div>
 
       {selectedSkill && (
@@ -554,5 +535,95 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
     </div>
   );
 };
+
+type SkillsHelpPanelProps = {
+  isDarkMode?: boolean;
+  /** 桌面 Popover：含图标标题；移动端 Drawer：避免与 Drawer title 重复 */
+  variant?: 'full' | 'drawer';
+};
+
+function SkillsHelpPanel({ isDarkMode = false, variant = 'full' }: SkillsHelpPanelProps) {
+  const { t } = useTranslation();
+  const pageMuted = isDarkMode ? '#94a3b8' : '#64748b';
+
+  const steps = (
+    <Steps
+      direction="vertical"
+      size="small"
+      current={-1}
+      items={[
+        {
+          title: <span style={{ fontWeight: 700 }}>{t('skills.help.step1')}</span>,
+          description: (
+            <Button
+              type="link"
+              href="https://clawhub.ai/skills"
+              target="_blank"
+              rel="noopener noreferrer"
+              icon={<ExternalLink size={14} />}
+              style={{ padding: 0, height: 'auto', fontSize: 12 }}
+            >
+              {t('skills.help.marketLink')}
+            </Button>
+          ),
+        },
+        {
+          title: <span style={{ fontWeight: 600 }}>{t('skills.help.step2')}</span>,
+        },
+        {
+          title: <span style={{ fontWeight: 600 }}>{t('skills.help.step3')}</span>,
+          description: <Typography.Text code>openclaw skill install [skill-id]</Typography.Text>,
+        },
+        {
+          title: <span style={{ fontWeight: 600 }}>{t('skills.help.step4')}</span>,
+        },
+        {
+          title: <span style={{ fontWeight: 600 }}>{t('skills.help.step5')}</span>,
+        },
+      ]}
+    />
+  );
+
+  return (
+    <div>
+      {variant === 'full' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          <div
+            style={{
+              padding: 8,
+              background: isDarkMode ? 'rgba(79, 70, 229, 0.22)' : '#eff6ff',
+              borderRadius: 10,
+              color: isDarkMode ? '#a5b4fc' : '#2563eb',
+              border: isDarkMode ? '1px solid #334155' : undefined,
+            }}
+          >
+            <HelpCircle size={20} />
+          </div>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#0f172a' }}>{t('skills.help.title')}</div>
+            <div style={{ fontSize: 12, color: pageMuted, fontWeight: 400 }}>{t('skills.help.subtitle')}</div>
+          </div>
+        </div>
+      )}
+      {variant === 'drawer' && (
+        <div style={{ fontSize: 12, color: pageMuted, marginBottom: 16, lineHeight: 1.5 }}>{t('skills.help.subtitle')}</div>
+      )}
+      <div
+        style={{
+          marginBottom: 24,
+          padding: 16,
+          background: isDarkMode ? '#1e293b' : '#f8fafc',
+          borderRadius: 12,
+          border: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9',
+        }}
+      >
+        <Typography.Text type="secondary" style={{ fontSize: 13, color: pageMuted }}>
+          {t('skills.help.description')}
+        </Typography.Text>
+      </div>
+      {steps}
+    </div>
+  );
+}
 
 export default SkillManagement;
