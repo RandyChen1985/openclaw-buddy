@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip, Upload } from 'antd';
+import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip, Upload, Radio, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2, ArrowDown, ZapOff, Activity, Paperclip, FileText, Loader2, Maximize2, Minimize2, Image } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -11,6 +11,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import api, { getFullUrl } from '../api';
 import { getBaseURL } from '../utils/url';
+import { buildChatEmbedPageUrl, type ChatEmbedLayout } from '../utils/chatEmbedUrl';
 import storage from '../utils/storage';
 import { Mermaid, CodeBlock, ECharts, isEchartsCodeFenceLanguage } from '../components/ChatComponents';
 
@@ -125,31 +126,29 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [form] = Form.useForm();
 
+  const [embedShareOpen, setEmbedShareOpen] = useState(false);
+  const [embedOptions, setEmbedOptions] = useState<{
+    botId: string;
+    layout: ChatEmbedLayout;
+    defaultTab: 'v3' | 'classic';
+  }>({ botId: '', layout: 'tabs', defaultTab: 'v3' });
+
   const queryParams = new URLSearchParams(window.location.search);
   const urlBot = queryParams.get('bot');
   const urlUser = queryParams.get('user');
   const isEmbedMode = queryParams.get('embed') === 'true';
-  const base = getBaseURL(); // "" or "/prefix"
+
+  /** 与 V3 一致：应用内「铺满视口」全屏，不使用浏览器原生 Fullscreen API（避免整页进入 OS 级全屏） */
+  const toggleFullscreen = () => setIsFullscreen((prev) => !prev);
 
   useEffect(() => {
-    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
-
-  const toggleFullscreen = async () => {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-        return;
-      }
-      const el = rootRef.current || document.documentElement;
-      await (el as any).requestFullscreen?.();
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to toggle fullscreen:', e);
-    }
-  };
+    if (!isFullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isFullscreen]);
 
   useEffect(() => {
     checkChatStatus();
@@ -678,6 +677,26 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
 
   const botList = botsModels?.data?.bots || [];
 
+  const embedPreviewUrl = useMemo(() => {
+    const token = storage.getItem('guardian_token');
+    const botId =
+      embedOptions.botId ||
+      selectedBot.replace('openclaw:', '') ||
+      (botList[0] as { id?: string } | undefined)?.id ||
+      'main';
+    return buildChatEmbedPageUrl({
+      token,
+      botId,
+      layout: embedOptions.layout,
+      defaultTab: embedOptions.defaultTab,
+    });
+  }, [embedOptions, selectedBot, botList]);
+
+  const embedIframeCode = useMemo(
+    () => `<iframe src="${embedPreviewUrl}" width="100%" height="600" frameborder="0"></iframe>`,
+    [embedPreviewUrl]
+  );
+
   if (checkingEnabled) {
     return (
         <div style={{ padding: 40, textAlign: 'center' }}>
@@ -716,28 +735,43 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
   }
 
   return (
-    <div ref={rootRef} style={{ 
-      flex: 1,
-      display: 'flex', 
-      flexDirection: 'column', 
-      gap: isEmbedMode ? 0 : 16,
-      background: c.pageBg,
-      width: '100%',
-      height: '100%',
-      minHeight: 0,
-      minWidth: 0,
-      position: 'relative',
-      overflow: 'hidden'
-    }}>
+    <div
+      ref={rootRef}
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        /* 与顶部 Card 紧贴，避免非嵌入模式下 flex gap 露出 pageBg 形成「缝隙」 */
+        gap: 0,
+        background: c.pageBg,
+        width: '100%',
+        height: '100%',
+        minHeight: 0,
+        minWidth: 0,
+        position: 'relative',
+        overflow: 'hidden',
+        ...(isFullscreen
+          ? {
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100vw',
+              height: '100vh',
+              zIndex: 500,
+              background: c.pageBg,
+            }
+          : {}),
+      }}
+    >
       {markdownStyles}
       {/* Top Bar */}
       <Card 
         styles={{ body: { padding: isMobile ? '8px 12px' : '12px 20px' } }} 
         style={{ 
-          borderRadius: isEmbedMode ? 0 : 12, 
+          borderRadius: isEmbedMode ? 0 : '12px 12px 0 0',
           boxShadow: isEmbedMode ? 'none' : c.cardShadow,
           border: isEmbedMode ? 'none' : `1px solid ${c.border}`,
-          borderBottom: isEmbedMode ? `1px solid ${c.hairline}` : 'none',
+          borderBottom: `1px solid ${c.hairline}`,
           background: c.card
         }}
       >
@@ -822,56 +856,36 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
             </div>
             <Button icon={<RefreshCw size={14} />} onClick={onRefreshBots} loading={loadingBots} title={t('common.refresh')} />
             {!isMobile && !isEmbedMode && (
-              <Button 
-                icon={<ExternalLink size={14} />} 
+              <Button
+                icon={<ExternalLink size={14} />}
                 title={t('chat.labDescription')}
                 onClick={() => {
                   const token = storage.getItem('guardian_token');
                   const botId = selectedBot.replace('openclaw:', '');
-                  const url = `${window.location.origin}${base}/?page=chat&token=${token}&bot=${botId}&embed=true`;
+                  const url = buildChatEmbedPageUrl({
+                    token,
+                    botId,
+                    layout: 'tabs',
+                    defaultTab: 'v3',
+                  });
                   window.open(url, '_blank');
                 }}
               />
             )}
-            {!isMobile && (
-            <Button 
-                icon={<Share2 size={14} />} 
+            {!isMobile && !isEmbedMode && (
+              <Button
+                icon={<Share2 size={14} />}
                 title={t('chat.shareTitle')}
                 onClick={() => {
-                  const token = storage.getItem('guardian_token');
-                  const botId = selectedBot.replace('openclaw:', '');
-                  const url = `${window.location.origin}${base}/?page=chat&token=${token}&bot=${botId}&embed=true`;
-                  const iframeCode = `<iframe src="${url}" width="100%" height="600" frameborder="0"></iframe>`;
-                  Modal.info({
-                    title: t('chat.shareTitle'),
-                    width: 500,
-                    content: (
-                      <div style={{ marginTop: 16 }}>
-                        <p style={{ fontSize: 13, color: c.body }}>{t('chat.shareDesc')}</p>
-                        <Input.TextArea 
-                          readOnly 
-                          value={iframeCode} 
-                          autoSize={{ minRows: 3 }} 
-                          style={{ fontFamily: 'monospace', fontSize: 12, background: c.shareTa, color: isDarkMode ? '#e2e8f0' : undefined }}
-                        />
-                        <Button 
-                          type="primary" 
-                          size="small" 
-                          icon={<Copy size={12} />} 
-                          style={{ marginTop: 12 }}
-                          onClick={() => {
-                            navigator.clipboard.writeText(iframeCode);
-                            message.success(t('chat.copySuccess'));
-                          }}
-                        >
-                          {t('chat.copyIframe')}
-                        </Button>
-                      </div>
-                    ),
-                    okText: t('common.close')
+                  const id = selectedBot.replace('openclaw:', '') || botList[0]?.id || '';
+                  setEmbedOptions({
+                    botId: id,
+                    layout: 'tabs',
+                    defaultTab: 'v3',
                   });
+                  setEmbedShareOpen(true);
                 }}
-            />
+              />
             )}
             {!isEmbedMode && (
               <Button
@@ -889,8 +903,9 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
       <div style={{ 
         flex: 1, 
         background: c.card, 
-        borderRadius: isEmbedMode ? 0 : 12, 
+        borderRadius: isEmbedMode ? 0 : '0 0 12px 12px',
         border: isEmbedMode ? 'none' : `1px solid ${c.border}`,
+        borderTop: 'none',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -1561,6 +1576,93 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
             </Form>
         </div>
       </Modal>
+
+      <Modal
+        open={embedShareOpen}
+        onCancel={() => setEmbedShareOpen(false)}
+        title={t('chat.shareTitle')}
+        width={520}
+        footer={null}
+        destroyOnClose
+        styles={{ body: { paddingTop: 12 } }}
+      >
+        <p style={{ fontSize: 13, color: c.body, marginBottom: 16 }}>{t('chat.shareDesc')}</p>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 12, color: c.subtle, marginBottom: 6 }}>{t('chat.embedBotLabel')}</div>
+          <Select
+            style={{ width: '100%' }}
+            value={embedOptions.botId || undefined}
+            placeholder={t('chat.selectBotTip')}
+            onChange={(v) => setEmbedOptions((o) => ({ ...o, botId: v }))}
+            options={botList.map((b: { id: string; name?: string }) => ({
+              label: b.name || b.id,
+              value: b.id,
+            }))}
+          />
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 12, color: c.subtle, marginBottom: 6 }}>{t('chat.embedLayoutLabel')}</div>
+          <Radio.Group
+            value={embedOptions.layout}
+            onChange={(e) =>
+              setEmbedOptions((o) => ({ ...o, layout: e.target.value as ChatEmbedLayout }))
+            }
+          >
+            <Space direction="vertical" size={4}>
+              <Radio value="tabs">{t('chat.embedLayoutTabs')}</Radio>
+              <Radio value="v3">{t('chat.embedLayoutV3')}</Radio>
+              <Radio value="classic">{t('chat.embedLayoutClassic')}</Radio>
+            </Space>
+          </Radio.Group>
+        </div>
+        {embedOptions.layout === 'tabs' && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: c.subtle, marginBottom: 6 }}>{t('chat.embedDefaultTabLabel')}</div>
+            <Radio.Group
+              value={embedOptions.defaultTab}
+              onChange={(e) =>
+                setEmbedOptions((o) => ({
+                  ...o,
+                  defaultTab: e.target.value as 'v3' | 'classic',
+                }))
+              }
+            >
+              <Space wrap>
+                <Radio value="v3">{t('chat.v3Mode', { defaultValue: 'V3 模式 (RPC)' })}</Radio>
+                <Radio value="classic">{t('chat.classicMode', { defaultValue: '经典模式 (HTTP)' })}</Radio>
+              </Space>
+            </Radio.Group>
+          </div>
+        )}
+        <Input.TextArea
+          readOnly
+          value={embedIframeCode}
+          autoSize={{ minRows: 3, maxRows: 8 }}
+          style={{
+            fontFamily: 'monospace',
+            fontSize: 12,
+            background: c.shareTa,
+            color: isDarkMode ? '#e2e8f0' : undefined,
+          }}
+        />
+        <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Button
+            type="primary"
+            size="small"
+            icon={<Copy size={12} />}
+            onClick={() => {
+              navigator.clipboard.writeText(embedIframeCode);
+              message.success(t('chat.copySuccess'));
+            }}
+          >
+            {t('chat.copyIframe')}
+          </Button>
+          <Button size="small" onClick={() => setEmbedShareOpen(false)}>
+            {t('common.close')}
+          </Button>
+        </div>
+      </Modal>
+
       <style>{`
         .typing-indicator {
           display: flex;

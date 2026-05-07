@@ -253,8 +253,15 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
         setSelectedBot(quickChatBot);
         startNewSession(botId);
       } else if (!selectedBot && !sessionKey) {
-        const firstBot = botsModels.data.bots[0];
-        setSelectedBot(`openclaw:${firstBot.id}`);
+        const qp = new URLSearchParams(window.location.search);
+        const urlBot = qp.get('bot');
+        const bots = botsModels.data.bots;
+        let pick = bots[0];
+        if (urlBot) {
+          const found = bots.find((b: any) => b.id === urlBot || b.name === urlBot);
+          if (found) pick = found;
+        }
+        setSelectedBot(`openclaw:${pick.id}`);
       }
     }
   }, [botsModels, selectedBot, sessionKey, startNewSession]);
