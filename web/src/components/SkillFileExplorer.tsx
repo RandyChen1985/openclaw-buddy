@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal, List, Button, message, Spin, Breadcrumb, Tabs, Input, Empty, Tree, Tooltip, Dropdown, type MenuProps } from 'antd';
 import { 
   Folder, FileText, ChevronRight, ChevronLeft, Save, Eye, PenLine, FileCode, Search, 
   LayoutList, Maximize2, Minimize2, 
   FileJson, FileCode2, Image as ImageIcon, Monitor, Terminal, File,
-  FolderPlus, FilePlus, Download, PanelLeftOpen, PanelLeftClose
+  FolderPlus, FilePlus, Download, PanelLeftOpen, PanelLeftClose, Copy, X
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -18,6 +18,8 @@ import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import { Table } from 'antd';
 import { FE_THEME_DARK, FE_THEME_LIGHT } from '../theme/feSurfaceTheme';
+import Draggable from 'react-draggable';
+import type { DraggableBounds, DraggableData, DraggableEvent } from 'react-draggable';
 
 const { DirectoryTree } = Tree;
 
@@ -97,6 +99,17 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
   const [wordHtml, setWordHtml] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+  const [dragDisabled, setDragDisabled] = useState(true);
+  const [bounds, setBounds] = useState<DraggableBounds>({ left: 0, top: 0, bottom: 0, right: 0 });
+  const [dragPos, setDragPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const savedDragPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const draggleRef = useRef<HTMLDivElement>(null);
+
+  const noDragProps = {
+    onMouseEnter: () => setDragDisabled(true),
+    onMouseLeave: () => setDragDisabled(false),
+  };
+
   // Create Modal States
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createType, setCreateType] = useState<'file' | 'dir'>('file');
@@ -115,6 +128,8 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
       setIsEditing(false);
       setFilterText('');
       setIsFullscreen(false);
+      setDragPos({ x: 0, y: 0 });
+      savedDragPos.current = { x: 0, y: 0 };
       const initialRoot: TreeDataItem = { title: skillName || 'Skill', key: rootPath, isLeaf: false, children: [] };
       setTreeData([initialRoot]);
       setExpandedKeys([rootPath]);
@@ -401,19 +416,59 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
   const isText = textExts.includes(ext) || isMarkdown || isHTML;
   const canView = hasPreview || isText;
 
+  const onDragStart = (_event: DraggableEvent, uiData: DraggableData) => {
+    const { clientWidth, clientHeight } = window.document.documentElement;
+    const targetRect = draggleRef.current?.getBoundingClientRect();
+    if (!targetRect) return;
+    setBounds({
+      left: -targetRect.left + uiData.x,
+      right: clientWidth - (targetRect.right - uiData.x),
+      top: -targetRect.top + uiData.y,
+      bottom: clientHeight - (targetRect.bottom - uiData.y),
+    });
+  };
+
+  const onDragStop = (_event: DraggableEvent, uiData: DraggableData) => {
+    const newPos = { x: uiData.x, y: uiData.y };
+    setDragPos(newPos);
+    savedDragPos.current = newPos;
+  };
+
+  const toggleFullscreen = () => {
+    setIsFullscreen((prev) => {
+      const next = !prev;
+      if (next) {
+        setDragPos({ x: 0, y: 0 });
+      } else {
+        setDragPos(savedDragPos.current);
+      }
+      return next;
+    });
+  };
+
   return (
     <Modal
       title={
-        <div style={{ 
-          display: 'flex', 
-          flexDirection: isMobile ? 'column' : 'row',
-          alignItems: isMobile ? 'flex-start' : 'center', 
-          justifyContent: 'space-between', 
-          width: '100%', 
-          paddingRight: isMobile ? 0 : 32,
-          gap: isMobile ? 12 : 0
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, width: isMobile ? '100%' : 'auto' }}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: isMobile ? 'stretch' : 'center',
+            justifyContent: 'space-between',
+            width: '100%',
+            gap: isMobile ? 12 : 0,
+            cursor: isFullscreen || isMobile ? 'default' : 'move',
+            boxSizing: 'border-box',
+            padding: isMobile ? '12px 12px' : '8px 16px',
+            background: fe.modalHeader,
+            borderRadius: isFullscreen ? 0 : '12px 12px 0 0',
+          }}
+          onMouseOver={() => {
+            if (dragDisabled) setDragDisabled(false);
+          }}
+          onMouseOut={() => setDragDisabled(true)}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flex: 1, minWidth: 0 }}>
             {!isMobile && (
               <Button
                 type="text"
@@ -421,6 +476,7 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                 icon={isSidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
                 onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
                 style={{ color: fe.textMuted, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                {...noDragProps}
               />
             )}
             {(isEditing || (isMobile && currentPath !== rootPath)) && (
@@ -439,6 +495,7 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                   }
                 }}
                 style={{ padding: 0, width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                {...noDragProps}
               />
             )}
             {!isMobile && (
@@ -446,7 +503,7 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                 <FileCode size={20} color={isDarkMode ? fe.link : '#2563eb'} />
               </div>
             )}
-            <div style={{ flex: isMobile ? 1 : 'none' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, lineHeight: 1.2, color: fe.text }}>{skillName} {t('skills.resourceExplorer')}</div>
               <Breadcrumb
                 style={{ fontSize: isMobile ? 10 : 11, marginTop: isMobile ? 1 : 2 }}
@@ -468,46 +525,28 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
           </div>
           <div style={{ 
             display: 'flex', 
-            gap: isMobile ? 4 : 8, 
+            gap: 8, 
             alignItems: 'center', 
-            width: isMobile ? '100%' : 'auto',
-            justifyContent: isMobile ? 'flex-end' : 'flex-start',
-            marginTop: isMobile ? 4 : 0
+            flexShrink: 0,
+            flexWrap: 'wrap',
+            justifyContent: isMobile ? 'flex-end' : 'flex-end',
           }}>
             {!isEditing && (
-              <Input
-                placeholder={t('common.searchPlaceholder')}
-                prefix={<Search size={isMobile ? 14 : 16} color={fe.textFaint} style={{ marginRight: 4 }} />}
-                value={filterText}
-                onChange={e => setFilterText(e.target.value)}
-                allowClear
-                style={{ 
-                  borderRadius: 8, 
-                  height: isMobile ? 28 : 32, 
-                  flex: isMobile ? 1 : 'none',
-                  width: isMobile ? 'auto' : 200,
-                  marginRight: isMobile ? 4 : 8
-                }}
-              />
-            )}
-            <Button 
-              type="text"
-              size={isMobile ? 'small' : undefined}
-              icon={isFullscreen ? <Minimize2 size={isMobile ? 16 : 18} /> : <Maximize2 size={isMobile ? 16 : 18} />}
-              onClick={() => setIsFullscreen(!isFullscreen)}
-              style={{ color: fe.textMuted }}
-            />
-            {isEditing && (
-              <Button 
-                type="primary" 
-                size={isMobile ? 'small' : undefined}
-                icon={<Save size={14} />} 
-                loading={isSaving} 
-                onClick={handleSave} 
-                style={{ background: '#2563eb' }}
-              >
-                {t('common.save')}
-              </Button>
+              <span style={{ flex: isMobile ? 1 : 'none', minWidth: 0 }} {...noDragProps}>
+                <Input
+                  placeholder={t('common.searchPlaceholder')}
+                  prefix={<Search size={isMobile ? 14 : 16} color={fe.textFaint} style={{ marginRight: 4 }} />}
+                  value={filterText}
+                  onChange={e => setFilterText(e.target.value)}
+                  allowClear
+                  style={{ 
+                    borderRadius: 8, 
+                    height: isMobile ? 28 : 32, 
+                    flex: isMobile ? 1 : 'none',
+                    width: isMobile ? 'auto' : 200,
+                  }}
+                />
+              </span>
             )}
             {!isEditing && (
               <>
@@ -517,6 +556,7 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                     icon={<FilePlus size={14} />} 
                     onClick={() => handleCreateFile()} 
                     style={{ borderRadius: 8 }}
+                    {...noDragProps}
                   />
                 </Tooltip>
                 <Tooltip title={t('common.newFolder', { defaultValue: '新建文件夹' })}>
@@ -525,25 +565,91 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                     icon={<FolderPlus size={14} />} 
                     onClick={() => handleCreateDir()} 
                     style={{ borderRadius: 8 }}
+                    {...noDragProps}
                   />
                 </Tooltip>
               </>
             )}
+            <Tooltip title={isFullscreen ? t('common.minimize') : t('common.maximize')}>
+              <Button 
+                type="text"
+                size="small"
+                icon={isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                onClick={toggleFullscreen}
+                style={{ color: fe.textMuted }}
+                {...noDragProps}
+              />
+            </Tooltip>
+            <Button 
+              type="text" 
+              size="small" 
+              icon={<X size={18} />} 
+              onClick={onClose} 
+              style={{ color: fe.textMuted }}
+              {...noDragProps}
+            />
           </div>
         </div>
       }
+      closeIcon={null}
       open={open}
       onCancel={onClose}
-      width={isFullscreen ? '100%' : (isMobile ? '100%' : 1000)}
-      style={isFullscreen ? { top: 0, paddingBottom: 0, maxWidth: 'none' } : {}}
+      width={isFullscreen ? '100vw' : (isMobile ? '100%' : 1000)}
+      style={isFullscreen ? { top: 0, maxWidth: '100vw', width: '100vw', margin: 0, padding: 0, paddingBottom: 0 } : {}}
       footer={null}
-      styles={{ 
-        body: { padding: 0, height: isFullscreen ? 'calc(100vh - 110px)' : (isMobile ? 'calc(100vh - 120px)' : 550), display: 'flex', flexDirection: 'column', overflow: 'hidden', background: fe.modalBody },
-        content: { background: fe.modalBody },
-        header: { padding: isMobile ? '12px 12px' : '16px 24px', borderBottom: `1px solid ${fe.border}`, background: fe.modalHeader }
+      styles={{
+        ...(isFullscreen ? { wrapper: { padding: 0 } } : {}),
+        body: {
+          padding: 0,
+          background: fe.modalBody,
+          overflow: 'hidden',
+          borderRadius: isFullscreen ? 0 : '0 0 12px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          ...(isFullscreen
+            ? { flex: 1, minHeight: 0, height: 'auto' }
+            : { height: isMobile ? 'calc(100vh - 120px)' : 550 }),
+        },
+        content: {
+          padding: 0,
+          background: fe.modalBody,
+          borderRadius: isFullscreen ? 0 : 12,
+          overflow: 'hidden',
+          ...(isFullscreen
+            ? {
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100vh',
+                maxHeight: '100vh',
+                maxWidth: '100vw',
+                margin: 0,
+              }
+            : {}),
+        },
+        header: {
+          padding: 0,
+          background: fe.modalHeader,
+          borderBottom: `1px solid ${fe.editHeaderBorder}`,
+          marginBottom: 0,
+          borderRadius: isFullscreen ? 0 : '12px 12px 0 0',
+          flexShrink: 0,
+        },
       }}
       centered={!isFullscreen}
       destroyOnClose
+      modalRender={(modal) => (
+        <Draggable
+          disabled={dragDisabled || isFullscreen || isMobile}
+          bounds={bounds}
+          position={dragPos}
+          onStart={onDragStart}
+          onStop={onDragStop}
+        >
+          <div ref={draggleRef} style={isFullscreen ? { width: '100%', minHeight: '100%' } : undefined}>
+            {modal}
+          </div>
+        </Draggable>
+      )}
     >
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: fe.bg, color: fe.text }}>
         {!isMobile && (
@@ -681,6 +787,65 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
                     ) : (
                       <div style={{ position: 'relative', height: '100%' }}>
                       <TokenBadge text={fileContent} />
+                      <Tooltip title={t('common.copyContent', { defaultValue: '复制全部内容' })}>
+                        <Button 
+                          type="default"
+                          icon={<Copy size={16} />} 
+                          onClick={() => {
+                            navigator.clipboard.writeText(fileContent).then(() => {
+                              message.success(t('common.copied', { defaultValue: '已复制到剪贴板' }));
+                            }).catch(() => {
+                              message.error(t('common.copyFailed', { defaultValue: '复制失败，请手动复制' }));
+                            });
+                          }}
+                          style={{ 
+                            position: 'absolute', 
+                            bottom: 32, 
+                            right: 160,
+                            zIndex: 100, 
+                            borderRadius: 22, 
+                            height: 44, 
+                            width: 44,
+                            padding: 0,
+                            boxShadow: '0 4px 14px rgba(100, 116, 139, 0.3)',
+                            background: fe.copyFloatBg,
+                            border: `1px solid ${fe.copyFloatBorder}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: fe.copyFloatColor,
+                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                          }}
+                          className="skill-copy-float-btn"
+                        />
+                      </Tooltip>
+                      <Button 
+                        type="primary" 
+                        icon={<Save size={16} />} 
+                        loading={isSaving} 
+                        onClick={handleSave} 
+                        style={{ 
+                          position: 'absolute', 
+                          bottom: 32, 
+                          right: 32, 
+                          zIndex: 100, 
+                          borderRadius: 24, 
+                          height: 44, 
+                          padding: '0 24px', 
+                          boxShadow: '0 8px 20px rgba(14, 165, 233, 0.4)',
+                          background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
+                          border: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          fontSize: 15,
+                          fontWeight: 600,
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                        }}
+                        className="skill-save-float-btn"
+                      >
+                        {t('common.save', { defaultValue: '保存' })}
+                      </Button>
                       <div style={{ height: '100%', minHeight: 0 }}>
                         <CodeMirrorTextEditor
                           filename={selectedFile?.name || ''}
@@ -735,6 +900,17 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
         </div>
       </div>
       <style>{`
+        .skill-save-float-btn:hover {
+          transform: translateY(-2px) scale(1.05);
+          box-shadow: 0 12px 24px rgba(14, 165, 233, 0.5) !important;
+        }
+        .skill-copy-float-btn:hover {
+          transform: translateY(-2px) scale(1.05);
+          box-shadow: 0 8px 20px rgba(100, 116, 139, 0.35) !important;
+          background: ${fe.copyFloatHoverBg} !important;
+          border-color: ${fe.copyFloatHoverBorder} !important;
+          color: ${fe.copyFloatHoverColor} !important;
+        }
         .file-item-hover:hover {
           transform: scale(1.005);
           box-shadow: 0 4px 12px ${fe.hoverShadow};
