@@ -96,6 +96,7 @@
     "maximize": "Maximize",
     "minimize": "Minimize",
     "sessionClosed": "Session closed",
+    "terminalTabLabel": "Terminal {{n}}",
     "cron": "Scheduled Jobs",
     "all": "All",
     "command": "Command Content",

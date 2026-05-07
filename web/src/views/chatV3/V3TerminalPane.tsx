@@ -1,14 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
-import { message, Button, Tooltip } from 'antd';
+import React, { useRef, useState } from 'react';
+import { Button, Tabs, Tooltip } from 'antd';
 import { RotateCcw, XCircle, Terminal as TerminalIcon, X, Maximize2, Minimize2 } from 'lucide-react';
-import api from '../../api';
-import storage from '../../utils/storage';
-import { getWsUrl } from '../../utils/url';
+import { V3TerminalSession, genTerminalTabId, type V3TerminalSessionHandle } from './V3TerminalSession';
+import './v3TerminalTabs.css';
 
 interface V3TerminalPaneProps {
-  t: any;
+  t: (key: string, opts?: Record<string, unknown>) => string;
   cwd?: string;
   width?: number;
   onWidthChange?: (width: number) => void;
@@ -16,203 +13,139 @@ interface V3TerminalPaneProps {
   transition?: string;
 }
 
-export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({ t, cwd, width = 450, onWidthChange, onClose, transition: customTransition }) => {
-  const [terminalEl, setTerminalEl] = useState<HTMLDivElement | null>(null);
-  const xtermRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
-  const [sessionKey, setSessionKey] = useState(0);
+export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({
+  t,
+  cwd,
+  width = 450,
+  onWidthChange,
+  onClose,
+  transition: customTransition,
+}) => {
+  const seedRef = useRef<string | null>(null);
+  if (!seedRef.current) seedRef.current = genTerminalTabId();
 
-  useEffect(() => {
-    if (!terminalEl) return;
+  const [tabIds, setTabIds] = useState<string[]>(() => [seedRef.current!]);
+  const [activeKey, setActiveKey] = useState<string>(() => seedRef.current!);
+  const [restartByTab, setRestartByTab] = useState<Record<string, number>>(() => ({ [seedRef.current!]: 0 }));
 
-    // Initialize xterm.js
-    const term = new Terminal({
-      cursorBlink: true,
-      cursorStyle: 'block',
-      fontSize: 12,
-      fontFamily: '"Cascadia Code", "Fira Code", monospace',
-      theme: {
-        background: '#0f172a',
-        foreground: '#f8fafc',
-        selectionBackground: 'rgba(255, 255, 255, 0.2)',
-      },
-      allowProposedApi: true,
-    });
-
-    const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
-    term.open(terminalEl);
-    term.focus();
-    
-    xtermRef.current = term;
-    fitAddonRef.current = fitAddon;
-
-    const token = storage.getItem('guardian_token');
-    let socket: WebSocket | null = null;
-
-    const sendResize = () => {
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({
-          type: 'resize',
-          cols: term.cols,
-          rows: term.rows
-        }));
-      }
-    };
-
-    const connect = async () => {
-      // 优先获取短效票据 (Ticket)
-      const res = await api.post('/v1/auth/ticket').catch(() => null);
-      const ticket = res?.data?.ticket;
-      
-      let wsUrl = '';
-      const queryParams = new URLSearchParams();
-      if (ticket) queryParams.set('ticket', ticket);
-      else queryParams.set('token', token || '');
-      if (cwd) queryParams.set('cwd', cwd);
-
-      wsUrl = getWsUrl(`/v1/ws/shell?${queryParams.toString()}`);
-
-      if (xtermRef.current === null) return;
-
-      socket = new WebSocket(wsUrl);
-      socket.binaryType = 'arraybuffer';
-      socketRef.current = socket;
-
-      socket.onopen = () => {
-        sendResize();
-        if (cwd) {
-          term.write(`\x1b[1;34m[Buddy] 自动切换到工作目录: ${cwd}\x1b[0m\r\n`);
-        }
-      };
-
-      socket.onmessage = (event) => {
-        term.write(new Uint8Array(event.data));
-      };
-
-      socket.onerror = (error) => {
-        console.error('Terminal WebSocket error:', error);
-        message.error(t('common.connectionError'));
-      };
-
-      socket.onclose = () => {
-        term.write(`\r\n\x1b[31m[${t('common.sessionClosed')}]\x1b[0m\r\n`);
-      };
-
-      term.onData((data) => {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(data);
-        }
-      });
-
-      term.onResize(() => {
-        sendResize();
-      });
-    };
-
-    connect();
-
-    const initialFit = setTimeout(() => {
-      if (fitAddonRef.current && xtermRef.current) {
-        fitAddonRef.current.fit();
-        xtermRef.current.focus();
-        sendResize();
-      }
-    }, 400);
-
-    const handleResize = () => {
-      if (fitAddonRef.current) {
-        fitAddonRef.current.fit();
-        sendResize();
-      }
-    };
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      clearTimeout(initialFit);
-      if (socket) socket.close();
-      term.dispose();
-      xtermRef.current = null;
-    };
-  }, [terminalEl, sessionKey, cwd, t]);
-
-  // Handle width changes (including CSS transitions)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (fitAddonRef.current) {
-        fitAddonRef.current.fit();
-        if (socketRef.current?.readyState === WebSocket.OPEN) {
-          socketRef.current.send(JSON.stringify({
-            type: 'resize',
-            cols: xtermRef.current?.cols,
-            rows: xtermRef.current?.rows
-          }));
-        }
-      }
-    }, 250); // Match or slightly exceed CSS transition time
-    return () => clearTimeout(timer);
-  }, [width]);
+  const sessionRefs = useRef<Map<string, V3TerminalSessionHandle>>(new Map());
 
   const handleRestart = () => {
-    setSessionKey(prev => prev + 1);
+    setRestartByTab((prev) => ({
+      ...prev,
+      [activeKey]: (prev[activeKey] ?? 0) + 1,
+    }));
   };
 
   const handleInterrupt = () => {
-    if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send('\x03');
-    }
+    sessionRefs.current.get(activeKey)?.interrupt();
   };
 
+  const onTabEdit = (
+    targetKey: string | number | React.MouseEvent | React.KeyboardEvent,
+    action: 'add' | 'remove'
+  ) => {
+    if (action === 'add') {
+      const id = genTerminalTabId();
+      setTabIds((prev) => [...prev, id]);
+      setRestartByTab((prev) => ({ ...prev, [id]: 0 }));
+      setActiveKey(id);
+      return;
+    }
+    const key = String(targetKey);
+    setTabIds((prev) => {
+      if (prev.length <= 1) return prev;
+      const next = prev.filter((tid) => tid !== key);
+      const idx = prev.indexOf(key);
+      setActiveKey((cur) => {
+        if (cur !== key) return cur;
+        return next[Math.max(0, idx - 1)] ?? next[0];
+      });
+      setRestartByTab((r) => {
+        const { [key]: _, ...rest } = r;
+        return rest;
+      });
+      sessionRefs.current.delete(key);
+      return next;
+    });
+  };
+
+  const tabItems = tabIds.map((id, index) => ({
+    key: id,
+    label: t('common.terminalTabLabel', { n: index + 1, defaultValue: `终端 ${index + 1}` }),
+    closable: tabIds.length > 1,
+    children: (
+      <div style={{ height: '100%', padding: 12, paddingTop: 8, boxSizing: 'border-box' }}>
+        <V3TerminalSession
+          ref={(h) => {
+            if (h) sessionRefs.current.set(id, h);
+            else sessionRefs.current.delete(id);
+          }}
+          t={t}
+          cwd={cwd}
+          width={width}
+          isActive={activeKey === id}
+          restartKey={restartByTab[id] ?? 0}
+        />
+      </div>
+    ),
+  }));
+
   return (
-    <div className="v3-terminal-pane" style={{
-      width: width,
-      height: '100%',
-      background: '#0f172a',
-      borderLeft: '1px solid #334155',
-      display: 'flex',
-      flexDirection: 'column',
-      boxShadow: '-4px 0 15px rgba(0,0,0,0.2)',
-      zIndex: 20,
-      transition: customTransition !== undefined ? customTransition : 'width 0.2s ease-in-out'
-    }}>
-      <div style={{ 
-        padding: '12px 16px', 
-        borderBottom: '1px solid #334155', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between',
-        background: '#1e293b'
-      }}>
+    <div
+      className="v3-terminal-pane"
+      style={{
+        width: width,
+        height: '100%',
+        background: '#0f172a',
+        borderLeft: '1px solid #334155',
+        display: 'flex',
+        flexDirection: 'column',
+        boxShadow: '-4px 0 15px rgba(0,0,0,0.2)',
+        zIndex: 20,
+        transition: customTransition !== undefined ? customTransition : 'width 0.2s ease-in-out',
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          padding: '12px 16px',
+          borderBottom: '1px solid #334155',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: '#1e293b',
+          flexShrink: 0,
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f8fafc' }}>
           <TerminalIcon size={14} className="text-indigo-400" />
           <span style={{ fontSize: 13, fontWeight: 800 }}>{t('common.terminal', { defaultValue: '运维终端' })}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <Tooltip title={t('common.interrupt', { defaultValue: '中断 (Ctrl+C)' })}>
-            <Button 
-              size="small" 
-              type="text" 
-              icon={<XCircle size={14} />} 
+            <Button
+              size="small"
+              type="text"
+              icon={<XCircle size={14} />}
               onClick={handleInterrupt}
               style={{ color: '#ef4444' }}
             />
           </Tooltip>
           <Tooltip title={t('common.restart', { defaultValue: '重启' })}>
-            <Button 
-              size="small" 
-              type="text" 
-              icon={<RotateCcw size={14} />} 
+            <Button
+              size="small"
+              type="text"
+              icon={<RotateCcw size={14} />}
               onClick={handleRestart}
               style={{ color: '#94a3b8' }}
             />
           </Tooltip>
           <Tooltip title={width > 600 ? t('common.minimize', { defaultValue: '最小化' }) : t('common.maximize', { defaultValue: '最大化' })}>
-            <Button 
-              size="small" 
-              type="text" 
-              icon={width > 600 ? <Minimize2 size={14} /> : <Maximize2 size={14} />} 
+            <Button
+              size="small"
+              type="text"
+              icon={width > 600 ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
               onClick={() => {
                 const target = width > 600 ? 450 : 800;
                 onWidthChange?.(target);
@@ -220,19 +153,18 @@ export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({ t, cwd, width = 
               style={{ color: '#94a3b8' }}
             />
           </Tooltip>
-          <Button 
-            size="small" 
-            type="text" 
-            icon={<X size={16} />} 
-            onClick={onClose} 
-            style={{ color: '#94a3b8' }}
-          />
+          <Button size="small" type="text" icon={<X size={16} />} onClick={onClose} style={{ color: '#94a3b8' }} />
         </div>
       </div>
-      <div 
-        ref={setTerminalEl} 
-        style={{ flex: 1, overflow: 'hidden', padding: 12 }}
-        onClick={() => xtermRef.current?.focus()}
+      <Tabs
+        className="v3-terminal-multi-tabs"
+        type="editable-card"
+        size="small"
+        activeKey={activeKey}
+        onChange={setActiveKey}
+        onEdit={onTabEdit}
+        items={tabItems}
+        destroyInactiveTabPane={false}
       />
     </div>
   );

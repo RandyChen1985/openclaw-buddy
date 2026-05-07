@@ -105,6 +105,7 @@
     "maximize": "最大化",
     "minimize": "最小化",
     "sessionClosed": "会话已关闭",
+    "terminalTabLabel": "终端 {{n}}",
     "cron": "定时任务",
     "uploadSuccess": "上传成功",
     "createSuccess": "创建成功",

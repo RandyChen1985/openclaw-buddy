@@ -1,14 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
-import { message, Button, Tooltip, Modal } from 'antd';
+import { Button, Tooltip, Modal, Tabs } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { RotateCcw, XCircle, Terminal as TerminalIcon, Maximize2, Minimize2 } from 'lucide-react';
 import Draggable from 'react-draggable';
 import type { DraggableBounds, DraggableData, DraggableEvent } from 'react-draggable';
-import api from '../../api';
-import storage from '../../utils/storage';
-import { getWsUrl } from '../../utils/url';
+import {
+  V3TerminalSession,
+  genTerminalTabId,
+  type V3TerminalSessionHandle,
+} from '../../views/chatV3/V3TerminalSession';
+import '../../views/chatV3/v3TerminalTabs.css';
 
 interface V3TerminalModalProps {
   open: boolean;
@@ -20,19 +21,34 @@ interface V3TerminalModalProps {
 
 export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose, cwd, title, showSider }) => {
   const { t } = useTranslation();
-  const [terminalEl, setTerminalEl] = useState<HTMLDivElement | null>(null);
-  const xtermRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
-  const [sessionKey, setSessionKey] = useState(0);
   const [isMobile] = useState(window.innerWidth < 768);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [viewportW, setViewportW] = useState(() => window.innerWidth);
+
+  const modalTabSeedRef = useRef<string | null>(null);
+  if (!modalTabSeedRef.current) modalTabSeedRef.current = genTerminalTabId();
+
+  const [tabIds, setTabIds] = useState<string[]>(() => [modalTabSeedRef.current!]);
+  const [activeKey, setActiveKey] = useState<string>(() => modalTabSeedRef.current!);
+  const [restartByTab, setRestartByTab] = useState<Record<string, number>>(() => ({
+    [modalTabSeedRef.current!]: 0,
+  }));
+
+  const sessionRefs = useRef<Map<string, V3TerminalSessionHandle>>(new Map());
+  const prevOpenRef = useRef(false);
+
+  const sessionWidth = isFullscreen ? viewportW : 1000;
+
+  useEffect(() => {
+    const onR = () => setViewportW(window.innerWidth);
+    window.addEventListener('resize', onR);
+    return () => window.removeEventListener('resize', onR);
+  }, []);
 
   // Draggable states
   const [dragDisabled, setDragDisabled] = useState(true);
   const [bounds, setBounds] = useState<DraggableBounds>({ left: 0, top: 0, bottom: 0, right: 0 });
   const draggleRef = useRef<HTMLDivElement>(null);
-  // 受控位置：进入全屏时重置为 (0,0)，退出时还原
   const [dragPos, setDragPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const savedDragPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const prevShowSiderOpenRef = useRef<boolean | null>(null);
@@ -49,7 +65,6 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
     });
   };
 
-  // 每次重新打开时，重置最大化和拖动位置状态
   useEffect(() => {
     if (open) {
       setIsFullscreen(false);
@@ -59,13 +74,24 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
   }, [open]);
 
   useEffect(() => {
-    const open = !!showSider;
+    if (open && !prevOpenRef.current) {
+      const id = genTerminalTabId();
+      setTabIds([id]);
+      setActiveKey(id);
+      setRestartByTab({ [id]: 0 });
+      sessionRefs.current.clear();
+    }
+    prevOpenRef.current = open;
+  }, [open]);
+
+  useEffect(() => {
+    const siderOpen = !!showSider;
     const prev = prevShowSiderOpenRef.current;
     if (prev === null) {
-      prevShowSiderOpenRef.current = open;
+      prevShowSiderOpenRef.current = siderOpen;
       return;
     }
-    if (prev === false && open) {
+    if (prev === false && siderOpen) {
       setIsFullscreen((m) => {
         if (m) {
           setDragPos({ x: 0, y: 0 });
@@ -74,7 +100,7 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
         return m;
       });
     }
-    prevShowSiderOpenRef.current = open;
+    prevShowSiderOpenRef.current = siderOpen;
   }, [showSider]);
 
   const onDragStop = (_event: DraggableEvent, uiData: DraggableData) => {
@@ -84,115 +110,78 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
   };
 
   const toggleFullscreen = () => {
-    setIsFullscreen(prev => {
+    setIsFullscreen((prev) => {
       const next = !prev;
       if (next) {
-        // 进入全屏：保存当前拖动位置，然后重置到 (0,0)
         setDragPos({ x: 0, y: 0 });
       } else {
-        // 退出全屏：还原之前的拖动位置
         setDragPos(savedDragPos.current);
       }
       return next;
     });
   };
 
-  useEffect(() => {
-    if (!open || !terminalEl) return;
-
-    const term = new Terminal({
-      cursorBlink: true,
-      cursorStyle: 'block',
-      fontSize: isMobile ? 12 : 13,
-      fontFamily: '"Cascadia Code", "Fira Code", monospace',
-      theme: {
-        background: '#0f172a',
-        foreground: '#f8fafc',
-        selectionBackground: 'rgba(255, 255, 255, 0.2)',
-      },
-      allowProposedApi: true,
-    });
-
-    const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
-    term.open(terminalEl);
-    term.focus();
-
-    xtermRef.current = term;
-    fitAddonRef.current = fitAddon;
-
-    const token = storage.getItem('guardian_token');
-    let socket: WebSocket | null = null;
-
-    const sendResize = () => {
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-      }
-    };
-
-    const connect = async () => {
-      const res = await api.post('/v1/auth/ticket').catch(() => null);
-      const ticket = res?.data?.ticket;
-      const queryParams = new URLSearchParams();
-      if (ticket) queryParams.set('ticket', ticket);
-      else queryParams.set('token', token || '');
-      if (cwd) queryParams.set('cwd', cwd);
-
-      const wsUrl = getWsUrl(`/v1/ws/shell?${queryParams.toString()}`);
-      if (xtermRef.current === null) return;
-
-      socket = new WebSocket(wsUrl);
-      socket.binaryType = 'arraybuffer';
-      socketRef.current = socket;
-
-      socket.onopen = () => {
-        sendResize();
-        if (cwd) {
-          term.write(`\x1b[1;34m[Buddy] 自动切换到工作目录: ${cwd}\x1b[0m\r\n`);
-        }
-      };
-      socket.onmessage = (event) => { term.write(new Uint8Array(event.data)); };
-      socket.onerror = (error) => {
-        console.error('Terminal WebSocket error:', error);
-        message.error(t('common.connectionError'));
-      };
-      socket.onclose = () => {
-        term.write(`\r\n\x1b[31m[${t('common.sessionClosed')}]\x1b[0m\r\n`);
-      };
-      term.onData((data) => {
-        if (socket && socket.readyState === WebSocket.OPEN) socket.send(data);
-      });
-      term.onResize(() => { sendResize(); });
-    };
-
-    connect();
-
-    const initialFit = setTimeout(() => {
-      if (fitAddonRef.current && xtermRef.current) {
-        fitAddonRef.current.fit();
-        xtermRef.current.focus();
-        sendResize();
-      }
-    }, 400);
-
-    const handleResize = () => { fitAddon.fit(); sendResize(); };
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      clearTimeout(initialFit);
-      if (socket) socket.close();
-      term.dispose();
-      xtermRef.current = null;
-    };
-  }, [open, terminalEl, sessionKey, cwd, isMobile, t]);
-
-  const handleRestart = () => { setSessionKey(prev => prev + 1); };
-  const handleInterrupt = () => {
-    if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send('\x03');
-    }
+  const handleRestart = () => {
+    setRestartByTab((prev) => ({
+      ...prev,
+      [activeKey]: (prev[activeKey] ?? 0) + 1,
+    }));
   };
+
+  const handleInterrupt = () => {
+    sessionRefs.current.get(activeKey)?.interrupt();
+  };
+
+  const onTabEdit = (
+    targetKey: string | number | React.MouseEvent | React.KeyboardEvent,
+    action: 'add' | 'remove'
+  ) => {
+    if (action === 'add') {
+      const id = genTerminalTabId();
+      setTabIds((prev) => [...prev, id]);
+      setRestartByTab((prev) => ({ ...prev, [id]: 0 }));
+      setActiveKey(id);
+      return;
+    }
+    const key = String(targetKey);
+    setTabIds((prev) => {
+      if (prev.length <= 1) return prev;
+      const next = prev.filter((tid) => tid !== key);
+      const idx = prev.indexOf(key);
+      setActiveKey((cur) => {
+        if (cur !== key) return cur;
+        return next[Math.max(0, idx - 1)] ?? next[0];
+      });
+      setRestartByTab((r) => {
+        const { [key]: _, ...rest } = r;
+        return rest;
+      });
+      sessionRefs.current.delete(key);
+      return next;
+    });
+  };
+
+  const tabItems = tabIds.map((id, index) => ({
+    key: id,
+    label: t('common.terminalTabLabel', { n: index + 1, defaultValue: `终端 ${index + 1}` }),
+    closable: tabIds.length > 1,
+    children: (
+      <div style={{ height: '100%', padding: 12, paddingTop: 8, boxSizing: 'border-box' }}>
+        <V3TerminalSession
+          ref={(h) => {
+            if (h) sessionRefs.current.set(id, h);
+            else sessionRefs.current.delete(id);
+          }}
+          t={t}
+          cwd={cwd}
+          width={sessionWidth}
+          isActive={open && activeKey === id}
+          restartKey={restartByTab[id] ?? 0}
+          fontSize={isMobile ? 12 : 13}
+        />
+      </div>
+    ),
+  }));
 
   return (
     <Modal
@@ -203,9 +192,24 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
       centered={!isFullscreen}
       destroyOnClose
       styles={{
-        body: { padding: 0, height: isFullscreen ? 'calc(100vh - 40px)' : '600px', background: '#0f172a', overflow: 'hidden', borderRadius: isFullscreen ? 0 : '0 0 12px 12px' },
+        body: {
+          padding: 0,
+          height: isFullscreen ? 'calc(100vh - 40px)' : '600px',
+          background: '#0f172a',
+          overflow: 'hidden',
+          borderRadius: isFullscreen ? 0 : '0 0 12px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+        },
         content: { padding: 0, background: '#0f172a', borderRadius: isFullscreen ? 0 : 12, overflow: 'hidden' },
-        header: { padding: '12px 16px', background: '#1e293b', borderBottom: '1px solid rgba(255,255,255,0.1)', marginBottom: 0, borderRadius: isFullscreen ? 0 : '12px 12px 0 0' }
+        header: {
+          padding: '12px 16px',
+          background: '#1e293b',
+          borderBottom: '1px solid rgba(255,255,255,0.1)',
+          marginBottom: 0,
+          borderRadius: isFullscreen ? 0 : '12px 12px 0 0',
+        },
       }}
       modalRender={(modal) => (
         <Draggable
@@ -225,10 +229,14 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
             alignItems: 'center',
             justifyContent: 'space-between',
             width: 'calc(100% - 32px)',
-            cursor: isFullscreen ? 'default' : 'move'
+            cursor: isFullscreen ? 'default' : 'move',
           }}
-          onMouseOver={() => { if (dragDisabled) setDragDisabled(false); }}
-          onMouseOut={() => { setDragDisabled(true); }}
+          onMouseOver={() => {
+            if (dragDisabled) setDragDisabled(false);
+          }}
+          onMouseOut={() => {
+            setDragDisabled(true);
+          }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f8fafc' }}>
             <TerminalIcon size={16} className="text-indigo-400" />
@@ -237,7 +245,9 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Tooltip title={t('common.interrupt', { defaultValue: '中断 (Ctrl+C)' })}>
               <Button
-                size="small" type="text" icon={<XCircle size={14} />}
+                size="small"
+                type="text"
+                icon={<XCircle size={14} />}
                 onClick={handleInterrupt}
                 style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)' }}
                 onMouseEnter={() => setDragDisabled(true)}
@@ -246,17 +256,22 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
             </Tooltip>
             <Tooltip title={t('common.restart', { defaultValue: '重启' })}>
               <Button
-                size="small" type="text" icon={<RotateCcw size={14} />}
-                onClick={handleRestart} style={{ color: '#94a3b8' }}
+                size="small"
+                type="text"
+                icon={<RotateCcw size={14} />}
+                onClick={handleRestart}
+                style={{ color: '#94a3b8' }}
                 onMouseEnter={() => setDragDisabled(true)}
                 onMouseLeave={() => setDragDisabled(false)}
               />
             </Tooltip>
             <Tooltip title={isFullscreen ? t('common.exitFullscreen') : t('common.fullscreen')}>
               <Button
-                size="small" type="text"
+                size="small"
+                type="text"
                 icon={isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                onClick={toggleFullscreen} style={{ color: '#94a3b8' }}
+                onClick={toggleFullscreen}
+                style={{ color: '#94a3b8' }}
                 onMouseEnter={() => setDragDisabled(true)}
                 onMouseLeave={() => setDragDisabled(false)}
               />
@@ -269,15 +284,24 @@ export const V3TerminalModal: React.FC<V3TerminalModalProps> = ({ open, onClose,
           style={{ color: '#94a3b8' }}
           onMouseEnter={() => setDragDisabled(true)}
           onMouseLeave={() => setDragDisabled(false)}
-        >×</span>
+        >
+          ×
+        </span>
       }
       style={isFullscreen ? { top: 0, maxWidth: '100vw', margin: 0, padding: 0 } : {}}
     >
-      <div
-        ref={setTerminalEl}
-        style={{ height: '100%', width: '100%', padding: 12 }}
-        onClick={() => xtermRef.current?.focus()}
-      />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+        <Tabs
+          className="v3-terminal-multi-tabs"
+          type="editable-card"
+          size="small"
+          activeKey={activeKey}
+          onChange={setActiveKey}
+          onEdit={onTabEdit}
+          items={tabItems}
+          destroyInactiveTabPane={false}
+        />
+      </div>
     </Modal>
   );
 };
