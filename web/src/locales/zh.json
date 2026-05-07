@@ -785,7 +785,9 @@
     "info": "信息",
     "warn": "警告",
     "error": "错误",
-    "connecting": "正在建立 WebSocket 安全隧道...",
+    "connecting": "正在连接实时日志流...",
+    "connectedIdle": "已连接，暂无日志（等待推送）",
+    "wsError": "日志 WebSocket 连接失败，请检查 VITE_API_URL、网关地址与网络",
     "live": "实时",
     "noMatch": "未找到匹配 \"{{text}}\" 的日志",
     "clearFilters": "清除所有过滤器"

@@ -53,6 +53,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, .
       overflow: 'hidden'
     }}>
       <Tabs
+        destroyInactiveTabPane
         activeKey={activeTab}
         onChange={setActiveTab}
         items={items}

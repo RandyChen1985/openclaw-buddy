@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode, theme, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
@@ -7,28 +7,30 @@ import {
   ShieldCheck, Clock, Activity, Sun, Moon
 } from 'lucide-react';
 import api from './api';
+import axios from 'axios';
 import storage from './utils/storage';
 
-// Components
+// Components（登录与壳层同步加载；业务 Tab 按需懒加载以降低首包）
 import LoginView from './views/LoginView';
 import Sidebar from './components/layout/Sidebar';
-import DashboardOverview from './views/DashboardOverview';
-import AuditDashboard from './views/AuditDashboard';
-import BotsManager from './views/BotsManager';
-import ChannelsManager from './views/ChannelsManager';
-import DeviceManager from './views/DeviceManager';
-import LogsViewer from './views/LogsViewer';
-import SelfHealing from './views/SelfHealing';
+const DashboardOverview = lazy(() => import('./views/DashboardOverview'));
+const AuditDashboard = lazy(() => import('./views/AuditDashboard'));
+const BotsManager = lazy(() => import('./views/BotsManager'));
+const ChannelsManager = lazy(() => import('./views/ChannelsManager'));
+const DeviceManager = lazy(() => import('./views/DeviceManager'));
+const LogsViewer = lazy(() => import('./views/LogsViewer'));
+const SelfHealing = lazy(() => import('./views/SelfHealing'));
+/** 同步加载：子路径部署时 lazy chunk 配套 CSS preload 易指向 `/assets/...` 导致聊天页崩溃 */
 import OnlineChat from './views/OnlineChat';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import TaskTray from './components/common/TaskTray';
-import SkillManagement from './views/SkillManagement';
-import ExpertMarket from './views/ExpertMarket';
-import PluginManagement from './views/PluginManagement';
-import SecurityManager from './views/SecurityManager';
-import CronJobsView from './views/CronJobsView';
-import TuiView from './views/TuiView';
-import ShellView from './views/ShellView';
+const SkillManagement = lazy(() => import('./views/SkillManagement'));
+const ExpertMarket = lazy(() => import('./views/ExpertMarket'));
+const PluginManagement = lazy(() => import('./views/PluginManagement'));
+const SecurityManager = lazy(() => import('./views/SecurityManager'));
+const CronJobsView = lazy(() => import('./views/CronJobsView'));
+const TuiView = lazy(() => import('./views/TuiView'));
+const ShellView = lazy(() => import('./views/ShellView'));
 import CrayfishLoading from './components/common/CrayfishLoading';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import CommandPalette from './components/common/CommandPalette';
@@ -52,7 +54,17 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
   const [activeTab, setActiveTab] = useState(initialPage || 'dashboard');
   const [collapsed, setCollapsed] = useState(window.innerWidth < 1200 || isEmbed);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const isMobile = window.innerWidth < 1024;
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 1023px)').matches : false
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const apply = () => setIsMobile(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
 
   // States
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -92,27 +104,51 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
   const [loadingSkills, setLoadingSkills] = useState(false);
   const [skills, setSkills] = useState<any[]>([]);
 
+  /** 短缓存 + 请求互斥，减轻 Tab 切换与轮询叠加时的请求风暴 */
+  const RESOURCE_TTL_MS = 25_000;
+  const botsCacheRef = useRef<{ data: any; at: number } | null>(null);
+  const botsAbortRef = useRef<AbortController | null>(null);
+  const devicesCacheRef = useRef<{ data: any; at: number } | null>(null);
+  const devicesAbortRef = useRef<AbortController | null>(null);
+  const skillsListCacheRef = useRef<{ list: any[]; at: number } | null>(null);
+  const skillsAbortRef = useRef<AbortController | null>(null);
+  const pluginsCacheRef = useRef<{ list: any[]; at: number } | null>(null);
+  const pluginsAbortRef = useRef<AbortController | null>(null);
+
   const fetchSkills = async (force = false, isSilent = false) => {
+    const now = Date.now();
+    if (!force && skillsListCacheRef.current && now - skillsListCacheRef.current.at < RESOURCE_TTL_MS) {
+      setSkills(skillsListCacheRef.current.list);
+      if (!isSilent) setLoadingSkills(false);
+      return;
+    }
+    if (!force && skillsListCacheRef.current) {
+      setSkills(skillsListCacheRef.current.list);
+    }
+    skillsAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    skillsAbortRef.current = ctrl;
     if (!isSilent) setLoadingSkills(true);
     try {
       if (force) {
-        await api.post('/v1/openclaw/skills/reload');
+        await api.post('/v1/openclaw/skills/reload', undefined, { signal: ctrl.signal });
       }
-      const res = await api.get(`/v1/openclaw/skills${force ? '?refresh=true' : ''}`);
+      const res = await api.get(`/v1/openclaw/skills${force ? '?refresh=true' : ''}`, { signal: ctrl.signal });
       const rawData = res.data;
-      
-      let skillsList = [];
+      let skillsList: any[] = [];
       if (rawData.data) {
-          skillsList = Array.isArray(rawData.data.skills) ? rawData.data.skills : [];
+        skillsList = Array.isArray(rawData.data.skills) ? rawData.data.skills : [];
       } else {
-          skillsList = Array.isArray(rawData.skills) ? rawData.skills : [];
+        skillsList = Array.isArray(rawData.skills) ? rawData.skills : [];
       }
+      skillsListCacheRef.current = { list: skillsList, at: Date.now() };
       setSkills(skillsList);
       if (force && !isSilent) message.success(t('skills.syncSuccess'));
     } catch (err) {
+      if (axios.isCancel(err)) return;
       if (!isSilent) message.error(t('skills.fetchFailed'));
     } finally {
-      setLoadingSkills(false);
+      if (!isSilent) setLoadingSkills(false);
     }
   };
   const [ocInstalled, setOcInstalled] = useState<boolean | null>(null);
@@ -129,7 +165,16 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
     }
   );
 
-  const { status: v3Status, lastHealth, connect: v3Connect } = useV3Gateway();
+  const { status: v3Status, lastHealth, connect: v3Connect, setConnectionPaused } = useV3Gateway();
+
+  const gatewayWsDesired = useMemo(
+    () => activeTab === 'chat' || activeTab === 'dashboard',
+    [activeTab]
+  );
+
+  useEffect(() => {
+    setConnectionPaused(!gatewayWsDesired);
+  }, [gatewayWsDesired, setConnectionPaused]);
 
   // 核心：合并状态机。
   // WS health payload 不含 cpu/memory（验证过），所以 metrics 仍由 HTTP 提供。
@@ -167,7 +212,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
           fetchData();
           fetchSystemEvents();
         } else if (task.module === 'plugins') {
-          fetchPlugins();
+          fetchPlugins(true);
         } else if (task.module === 'bots') {
           // 如果是模型相关变更（添加、删除、设置默认、新增渠道），触发物理对账
           const modelActions = ['delete-model', 'add-model', 'add-provider', 'delete-provider', 'update-provider', 'set-default-model', 'clone-expert', 'add', 'update'];
@@ -203,7 +248,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
           if (syncActions.includes(task.action || '')) {
             console.log('🔄 [Task Observer] 监测到技能/插件任务完成，执行物理对账...');
             fetchSkills(true, true); // 强制获取最新数据，并静默执行
-            fetchPlugins(); // 同步刷新插件状态
+            fetchPlugins(true); // 同步刷新插件状态
           }
         } else if (task.module === 'wechat') {
           if (task.action === 'unbind' && task.status === 'Completed') {
@@ -221,7 +266,12 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
   };
 
   const [logSource, setLogSource] = useState('buddy');
-  const { wsLogs } = useWebSocketLogs(storage.getItem('guardian_token'), logSource, handleTaskUpdate);
+  const { wsLogs, wsConnectionState } = useWebSocketLogs(
+    storage.getItem('guardian_token'),
+    logSource,
+    handleTaskUpdate,
+    activeTab === 'logs'
+  );
 
   // Side Effects
   useEffect(() => {
@@ -325,12 +375,26 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
 
   // Methods
   const fetchBotsModels = async (force = false) => {
+    const now = Date.now();
+    if (!force && botsCacheRef.current && now - botsCacheRef.current.at < RESOURCE_TTL_MS) {
+      setBotsModels(botsCacheRef.current.data);
+      setLoadingBots(false);
+      return;
+    }
+    if (!force && botsCacheRef.current) {
+      setBotsModels(botsCacheRef.current.data);
+    }
+    botsAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    botsAbortRef.current = ctrl;
     setLoadingBots(true);
     try {
-      const res = await api.get(`/v1/openclaw/bots-models${force ? '?refresh=true' : ''}`);
+      const res = await api.get(`/v1/openclaw/bots-models${force ? '?refresh=true' : ''}`, { signal: ctrl.signal });
+      botsCacheRef.current = { data: res.data, at: Date.now() };
       setBotsModels(res.data);
       if (force) message.success(t('chat.syncAssetsSuccess'));
     } catch (e) {
+      if (axios.isCancel(e)) return;
       message.error(t('chat.syncAssetsError'));
     } finally {
       setLoadingBots(false);
@@ -379,12 +443,26 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
   };
 
   const fetchDevices = async (force = false) => {
+    const now = Date.now();
+    if (!force && devicesCacheRef.current && now - devicesCacheRef.current.at < RESOURCE_TTL_MS) {
+      setDevices(devicesCacheRef.current.data);
+      setLoadingDevices(false);
+      return;
+    }
+    if (!force && devicesCacheRef.current) {
+      setDevices(devicesCacheRef.current.data);
+    }
+    devicesAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    devicesAbortRef.current = ctrl;
     setLoadingDevices(true);
     try {
-      const res = await api.get(`/v1/openclaw/devices${force ? '?refresh=true' : ''}`);
+      const res = await api.get(`/v1/openclaw/devices${force ? '?refresh=true' : ''}`, { signal: ctrl.signal });
+      devicesCacheRef.current = { data: res.data, at: Date.now() };
       setDevices(res.data);
       if (force) message.success(t('common.refreshSuccess', { defaultValue: '列表已同步并刷新' }));
     } catch (err) {
+      if (axios.isCancel(err)) return;
       message.error(t('chat.syncDevicesError'));
     } finally {
       setLoadingDevices(false);
@@ -420,15 +498,28 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
     }
   };
 
-  const fetchPlugins = async () => {
+  const fetchPlugins = async (force = false) => {
+    const now = Date.now();
+    if (!force && pluginsCacheRef.current && now - pluginsCacheRef.current.at < RESOURCE_TTL_MS) {
+      setPlugins(pluginsCacheRef.current.list);
+      setLoadingPlugins(false);
+      return;
+    }
+    if (!force && pluginsCacheRef.current) {
+      setPlugins(pluginsCacheRef.current.list);
+    }
+    pluginsAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    pluginsAbortRef.current = ctrl;
     setLoadingPlugins(true);
     try {
-      const res = await api.get('/v1/openclaw/plugins');
+      const res = await api.get('/v1/openclaw/plugins', { signal: ctrl.signal });
       const data = res.data.data || res.data || [];
+      pluginsCacheRef.current = { list: data, at: Date.now() };
       setPlugins(data);
-      // 记录同步时间
       setPluginsUpdatedAt(new Date().toLocaleString());
     } catch (err) {
+      if (axios.isCancel(err)) return;
     } finally {
       setLoadingPlugins(false);
     }
@@ -867,11 +958,14 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
     }
   };
 
-  // 网关运行状态：完全基于 WebSocket 连接判断，不再使用 HTTP 轮询值
-  const isRunning = v3Status === 'authenticated';
+  /** 聊天/仪表盘需要实时网关 WS；其它页面暂停 WS 时用工 HTTP gateway.status 兜底展示“运行中” */
+  const isRunning =
+    v3Status === 'authenticated' ||
+    (!gatewayWsDesired && (status as any)?.gateway?.status === 'running');
 
   // [自动刷新] 连通性自愈：当 HTTP 轮询发现网关已启动，但 WebSocket 处于断开或错误状态时，主动拉起连接
   useEffect(() => {
+    if (!gatewayWsDesired) return;
     // 仅在非过渡态且 HTTP 状态明确为 running 时触发
     if (!isTransitioning && status?.gateway?.status === 'running') {
       if (v3Status === 'disconnected' || v3Status === 'error') {
@@ -879,7 +973,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
         v3Connect();
       }
     }
-  }, [status?.gateway?.status, v3Status, v3Connect, isTransitioning]);
+  }, [gatewayWsDesired, status?.gateway?.status, v3Status, v3Connect, isTransitioning]);
 
 
   // --- Menu Configuration ---
@@ -1073,7 +1167,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
           }}
         />
       ),
-      'logs': <LogsViewer wsLogs={wsLogs} activeSource={logSource} onSourceChange={setLogSource} isRunning={isRunning} isDarkMode={isDarkMode} onNavigateToDashboard={() => {
+      'logs': <LogsViewer wsLogs={wsLogs} wsConnectionState={wsConnectionState} activeSource={logSource} onSourceChange={setLogSource} isRunning={isRunning} isDarkMode={isDarkMode} onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
           }} />,
@@ -1137,7 +1231,15 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
 
     return (
       <ErrorBoundary key={activeTab}>
-        {viewMap[activeTab] || <div style={{ padding: 40, textAlign: 'center' }}><Spin size="large" tip={t('common.loading')} /></div>}
+        <Suspense
+          fallback={
+            <div style={{ padding: 40, textAlign: 'center', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Spin size="large" tip={t('common.loading')} />
+            </div>
+          }
+        >
+          {viewMap[activeTab] || <div style={{ padding: 40, textAlign: 'center' }}><Spin size="large" tip={t('common.loading')} /></div>}
+        </Suspense>
       </ErrorBoundary>
     );
   };

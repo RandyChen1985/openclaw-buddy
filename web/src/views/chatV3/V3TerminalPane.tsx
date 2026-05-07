@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
-import 'xterm/css/xterm.css';
 import { message, Button, Tooltip } from 'antd';
 import { RotateCcw, XCircle, Terminal as TerminalIcon, X, Maximize2, Minimize2 } from 'lucide-react';
 import api from '../../api';

@@ -788,7 +788,9 @@
     "info": "Info",
     "warn": "Warn",
     "error": "Error",
-    "connecting": "Establishing secure WebSocket tunnel...",
+    "connecting": "Connecting to the live log stream...",
+    "connectedIdle": "Connected. No log lines yet (waiting for events).",
+    "wsError": "Log WebSocket failed. Check VITE_API_URL, gateway URL, and network.",
     "live": "LIVE",
     "noMatch": "No logs matching \"{{text}}\" found",
     "clearFilters": "Clear all filters"

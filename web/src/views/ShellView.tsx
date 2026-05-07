@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
-import 'xterm/css/xterm.css';
 import { message, Button, Tooltip, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { RotateCcw, XCircle, Server, Monitor, Cpu, Terminal as TerminalIcon } from 'lucide-react';
