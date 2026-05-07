@@ -46,6 +46,10 @@ interface UseChatV3WebSocketProps {
   setSelectedBot: (bot: string) => void;
   botsModels: any;
   t: any;
+  /** 当前登录用户名（可选）。用于把 username 写入 buddy:direct 会话 key */
+  usernameForSessionKey?: string | null;
+  /** 普通用户：只加载 key 中包含 username 的会话 */
+  filterV3SessionsByUsername?: boolean;
   inputAreaRef: React.RefObject<any>;
   virtuosoRef: React.RefObject<any>;
   scrollRef: React.RefObject<HTMLDivElement>;
@@ -59,6 +63,8 @@ export const useChatV3WebSocket = ({
   setSelectedBot,
   botsModels,
   t,
+  usernameForSessionKey,
+  filterV3SessionsByUsername,
   inputAreaRef,
   virtuosoRef,
   scrollRef,
@@ -144,6 +150,8 @@ export const useChatV3WebSocket = ({
     t,
     sendRPC,
     status,
+    usernameForSessionKey,
+    filterSessionListByUsername: filterV3SessionsByUsername,
     sessionKey,
     setSessionKey,
     sessionLabel,
@@ -184,6 +192,7 @@ export const useChatV3WebSocket = ({
     status,
     sessionKey,
     setSessionKey,
+    usernameForSessionKey,
     selectedBot,
     thinkingLevel,
     sessionModel,

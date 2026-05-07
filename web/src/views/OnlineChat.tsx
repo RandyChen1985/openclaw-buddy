@@ -14,9 +14,15 @@ interface OnlineChatProps {
   isRunning?: boolean;
   onNavigateToDashboard?: () => void;
   isDarkMode?: boolean;
+  /** 当前登录用户名（可选）。用于把 username 写入 buddy:direct 会话 key */
+  usernameForSessionKey?: string | null;
+  /** 当前登录用户名（可选）。用于经典（HTTP）模式生成 s-{ts}-{username} */
+  usernameForSessionId?: string | null;
+  /** 普通用户：只加载 key 中包含 username 的会话 */
+  filterV3SessionsByUsername?: boolean;
 }
 
-const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, ...props }) => {
+const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, usernameForSessionId, ...props }) => {
   const { t } = useTranslation();
 
   const { singleEmbedPane, initialChatTab } = useMemo(() => {
@@ -60,7 +66,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, .
           overflow: 'hidden',
         }}
       >
-        <ChatClassic {...props} isMobile={isMobile} isDarkMode={isDarkMode} />
+        <ChatClassic {...props} isMobile={isMobile} isDarkMode={isDarkMode} usernameForSessionId={usernameForSessionId} />
       </div>
     );
   }
@@ -84,7 +90,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, .
           {t('chat.classicMode', { defaultValue: '经典模式 (HTTP)' })}
         </span>
       ),
-      children: <ChatClassic {...props} isMobile={isMobile} isDarkMode={isDarkMode} />,
+      children: <ChatClassic {...props} isMobile={isMobile} isDarkMode={isDarkMode} usernameForSessionId={usernameForSessionId} />,
     },
   ];
 

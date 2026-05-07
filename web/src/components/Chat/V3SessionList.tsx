@@ -31,7 +31,9 @@ export interface V3SessionListProps {
 
 // --- Utils & Config ---
 const parseSessionKey = (key: string) => {
-  if (!key || !key.startsWith('agent:')) return { botId: 'main', source: 'dashboard' as const, openAIUser: undefined as string | undefined };
+  if (!key || !key.startsWith('agent:')) {
+    return { botId: 'main', source: 'dashboard' as const, openAIUser: undefined as string | undefined, buddyUser: undefined as string | undefined };
+  }
   const parts = key.split(':');
   const botId = parts[1] || 'main';
   const source = parts[2] || 'dashboard';
@@ -43,7 +45,17 @@ const parseSessionKey = (key: string) => {
     if (raw) openAIUser = raw.split('-')[0] || raw;
   }
 
-  return { botId, source, openAIUser };
+  // buddy direct: agent:{botId}:buddy:direct:{username}:{suffix}
+  let buddyUser: string | undefined;
+  if ((source || '').toLowerCase() === 'buddy' && (parts[3] || '').toLowerCase() === 'direct') {
+    const raw = (parts[4] || '').trim();
+    // 兼容旧格式：agent:{botId}:buddy:direct:{suffix}（无 username 段）
+    if (raw && !/^\d/.test(raw)) buddyUser = raw;
+    // 新格式里 raw 即 username；旧格式 raw 是 suffix（通常以数字时间戳开头）
+    if (raw && /^\d/.test(raw)) buddyUser = undefined;
+  }
+
+  return { botId, source, openAIUser, buddyUser };
 };
 
 const SourceConfig: Record<string, { icon: any, color: string, labelKey: string, defaultLabel: string }> = {
@@ -475,9 +487,10 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                   </div>
                   {items.map((s: any) => {
                     const isActive = sessionKey === s.key;
-                    const { source, openAIUser } = parseSessionKey(s.key);
+                    const { source, openAIUser, buddyUser } = parseSessionKey(s.key);
                     const sourceMeta = getSourceMeta(source);
                     const sourceLabel = t(sourceMeta.labelKey, { defaultValue: sourceMeta.defaultLabel });
+                    const sourceUser = openAIUser || buddyUser;
                     
                     return (
                       <div 
@@ -556,7 +569,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                   <span>•</span>
                                   <span style={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
                                     {sourceMeta.icon && React.cloneElement(sourceMeta.icon as React.ReactElement, { size: 10, style: { opacity: 0.7 } })}
-                                    {sourceLabel}{openAIUser ? `（${openAIUser}）` : ''}
+                                    {sourceLabel}{sourceUser ? `（${sourceUser}）` : ''}
                                   </span>
                                   {s.model && (
                                     <>
@@ -573,15 +586,16 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, fontSize: 9, fontWeight: 600 }}>
                                        <span style={{ color: isActive ? (isDarkMode ? '#a5b4fc' : '#4f46e5') : '#94a3b8', transform: 'scale(0.9)', transformOrigin: 'left', fontWeight: 800 }}>
                                          {(() => {
-                                           const { botId, source, openAIUser } = parseSessionKey(s.key);
+                                           const { botId, source, openAIUser, buddyUser } = parseSessionKey(s.key);
                                            const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
                                            const botName = bot?.name || botId;
-                                           if (source === 'openai-user' && openAIUser) {
+                                           const u = openAIUser || buddyUser;
+                                           if ((source === 'openai-user' || source === 'buddy') && u) {
                                              return (
                                                <>
                                                  <span style={{ textTransform: 'uppercase' }}>{botName}</span>
                                                  <span style={{ opacity: 0.6, margin: '0 4px' }}>/</span>
-                                                 <span>{openAIUser}</span>
+                                                 <span>{u}</span>
                                                </>
                                              );
                                            }

@@ -49,10 +49,12 @@ interface ChatClassicProps {
   isMobile?: boolean;
   onRestartGateway?: () => Promise<void>;
   isDarkMode?: boolean;
+  /** 当前登录用户名（可选）。用于生成稳定的 HTTP 会话 id */
+  usernameForSessionId?: string | null;
 }
 
 const ChatClassic: React.FC<ChatClassicProps> = ({ 
-  botsModels, loadingBots, onRefreshBots, isMobile, onRestartGateway, isDarkMode = false
+  botsModels, loadingBots, onRefreshBots, isMobile, onRestartGateway, isDarkMode = false, usernameForSessionId
 }) => {
 
 
@@ -163,14 +165,20 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
     if (!urlUser) {
       let storedSessionId = storage.getItem('chat_session_id');
       if (!storedSessionId) {
-        storedSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const rawU = (usernameForSessionId || '').trim();
+        const safeU = rawU
+          ? rawU.replace(/:/g, '_').replace(/\s+/g, '').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 48)
+          : '';
+        storedSessionId = safeU
+          ? `s-${Date.now()}-${safeU}`
+          : `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         storage.setItem('chat_session_id', storedSessionId);
       }
       setGeneratedSessionId(storedSessionId);
     } else {
       setGeneratedSessionId(null);
     }
-  }, [urlUser]);
+  }, [urlUser, usernameForSessionId]);
 
   useEffect(() => {
     if (botsModels?.data?.bots?.length > 0) {

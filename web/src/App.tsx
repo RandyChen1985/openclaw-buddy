@@ -55,9 +55,14 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
   const tag = storage.getItem('guardian_tag') || undefined;
 
   const [activeTab, setActiveTab] = useState(initialPage || 'dashboard');
-  const [authMe, setAuthMe] = useState<{ is_superadmin: boolean; permissions: string[]; username?: string; real_name?: string }>(
-    { is_superadmin: false, permissions: [] }
-  );
+  const [authMe, setAuthMe] = useState<{
+    is_superadmin: boolean;
+    permissions: string[];
+    username?: string;
+    real_name?: string;
+    role_keys?: string[];
+    login_type?: string;
+  }>({ is_superadmin: false, permissions: [] });
   const [collapsed, setCollapsed] = useState(window.innerWidth < 1200 || isEmbed);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() =>
@@ -343,6 +348,8 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
         permissions: Array.isArray(d.permissions) ? d.permissions : [],
         username: d.username,
         real_name: d.real_name,
+        role_keys: Array.isArray(d.role_keys) ? d.role_keys : [],
+        login_type: d.login_type,
       });
     } catch {
       setAuthMe({ is_superadmin: false, permissions: [] });
@@ -1239,10 +1246,26 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
             window.location.hash = 'actions';
           }} />,
       'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} ocInstalled={ocInstalled} isDarkMode={isDarkMode} />,
-      'chat': <OnlineChat botsModels={botsModels} loadingBots={loadingBots} onRefreshBots={fetchBotsModels} isMobile={isMobile} onRestartGateway={restartGateway} isRunning={isRunning} isDarkMode={isDarkMode} onNavigateToDashboard={() => {
-            setActiveTab('dashboard');
-            window.location.hash = 'actions';
-          }} />,
+      'chat': <OnlineChat
+        botsModels={botsModels}
+        loadingBots={loadingBots}
+        onRefreshBots={fetchBotsModels}
+        isMobile={isMobile}
+        onRestartGateway={restartGateway}
+        isRunning={isRunning}
+        isDarkMode={isDarkMode}
+        usernameForSessionKey={authMe?.username || null}
+        usernameForSessionId={(authMe?.login_type || '') === 'password' ? (authMe?.username || null) : null}
+        filterV3SessionsByUsername={
+          !authMe?.is_superadmin &&
+          (authMe?.login_type || '') !== 'token' &&
+          !(authMe?.role_keys || []).includes('admin')
+        }
+        onNavigateToDashboard={() => {
+          setActiveTab('dashboard');
+          window.location.hash = 'actions';
+        }}
+      />,
       'tui': <TuiView isRunning={isRunning} isDarkMode={isDarkMode} onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
