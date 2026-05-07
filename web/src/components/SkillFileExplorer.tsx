@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Modal, List, Button, message, Spin, Breadcrumb, Tabs, Input, Empty, Tree, Tooltip, Dropdown, type MenuProps } from 'antd';
+import { Modal, List, Button, message, Spin, Breadcrumb, Tabs, Input, Empty, Tree, Dropdown, type MenuProps } from 'antd';
 import { 
   Folder, FileText, ChevronRight, ChevronLeft, Save, Eye, PenLine, FileCode, Search, 
   LayoutList, Maximize2, Minimize2, 
@@ -20,6 +20,7 @@ import { Table } from 'antd';
 import { FE_THEME_DARK, FE_THEME_LIGHT } from '../theme/feSurfaceTheme';
 import Draggable from 'react-draggable';
 import type { DraggableBounds, DraggableData, DraggableEvent } from 'react-draggable';
+import Tooltip from './common/AppTooltip';
 
 const { DirectoryTree } = Tree;
 

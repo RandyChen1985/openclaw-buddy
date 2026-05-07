@@ -1,7 +1,8 @@
 import React from 'react';
-import { Button, Tooltip } from 'antd';
+import { Button } from 'antd';
 import { X, Folder, Maximize2, Minimize2 } from 'lucide-react';
 import { FileExplorerContent } from '../../components/FileExplorer';
+import Tooltip from '../../components/common/AppTooltip';
 
 interface V3ExplorerPaneProps {
   t: any;

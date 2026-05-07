@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
-import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode, theme, Tooltip } from 'antd';
+import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode, theme } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
   Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone, Rocket,
-  ShieldCheck, Clock, Activity, Sun, Moon
+  ShieldCheck, Clock, Activity, Sun, Moon, Users, Settings
 } from 'lucide-react';
 import api from './api';
 import axios from 'axios';
@@ -31,9 +31,12 @@ const SecurityManager = lazy(() => import('./views/SecurityManager'));
 const CronJobsView = lazy(() => import('./views/CronJobsView'));
 const TuiView = lazy(() => import('./views/TuiView'));
 const ShellView = lazy(() => import('./views/ShellView'));
+const UserManagerView = lazy(() => import('./views/UserManagerView'));
 import CrayfishLoading from './components/common/CrayfishLoading';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import CommandPalette from './components/common/CommandPalette';
+import { TooltipDisabledProvider } from './components/common/AppTooltip';
+import Tooltip from './components/common/AppTooltip';
 
 // Hooks
 import { useStatusPolling } from './hooks/useStatusPolling';
@@ -52,6 +55,9 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
   const tag = storage.getItem('guardian_tag') || undefined;
 
   const [activeTab, setActiveTab] = useState(initialPage || 'dashboard');
+  const [authMe, setAuthMe] = useState<{ is_superadmin: boolean; permissions: string[]; username?: string; real_name?: string }>(
+    { is_superadmin: false, permissions: [] }
+  );
   const [collapsed, setCollapsed] = useState(window.innerWidth < 1200 || isEmbed);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() =>
@@ -323,9 +329,25 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
     // 首次加载检查版本更新
     checkVersionUpdate();
     checkOpenClawStatus();
+    fetchAuthMe();
     
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
+
+  const fetchAuthMe = async () => {
+    try {
+      const res = await api.get('/v1/auth/me');
+      const d: any = res.data || {};
+      setAuthMe({
+        is_superadmin: !!d.is_superadmin,
+        permissions: Array.isArray(d.permissions) ? d.permissions : [],
+        username: d.username,
+        real_name: d.real_name,
+      });
+    } catch {
+      setAuthMe({ is_superadmin: false, permissions: [] });
+    }
+  };
 
   const checkOpenClawStatus = async () => {
     try {
@@ -930,8 +952,10 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
   };
 
   const handleLogout = () => {
-    storage.removeItem('guardian_token');
-    window.location.reload();
+    api.post('/v1/auth/logout').catch(() => { /* ignore */ }).finally(() => {
+      storage.removeItem('guardian_token');
+      window.location.reload();
+    });
   };
   
   const handleOpenDashboard = async () => {
@@ -1042,6 +1066,14 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
       ]
     },
     {
+      key: 'grp-system',
+      label: t('common.systemAdmin'),
+      icon: <Settings size={16} />,
+      children: [
+        { key: 'system.users', label: t('common.userManagement'), icon: <Users size={14} /> },
+      ]
+    },
+    {
       key: 'grp-external',
       label: t('common.external'),
       icon: <ExternalLink size={16} />,
@@ -1050,6 +1082,38 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
       ]
     }
   ];
+
+  // 菜单 key → 所需权限 key（仅对需要权限保护的页面登记；其余默认放行）
+  const menuPermissionMap: Record<string, string> = {
+    // 监控中心
+    'dashboard': 'menu:monitor:dashboard:view',
+    'audit': 'menu:monitor:audit:view',
+    'logs': 'menu:monitor:logs:view',
+    'tools': 'menu:monitor:self_healing:manage',
+    'shell': 'menu:monitor:shell:manage',
+    'security': 'menu:monitor:security:manage',
+    'cron': 'menu:monitor:cron:view',
+    // 资产管理
+    'chat': 'menu:assets:chat:view',
+    'tui': 'menu:assets:tui:view',
+    'bots-models': 'menu:assets:bots:manage',
+    'skills': 'menu:assets:skills:manage',
+    'plugins': 'menu:assets:plugins:manage',
+    'experts': 'menu:assets:experts:view',
+    // 绑定中心
+    'components': 'menu:binding:channels:manage',
+    'devices': 'menu:binding:devices:manage',
+    // 系统管理
+    'system.users': 'menu:system:user:manage',
+    // 外部工具
+    'lobster-panel': 'menu:external:lobster_panel:open',
+  };
+  const hasMenuPerm = (key: string) => {
+    const need = menuPermissionMap[key];
+    if (!need) return true;
+    if (authMe.is_superadmin) return true;
+    return authMe.permissions.includes(need);
+  };
 
   const menuItems = rawMenuItems
     .filter(group => {
@@ -1064,7 +1128,8 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
       children: group.children?.filter(item => {
         // 核心功能 'chat' (在线聊天 Web 版) 不允许被隐藏
         if (item.key === 'chat') return true;
-        return !disabledFeatures.includes(item.key);
+        if (disabledFeatures.includes(item.key)) return false;
+        return hasMenuPerm(item.key);
       })
     })).filter(group => group.children && group.children.length > 0);
 
@@ -1095,6 +1160,8 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
           isRunning={isRunning} 
           onControl={handleControl} 
           onNavigate={setActiveTab}
+          canGatewayControl={hasMenuPerm('tools')}
+          canWeChatManage={hasMenuPerm('components')}
           systemEvents={systemEvents}
           topBots={topBots}
           loading={loadingTopBots}
@@ -1226,7 +1293,8 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
           }}
         />
       ),
-      'cron': <CronJobsView isDarkMode={isDarkMode} />
+      'cron': <CronJobsView isDarkMode={isDarkMode} />,
+      'system.users': <UserManagerView isDarkMode={isDarkMode} isMobile={isMobile} canManage={hasMenuPerm('system.users')} />,
     };
 
     return (
@@ -1530,7 +1598,9 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
                 setActiveTab(k); 
                 setMobileMenuOpen(false); 
               }} 
-              onLogout={handleLogout} navItems={menuItems} 
+              onLogout={handleLogout}
+              principalName={(authMe?.real_name || authMe?.username || '').trim() || undefined}
+              navItems={menuItems} 
               versionUpdate={versionUpdate}
             />
           </Drawer>
@@ -1551,7 +1621,9 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
                 if (k === 'lobster-panel') { handleOpenDashboard(); return; }
                 setActiveTab(k);
               }} 
-              onLogout={handleLogout} navItems={menuItems} 
+              onLogout={handleLogout}
+              principalName={(authMe?.real_name || authMe?.username || '').trim() || undefined}
+              navItems={menuItems} 
               versionUpdate={versionUpdate}
             />
           </Sider>
@@ -1686,6 +1758,9 @@ export default function App() {
   // 只从持久化存储获取初始 Token (不再信任 URL 传来的未经验证的 Token)
   const [token, setToken] = useState<string | null>(storage.getItem('guardian_token'));
   const [isValidating, setIsValidating] = useState(false);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 1023px)').matches : false
+  );
 
   // Theme state
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
@@ -1708,6 +1783,14 @@ export default function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const apply = () => setIsMobile(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
 
   useEffect(() => {
     const interceptor = api.interceptors.response.use(
@@ -1810,13 +1893,15 @@ export default function App() {
           : {}),
       },
     }}>
-      {token ? (
-        <V3GatewayProvider>
-          <Dashboard isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
-        </V3GatewayProvider>
-      ) : (
-        <LoginView onLoginSuccess={setToken} isDarkMode={isDarkMode} />
-      )}
+      <TooltipDisabledProvider disabled={isMobile}>
+        {token ? (
+          <V3GatewayProvider>
+            <Dashboard isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
+          </V3GatewayProvider>
+        ) : (
+          <LoginView onLoginSuccess={setToken} isDarkMode={isDarkMode} />
+        )}
+      </TooltipDisabledProvider>
     </ConfigProvider>
   );
 }

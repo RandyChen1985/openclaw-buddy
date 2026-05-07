@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Drawer, Empty, Popconfirm, Popover, Space, Spin, Table, Tag, Tooltip, Typography, message } from 'antd';
+import { Button, Card, Drawer, Empty, Popconfirm, Popover, Space, Spin, Table, Tag, Typography, message } from 'antd';
 import { RefreshCw, Clock, CheckCircle2, XCircle, Trash2, HelpCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import api from '../api';
+import Tooltip from '../components/common/AppTooltip';
 
 const { Text, Paragraph, Title } = Typography;
 

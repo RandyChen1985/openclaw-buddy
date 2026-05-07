@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip, Upload, Radio, Space } from 'antd';
+import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Upload, Radio, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2, ArrowDown, ZapOff, Activity, Paperclip, FileText, Loader2, Maximize2, Minimize2, Image, Pencil } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -14,6 +14,7 @@ import { getBaseURL } from '../utils/url';
 import { buildChatEmbedPageUrl, type ChatEmbedLayout } from '../utils/chatEmbedUrl';
 import storage from '../utils/storage';
 import { Mermaid, CodeBlock, ECharts, isEchartsCodeFenceLanguage } from '../components/ChatComponents';
+import Tooltip from '../components/common/AppTooltip';
 
 
 const { Option } = Select;

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, Search, CheckCircle2, AlertCircle, Puzzle, Trash2, HelpCircle, ExternalLink } from 'lucide-react';
 import SkillFileExplorer from '../components/SkillFileExplorer';
-import { Card, Table, Tag, Button, Input, message, Tooltip, Segmented, Modal, Steps, Typography, Popover, Drawer } from 'antd';
+import { Card, Table, Tag, Button, Input, message, Segmented, Modal, Steps, Typography, Popover, Drawer } from 'antd';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import api from '../api';
+import Tooltip from '../components/common/AppTooltip';
 
 interface Skill {
   name: string;

@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { message, Button, Tooltip, Space, Tabs } from 'antd';
+import { message, Button, Space, Tabs } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { RotateCcw, XCircle, Server, Monitor, Cpu, Terminal as TerminalIcon } from 'lucide-react';
 import api from '../api';
+import Tooltip from '../components/common/AppTooltip';
 import {
   V3TerminalSession,
   genTerminalTabId,

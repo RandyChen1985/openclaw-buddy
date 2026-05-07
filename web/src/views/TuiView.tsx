@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
-import { message, Button, Tooltip, Space, Result, Spin, Typography } from 'antd';
+import { message, Button, Space, Result, Spin, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { RotateCcw, XCircle, Terminal as TerminalIcon, Info, Download, RefreshCw } from 'lucide-react';
 import api from '../api';
 import storage from '../utils/storage';
 import { getWsUrl } from '../utils/url';
+import Tooltip from '../components/common/AppTooltip';
 
 const { Paragraph, Text } = Typography;
 

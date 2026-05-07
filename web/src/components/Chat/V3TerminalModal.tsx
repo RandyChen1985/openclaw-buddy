@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Tooltip, Modal, Tabs } from 'antd';
+import { Button, Modal, Tabs } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { RotateCcw, XCircle, Terminal as TerminalIcon, Maximize2, Minimize2 } from 'lucide-react';
 import Draggable from 'react-draggable';
@@ -10,6 +10,7 @@ import {
   type V3TerminalSessionHandle,
 } from '../../views/chatV3/V3TerminalSession';
 import '../../views/chatV3/v3TerminalTabs.css';
+import Tooltip from '../common/AppTooltip';
 
 interface V3TerminalModalProps {
   open: boolean;

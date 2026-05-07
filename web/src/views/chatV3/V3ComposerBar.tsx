@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Button, Select, Tooltip } from 'antd';
+import { Button, Select } from 'antd';
 import { Activity, Bot, Cpu, Image, Plus, Quote, RefreshCw, Terminal as TerminalIcon, Zap } from 'lucide-react';
 import type { InputAreaHandle } from '../../components/Chat/V3InputArea';
 import V3InputArea from '../../components/Chat/V3InputArea';
 import { V3SoulEditorDrawer } from './V3SoulEditorDrawer';
+import Tooltip from '../../components/common/AppTooltip';
 
 export interface V3ComposerBarProps {
   t: any;

@@ -1,8 +1,9 @@
 import React from 'react';
-import { Menu, Button, Tooltip, message } from 'antd';
+import { Menu, Button, message } from 'antd';
 import { APP_VERSION } from '../../version';
 import { LogOut, Mail } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import Tooltip from '../common/AppTooltip';
 
 import { hasNewVersion } from '../../utils/version';
 
@@ -16,12 +17,14 @@ interface SidebarProps {
   collapsed: boolean;
   onSelect: (key: string) => void;
   onLogout: () => void;
+  principalName?: string;
   navItems: any[];
   versionUpdate?: { latest: string, current: string, release_url: string } | null;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLogout, navItems, versionUpdate }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLogout, principalName, navItems, versionUpdate }) => {
   const { t } = useTranslation();
+  const logoutText = principalName ? `${t('common.logout')}(${principalName})` : t('common.logout');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: SIDEBAR_SHELL }}>
@@ -168,7 +171,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
 
       {/* Logout */}
       <div style={{ padding: '0 8px 16px', borderTop: '1px solid rgba(51,65,85,0.3)', flexShrink: 0 }}>
-        <Tooltip title={collapsed ? t('common.logout') : ''} placement="right">
+        <Tooltip title={collapsed ? logoutText : ''} placement="right">
           <Button
             block
             icon={<LogOut size={14} />}
@@ -181,7 +184,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
               paddingLeft: collapsed ? 0 : 12, gap: 8,
             }}
           >
-            {!collapsed && <span style={{ fontSize: 12 }}>{t('common.logout')}</span>}
+            {!collapsed && <span style={{ fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{logoutText}</span>}
           </Button>
         </Tooltip>
       </div>

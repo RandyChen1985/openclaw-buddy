@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { Button, Tooltip, Empty, Tag, Input, Radio, ConfigProvider, message } from 'antd';
+import { Button, Empty, Tag, Input, Radio, ConfigProvider, message } from 'antd';
 import { X, Trash2, ArrowUpRight, ArrowDownLeft, Terminal, Copy, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import Tooltip from '../../components/common/AppTooltip';
 
 interface V3DebugPaneProps {
   t: any;

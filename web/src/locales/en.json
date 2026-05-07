@@ -33,6 +33,8 @@
     "devices": "Devices",
     "external": "External Tools",
     "lobsterPanel": "Lobster Panel",
+    "systemAdmin": "System Admin",
+    "userManagement": "User Management",
     "logout": "Logout",
     "refresh": "Refresh",
     "confirm": "Confirm",
@@ -115,7 +117,8 @@
     "up": "Up",
     "upgradeStarted": "Download started, please check progress",
     "upload": "Upload",
-    "uploadSuccess": "Uploaded successfully"
+    "uploadSuccess": "Uploaded successfully",
+    "more": "More"
   },
   "cron": {
     "title": "Scheduled Jobs",
@@ -246,6 +249,14 @@
     "tokenPlaceholder": "Enter your Buddy Token",
     "authSuccess": "Authenticated, welcome back",
     "invalidCredentials": "Invalid access credentials",
+    "modeToken": "Token Login",
+    "modePassword": "Password Login",
+    "username": "Username",
+    "password": "Password",
+    "usernameRequired": "Please enter username",
+    "passwordRequired": "Please enter password",
+    "usernamePlaceholder": "Enter your username",
+    "passwordPlaceholder": "Enter your password",
     "features": {
       "monit": "24/7 Monitoring",
       "alert": "Instant Alerts",
@@ -995,5 +1006,35 @@
       "approvals_set": "Config updated",
       "cloned_and_restarted": "Cloned and gateway restarted. If data is not displayed, please click refresh."
     }
+  },
+  "users": {
+    "title": "User Management",
+    "search": "Search username/name/remark",
+    "createUser": "New User",
+    "editUser": "Edit User",
+    "resetPassword": "Reset Password",
+    "username": "Username",
+    "realName": "Real Name",
+    "remark": "Remark",
+    "password": "Password",
+    "newPassword": "New Password",
+    "role": "Role",
+    "roles": "Roles",
+    "status": "Status",
+    "createdAt": "Created At",
+    "active": "Active",
+    "disabled": "Disabled",
+    "createSuccess": "User created",
+    "updateSuccess": "User updated",
+    "deleteConfirm": "Delete user {{name}}?",
+    "deleteSuccess": "User deleted",
+    "passwordReset": "Password reset",
+    "passwordTooShort": "Password must be at least 6 characters",
+    "noPermission": "Current account has no access to user management",
+    "currentUserCannotDelete": "Cannot delete current logged-in user",
+    "rolesPlaceholder": "Pick one or more roles",
+    "usernameRule": "Letters, digits and underscores only, 2~32 chars",
+    "permissions": "Permissions",
+    "userPermissions": "User permissions"
   }
 }

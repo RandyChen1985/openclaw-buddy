@@ -1,8 +1,9 @@
 import React from 'react';
-import { Card, Tag, Spin, List, Button, Tooltip, Modal } from 'antd';
+import { Card, Tag, Spin, List, Button, Modal } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Smartphone, CheckCircle, RefreshCw } from 'lucide-react';
 import dayjs from 'dayjs';
+import Tooltip from '../components/common/AppTooltip';
 
 interface DeviceManagerProps {
   devices: any; // 结构: { data: [], updated_at: string }

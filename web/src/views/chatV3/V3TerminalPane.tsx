@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react';
-import { Button, Tabs, Tooltip } from 'antd';
+import { Button, Tabs } from 'antd';
 import { RotateCcw, XCircle, Terminal as TerminalIcon, X, Maximize2, Minimize2 } from 'lucide-react';
 import { V3TerminalSession, genTerminalTabId, type V3TerminalSessionHandle } from './V3TerminalSession';
 import './v3TerminalTabs.css';
+import Tooltip from '../../components/common/AppTooltip';
 
 interface V3TerminalPaneProps {
   t: (key: string, opts?: Record<string, unknown>) => string;

@@ -1,6 +1,7 @@
 import React from 'react';
-import { Input, Button, Spin, Tooltip, Avatar, Badge as AntBadge, Select } from 'antd';
+import { Input, Button, Spin, Avatar, Badge as AntBadge, Select } from 'antd';
 import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe, Clock, PenLine, Sparkles, Settings, GitBranch } from 'lucide-react';
+import Tooltip from '../common/AppTooltip';
 
 export interface V3SessionListProps {
   sessions: any[];
