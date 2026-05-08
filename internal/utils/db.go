@@ -178,6 +178,12 @@ func createTables(existingToken string) (string, error) {
 			permission_id INTEGER NOT NULL,
 			PRIMARY KEY (user_id, permission_id)
 		);`,
+		// 用户可用 Bot 列表（用于聊天界面筛选可见 Bot；admin/superadmin 不受限）
+		`CREATE TABLE IF NOT EXISTS user_bots (
+			user_id INTEGER NOT NULL,
+			bot_id TEXT NOT NULL,
+			PRIMARY KEY (user_id, bot_id)
+		);`,
 		`CREATE TABLE IF NOT EXISTS user_sessions (
 			token TEXT PRIMARY KEY,
 			user_id INTEGER NOT NULL,

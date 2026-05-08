@@ -14,6 +14,8 @@ interface OnlineChatProps {
   isRunning?: boolean;
   onNavigateToDashboard?: () => void;
   isDarkMode?: boolean;
+  /** 普通用户：允许访问的 bot id 列表；为空表示无权限；未传则表示不限制（admin/superadmin） */
+  allowedBotIDs?: string[] | null;
   /** 当前登录用户名（可选）。用于把 username 写入 buddy:direct 会话 key */
   usernameForSessionKey?: string | null;
   /** 当前登录用户名（可选）。用于经典（HTTP）模式生成 s-{ts}-{username} */
@@ -22,8 +24,31 @@ interface OnlineChatProps {
   filterV3SessionsByUsername?: boolean;
 }
 
+const chatBlockedPlaceholder = <div style={{ flex: 1, minHeight: 0 }} aria-hidden />;
+
 const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, usernameForSessionId, ...props }) => {
   const { t } = useTranslation();
+  const allowedBotIDs = props.allowedBotIDs;
+  const isBotRestricted = Array.isArray(allowedBotIDs);
+  const hasAnyBot = !isBotRestricted || (allowedBotIDs?.length || 0) > 0;
+
+  const filteredBotsModels = useMemo(() => {
+    if (!isBotRestricted) return props.botsModels;
+    const src = props.botsModels;
+    const bots = src?.data?.bots;
+    if (!Array.isArray(bots)) return src;
+    const allow = new Set(allowedBotIDs || []);
+    const filtered = bots.filter((b: any) => allow.has(b?.id));
+    return {
+      ...src,
+      data: {
+        ...(src?.data || {}),
+        bots: filtered,
+      },
+    };
+  }, [isBotRestricted, allowedBotIDs, props.botsModels]);
+
+  const childProps = useMemo(() => ({ ...props, botsModels: filteredBotsModels }), [props, filteredBotsModels]);
 
   const { singleEmbedPane, initialChatTab } = useMemo(() => {
     const qp = new URLSearchParams(window.location.search);
@@ -49,7 +74,11 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, u
           overflow: 'hidden',
         }}
       >
-        <ChatV3Final {...props} isMobile={isMobile} isDarkMode={isDarkMode} />
+        {hasAnyBot ? (
+          <ChatV3Final {...childProps} isMobile={isMobile} isDarkMode={isDarkMode} />
+        ) : (
+          chatBlockedPlaceholder
+        )}
       </div>
     );
   }
@@ -66,7 +95,11 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, u
           overflow: 'hidden',
         }}
       >
-        <ChatClassic {...props} isMobile={isMobile} isDarkMode={isDarkMode} usernameForSessionId={usernameForSessionId} />
+        {hasAnyBot ? (
+          <ChatClassic {...childProps} isMobile={isMobile} isDarkMode={isDarkMode} usernameForSessionId={usernameForSessionId} />
+        ) : (
+          chatBlockedPlaceholder
+        )}
       </div>
     );
   }
@@ -80,7 +113,11 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, u
           {t('chat.v3Mode', { defaultValue: 'V3 模式 (RPC)' })}
         </span>
       ),
-      children: <ChatV3Final {...props} isMobile={isMobile} isDarkMode={isDarkMode} />,
+      children: hasAnyBot ? (
+        <ChatV3Final {...childProps} isMobile={isMobile} isDarkMode={isDarkMode} />
+      ) : (
+        chatBlockedPlaceholder
+      ),
     },
     {
       key: 'classic',
@@ -90,7 +127,11 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, u
           {t('chat.classicMode', { defaultValue: '经典模式 (HTTP)' })}
         </span>
       ),
-      children: <ChatClassic {...props} isMobile={isMobile} isDarkMode={isDarkMode} usernameForSessionId={usernameForSessionId} />,
+      children: hasAnyBot ? (
+        <ChatClassic {...childProps} isMobile={isMobile} isDarkMode={isDarkMode} usernameForSessionId={usernameForSessionId} />
+      ) : (
+        chatBlockedPlaceholder
+      ),
     },
   ];
 

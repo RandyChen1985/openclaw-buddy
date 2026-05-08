@@ -286,10 +286,39 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
     if (!sessionKey) return;
     const { botId } = parseSessionKey(sessionKey);
     const desired = `openclaw:${botId}`;
+    const bots = botsModels?.data?.bots;
+    if (Array.isArray(bots) && bots.length > 0) {
+      const allowed = new Set(bots.map((b: any) => b.id));
+      if (!allowed.has(botId)) return;
+    }
     if (desired && desired !== selectedBot) {
       setSelectedBot(desired);
     }
-  }, [sessionKey, selectedBot]);
+  }, [sessionKey, selectedBot, botsModels]);
+
+  /**
+   * RBAC 等场景下可选 bot 列表不含会话里的 bot（例如仅分配 nomi 却持久化了 agent:main:main）：
+   * 为首个可用 bot 新建会话，或仅纠正下拉选中值。
+   */
+  useEffect(() => {
+    const bots = botsModels?.data?.bots;
+    if (!Array.isArray(bots) || bots.length === 0) return;
+
+    const allowed = new Set(bots.map((b: any) => b.id));
+    const curId = (selectedBot || '').replace(/^openclaw:/, '');
+    const sessionBotId = sessionKey ? parseSessionKey(sessionKey).botId : '';
+
+    const sessionForbidden = !!(sessionKey && sessionBotId && !allowed.has(sessionBotId));
+    const botForbidden = !!(selectedBot && curId && !allowed.has(curId));
+
+    if (sessionForbidden) {
+      startNewSession(bots[0].id);
+      return;
+    }
+    if (botForbidden) {
+      setSelectedBot(`openclaw:${bots[0].id}`);
+    }
+  }, [botsModels, selectedBot, sessionKey, startNewSession]);
   
   // Sync workspace paths for pinned sidebars
   useEffect(() => {

@@ -163,7 +163,8 @@ export const useChatV3WebSocket = ({
     sessionModel,
     thinkingLevel,
     messageOpsRef: sessionMessageOpsRef,
-    inputAreaRef
+    inputAreaRef,
+    botsModels
   });
 
   const {

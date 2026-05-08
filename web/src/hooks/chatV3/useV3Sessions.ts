@@ -8,6 +8,12 @@ import { isUntitledSessionLabel } from './labelUtils';
 /** 会话列表每页条数（后端无 offset，通过增大 limit 模拟分页） */
 const V3_SESSION_LIST_PAGE_SIZE = 25;
 
+function botIdFromAgentSessionKey(key: string): string {
+  if (!key || !key.startsWith('agent:')) return 'main';
+  const parts = key.split(':');
+  return parts[1] || 'main';
+}
+
 export interface UseV3SessionsParams {
   t: any;
   sendRPC: (method: string, params: any) => Promise<any>;
@@ -41,6 +47,8 @@ export interface UseV3SessionsParams {
     resetTypingState?: (nextKey?: string) => void;
   }>;
   inputAreaRef: React.RefObject<any>;
+  /** 当前可选 Bot 列表；用于避免 RBAC 仅允许部分 bot 时仍自动选中 agent:main:main */
+  botsModels?: any;
 }
 
 /**
@@ -65,7 +73,8 @@ export function useV3Sessions({
   sessionModel,
   thinkingLevel,
   messageOpsRef,
-  inputAreaRef
+  inputAreaRef,
+  botsModels
 }: UseV3SessionsParams) {
   const [isUpdatingLabel, setIsUpdatingLabel] = useState(false);
   const didAutoSelectMainRef = useRef(false);
@@ -123,6 +132,11 @@ export function useV3Sessions({
 
   const sendRPCRef = useRef(sendRPC);
   sendRPCRef.current = sendRPC;
+
+  const botsModelsRef = useRef(botsModels);
+  useEffect(() => {
+    botsModelsRef.current = botsModels;
+  }, [botsModels]);
 
   useEffect(() => {
     if (status !== 'authenticated') {
@@ -183,7 +197,16 @@ export function useV3Sessions({
         setSessionLimit(nextLimit);
 
         // 默认会话逻辑（仅在首次非追加加载时执行）
-        if (!shouldFilter && !isAppend && !didAutoSelectMainRef.current && !sessionKeyRef.current) {
+        const botsArr = botsModelsRef.current?.data?.bots;
+        const mainBotAllowed =
+          Array.isArray(botsArr) && botsArr.length > 0 && botsArr.some((b: any) => b?.id === 'main');
+        if (
+          !shouldFilter &&
+          !isAppend &&
+          !didAutoSelectMainRef.current &&
+          !sessionKeyRef.current &&
+          mainBotAllowed
+        ) {
           const main = patchedList.find((s: any) => s.key === 'agent:main:main');
           if (main?.key) {
             didAutoSelectMainRef.current = true;
@@ -242,6 +265,13 @@ export function useV3Sessions({
    */
   const handleSelectSession = useCallback((key: string) => {
     if (key === sessionKey) return;
+
+    const bots = botsModels?.data?.bots;
+    if (Array.isArray(bots) && bots.length > 0) {
+      const allowed = new Set(bots.map((b: any) => b.id));
+      if (!allowed.has(botIdFromAgentSessionKey(key))) return;
+    }
+
     messageOpsRef.current.resetTypingState?.(key);
 
     // 取消订阅旧会话的消息推送，订阅新会话
@@ -270,7 +300,7 @@ export function useV3Sessions({
 
     messageOpsRef.current.loadSessionHistory?.(key);
     messageOpsRef.current.setHasNewMessages?.(false);
-  }, [messageOpsRef, sendRPC, sessionKey, sessions, setSelectedBot, setSessionKey, setSessionLabel, setSessionModel]);
+  }, [botsModels, messageOpsRef, sendRPC, sessionKey, sessions, setSelectedBot, setSessionKey, setSessionLabel, setSessionModel]);
 
   /**
    * 开始新会话：立即在网关创建空白会话并写入 sessionKey，顶部与会话列表立刻可显示；

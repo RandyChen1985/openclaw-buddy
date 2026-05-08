@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
   Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone, Rocket,
-  ShieldCheck, Clock, Activity, Sun, Moon, Users, Settings
+  ShieldCheck, Clock, Activity, Sun, Moon, Users, Settings, Bot, AlertCircle
 } from 'lucide-react';
 import api from './api';
 import axios from 'axios';
@@ -62,6 +62,8 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
     real_name?: string;
     role_keys?: string[];
     login_type?: string;
+    /** 普通用户：允许访问的 bot id 列表；为空表示无权限；未返回则表示不限制（admin/superadmin） */
+    bot_ids?: string[] | null;
   }>({ is_superadmin: false, permissions: [] });
   const [collapsed, setCollapsed] = useState(window.innerWidth < 1200 || isEmbed);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -350,6 +352,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
         real_name: d.real_name,
         role_keys: Array.isArray(d.role_keys) ? d.role_keys : [],
         login_type: d.login_type,
+        bot_ids: Array.isArray(d.bot_ids) ? d.bot_ids : undefined,
       });
     } catch {
       setAuthMe({ is_superadmin: false, permissions: [] });
@@ -994,6 +997,12 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
     v3Status === 'authenticated' ||
     (!gatewayWsDesired && (status as any)?.gateway?.status === 'running');
 
+  // 顶栏状态：连接中不应显示“已停止”
+  const isConnecting = ['connecting', 'handshaking', 'challenging', 'authorizing', 'identifying'].includes((v3Status || '') as any);
+  const gatewayStateText = isRunning
+    ? t('dashboard.running')
+    : (isConnecting ? t('chat.gatewayConnecting') : t('dashboard.stopped'));
+
   // [自动刷新] 连通性自愈：当 HTTP 轮询发现网关已启动，但 WebSocket 处于断开或错误状态时，主动拉起连接
   useEffect(() => {
     if (!gatewayWsDesired) return;
@@ -1254,6 +1263,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
         onRestartGateway={restartGateway}
         isRunning={isRunning}
         isDarkMode={isDarkMode}
+        allowedBotIDs={authMe?.bot_ids}
         usernameForSessionKey={authMe?.username || null}
         usernameForSessionId={(authMe?.login_type || '') === 'password' ? (authMe?.username || null) : null}
         filterV3SessionsByUsername={
@@ -1336,6 +1346,85 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
   };
 
   if (fetching && !status) return <CrayfishLoading isDarkMode={isDarkMode} />;
+
+  /** 受控用户 bot_ids 为空时：仅盖住主内容区（侧栏不挡，可换页）；置于 Content 内 absolute */
+  const showNoBotChatOverlay =
+    activeTab === 'chat' && Array.isArray(authMe?.bot_ids) && authMe.bot_ids.length === 0;
+  const noBotChatOverlay = showNoBotChatOverlay ? (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 100,
+        background: isDarkMode ? 'rgba(15, 23, 42, 0.94)' : 'rgba(248, 250, 252, 0.97)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+        pointerEvents: 'auto',
+      }}
+      aria-live="polite"
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 440,
+          padding: isMobile ? '28px 22px' : '36px 40px',
+          borderRadius: 20,
+          background: isDarkMode ? '#1e293b' : '#fff',
+          border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+          boxShadow: isDarkMode
+            ? '0 25px 50px -12px rgba(0, 0, 0, 0.55)'
+            : '0 25px 50px -12px rgba(15, 23, 42, 0.15)',
+          textAlign: 'center',
+        }}
+      >
+        <div
+          style={{
+            width: 56,
+            height: 56,
+            margin: '0 auto 16px',
+            borderRadius: 14,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: isDarkMode ? '#0f172a' : '#fef3c7',
+            border: `1px solid ${isDarkMode ? '#334155' : '#fde68a'}`,
+          }}
+        >
+          <Bot size={28} color={isDarkMode ? '#93c5fd' : '#d97706'} strokeWidth={2} />
+        </div>
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 12,
+            fontWeight: 800,
+            fontSize: 17,
+            color: isDarkMode ? '#f1f5f9' : '#0f172a',
+          }}
+        >
+          <AlertCircle size={20} color="#f59e0b" strokeWidth={2.5} />
+          {t('users.noBotPermissionTitle', { defaultValue: '暂无 Bot 使用权限' })}
+        </div>
+        <p
+          style={{
+            margin: 0,
+            fontSize: 14,
+            lineHeight: 1.65,
+            color: isDarkMode ? '#94a3b8' : '#64748b',
+          }}
+        >
+          {t('users.noBotPermission', {
+            defaultValue: '当前账号未分配任何 Bot 权限，请联系管理员分配后再使用。',
+          })}
+        </p>
+      </div>
+    </div>
+  ) : null;
 
   const globalLoadingMask = (globalLoadingMessage || dashboardProcessing) && (
     <div style={{
@@ -1423,7 +1512,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
     const breadcrumbTitle = `${t('common.console')} / ${getActiveLabel(activeTab)}`;
     const gatewayTitle = [
       'Gateway',
-      isRunning ? t('dashboard.running') : t('dashboard.stopped'),
+      gatewayStateText,
       isRunning && lastHealth?.latency !== undefined ? `${lastHealth.latency}ms` : '',
     ].filter(Boolean).join(' · ');
 
@@ -1442,7 +1531,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
         }}
       >
         {!isMobile && 'Gateway '}
-        {isRunning ? t('dashboard.running') : t('dashboard.stopped')}
+        {gatewayStateText}
         {isRunning && lastHealth?.latency !== undefined && (
           <span style={{ color: '#10b981', marginLeft: isMobile ? 2 : 4, fontWeight: 700 }}>
             {isMobile ? `${lastHealth.latency}ms` : `(${lastHealth.latency}ms)`}
@@ -1590,16 +1679,20 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
           display: 'flex', 
           flexDirection: 'column',
           padding: activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell' ? 0 : 24,
-          overflow: activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell' ? 'hidden' : 'auto'
+          overflow: activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell' ? 'hidden' : 'auto',
+          position: 'relative',
         }}>
           {renderContent()}
+          {noBotChatOverlay}
         </div>
       ) : isMobile ? (
         <Layout style={{ 
           height: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? '100vh' : 'auto', 
           minHeight: '100vh',
           background: isDarkMode ? '#0f172a' : '#f8fafc', 
-          overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? 'hidden' : 'auto' 
+          overflow: (activeTab === 'chat' || activeTab === 'logs' || activeTab === 'tui' || activeTab === 'shell') ? 'hidden' : 'auto',
+          display: 'flex',
+          flexDirection: 'column',
         }}>
           {headerEl(() => setMobileMenuOpen(true))}
           <Content style={{ 
@@ -1607,8 +1700,16 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
             background: isDarkMode
               ? '#0f172a'
               : (activeTab === 'tui' || activeTab === 'shell' ? '#0f172a' : '#f8fafc'),
+            position: 'relative',
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
           }}>
-            {renderContent()}
+            <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              {renderContent()}
+              {noBotChatOverlay}
+            </div>
           </Content>
           <Drawer
             placement="left" closable={false} width={240}
@@ -1666,9 +1767,11 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
               flex: 1,
               display: 'flex', 
               flexDirection: 'column', 
-              minHeight: 0
+              minHeight: 0,
+              position: 'relative',
             }}>
               <div style={{ 
+                position: 'relative',
                 maxWidth: 'none', 
                 margin: '0 auto', 
                 flex: 1,
@@ -1678,6 +1781,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
                 minHeight: 0
               }}>
                 {renderContent()}
+                {noBotChatOverlay}
               </div>
             </Content>
           </Layout>

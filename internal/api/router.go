@@ -172,6 +172,8 @@ func (s *Server) setupRoutes() {
 			systemUsers.GET("/permissions", s.handleListPermissions)
 			systemUsers.GET("/users/:id/permissions", s.handleGetUserPermissions)
 			systemUsers.PUT("/users/:id/permissions", s.handleUpdateUserPermissions)
+			systemUsers.GET("/users/:id/bots", s.handleGetUserBots)
+			systemUsers.PUT("/users/:id/bots", s.handleUpdateUserBots)
 		}
 
 		// OpenClaw related routes

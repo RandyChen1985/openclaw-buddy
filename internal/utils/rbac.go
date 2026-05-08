@@ -408,6 +408,48 @@ func SetUserPermissions(userID int64, permissionKeys []string) error {
 	return nil
 }
 
+// GetUserBotIDs 返回用户被授权可见的 bot_id 列表。
+// 约定：admin/superadmin 不依赖该表做限制；是否放行由上层判断。
+func GetUserBotIDs(userID int64) ([]string, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+	rows, err := DB.Query(`SELECT bot_id FROM user_bots WHERE user_id = ? ORDER BY bot_id ASC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err == nil {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				out = append(out, id)
+			}
+		}
+	}
+	return out, nil
+}
+
+// SetUserBots 覆盖更新用户可见的 bot_id 列表。
+func SetUserBots(userID int64, botIDs []string) error {
+	if DB == nil {
+		return fmt.Errorf("database not initialized")
+	}
+	if _, err := DB.Exec(`DELETE FROM user_bots WHERE user_id = ?`, userID); err != nil {
+		return err
+	}
+	for _, id := range botIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		_, _ = DB.Exec(`INSERT OR IGNORE INTO user_bots (user_id, bot_id) VALUES (?, ?)`, userID, id)
+	}
+	return nil
+}
+
 // AssignRolesToUser 用给定 role key 列表覆盖用户的角色绑定。
 func AssignRolesToUser(userID int64, roleKeys []string) error {
 	if DB == nil {

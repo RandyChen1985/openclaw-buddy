@@ -31,6 +31,23 @@ func (s *Server) handleAuthMe(c *gin.Context) {
 	}
 
 	roleKeys, _ := utils.GetUserRoleKeys(p.User.ID)
+	// 普通用户：返回 bot_ids（空数组表示“没有任何 bot 权限”）；admin 不受限，前端按缺省视为全部可见。
+	botIDs := []string(nil)
+	isAdminRole := false
+	for _, rk := range roleKeys {
+		if rk == "admin" {
+			isAdminRole = true
+			break
+		}
+	}
+	if !isAdminRole {
+		ids, err := utils.GetUserBotIDs(p.User.ID)
+		if err == nil {
+			botIDs = ids
+		} else {
+			botIDs = []string{}
+		}
+	}
 	s.Success(c, gin.H{
 		"is_superadmin": false,
 		"id":            p.User.ID,
@@ -39,6 +56,7 @@ func (s *Server) handleAuthMe(c *gin.Context) {
 		"remark":        p.User.Remark,
 		"role_keys":     roleKeys,
 		"permissions":   p.Permissions,
+		"bot_ids":       botIDs,
 		"login_type":    "password",
 	})
 }
@@ -225,6 +243,44 @@ func (s *Server) handleUpdateUserPermissions(c *gin.Context) {
 		return
 	}
 	if err := utils.SetUserPermissions(id, req.PermissionKeys); err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success"})
+}
+
+type updateUserBotsReq struct {
+	BotIDs []string `json:"bot_ids"`
+}
+
+// handleGetUserBots 获取用户可见 bot_id 列表
+func (s *Server) handleGetUserBots(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		s.Error(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	keys, err := utils.GetUserBotIDs(id)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"bot_ids": keys})
+}
+
+// handleUpdateUserBots 覆盖更新用户可见 bot_id 列表
+func (s *Server) handleUpdateUserBots(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		s.Error(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var req updateUserBotsReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "Invalid request")
+		return
+	}
+	if err := utils.SetUserBots(id, req.BotIDs); err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
