@@ -3,8 +3,15 @@ import storage from './storage';
 // Get base URL dynamically at runtime if available
 export const getBaseURL = () => {
   // Try to read from global variable injected by Go backend
-  let base = (window as any).__WEB_ROOT__ || import.meta.env.BASE_URL || '/';
-  
+  let base = (window as any).__WEB_ROOT__;
+  if (base == null || base === '') {
+    base = import.meta.env.BASE_URL || '/';
+  }
+  // 相对 base 构建（import.meta.env.BASE_URL 为 ./）时不要当成路径前缀
+  if (base === './' || base === '.') {
+    base = '/';
+  }
+
   // Ensure base starts with /
   if (!base.startsWith('/')) base = '/' + base;
   // Remove trailing slash for consistent joining
