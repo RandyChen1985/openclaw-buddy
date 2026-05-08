@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   Modal, Button, message, Spin, Breadcrumb, Tabs, Input, Empty, 
   Popconfirm, Tooltip, Tree, Table, Dropdown, Checkbox, 
@@ -28,7 +28,65 @@ import { FE_THEME_DARK, FE_THEME_LIGHT } from '../theme/feSurfaceTheme';
 
 const { DirectoryTree } = Tree;
 
+/**
+ * `position: fixed` 在任意带 transform/filter/perspective 的祖先下会相对于该祖先定位，而非视口。
+ * 右键菜单锚点使用 fixed + 视口坐标时会出现大幅偏移，需换算为相对该祖先的坐标。
+ */
+function menuAnchorCoordsForFixedInsideMount(
+  clientX: number,
+  clientY: number,
+  mountRoot: HTMLElement | null,
+): { x: number; y: number } {
+  if (
+    !mountRoot ||
+    typeof clientX !== 'number' ||
+    typeof clientY !== 'number' ||
+    !Number.isFinite(clientX) ||
+    !Number.isFinite(clientY)
+  ) {
+    return { x: clientX, y: clientY };
+  }
+  let el: HTMLElement | null = mountRoot;
+  while (el) {
+    const st = window.getComputedStyle(el);
+    if (
+      (st.transform && st.transform !== 'none') ||
+      (st.filter && st.filter !== 'none') ||
+      (st.perspective && st.perspective !== 'none')
+    ) {
+      const r = el.getBoundingClientRect();
+      return { x: clientX - r.left, y: clientY - r.top };
+    }
+    el = el.parentElement;
+  }
+  return { x: clientX, y: clientY };
+}
+
 const protectedFiles = ['soul.md', 'agent.md', 'agents.md', 'identity.md', 'identify.md', 'user.md', 'tools.md', 'heartbeat.md', 'memory.md', 'soul', 'agent', 'memory', 'identity', 'heartbeat'];
+
+const FE_SIDEBAR_WIDTH_KEY = 'fe_sidebar_width';
+const FE_SIDEBAR_WIDTH_DEFAULT = 280;
+const FE_SIDEBAR_WIDTH_MIN = 180;
+const FE_SIDEBAR_WIDTH_MAX = 720;
+
+function clampFeSidebarWidth(w: number, viewportW?: number): number {
+  const vw = viewportW ?? (typeof window !== 'undefined' ? window.innerWidth : 1200);
+  const max = Math.min(FE_SIDEBAR_WIDTH_MAX, Math.floor(vw * 0.65));
+  return Math.max(FE_SIDEBAR_WIDTH_MIN, Math.min(max, Math.round(w)));
+}
+
+function readInitialSidebarWidth(): number {
+  try {
+    const raw = storage.getItem(FE_SIDEBAR_WIDTH_KEY);
+    if (raw != null) {
+      const v = Number(raw);
+      if (Number.isFinite(v)) return clampFeSidebarWidth(v);
+    }
+  } catch {
+    /* noop */
+  }
+  return FE_SIDEBAR_WIDTH_DEFAULT;
+}
 
 interface FileEntry {
   name: string;
@@ -117,6 +175,8 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
   const [excelData, setExcelData] = useState<{ columns: any[], dataSource: any[] } | null>(null);
   const [wordHtml, setWordHtml] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(readInitialSidebarWidth);
+  const sidebarResizeDragRef = useRef<{ startX: number; startW: number } | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [selectedBulkKeys, setSelectedBulkKeys] = useState<string[]>([]);
   const [searchMode, setSearchMode] = useState<'current' | 'global'>('current');
@@ -138,6 +198,47 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
   const [contextPath, setContextPath] = useState('');
   const [contextIsFile, setContextIsFile] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+  const explorerRootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onResize = () => setSidebarWidth((w) => clampFeSidebarWidth(w));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const handleSidebarResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      if (isSidebarCollapsed) return;
+      e.preventDefault();
+      e.stopPropagation();
+      sidebarResizeDragRef.current = { startX: e.clientX, startW: sidebarWidth };
+
+      const onMove = (ev: MouseEvent) => {
+        const r = sidebarResizeDragRef.current;
+        if (!r) return;
+        const next = clampFeSidebarWidth(r.startW + ev.clientX - r.startX);
+        setSidebarWidth(next);
+      };
+
+      const onUp = () => {
+        sidebarResizeDragRef.current = null;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        setSidebarWidth((w) => {
+          storage.setItem(FE_SIDEBAR_WIDTH_KEY, String(w));
+          return w;
+        });
+      };
+
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    },
+    [isSidebarCollapsed, sidebarWidth],
+  );
 
   // Drag and Drop Logic
   const handleDragStart = (e: React.DragEvent, item: FileEntry) => {
@@ -208,13 +309,36 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
   };
 
   const treeTitleRender = (nodeData: any) => {
+    const displayText =
+      typeof nodeData.title === 'string' || typeof nodeData.title === 'number'
+        ? String(nodeData.title)
+        : '';
+    const tip =
+      displayText ||
+      (typeof nodeData.key === 'string' ? nodeData.key.split(/[/\\]/).pop() ?? '' : '');
     return (
       <div
         onDragOver={handleDragOver}
         onDrop={(e) => handleDropOnFolder(e, nodeData.key)}
-        style={{ display: 'inline-flex', alignItems: 'center', width: '100%' }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          minWidth: 0,
+          flex: 1,
+          overflow: 'hidden',
+        }}
       >
-        {nodeData.title}
+        <span
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            minWidth: 0,
+          }}
+          title={tip || undefined}
+        >
+          {nodeData.title}
+        </span>
       </div>
     );
   };
@@ -649,12 +773,12 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
     if (event.stopPropagation) event.stopPropagation();
     
     // Support both React.MouseEvent and antd's event wrapper
-    const clientX = event.clientX || (event.nativeEvent && event.nativeEvent.clientX);
-    const clientY = event.clientY || (event.nativeEvent && event.nativeEvent.clientY);
-    
+    const clientX = event.clientX ?? event.nativeEvent?.clientX;
+    const clientY = event.clientY ?? event.nativeEvent?.clientY;
+
     setContextPath(key);
     setContextIsFile(!isDir);
-    setMenuPosition({ x: clientX, y: clientY });
+    setMenuPosition(menuAnchorCoordsForFixedInsideMount(clientX, clientY, explorerRootRef.current));
     setContextMenuVisible(true);
   };
 
@@ -877,7 +1001,11 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
 
   return (
     <>
-      <div className={isDarkMode ? 'file-explorer-root file-explorer-root--dark' : 'file-explorer-root'} style={{ height: '100%', display: 'flex', flexDirection: 'column', background: fe.bg, color: fe.text }}>
+      <div
+        ref={explorerRootRef}
+        className={isDarkMode ? 'file-explorer-root file-explorer-root--dark' : 'file-explorer-root'}
+        style={{ height: '100%', display: 'flex', flexDirection: 'column', background: fe.bg, color: fe.text }}
+      >
           {/* Custom Header */}
           {/* Custom Header - Only show if not simplified */}
           {!simplified && (
@@ -1147,26 +1275,29 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: fe.bg }}>
         {!isMobile && !simplified && (
-          <div style={{ 
-            width: isSidebarCollapsed ? 0 : 280, 
-            display: 'flex', 
-            flexDirection: 'column', 
-            background: fe.bgTree, 
-            borderRight: isSidebarCollapsed ? 'none' : `1px solid ${fe.border}`,
-            transition: 'all 0.3s ease-in-out',
-            overflow: 'hidden',
-            opacity: isSidebarCollapsed ? 0 : 1,
-            pointerEvents: isSidebarCollapsed ? 'none' : 'auto'
-          }}>
-            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${fe.border}`, display: 'flex', flexDirection: 'column', gap: 4, overflow: 'hidden' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: fe.textMuted, display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
-                <LayoutList size={14} /> {t('common.directory')}
+          <>
+            <div
+              style={{
+                width: isSidebarCollapsed ? 0 : sidebarWidth,
+                flexShrink: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                background: fe.bgTree,
+                transition: 'opacity 0.2s ease',
+                overflow: 'hidden',
+                opacity: isSidebarCollapsed ? 0 : 1,
+                pointerEvents: isSidebarCollapsed ? 'none' : 'auto',
+              }}
+            >
+              <div style={{ padding: '12px 16px', borderBottom: `1px solid ${fe.border}`, display: 'flex', flexDirection: 'column', gap: 4, overflow: 'hidden' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: fe.textMuted, display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+                  <LayoutList size={14} /> {t('common.directory')}
+                </div>
+                <div style={{ fontSize: 10, color: fe.textFaint, fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={rootPath}>
+                  {rootPath}
+                </div>
               </div>
-              <div style={{ fontSize: 10, color: fe.textFaint, fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={rootPath}>
-                {rootPath}
-              </div>
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 8px', minWidth: 280 }}>
+              <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '12px 8px', minWidth: 0 }}>
                 <DirectoryTree
                   loadData={onLoadData}
                   treeData={treeData}
@@ -1182,7 +1313,25 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                   className="custom-directory-tree"
                 />
               </div>
-          </div>
+            </div>
+            {!isSidebarCollapsed && (
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label={t('common.dragResizeSidebar', { defaultValue: '拖动调整目录宽度' })}
+                onMouseDown={handleSidebarResizeStart}
+                style={{
+                  width: 6,
+                  flexShrink: 0,
+                  cursor: 'col-resize',
+                  alignSelf: 'stretch',
+                  borderLeft: `1px solid ${fe.border}`,
+                  background: fe.bgTree,
+                  boxSizing: 'border-box',
+                }}
+              />
+            )}
+          </>
         )}
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: fe.bgMuted }}>
@@ -1627,6 +1776,13 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
           padding: 4px 8px !important;
           display: flex !important;
           align-items: center;
+          min-width: 0 !important;
+          overflow: hidden;
+        }
+        .custom-directory-tree .ant-tree-title {
+          flex: 1 1 0 !important;
+          min-width: 0 !important;
+          overflow: hidden !important;
         }
         .custom-directory-tree .ant-tree-node-selected {
           background-color: ${fe.treeNodeSelBg} !important;

@@ -69,6 +69,17 @@ mkdir -p "$DEV_ROOT/backups"
 if [ -d "web" ]; then
     echo "🎨 正在编译前端..."
     pushd web > /dev/null
+    # 确保 Vite 构建的 base 与后端 WEB_ROOT 一致，否则子路径部署会出现 /assets 404
+    WEB_ROOT_FOR_BUILD="/"
+    if [ -f "../$DEV_ROOT/env" ]; then
+        WEB_ROOT_FOR_BUILD=$(grep -E '^WEB_ROOT=' "../$DEV_ROOT/env" | head -n 1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" )
+    fi
+    if [ -z "$WEB_ROOT_FOR_BUILD" ]; then
+        WEB_ROOT_FOR_BUILD="/"
+    fi
+    export VITE_WEB_ROOT="$WEB_ROOT_FOR_BUILD"
+    echo "🔧 VITE_WEB_ROOT=$VITE_WEB_ROOT"
+
     npm run build
     if [ $? -ne 0 ]; then
         echo "❌ 前端项目编译失败！请检查 TypeScript 或 Lint 错误。"

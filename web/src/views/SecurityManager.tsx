@@ -7,12 +7,13 @@ import {
 import { 
   Card, Button, Tag, Table, Input, Select, 
   Typography, message, Popconfirm, Empty, Modal,
-  Alert, Tooltip, Space
+  Alert, Space
 } from 'antd';
 import { useTranslation } from 'react-i18next';
 import api from '../api';
 import type { Task } from '../hooks/useTaskCenter';
 import TokenBadge from '../components/TokenBadge';
+import Tooltip from '../components/common/AppTooltip';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;

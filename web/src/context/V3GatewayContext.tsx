@@ -9,6 +9,8 @@ interface V3GatewayContextType {
   status: V3WsStatus;
   connect: () => Promise<void>;
   sendRPC: (method: string, params: any) => Promise<SendRpcResult>;
+  /** 暂停网关 WS（不重连）；恢复时自动 connect */
+  setConnectionPaused: (paused: boolean) => void;
   lastHealth: { ok: boolean; latency: number; ts: number } | null;
   latencyHistory: number[];
   pulse: number;
@@ -70,6 +72,7 @@ export const V3GatewayProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     status,
     connect,
     sendRPC,
+    setConnectionPaused,
     lastHealth,
     latencyHistory,
     pulse
@@ -105,17 +108,11 @@ export const V3GatewayProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     initKeys();
   }, []);
 
-  // 登录后（即 Provider 加载后）立即尝试连接
-  useEffect(() => {
-    if (keyPair && deviceId && status === 'disconnected') {
-      connect();
-    }
-  }, [keyPair, deviceId, status, connect]);
-
   const value = useMemo(() => ({
     status,
     connect,
     sendRPC,
+    setConnectionPaused,
     lastHealth,
     latencyHistory,
     pulse,
@@ -124,7 +121,7 @@ export const V3GatewayProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     healthData,
     registerHandlers,
     unregisterHandlers
-  }), [status, connect, sendRPC, lastHealth, latencyHistory, pulse, deviceId, keyPair, healthData, registerHandlers, unregisterHandlers]);
+  }), [status, connect, sendRPC, setConnectionPaused, lastHealth, latencyHistory, pulse, deviceId, keyPair, healthData, registerHandlers, unregisterHandlers]);
 
   return (
     <V3GatewayContext.Provider value={value}>

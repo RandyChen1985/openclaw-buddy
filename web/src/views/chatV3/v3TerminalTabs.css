@@ -1,0 +1,92 @@
+/* 运维终端多 Tab：撑满侧栏/弹窗剩余高度 */
+.v3-terminal-multi-tabs.ant-tabs {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  color: #e2e8f0;
+}
+
+.v3-terminal-multi-tabs .ant-tabs-nav {
+  margin-bottom: 0;
+  padding: 0 8px;
+  background: #1e293b;
+}
+
+.v3-terminal-multi-tabs .ant-tabs-nav::before {
+  border-color: #334155;
+}
+
+/* 未选中：明显压暗，与选中拉开差距 */
+.v3-terminal-multi-tabs .ant-tabs-tab:not(.ant-tabs-tab-active) {
+  background: #020617 !important;
+  border-color: #1e293b !important;
+}
+
+.v3-terminal-multi-tabs .ant-tabs-tab:not(.ant-tabs-tab-active) .ant-tabs-tab-btn {
+  color: #64748b !important;
+}
+
+.v3-terminal-multi-tabs .ant-tabs-tab:not(.ant-tabs-tab-active):hover {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+}
+
+.v3-terminal-multi-tabs .ant-tabs-tab:not(.ant-tabs-tab-active):hover .ant-tabs-tab-btn {
+  color: #94a3b8 !important;
+}
+
+/* 选中：与终端内容区同色；仅用底部色条强调，无整圈描边 */
+.v3-terminal-multi-tabs .ant-tabs-tab.ant-tabs-tab-active {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  box-shadow: 0 3px 0 0 #38bdf8;
+  z-index: 2;
+}
+
+.v3-terminal-multi-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.v3-terminal-multi-tabs .ant-tabs-tab-active:hover .ant-tabs-tab-btn {
+  color: #ffffff !important;
+}
+
+/* 关闭图标：未选中更弱，选中时仍可点 */
+.v3-terminal-multi-tabs .ant-tabs-tab:not(.ant-tabs-tab-active) .ant-tabs-tab-remove {
+  color: #475569 !important;
+}
+
+.v3-terminal-multi-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-remove {
+  color: #cbd5e1 !important;
+}
+
+.v3-terminal-multi-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-remove:hover {
+  color: #f8fafc !important;
+}
+
+.v3-terminal-multi-tabs .ant-tabs-content-holder {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.v3-terminal-multi-tabs .ant-tabs-content,
+.v3-terminal-multi-tabs .ant-tabs-tabpane {
+  height: 100%;
+}
+
+.v3-terminal-multi-tabs .ant-tabs-tabpane > div {
+  height: 100%;
+}
+
+.v3-terminal-multi-tabs .ant-tabs-nav-add {
+  color: #94a3b8 !important;
+  background: #0f172a !important;
+  border-color: #334155 !important;
+}
+
+.v3-terminal-multi-tabs .ant-tabs-nav-add:hover {
+  color: #f8fafc !important;
+}

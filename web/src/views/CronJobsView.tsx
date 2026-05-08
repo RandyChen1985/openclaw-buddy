@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Drawer, Empty, Modal, Popconfirm, Space, Spin, Table, Tag, Tooltip, Typography, message } from 'antd';
+import { Button, Card, Drawer, Empty, Popconfirm, Popover, Space, Spin, Table, Tag, Typography, message } from 'antd';
 import { RefreshCw, Clock, CheckCircle2, XCircle, Trash2, HelpCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import api from '../api';
+import Tooltip from '../components/common/AppTooltip';
 
 const { Text, Paragraph, Title } = Typography;
 
@@ -383,14 +384,44 @@ export default function CronJobsView({ isDarkMode = false }: CronJobsViewProps) 
             >
               {t('common.refresh', { defaultValue: '刷新' })}
             </Button>
-            <Button
-              size="small"
-              type="text"
-              icon={<HelpCircle size={16} />}
-              onClick={() => setHelpOpen(true)}
-              aria-label={t('cron.helpTitle', { defaultValue: '如何创建定时任务？' })}
-              style={{ color: pageMuted }}
-            />
+            {isMobile ? (
+              <Button
+                size="small"
+                type="text"
+                icon={<HelpCircle size={16} />}
+                onClick={() => setHelpOpen(true)}
+                aria-label={t('cron.helpTitle', { defaultValue: '如何创建定时任务？' })}
+                style={{ color: pageMuted }}
+              />
+            ) : (
+              <Popover
+                trigger="click"
+                placement="bottomRight"
+                arrow={false}
+                overlayStyle={{ maxWidth: 820 }}
+                styles={{
+                  body: {
+                    maxWidth: 820,
+                    maxHeight: 'min(85vh, 720px)',
+                    overflowY: 'auto',
+                    padding: 16,
+                    background: isDarkMode ? '#0f172a' : '#fff',
+                    border: isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0',
+                    borderRadius: 12,
+                    boxShadow: isDarkMode ? '0 8px 24px rgba(0,0,0,0.45)' : '0 8px 24px rgba(15,23,42,0.12)',
+                  },
+                }}
+                content={<CronHelpContent isDarkMode={isDarkMode} />}
+              >
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<HelpCircle size={16} />}
+                  aria-label={t('cron.helpTitle', { defaultValue: '如何创建定时任务？' })}
+                  style={{ color: pageMuted }}
+                />
+              </Popover>
+            )}
           </Space>
         }
         style={{ borderRadius: 12, border: `1px solid ${borderDefault}`, background: cardBg }}
@@ -421,28 +452,21 @@ export default function CronJobsView({ isDarkMode = false }: CronJobsViewProps) 
         )}
       </Card>
 
-      {/* Help: 如何用自然语言创建定时任务 */}
-      {isMobile ? (
+      {/* Help: 如何用自然语言创建定时任务（桌面：Popover 无全屏遮罩；窄屏：底部 Drawer） */}
+      {isMobile && (
         <Drawer
           title={t('cron.helpTitle', { defaultValue: '如何用自然语言创建定时任务？' })}
           open={helpOpen}
           onClose={() => setHelpOpen(false)}
           placement="bottom"
           height="78vh"
-          styles={{ body: { padding: 16 } }}
+          styles={{
+            body: { padding: 16, background: isDarkMode ? '#0f172a' : undefined },
+            header: isDarkMode ? { background: '#1e293b', borderBottom: '1px solid #334155' } : undefined,
+          }}
         >
           <CronHelpContent isDarkMode={isDarkMode} />
         </Drawer>
-      ) : (
-        <Modal
-          title={t('cron.helpTitle', { defaultValue: '如何用自然语言创建定时任务？' })}
-          open={helpOpen}
-          onCancel={() => setHelpOpen(false)}
-          footer={null}
-          width={820}
-        >
-          <CronHelpContent isDarkMode={isDarkMode} />
-        </Modal>
       )}
     </div>
   );

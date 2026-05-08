@@ -95,6 +95,9 @@ export function useV3GatewayConnection({
   maxReconnects = 5,
   handlers
 }: UseV3GatewayConnectionParams) {
+  /** 为 true 时不发起连接、不重连；用于离开聊天/仪表盘以外页面减负 */
+  const connectionPausedRef = useRef(false);
+
   const wsRef = useRef<WebSocket | null>(null);
   const requestIdRef = useRef(1);
   const pendingRequests = useRef<Map<string, (res: any) => void>>(new Map());
@@ -279,6 +282,10 @@ export function useV3GatewayConnection({
    */
   const connect = useCallback(async () => {
     if (!keyPair || !deviceId) return;
+    if (connectionPausedRef.current) {
+      connectInFlightRef.current = false;
+      return;
+    }
     // 防抖：避免多次点击导致 close/new ws 抖动
     if (connectInFlightRef.current) return;
     connectInFlightRef.current = true;
@@ -394,6 +401,7 @@ export function useV3GatewayConnection({
    * 只监听 disconnected（onerror 不再直接触发 error 状态，而是由 onclose 统一收归为 disconnected）。
    */
   useEffect(() => {
+    if (connectionPausedRef.current) return;
     if (!keyPair) return;
     if (status !== 'disconnected') return;
     if (reconnectCountRef.current >= maxReconnects) {
@@ -409,6 +417,35 @@ export function useV3GatewayConnection({
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     };
   }, [status, keyPair, maxReconnects, connect]);
+
+  const setConnectionPaused = useCallback(
+    (paused: boolean) => {
+      connectionPausedRef.current = paused;
+      if (paused) {
+        if (reconnectTimerRef.current) {
+          clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+        }
+        connectInFlightRef.current = false;
+        if (connectTimeoutRef.current) {
+          clearTimeout(connectTimeoutRef.current);
+          connectTimeoutRef.current = null;
+        }
+        try {
+          wsRef.current?.close();
+        } catch {
+          /* ignore */
+        }
+        wsRef.current = null;
+        dispatch({ type: 'WS_CLOSE' });
+        rejectAllPendingRequests('Gateway connection paused');
+      } else {
+        reconnectCountRef.current = 0;
+        connect();
+      }
+    },
+    [connect, rejectAllPendingRequests]
+  );
 
   useEffect(() => {
     if (status === 'authenticated') reconnectCountRef.current = 0;
@@ -439,8 +476,9 @@ export function useV3GatewayConnection({
       rejectAllPendingRequests,
       lastHealth,
       latencyHistory,
-      pulse
+      pulse,
+      setConnectionPaused
     };
-  }, [status, connect, sendRPC, rejectAllPendingRequests, lastHealth, latencyHistory, pulse]);
+  }, [status, connect, sendRPC, rejectAllPendingRequests, lastHealth, latencyHistory, pulse, setConnectionPaused]);
 }
 

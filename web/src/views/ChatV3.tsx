@@ -26,7 +26,9 @@ import '../styles/ChatV3.css';
 
 // --- Utils & Config ---
 const parseSessionKey = (key: string) => {
-  if (!key || !key.startsWith('agent:')) return { botId: 'main', source: 'dashboard' as const, openAIUser: undefined as string | undefined };
+  if (!key || !key.startsWith('agent:')) {
+    return { botId: 'main', source: 'dashboard' as const, openAIUser: undefined as string | undefined, buddyUser: undefined as string | undefined };
+  }
   const parts = key.split(':');
   const botId = parts[1] || 'main';
   const source = parts[2] || 'dashboard';
@@ -41,7 +43,14 @@ const parseSessionKey = (key: string) => {
     }
   }
 
-  return { botId, source, openAIUser };
+  // buddy direct: agent:{botId}:buddy:direct:{username}:{suffix}
+  let buddyUser: string | undefined;
+  if ((source || '').toLowerCase() === 'buddy' && (parts[3] || '').toLowerCase() === 'direct') {
+    const raw = (parts[4] || '').trim();
+    if (raw && !/^\d/.test(raw)) buddyUser = raw;
+  }
+
+  return { botId, source, openAIUser, buddyUser };
 };
 
 const SourceConfig: Record<string, { icon: any; color: string; labelKey: string; defaultLabel: string }> = {
@@ -63,12 +72,16 @@ interface ChatV3Props {
   onRefreshBots: () => void;
   isMobile?: boolean;
   isDarkMode?: boolean;
+  /** 当前登录用户名（可选）。用于把 username 写入 buddy:direct 会话 key */
+  usernameForSessionKey?: string | null;
+  /** 普通用户：只加载 key 中包含 username 的会话 */
+  filterV3SessionsByUsername?: boolean;
 }
 
 
 // --- Utils ---
 
-const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDarkMode = false }) => {
+const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDarkMode = false, usernameForSessionKey, filterV3SessionsByUsername }) => {
 
   const { t } = useTranslation();
   const v3Theme = useV3Theme();
@@ -196,6 +209,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
     setSelectedBot: handleSetSelectedBot,
     botsModels,
     t,
+    usernameForSessionKey,
+    filterV3SessionsByUsername,
     inputAreaRef,
     virtuosoRef,
     scrollRef,
@@ -253,8 +268,15 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
         setSelectedBot(quickChatBot);
         startNewSession(botId);
       } else if (!selectedBot && !sessionKey) {
-        const firstBot = botsModels.data.bots[0];
-        setSelectedBot(`openclaw:${firstBot.id}`);
+        const qp = new URLSearchParams(window.location.search);
+        const urlBot = qp.get('bot');
+        const bots = botsModels.data.bots;
+        let pick = bots[0];
+        if (urlBot) {
+          const found = bots.find((b: any) => b.id === urlBot || b.name === urlBot);
+          if (found) pick = found;
+        }
+        setSelectedBot(`openclaw:${pick.id}`);
       }
     }
   }, [botsModels, selectedBot, sessionKey, startNewSession]);

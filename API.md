@@ -264,7 +264,7 @@
 
 ### 9.2 WebSocket 实时通信
 Buddy 提供了多个 WebSocket 挂载点以实现极低延迟的交互：
-- **日志订阅 (`/v1/ws/logs`)**: 实时推送 `.log` 文件行，适配前端 Xterm.js。
+- **日志订阅 (`/v1/ws/logs`)**: 实时推送 `.log` 文件行，适配前端 Xterm.js。`source=buddy`（默认）时，先以一条 JSON 消息推送文件末尾历史行，再仅跟新追加内容。Query：`source`（`buddy`|`gateway`）、`history_lines`（0–5000，默认 500；0 表示不要历史、仅跟尾）。`source=gateway` 时走 `openclaw logs --follow`，无历史批处理。
 - **终端交互 (`/v1/ws/tui`)**: 提供完整的 PTY 映射，允许在浏览器内直接操作 OpenClaw 终端。
 - **远程 Shell (`/v1/ws/shell`)**: (受限模式) 允许执行特定维护命令。
 

@@ -4,57 +4,88 @@ import (
 	"net/http"
 	"strings"
 
+	"openclaw-buddy/internal/utils"
+
 	"github.com/gin-gonic/gin"
 )
 
+// resolveBearerPrincipal 把一个 Bearer token 解析为认证主体；
+// 优先匹配 BUDDY_TOKEN（superadmin），其次查 user_sessions。
+func resolveBearerPrincipal(rawToken, superToken string) *Principal {
+	rawToken = strings.TrimSpace(rawToken)
+	if rawToken == "" {
+		return nil
+	}
+	if superToken != "" && rawToken == superToken {
+		return &Principal{IsSuperAdmin: true}
+	}
+	user, err := utils.LookupSession(rawToken)
+	if err != nil || user == nil {
+		return nil
+	}
+	perms, _ := utils.GetUserPermissionKeys(user.ID)
+	return &Principal{User: user, Permissions: perms}
+}
+
 func AuthMiddleware(token string, tickets *TicketStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var principal *Principal
+
 		hasHeaderAuth := false
 		hasQueryAuth := false
 		hasTicketAuth := false
 		hasCookieAuth := false
 
-		// 1. Check Authorization header
+		// 1. Authorization Header（同时支持 BUDDY_TOKEN 与 session token）
 		authHeader := c.GetHeader("Authorization")
 		if authHeader != "" {
 			parts := strings.Split(authHeader, " ")
 			if len(parts) == 2 && parts[0] == "Bearer" {
-				if strings.TrimSpace(parts[1]) == token {
+				if p := resolveBearerPrincipal(parts[1], token); p != nil {
+					principal = p
 					hasHeaderAuth = true
 				}
 			}
 		}
 
-		// 2. Check token from query parameter
-		queryToken := strings.TrimSpace(c.Query("token"))
-		if queryToken == token {
-			hasQueryAuth = true
+		// 2. Query 参数 token（兼容老用法 / WS）
+		if principal == nil {
+			queryToken := strings.TrimSpace(c.Query("token"))
+			if queryToken != "" {
+				if p := resolveBearerPrincipal(queryToken, token); p != nil {
+					principal = p
+					hasQueryAuth = true
+				}
+			}
 		}
 
-		// 3. Check ticket from query parameter (for WebSockets)
-		if tickets != nil {
+		// 3. 一次性 ticket（仅用于 WS / 显式短期授权，视为 superadmin 等价权限）
+		if principal == nil && tickets != nil {
 			queryTicket := strings.TrimSpace(c.Query("ticket"))
 			if queryTicket != "" && tickets.Consume(queryTicket) {
+				principal = &Principal{IsSuperAdmin: true}
 				hasTicketAuth = true
 			}
 		}
 
-		// 4. Check cookie
-		cookieToken, err := c.Cookie("guardian_token")
-		if err == nil && cookieToken == token {
-			hasCookieAuth = true
+		// 4. Cookie（同时支持 BUDDY_TOKEN 与 session token）
+		if principal == nil {
+			cookieToken, err := c.Cookie("guardian_token")
+			if err == nil && cookieToken != "" {
+				if p := resolveBearerPrincipal(cookieToken, token); p != nil {
+					principal = p
+					hasCookieAuth = true
+				}
+			}
 		}
 
-		// Validation logic
-		isAuthorized := hasHeaderAuth || hasQueryAuth || hasTicketAuth || hasCookieAuth
-		if !isAuthorized {
+		if principal == nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Invalid or missing token"})
 			c.Abort()
 			return
 		}
 
-		// CSRF Protection: Block write operations that ONLY rely on Cookies
-		// (Headers, Query Tokens, and Tickets are explicit and thus safe from silent CSRF)
+		// CSRF 防护：仅依赖 Cookie 时禁止写操作（保留原有策略）
 		if !hasHeaderAuth && !hasQueryAuth && !hasTicketAuth && hasCookieAuth {
 			method := c.Request.Method
 			if method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions {
@@ -66,6 +97,26 @@ func AuthMiddleware(token string, tickets *TicketStore) gin.HandlerFunc {
 			}
 		}
 
+		SetPrincipal(c, principal)
+		c.Next()
+	}
+}
+
+// RequirePermission 用于路由级权限校验，superadmin 直通；
+// 仅在 AuthMiddleware 之后挂载有效。
+func RequirePermission(key string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		p := GetPrincipal(c)
+		if p == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			c.Abort()
+			return
+		}
+		if !p.HasPermission(key) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: missing permission " + key})
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }

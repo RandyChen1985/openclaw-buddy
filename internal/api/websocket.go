@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -132,6 +133,40 @@ func (s *Server) streamLogs(c *gin.Context) {
 		}
 		_ = cmd.Wait()
 		return
+	}
+
+	// Buddy：先推送文件末尾若干行历史，再 tail 仅跟新追加内容（见 query history_lines）
+	historyLines := 500
+	if q := strings.TrimSpace(c.Query("history_lines")); q != "" {
+		if v, err := strconv.Atoi(q); err == nil {
+			if v < 0 {
+				v = 0
+			}
+			if v > 5000 {
+				v = 5000
+			}
+			historyLines = v
+		}
+	}
+	const maxBuddyHistoryScan = int64(4 << 20)
+	if historyLines > 0 {
+		lines, err := readLastLines(s.cfg.LogFile, historyLines, maxBuddyHistoryScan)
+		if err != nil {
+			log.Printf("⚠️ [WS] Buddy log history: %v", err)
+		}
+		if lines == nil {
+			lines = []string{}
+		}
+		payload, err := json.Marshal(map[string]interface{}{
+			"type":  "LOG_HISTORY",
+			"lines": lines,
+		})
+		if err != nil {
+			return
+		}
+		if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+			return
+		}
 	}
 
 	t, err := tail.TailFile(s.cfg.LogFile, tail.Config{

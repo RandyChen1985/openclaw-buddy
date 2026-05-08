@@ -11,6 +11,7 @@ import (
 	"openclaw-buddy/internal/config"
 	"openclaw-buddy/internal/scheduler"
 	"openclaw-buddy/internal/guardian"
+	"openclaw-buddy/internal/utils"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -85,27 +86,68 @@ func (s *Server) setupRoutes() {
 		c.JSON(200, APIResponse{Code: 200, Message: "success", Data: gin.H{"status": "ok"}})
 	})
 
-	// Login endpoint
+	// Login endpoint：支持两种登录方式
+	//   1) {token} —— 与 BUDDY_TOKEN 比对，授予最高权限（兼容旧前端/链接）
+	//   2) {username, password} —— 校验用户密码，签发会话 token
+	// 两种方式的响应均包含 token 字段，便于前端统一存入 storage 走 Bearer
 	root.POST("/login", func(c *gin.Context) {
 		var req struct {
-			Token string `json:"token"`
+			Token    string `json:"token"`
+			Username string `json:"username"`
+			Password string `json:"password"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(400, gin.H{"error": "Invalid request"})
 			return
 		}
 
-		if strings.TrimSpace(req.Token) == s.cfg.Token {
-			// Set cookie path to WebRoot to prevent collisions
-			cookiePath := s.cfg.WebRoot
-			if cookiePath == "" {
-				cookiePath = "/"
-			}
-			c.SetCookie("guardian_token", req.Token, 3600*24*7, cookiePath, "", false, true)
-			s.Success(c, gin.H{"status": "success"})
-		} else {
-			s.Error(c, http.StatusUnauthorized, "Invalid token")
+		cookiePath := s.cfg.WebRoot
+		if cookiePath == "" {
+			cookiePath = "/"
 		}
+
+		if t := strings.TrimSpace(req.Token); t != "" {
+			if t == s.cfg.Token {
+				c.SetCookie("guardian_token", t, 3600*24*7, cookiePath, "", false, true)
+				s.Success(c, gin.H{
+					"status":     "success",
+					"token":      t,
+					"login_type": "token",
+				})
+				return
+			}
+			s.Error(c, http.StatusUnauthorized, "Invalid token")
+			return
+		}
+
+		username := strings.TrimSpace(req.Username)
+		password := req.Password
+		if username == "" || password == "" {
+			s.Error(c, http.StatusBadRequest, "用户名或密码不能为空")
+			return
+		}
+		user, err := utils.GetUserByUsername(username)
+		if err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if user == nil || user.Status == 0 || !utils.CheckPassword(user.PasswordHash, password) {
+			s.Error(c, http.StatusUnauthorized, "用户名或密码错误")
+			return
+		}
+		sessionToken, err := utils.CreateSession(user.ID)
+		if err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		c.SetCookie("guardian_token", sessionToken, 3600*24*7, cookiePath, "", false, true)
+		s.Success(c, gin.H{
+			"status":     "success",
+			"token":      sessionToken,
+			"login_type": "password",
+			"username":   user.Username,
+			"real_name":  user.RealName,
+		})
 	})
 
 	// V1 API Group
@@ -114,6 +156,23 @@ func (s *Server) setupRoutes() {
 	{
 		// Auth related
 		v1.POST("/auth/ticket", s.handleGetTicket)
+		v1.GET("/auth/me", s.handleAuthMe)
+		v1.POST("/auth/logout", s.handleLogout)
+
+		// 系统管理 - 用户管理（按菜单权限保护）
+		systemUsers := v1.Group("/system")
+		systemUsers.Use(RequirePermission("menu:system:user:manage"))
+		{
+			systemUsers.GET("/users", s.handleListUsers)
+			systemUsers.POST("/users", s.handleCreateUser)
+			systemUsers.PUT("/users/:id", s.handleUpdateUser)
+			systemUsers.POST("/users/:id/reset-password", s.handleResetUserPassword)
+			systemUsers.DELETE("/users/:id", s.handleDeleteUser)
+			systemUsers.GET("/roles", s.handleListRoles)
+			systemUsers.GET("/permissions", s.handleListPermissions)
+			systemUsers.GET("/users/:id/permissions", s.handleGetUserPermissions)
+			systemUsers.PUT("/users/:id/permissions", s.handleUpdateUserPermissions)
+		}
 
 		// OpenClaw related routes
 		oc := v1.Group("/openclaw")

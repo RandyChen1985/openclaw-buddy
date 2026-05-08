@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Tag, Progress, Button, Timeline, Badge, Spin, Empty, message, notification, Tabs, Radio, Tooltip } from 'antd';
+import { Row, Col, Card, Tag, Progress, Button, Timeline, Badge, Spin, Empty, message, notification, Tabs, Radio } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Server, Activity, Play, Square, RefreshCw, Trophy, Zap, Monitor, Mail, Loader2, Layers } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
@@ -7,6 +7,7 @@ import dayjs from 'dayjs';
 import api from '../api';
 import { APP_VERSION } from '../version';
 import { hasNewVersion } from '../utils/version';
+import Tooltip from '../components/common/AppTooltip';
 
 interface DashboardOverviewProps {
   status: any;
@@ -16,6 +17,8 @@ interface DashboardOverviewProps {
   isRunning: boolean;
   onControl: (action: string) => void;
   onNavigate?: (key: string) => void;
+  canGatewayControl?: boolean;
+  canWeChatManage?: boolean;
   systemEvents?: any[];
   topBots?: any[];
   ocInstalled: boolean | null;
@@ -45,6 +48,7 @@ interface OcStatus {
 
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({ 
   status, history, v3Status, isRunning, onControl, onNavigate,
+  canGatewayControl = true, canWeChatManage = true,
   systemEvents = [], topBots = [], ocInstalled, activeTasks = [], isTransitioning = false, loading = false,
   onRefreshVersion, onUpgrade, onRestart, isDarkMode = false, tag
 }) => {
@@ -635,75 +639,83 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </Col>
       </Row>
 
-      {/* 快捷操作 */}
-      <Card
-        id="dashboard-quick-actions"
-        style={{ borderRadius: 12, border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, background: isDarkMode ? '#1e293b' : '#fff' }}
-        title={<span style={{ fontSize: 13, fontWeight: 600, color: isDarkMode ? '#f1f5f9' : '#475569' }}>{t('dashboard.quickActions')}</span>}
-        styles={{ header: { borderBottom: `1px solid ${isDarkMode ? '#334155' : '#f1f5f9'}`, minHeight: 52 }, body: { padding: '16px 24px' } }}
-      >
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(160px, 1fr))', 
-          gap: 12,
-          width: '100%'
-        }}>
-          <Button
-            type="primary"
-            size="large"
-            icon={<Play size={14} />}
-            onClick={() => onControl('start')}
-            disabled={isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking || isConnecting}
-            loading={(isGatewayProcessing && !isRunning) || (isEnvChecking && ocInstalled === null)}
-            style={{ 
-              borderRadius: 10, 
-              width: '100%',
-              background: (isRunning || isGatewayProcessing || isEnvChecking) ? (isDarkMode ? '#334155' : '#cbd5e1') : '#22c55e', 
-              borderColor: (isRunning || isGatewayProcessing || isEnvChecking) ? (isDarkMode ? '#334155' : '#cbd5e1') : '#22c55e' 
-            }}
-          >
-            {t('dashboard.startGateway')}
-          </Button>
-          <Button
-            danger
-            type="primary"
-            size="large"
-            icon={<Square size={14} />}
-            onClick={() => onControl('stop')}
-            disabled={!isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking || isConnecting}
-            loading={isGatewayProcessing && isRunning}
-            style={{ borderRadius: 10, width: '100%' }}
-          >
-            {t('dashboard.stopGateway')}
-          </Button>
-          <Button
-            size="large"
-            icon={<RefreshCw size={14} />}
-            onClick={() => onControl('restart')}
-            disabled={!isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking || isConnecting}
-            loading={isGatewayProcessing}
-            style={{ borderRadius: 10, border: `1.5px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, width: '100%', color: isDarkMode ? '#cbd5e1' : 'inherit', background: isDarkMode ? '#0f172a' : 'transparent' }}
-          >
-            {t('dashboard.asyncRestart')}
-          </Button>
-          <Button
-            size="large"
-            icon={<Zap size={14} />}
-            onClick={() => onNavigate?.('components')}
-            disabled={isEnvChecking}
-            style={{ 
-              borderRadius: 10, 
-              width: '100%',
-              background: isDarkMode ? '#0f172a' : '#f8fafc', 
-              border: `1.5px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, 
-              color: isDarkMode ? '#cbd5e1' : 'inherit',
-              opacity: isEnvChecking ? 0.6 : 1 
-            }}
-          >
-            {t('dashboard.wechatChannel')}
-          </Button>
-        </div>
-      </Card>
+      {/* 快捷操作（普通用户隐藏） */}
+      {(canGatewayControl || canWeChatManage) && (
+        <Card
+          id="dashboard-quick-actions"
+          style={{ borderRadius: 12, border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, background: isDarkMode ? '#1e293b' : '#fff' }}
+          title={<span style={{ fontSize: 13, fontWeight: 600, color: isDarkMode ? '#f1f5f9' : '#475569' }}>{t('dashboard.quickActions')}</span>}
+          styles={{ header: { borderBottom: `1px solid ${isDarkMode ? '#334155' : '#f1f5f9'}`, minHeight: 52 }, body: { padding: '16px 24px' } }}
+        >
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(160px, 1fr))', 
+            gap: 12,
+            width: '100%'
+          }}>
+            {canGatewayControl && (
+              <>
+                <Button
+                  type="primary"
+                  size="large"
+                  icon={<Play size={14} />}
+                  onClick={() => onControl('start')}
+                  disabled={isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking || isConnecting}
+                  loading={(isGatewayProcessing && !isRunning) || (isEnvChecking && ocInstalled === null)}
+                  style={{ 
+                    borderRadius: 10, 
+                    width: '100%',
+                    background: (isRunning || isGatewayProcessing || isEnvChecking) ? (isDarkMode ? '#334155' : '#cbd5e1') : '#22c55e', 
+                    borderColor: (isRunning || isGatewayProcessing || isEnvChecking) ? (isDarkMode ? '#334155' : '#cbd5e1') : '#22c55e' 
+                  }}
+                >
+                  {t('dashboard.startGateway')}
+                </Button>
+                <Button
+                  danger
+                  type="primary"
+                  size="large"
+                  icon={<Square size={14} />}
+                  onClick={() => onControl('stop')}
+                  disabled={!isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking || isConnecting}
+                  loading={isGatewayProcessing && isRunning}
+                  style={{ borderRadius: 10, width: '100%' }}
+                >
+                  {t('dashboard.stopGateway')}
+                </Button>
+                <Button
+                  size="large"
+                  icon={<RefreshCw size={14} />}
+                  onClick={() => onControl('restart')}
+                  disabled={!isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking || isConnecting}
+                  loading={isGatewayProcessing}
+                  style={{ borderRadius: 10, border: `1.5px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, width: '100%', color: isDarkMode ? '#cbd5e1' : 'inherit', background: isDarkMode ? '#0f172a' : 'transparent' }}
+                >
+                  {t('dashboard.asyncRestart')}
+                </Button>
+              </>
+            )}
+            {canWeChatManage && (
+              <Button
+                size="large"
+                icon={<Zap size={14} />}
+                onClick={() => onNavigate?.('components')}
+                disabled={isEnvChecking}
+                style={{ 
+                  borderRadius: 10, 
+                  width: '100%',
+                  background: isDarkMode ? '#0f172a' : '#f8fafc', 
+                  border: `1.5px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, 
+                  color: isDarkMode ? '#cbd5e1' : 'inherit',
+                  opacity: isEnvChecking ? 0.6 : 1 
+                }}
+              >
+                {t('dashboard.wechatChannel')}
+              </Button>
+            )}
+          </div>
+        </Card>
+      )}
     </div>
   );
 };

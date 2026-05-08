@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Tabs } from 'antd';
 import { useTranslation } from 'react-i18next';
-import {Zap, MessageSquare } from 'lucide-react';
+import { Zap, MessageSquare } from 'lucide-react';
 import ChatClassic from './ChatClassic';
 import ChatV3Final from './ChatV3';
 
@@ -14,11 +14,62 @@ interface OnlineChatProps {
   isRunning?: boolean;
   onNavigateToDashboard?: () => void;
   isDarkMode?: boolean;
+  /** 当前登录用户名（可选）。用于把 username 写入 buddy:direct 会话 key */
+  usernameForSessionKey?: string | null;
+  /** 当前登录用户名（可选）。用于经典（HTTP）模式生成 s-{ts}-{username} */
+  usernameForSessionId?: string | null;
+  /** 普通用户：只加载 key 中包含 username 的会话 */
+  filterV3SessionsByUsername?: boolean;
 }
 
-const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, ...props }) => {
+const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, usernameForSessionId, ...props }) => {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState('v3');
+
+  const { singleEmbedPane, initialChatTab } = useMemo(() => {
+    const qp = new URLSearchParams(window.location.search);
+    const isEmbed = qp.get('embed') === 'true';
+    const raw = (qp.get('embedLayout') || '').toLowerCase();
+    const single =
+      isEmbed && (raw === 'v3' || raw === 'classic') ? (raw as 'v3' | 'classic') : null;
+    const tab: 'v3' | 'classic' = qp.get('chatTab') === 'classic' ? 'classic' : 'v3';
+    return { singleEmbedPane: single, initialChatTab: tab };
+  }, []);
+
+  const [activeTab, setActiveTab] = useState<'v3' | 'classic'>(initialChatTab);
+
+  if (singleEmbedPane === 'v3') {
+    return (
+      <div
+        style={{
+          height: '100%',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          background: isDarkMode ? '#0f172a' : '#f8fafc',
+          overflow: 'hidden',
+        }}
+      >
+        <ChatV3Final {...props} isMobile={isMobile} isDarkMode={isDarkMode} />
+      </div>
+    );
+  }
+
+  if (singleEmbedPane === 'classic') {
+    return (
+      <div
+        style={{
+          height: '100%',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          background: isDarkMode ? '#0f172a' : '#f8fafc',
+          overflow: 'hidden',
+        }}
+      >
+        <ChatClassic {...props} isMobile={isMobile} isDarkMode={isDarkMode} usernameForSessionId={usernameForSessionId} />
+      </div>
+    );
+  }
 
   const items = [
     {
@@ -39,7 +90,7 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, .
           {t('chat.classicMode', { defaultValue: '经典模式 (HTTP)' })}
         </span>
       ),
-      children: <ChatClassic {...props} isMobile={isMobile} isDarkMode={isDarkMode} />,
+      children: <ChatClassic {...props} isMobile={isMobile} isDarkMode={isDarkMode} usernameForSessionId={usernameForSessionId} />,
     },
   ];
 
@@ -53,20 +104,30 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, .
       overflow: 'hidden'
     }}>
       <Tabs
+        destroyInactiveTabPane
         activeKey={activeTab}
-        onChange={setActiveTab}
+        onChange={(k) => setActiveTab(k as 'v3' | 'classic')}
         items={items}
         tabBarGutter={isMobile ? 12 : undefined}
         style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-        tabBarStyle={{ 
-          margin: 0, 
-          padding: isMobile ? '0 12px' : '0 20px', 
-          background: isDarkMode ? '#1e293b' : '#fff', 
-          borderBottom: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9' 
+        tabBarStyle={{
+          margin: 0,
+          marginBottom: 0,
+          padding: isMobile ? '0 12px' : '0 20px',
+          background: isDarkMode ? '#1e293b' : '#fff',
+          borderBottom: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9',
         }}
         className={`chat-tabs${isDarkMode ? ' chat-tabs--dark' : ''}`}
       />
       <style>{`
+        /* Ant Design Tabs 默认给 .ant-tabs-top 的 nav 加了 margin-bottom: 16px，与内容区之间会出现一条缝 */
+        .chat-tabs.ant-tabs-top > .ant-tabs-nav,
+        .chat-tabs.ant-tabs-top > div > .ant-tabs-nav {
+          margin-bottom: 0 !important;
+        }
+        .chat-tabs .ant-tabs-content-holder {
+          margin-top: 0;
+        }
         .chat-tabs .ant-tabs-content {
           height: 100%;
         }

@@ -136,6 +136,55 @@ func createTables(existingToken string) (string, error) {
 			last_offset INTEGER,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);`,
+		// 用户与 RBAC 体系
+		`CREATE TABLE IF NOT EXISTS users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			username TEXT NOT NULL UNIQUE,
+			real_name TEXT DEFAULT '',
+			remark TEXT DEFAULT '',
+			password_hash TEXT NOT NULL,
+			status INTEGER DEFAULT 1,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE TABLE IF NOT EXISTS roles (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			key TEXT NOT NULL UNIQUE,
+			name TEXT NOT NULL,
+			remark TEXT DEFAULT '',
+			is_builtin INTEGER DEFAULT 0
+		);`,
+		`CREATE TABLE IF NOT EXISTS permissions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			key TEXT NOT NULL UNIQUE,
+			type TEXT NOT NULL DEFAULT 'menu',
+			name TEXT NOT NULL,
+			menu_key TEXT DEFAULT '',
+			remark TEXT DEFAULT ''
+		);`,
+		`CREATE TABLE IF NOT EXISTS user_roles (
+			user_id INTEGER NOT NULL,
+			role_id INTEGER NOT NULL,
+			PRIMARY KEY (user_id, role_id)
+		);`,
+		`CREATE TABLE IF NOT EXISTS role_permissions (
+			role_id INTEGER NOT NULL,
+			permission_id INTEGER NOT NULL,
+			PRIMARY KEY (role_id, permission_id)
+		);`,
+		// 用户直绑权限（替代 role_permissions 作为实际生效来源）
+		`CREATE TABLE IF NOT EXISTS user_permissions (
+			user_id INTEGER NOT NULL,
+			permission_id INTEGER NOT NULL,
+			PRIMARY KEY (user_id, permission_id)
+		);`,
+		`CREATE TABLE IF NOT EXISTS user_sessions (
+			token TEXT PRIMARY KEY,
+			user_id INTEGER NOT NULL,
+			expires_at DATETIME,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);`,
 	}
 
 	for _, query := range queries {
@@ -188,7 +237,81 @@ func createTables(existingToken string) (string, error) {
 		_, _ = DB.Exec("INSERT INTO quick_commands (label, prompt, icon, is_system) VALUES (?, ?, ?, 1)", d.Label, d.Prompt, d.Icon)
 	}
 
+	if err := seedRBACDefaults(); err != nil {
+		log.Printf("⚠️ [数据库] RBAC 默认数据初始化失败: %v", err)
+	}
+
 	return activeToken, nil
+}
+
+// seedRBACDefaults 幂等地写入内置角色与基础权限点。
+// 第一期：仅维护一个"用户管理"菜单权限点；普通业务功能默认对所有登录用户开放。
+func seedRBACDefaults() error {
+	if DB == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	roles := []struct {
+		Key, Name, Remark string
+	}{
+		{"admin", "管理员", "拥有用户管理等系统级权限"},
+		{"user", "普通用户", "仅可使用业务功能，无系统管理权限"},
+	}
+	for _, r := range roles {
+		if _, err := DB.Exec(
+			`INSERT INTO roles (key, name, remark, is_builtin) VALUES (?, ?, ?, 1)
+			ON CONFLICT(key) DO UPDATE SET name=excluded.name, is_builtin=1`,
+			r.Key, r.Name, r.Remark,
+		); err != nil {
+			return err
+		}
+	}
+
+	// 菜单权限点：需要与前端侧栏菜单 key 一一对应，便于分配与过滤显示。
+	// key 命名约定：menu:<域>:<对象>:<动作>
+	permissions := []struct {
+		Key, Type, Name, MenuKey, Remark string
+	}{
+		// 监控中心
+		{"menu:monitor:dashboard:view", "menu", "运行状态", "dashboard", "查看运行状态"},
+		{"menu:monitor:audit:view", "menu", "审计大屏", "audit", "查看审计大屏"},
+		{"menu:monitor:logs:view", "menu", "实时日志", "logs", "查看实时日志"},
+		{"menu:monitor:self_healing:manage", "menu", "自愈管理", "tools", "自愈与控制工具"},
+		{"menu:monitor:shell:manage", "menu", "运维终端", "shell", "运维终端"},
+		{"menu:monitor:security:manage", "menu", "安全中心", "security", "安全策略与白名单"},
+		{"menu:monitor:cron:view", "menu", "定时任务", "cron", "查看与同步定时任务"},
+
+		// 资产管理
+		{"menu:assets:chat:view", "menu", "在线聊天", "chat", "在线聊天 Web 版"},
+		{"menu:assets:tui:view", "menu", "TUI 聊天", "tui", "TUI 聊天"},
+		{"menu:assets:bots:manage", "menu", "虾兵蟹将", "bots-models", "机器人与模型管理"},
+		{"menu:assets:skills:manage", "menu", "技能管理", "skills", "技能管理"},
+		{"menu:assets:plugins:manage", "menu", "插件管理", "plugins", "插件管理"},
+		{"menu:assets:experts:view", "menu", "专家市场", "experts", "专家市场"},
+
+		// 绑定中心
+		{"menu:binding:channels:manage", "menu", "渠道绑定", "components", "渠道绑定管理"},
+		{"menu:binding:devices:manage", "menu", "设备绑定", "devices", "设备绑定管理"},
+
+		// 系统管理
+		{"menu:system:user:manage", "menu", "用户管理", "system.users", "查看与维护系统用户/权限"},
+
+		// 外部工具
+		{"menu:external:lobster_panel:open", "menu", "龙虾面板", "lobster-panel", "打开外部龙虾面板"},
+	}
+	for _, p := range permissions {
+		if _, err := DB.Exec(
+			`INSERT INTO permissions (key, type, name, menu_key, remark) VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT(key) DO UPDATE SET type=excluded.type, name=excluded.name, menu_key=excluded.menu_key`,
+			p.Key, p.Type, p.Name, p.MenuKey, p.Remark,
+		); err != nil {
+			return err
+		}
+	}
+
+	// 注意：权限现在直接挂在用户上；角色仅做展示/预留，不再作为权限来源。
+
+	return nil
 }
 
 func generateRandomToken(n int) string {

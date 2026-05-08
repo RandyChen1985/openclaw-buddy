@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Tooltip, Table, Checkbox, Segmented, Empty, Tabs, List as AntList, Popconfirm, Alert } from 'antd';
+import { Row, Col, Card, Tag, Spin, Button, Modal, Form, Input, Select, Table, Checkbox, Segmented, Empty, Tabs, List as AntList, Popconfirm, Alert } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { 
   Boxes, RefreshCw, Plus, Pencil, Trash2, Cpu, History, ShieldCheck, Zap, Star, 
@@ -13,6 +13,7 @@ import api from '../api';
 import { message } from 'antd';
 import TokenBadge from '../components/TokenBadge';
 import FileExplorer from '../components/FileExplorer';
+import Tooltip from '../components/common/AppTooltip';
 
 interface BotsManagerProps {
   botsModels: any; 

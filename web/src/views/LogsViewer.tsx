@@ -1,29 +1,24 @@
-import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Spin, Input, Tag, Space, Button, Segmented } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Search, Filter, AlertCircle, Info, AlertTriangle, Shield, Terminal } from 'lucide-react';
+import { Virtuoso } from 'react-virtuoso';
+import type { WsLogConnectionState } from '../hooks/useWebSocketLogs';
 
 interface LogsViewerProps {
   wsLogs: string[];
   activeSource: string;
   onSourceChange: (source: string) => void;
+  wsConnectionState?: WsLogConnectionState;
   isRunning?: boolean;
   onNavigateToDashboard?: () => void;
   isDarkMode?: boolean;
 }
 
-const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceChange }) => {
+const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceChange, wsConnectionState = 'connecting' }) => {
   const { t } = useTranslation();
-  const logsEndRef = useRef<HTMLDivElement>(null);
   const [searchText, setSearchText] = useState('');
   const [activeLevel, setActiveLevel] = useState<string>('all');
-
-  useEffect(() => {
-    // 仅在没有过滤或搜索时自动滚动到最底层，否则可能打断查看
-    if (searchText === '' && activeLevel === 'all') {
-      logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [wsLogs, searchText, activeLevel]);
 
   const filteredLogs = useMemo(() => {
     return wsLogs.filter(log => {
@@ -168,13 +163,25 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceC
         </div>
       </div>
 
-      {/* 日志内容区 */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', fontFamily: '"JetBrains Mono", "Fira Code", monospace', fontSize: 12, color: '#c9d1d9', lineHeight: 1.8 }}>
+      {/* 日志内容区（虚拟列表，避免海量 DOM） */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '16px 20px', fontFamily: '"JetBrains Mono", "Fira Code", monospace', fontSize: 12, color: '#c9d1d9', lineHeight: 1.8 }}>
         {wsLogs.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, color: '#484f58', height: '100%', justifyContent: 'center' }}>
-            <Spin size="small" />
-            <span style={{ fontSize: 13 }}>{t('logs.connecting')}</span>
-          </div>
+          wsConnectionState === 'error' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, color: '#f87171', height: '100%', justifyContent: 'center', textAlign: 'center', padding: 24 }}>
+              <AlertCircle size={28} />
+              <span style={{ fontSize: 13, maxWidth: 360 }}>{t('logs.wsError')}</span>
+            </div>
+          ) : wsConnectionState === 'open' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, color: '#8b949e', height: '100%', justifyContent: 'center' }}>
+              <Info size={22} color="#22c55e" />
+              <span style={{ fontSize: 13 }}>{t('logs.connectedIdle')}</span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, color: '#484f58', height: '100%', justifyContent: 'center' }}>
+              <Spin size="small" />
+              <span style={{ fontSize: 13 }}>{t('logs.connecting')}</span>
+            </div>
+          )
         ) : filteredLogs.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, color: '#484f58', height: '100%', justifyContent: 'center' }}>
             <Search size={24} />
@@ -182,23 +189,27 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceC
             <Button type="link" size="small" onClick={() => { setSearchText(''); setActiveLevel('all'); }}>{t('logs.clearFilters')}</Button>
           </div>
         ) : (
-          filteredLogs.map((log, i) => (
-            <div key={i} style={{ display: 'flex', gap: 16, borderBottom: '1px solid #161b22', padding: '2px 0' }}>
-              <span style={{ color: '#30363d', width: 32, textAlign: 'right', flexShrink: 0, userSelect: 'none', fontSize: 11 }}>
-                {(i + 1).toString().padStart(3, '0')}
-              </span>
-              <span style={{ 
-                whiteSpace: 'pre-wrap', 
-                wordBreak: 'break-all', 
-                color: getLogColor(log),
-                textShadow: getLogColor(log) !== '#c9d1d9' ? `0 0 10px ${getLogColor(log)}20` : 'none'
-              }}>
-                {log}
-              </span>
-            </div>
-          ))
+          <Virtuoso
+            style={{ flex: 1, minHeight: 0 }}
+            data={filteredLogs}
+            followOutput={searchText === '' && activeLevel === 'all' ? 'smooth' : false}
+            itemContent={(index, log) => (
+              <div style={{ display: 'flex', gap: 16, borderBottom: '1px solid #161b22', padding: '2px 0' }}>
+                <span style={{ color: '#30363d', width: 32, textAlign: 'right', flexShrink: 0, userSelect: 'none', fontSize: 11 }}>
+                  {(index + 1).toString().padStart(3, '0')}
+                </span>
+                <span style={{
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  color: getLogColor(log),
+                  textShadow: getLogColor(log) !== '#c9d1d9' ? `0 0 10px ${getLogColor(log)}20` : 'none',
+                }}>
+                  {log}
+                </span>
+              </div>
+            )}
+          />
         )}
-        <div ref={logsEndRef} style={{ height: 10 }} />
       </div>
 
       <style>{`

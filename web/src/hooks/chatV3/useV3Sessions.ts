@@ -12,6 +12,10 @@ export interface UseV3SessionsParams {
   t: any;
   sendRPC: (method: string, params: any) => Promise<any>;
   status: 'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error';
+  /** 当前登录用户名（可选）。用于把 username 写入 buddy:direct 会话 key */
+  usernameForSessionKey?: string | null;
+  /** 普通用户：只加载 key 中包含 username 的会话 */
+  filterSessionListByUsername?: boolean;
 
   sessionKey: string | null;
   setSessionKey: (key: string | null) => void;
@@ -48,6 +52,8 @@ export function useV3Sessions({
   t,
   sendRPC,
   status,
+  usernameForSessionKey,
+  filterSessionListByUsername,
   sessionKey,
   setSessionKey,
   sessionLabel,
@@ -166,12 +172,18 @@ export function useV3Sessions({
           return s;
         });
 
-        setSessions(patchedList);
+        const normalizedUsername = (usernameForSessionKey || '').trim();
+        const shouldFilter = !!filterSessionListByUsername && !!normalizedUsername;
+        const nextList = shouldFilter
+          ? patchedList.filter((s: any) => String(s?.key || '').includes(normalizedUsername))
+          : patchedList;
+
+        setSessions(nextList);
         sessionLimitRef.current = nextLimit;
         setSessionLimit(nextLimit);
 
         // 默认会话逻辑（仅在首次非追加加载时执行）
-        if (!isAppend && !didAutoSelectMainRef.current && !sessionKeyRef.current) {
+        if (!shouldFilter && !isAppend && !didAutoSelectMainRef.current && !sessionKeyRef.current) {
           const main = patchedList.find((s: any) => s.key === 'agent:main:main');
           if (main?.key) {
             didAutoSelectMainRef.current = true;
@@ -289,7 +301,7 @@ export function useV3Sessions({
           antdMessage.warning(t('chat.selectBot'));
           return;
         }
-        const key = buildBuddyDirectSessionKey(agentId);
+        const key = buildBuddyDirectSessionKey(agentId, usernameForSessionKey);
         const res = await sendRPC('sessions.create', { agentId, key });
         if (!res.ok) {
           setSessionKey(null);
@@ -330,7 +342,8 @@ export function useV3Sessions({
     setSessions,
     status,
     t,
-    thinkingLevel
+    thinkingLevel,
+    usernameForSessionKey
   ]);
 
   /**

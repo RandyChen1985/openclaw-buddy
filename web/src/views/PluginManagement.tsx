@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { RefreshCw, Search, Zap, CheckCircle2, XCircle, Info, ShieldCheck, Globe, ChevronDown, ChevronUp, Trash2, ArrowUpCircle, Settings2 } from 'lucide-react';
-import { Card, Table, Tag, Button, Input, Tooltip, Typography, Segmented, message, Popconfirm, Switch } from 'antd';
+import { Card, Table, Tag, Button, Input, Typography, Segmented, message, Popconfirm, Switch } from 'antd';
 import { useTranslation } from 'react-i18next';
 import api from '../api';
+import Tooltip from '../components/common/AppTooltip';
 
 import type { Task } from '../hooks/useTaskCenter';
 import { channelPluginUiState, isPluginOperational } from '../utils/channelPlugins';

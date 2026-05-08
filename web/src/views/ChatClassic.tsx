@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Tooltip, Upload } from 'antd';
+import { Card, Select, Input, Button, Avatar, Spin, message, Modal, Form, Upload, Radio, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2, ArrowDown, ZapOff, Activity, Paperclip, FileText, Loader2, Maximize2, Minimize2, Image } from 'lucide-react';
+import { Send, Bot, User, RefreshCw, Trash2, MessageSquare, Zap, Settings, Copy, RotateCcw, StopCircle, ListRestart, Plus, ChevronUp, ChevronDown, Quote, X, ExternalLink, Share2, ArrowDown, ZapOff, Activity, Paperclip, FileText, Loader2, Maximize2, Minimize2, Image, Pencil } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -11,8 +11,10 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import api, { getFullUrl } from '../api';
 import { getBaseURL } from '../utils/url';
+import { buildChatEmbedPageUrl, type ChatEmbedLayout } from '../utils/chatEmbedUrl';
 import storage from '../utils/storage';
 import { Mermaid, CodeBlock, ECharts, isEchartsCodeFenceLanguage } from '../components/ChatComponents';
+import Tooltip from '../components/common/AppTooltip';
 
 
 const { Option } = Select;
@@ -47,10 +49,12 @@ interface ChatClassicProps {
   isMobile?: boolean;
   onRestartGateway?: () => Promise<void>;
   isDarkMode?: boolean;
+  /** 当前登录用户名（可选）。用于生成稳定的 HTTP 会话 id */
+  usernameForSessionId?: string | null;
 }
 
 const ChatClassic: React.FC<ChatClassicProps> = ({ 
-  botsModels, loadingBots, onRefreshBots, isMobile, onRestartGateway, isDarkMode = false
+  botsModels, loadingBots, onRefreshBots, isMobile, onRestartGateway, isDarkMode = false, usernameForSessionId
 }) => {
 
 
@@ -125,31 +129,32 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [form] = Form.useForm();
 
+  const [editingUserMsgIndex, setEditingUserMsgIndex] = useState<number | null>(null);
+  const [editUserDraft, setEditUserDraft] = useState('');
+
+  const [embedShareOpen, setEmbedShareOpen] = useState(false);
+  const [embedOptions, setEmbedOptions] = useState<{
+    botId: string;
+    layout: ChatEmbedLayout;
+    defaultTab: 'v3' | 'classic';
+  }>({ botId: '', layout: 'tabs', defaultTab: 'v3' });
+
   const queryParams = new URLSearchParams(window.location.search);
   const urlBot = queryParams.get('bot');
   const urlUser = queryParams.get('user');
   const isEmbedMode = queryParams.get('embed') === 'true';
-  const base = getBaseURL(); // "" or "/prefix"
+
+  /** 与 V3 一致：应用内「铺满视口」全屏，不使用浏览器原生 Fullscreen API（避免整页进入 OS 级全屏） */
+  const toggleFullscreen = () => setIsFullscreen((prev) => !prev);
 
   useEffect(() => {
-    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
-
-  const toggleFullscreen = async () => {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-        return;
-      }
-      const el = rootRef.current || document.documentElement;
-      await (el as any).requestFullscreen?.();
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to toggle fullscreen:', e);
-    }
-  };
+    if (!isFullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isFullscreen]);
 
   useEffect(() => {
     checkChatStatus();
@@ -159,15 +164,26 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
   useEffect(() => {
     if (!urlUser) {
       let storedSessionId = storage.getItem('chat_session_id');
-      if (!storedSessionId) {
-        storedSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      const rawU = (usernameForSessionId || '').trim();
+      const safeU = rawU
+        ? rawU.replace(/:/g, '_').replace(/\s+/g, '').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 48)
+        : '';
+
+      // 用户名登录时：如果当前 sessionId 不包含用户名，则自动更新（避免沿用历史随机段导致不可辨识）
+      const shouldForceUsernameSession =
+        !!safeU && (!storedSessionId || !storedSessionId.includes(safeU));
+
+      if (!storedSessionId || shouldForceUsernameSession) {
+        storedSessionId = safeU
+          ? `s-${Date.now()}-${safeU}`
+          : `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         storage.setItem('chat_session_id', storedSessionId);
       }
       setGeneratedSessionId(storedSessionId);
     } else {
       setGeneratedSessionId(null);
     }
-  }, [urlUser]);
+  }, [urlUser, usernameForSessionId]);
 
   useEffect(() => {
     if (botsModels?.data?.bots?.length > 0) {
@@ -430,48 +446,17 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
     `}</style>
   ), [c]);
 
-  const handleSend = async (textOverride?: string) => {
-    const text = textOverride || inputText;
-    if ((!text.trim() && attachedFiles.length === 0) || isTyping || !selectedBot || isUploading) return;
-
-    if (!textOverride) setInputText('');
-    const currentQuoted = quotedMsg;
-    const currentFiles = [...attachedFiles];
-    
-    setQuotedMsg(null); 
-    setAttachedFiles([]); // 清空已上传文件
+  /** conversationMessages：必须以最后一条用户消息结尾（尚未追加本轮助手回复） */
+  const runStreamingCompletion = async (conversationMessages: Message[]) => {
     setIsTyping(true);
-    
     abortControllerRef.current = new AbortController();
 
-    // 整合文件信息到文本中 (Markdown 格式)
-    let finalContent = text;
-    if (currentFiles.length > 0) {
-      const fileLinks = currentFiles.map(f => {
-        const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
-        if (isImage) {
-          return `\n![${f.filename}](${f.thumbUrl || f.url} "${f.url}")\n(File path: ${f.path})`;
-        }
-        return `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
-      }).join('');
-      
-      // 增加明确的专家指令
-      const fileInstruction = `\n\n**System Note for Expert:** The user has uploaded files. For any file analysis, reading, or processing tasks, please access the files directly using the absolute **"File path"** provided above. Do not attempt to download via URL.`;
-      finalContent += fileLinks + fileInstruction;
-    }
-
-    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const newUserMessage: Message = { role: 'user', content: finalContent, timestamp, quotedMessage: currentQuoted || undefined };
-    const newMessages = [...messages, newUserMessage];
-    setMessages(newMessages);
-
-    // 1. 发送瞬间：先挂载一个带有“正在思考”标志的 Assistant 消息气泡
     const thinkingTip = t('chat.thinking');
     const assistantTimestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const assistantMessage: Message = { role: 'assistant', content: thinkingTip, timestamp: assistantTimestamp };
-    setMessages(prev => [...prev, assistantMessage]);
+    setMessages([...conversationMessages, assistantMessage]);
 
-    const formattedMessages = newMessages.map(m => {
+    const formattedMessages = conversationMessages.map(m => {
         let content = m.content;
         if (m.quotedMessage) {
             content = `> ${m.quotedMessage.split('\n')[0]}...\n\n${content}`;
@@ -631,6 +616,60 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
     }
   };
 
+  const handleSend = async (textOverride?: string) => {
+    const text = textOverride || inputText;
+    if ((!text.trim() && attachedFiles.length === 0) || isTyping || !selectedBot || isUploading) return;
+
+    if (!textOverride) setInputText('');
+    const currentQuoted = quotedMsg;
+    const currentFiles = [...attachedFiles];
+
+    setQuotedMsg(null);
+    setAttachedFiles([]);
+
+    let finalContent = text;
+    if (currentFiles.length > 0) {
+      const fileLinks = currentFiles.map((f) => {
+        const isImage = f.ext.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
+        if (isImage) {
+          return `\n![${f.filename}](${f.thumbUrl || f.url} "${f.url}")\n(File path: ${f.path})`;
+        }
+        return `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
+      }).join('');
+      const fileInstruction = `\n\n**System Note for Expert:** The user has uploaded files. For any file analysis, reading, or processing tasks, please access the files directly using the absolute **"File path"** provided above. Do not attempt to download via URL.`;
+      finalContent += fileLinks + fileInstruction;
+    }
+
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const newUserMessage: Message = {
+      role: 'user',
+      content: finalContent,
+      timestamp,
+      quotedMessage: currentQuoted || undefined,
+    };
+    await runStreamingCompletion([...messages, newUserMessage]);
+  };
+
+  const handleEditAndResend = async (userIndex: number, draft: string) => {
+    const trimmed = draft.trim();
+    if (!trimmed) {
+      message.warning(t('chat.emptyMessage'));
+      return;
+    }
+    if (isTyping || !selectedBot) return;
+    const orig = messages[userIndex];
+    if (!orig || orig.role !== 'user') return;
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const editedMsg: Message = {
+      role: 'user',
+      content: trimmed,
+      timestamp,
+      quotedMessage: orig.quotedMessage,
+    };
+    setEditingUserMsgIndex(null);
+    await runStreamingCompletion([...messages.slice(0, userIndex), editedMsg]);
+  };
+
   const handleStopGeneration = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -644,18 +683,11 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
   };
 
   const handleRegenerate = () => {
-    // 找到最后一条用户消息
-    const lastUserIndex = [...messages].reverse().findIndex(m => m.role === 'user');
-    if (lastUserIndex !== -1) {
-      const actualIndex = messages.length - 1 - lastUserIndex;
-      const lastUserMsg = messages[actualIndex];
-      
-      // 移除该用户消息之后的所有 AI 消息
-      setMessages(prev => prev.slice(0, actualIndex + 1));
-      
-      // 重新触发发送
-      handleSend(lastUserMsg.content);
-    }
+    const lastUserIndexFromEnd = [...messages].reverse().findIndex((m) => m.role === 'user');
+    if (lastUserIndexFromEnd === -1) return;
+    const actualIndex = messages.length - 1 - lastUserIndexFromEnd;
+    const truncated = messages.slice(0, actualIndex + 1);
+    void runStreamingCompletion(truncated);
   };
 
   const clearHistory = () => {
@@ -668,7 +700,13 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
       onOk: () => {
         setMessages([]);
         storage.removeItem('chat_history');
-        const newSessionId = `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const rawU = (usernameForSessionId || '').trim();
+        const safeU = rawU
+          ? rawU.replace(/:/g, '_').replace(/\s+/g, '').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 48)
+          : '';
+        const newSessionId = safeU
+          ? `s-${Date.now()}-${safeU}`
+          : `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         storage.setItem('chat_session_id', newSessionId);
         setGeneratedSessionId(newSessionId);
         message.success(t('chat.historyCleared'));
@@ -677,6 +715,26 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
   };
 
   const botList = botsModels?.data?.bots || [];
+
+  const embedPreviewUrl = useMemo(() => {
+    const token = storage.getItem('guardian_token');
+    const botId =
+      embedOptions.botId ||
+      selectedBot.replace('openclaw:', '') ||
+      (botList[0] as { id?: string } | undefined)?.id ||
+      'main';
+    return buildChatEmbedPageUrl({
+      token,
+      botId,
+      layout: embedOptions.layout,
+      defaultTab: embedOptions.defaultTab,
+    });
+  }, [embedOptions, selectedBot, botList]);
+
+  const embedIframeCode = useMemo(
+    () => `<iframe src="${embedPreviewUrl}" width="100%" height="600" frameborder="0"></iframe>`,
+    [embedPreviewUrl]
+  );
 
   if (checkingEnabled) {
     return (
@@ -716,28 +774,43 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
   }
 
   return (
-    <div ref={rootRef} style={{ 
-      flex: 1,
-      display: 'flex', 
-      flexDirection: 'column', 
-      gap: isEmbedMode ? 0 : 16,
-      background: c.pageBg,
-      width: '100%',
-      height: '100%',
-      minHeight: 0,
-      minWidth: 0,
-      position: 'relative',
-      overflow: 'hidden'
-    }}>
+    <div
+      ref={rootRef}
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        /* 与顶部 Card 紧贴，避免非嵌入模式下 flex gap 露出 pageBg 形成「缝隙」 */
+        gap: 0,
+        background: c.pageBg,
+        width: '100%',
+        height: '100%',
+        minHeight: 0,
+        minWidth: 0,
+        position: 'relative',
+        overflow: 'hidden',
+        ...(isFullscreen
+          ? {
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100vw',
+              height: '100vh',
+              zIndex: 500,
+              background: c.pageBg,
+            }
+          : {}),
+      }}
+    >
       {markdownStyles}
       {/* Top Bar */}
       <Card 
         styles={{ body: { padding: isMobile ? '8px 12px' : '12px 20px' } }} 
         style={{ 
-          borderRadius: isEmbedMode ? 0 : 12, 
+          borderRadius: isEmbedMode ? 0 : '12px 12px 0 0',
           boxShadow: isEmbedMode ? 'none' : c.cardShadow,
           border: isEmbedMode ? 'none' : `1px solid ${c.border}`,
-          borderBottom: isEmbedMode ? `1px solid ${c.hairline}` : 'none',
+          borderBottom: `1px solid ${c.hairline}`,
           background: c.card
         }}
       >
@@ -822,56 +895,36 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
             </div>
             <Button icon={<RefreshCw size={14} />} onClick={onRefreshBots} loading={loadingBots} title={t('common.refresh')} />
             {!isMobile && !isEmbedMode && (
-              <Button 
-                icon={<ExternalLink size={14} />} 
+              <Button
+                icon={<ExternalLink size={14} />}
                 title={t('chat.labDescription')}
                 onClick={() => {
                   const token = storage.getItem('guardian_token');
                   const botId = selectedBot.replace('openclaw:', '');
-                  const url = `${window.location.origin}${base}/?page=chat&token=${token}&bot=${botId}&embed=true`;
+                  const url = buildChatEmbedPageUrl({
+                    token,
+                    botId,
+                    layout: 'tabs',
+                    defaultTab: 'v3',
+                  });
                   window.open(url, '_blank');
                 }}
               />
             )}
-            {!isMobile && (
-            <Button 
-                icon={<Share2 size={14} />} 
+            {!isMobile && !isEmbedMode && (
+              <Button
+                icon={<Share2 size={14} />}
                 title={t('chat.shareTitle')}
                 onClick={() => {
-                  const token = storage.getItem('guardian_token');
-                  const botId = selectedBot.replace('openclaw:', '');
-                  const url = `${window.location.origin}${base}/?page=chat&token=${token}&bot=${botId}&embed=true`;
-                  const iframeCode = `<iframe src="${url}" width="100%" height="600" frameborder="0"></iframe>`;
-                  Modal.info({
-                    title: t('chat.shareTitle'),
-                    width: 500,
-                    content: (
-                      <div style={{ marginTop: 16 }}>
-                        <p style={{ fontSize: 13, color: c.body }}>{t('chat.shareDesc')}</p>
-                        <Input.TextArea 
-                          readOnly 
-                          value={iframeCode} 
-                          autoSize={{ minRows: 3 }} 
-                          style={{ fontFamily: 'monospace', fontSize: 12, background: c.shareTa, color: isDarkMode ? '#e2e8f0' : undefined }}
-                        />
-                        <Button 
-                          type="primary" 
-                          size="small" 
-                          icon={<Copy size={12} />} 
-                          style={{ marginTop: 12 }}
-                          onClick={() => {
-                            navigator.clipboard.writeText(iframeCode);
-                            message.success(t('chat.copySuccess'));
-                          }}
-                        >
-                          {t('chat.copyIframe')}
-                        </Button>
-                      </div>
-                    ),
-                    okText: t('common.close')
+                  const id = selectedBot.replace('openclaw:', '') || botList[0]?.id || '';
+                  setEmbedOptions({
+                    botId: id,
+                    layout: 'tabs',
+                    defaultTab: 'v3',
                   });
+                  setEmbedShareOpen(true);
                 }}
-            />
+              />
             )}
             {!isEmbedMode && (
               <Button
@@ -889,8 +942,9 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
       <div style={{ 
         flex: 1, 
         background: c.card, 
-        borderRadius: isEmbedMode ? 0 : 12, 
+        borderRadius: isEmbedMode ? 0 : '0 0 12px 12px',
         border: isEmbedMode ? 'none' : `1px solid ${c.border}`,
+        borderTop: 'none',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -1153,30 +1207,75 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                           </ReactMarkdown>
                         )}
                       </div>
+                    ) : editingUserMsgIndex === index ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', minWidth: isMobile ? 200 : 260 }}>
+                        <Input.TextArea
+                          value={editUserDraft}
+                          onChange={(e) => setEditUserDraft(e.target.value)}
+                          autoSize={{ minRows: 2, maxRows: 14 }}
+                          style={{ fontSize: 14 }}
+                        />
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          <Button size="small" onClick={() => setEditingUserMsgIndex(null)}>
+                            {t('chat.cancelEdit')}
+                          </Button>
+                          <Button
+                            type="primary"
+                            size="small"
+                            onClick={() => void handleEditAndResend(index, editUserDraft)}
+                          >
+                            {t('chat.saveAndResend')}
+                          </Button>
+                        </div>
+                      </div>
                     ) : (
                       msg.content
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 2, alignItems: 'center' }}>
-                    <Tooltip title={t('chat.reply')}>
-                      <Button 
-                        type="text" 
-                        size="small" 
-                        icon={<Quote size={12} />} 
-                        style={{ color: c.subtle, height: 22, fontSize: 11, padding: '0 4px' }} 
-                        onClick={() => {
-                          setQuotedMsg(msg.content);
-                          inputRef.current?.focus();
-                        }}
-                      >{t('chat.reply')}</Button>
-                    </Tooltip>
-                    <Button 
-                      type="text" 
-                      size="small" 
-                      icon={<Copy size={12} />} 
-                        style={{ color: c.subtle, height: 22, fontSize: 11, padding: '0 4px' }} 
-                      onClick={() => copyToClipboard(msg.content)}
-                    >{t('chat.copy')}</Button>
+                    {editingUserMsgIndex !== index && (
+                      <>
+                        <Tooltip title={t('chat.reply')}>
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<Quote size={12} />}
+                            style={{ color: c.subtle, height: 22, fontSize: 11, padding: '0 4px' }}
+                            onClick={() => {
+                              setQuotedMsg(msg.content);
+                              inputRef.current?.focus();
+                            }}
+                          >
+                            {t('chat.reply')}
+                          </Button>
+                        </Tooltip>
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<Copy size={12} />}
+                          style={{ color: c.subtle, height: 22, fontSize: 11, padding: '0 4px' }}
+                          onClick={() => copyToClipboard(msg.content)}
+                        >
+                          {t('chat.copy')}
+                        </Button>
+                        {msg.role === 'user' && !isTyping && (
+                          <Tooltip title={t('chat.editResend')}>
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={<Pencil size={12} />}
+                              style={{ color: c.subtle, height: 22, fontSize: 11, padding: '0 4px' }}
+                              onClick={() => {
+                                setEditingUserMsgIndex(index);
+                                setEditUserDraft(msg.content);
+                              }}
+                            >
+                              {isMobile ? '' : t('chat.editResend')}
+                            </Button>
+                          </Tooltip>
+                        )}
+                      </>
+                    )}
                     {msg.role === 'assistant' && index === messages.length - 1 && !isTyping && (
                       <Button 
                         type="text" 
@@ -1561,6 +1660,93 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
             </Form>
         </div>
       </Modal>
+
+      <Modal
+        open={embedShareOpen}
+        onCancel={() => setEmbedShareOpen(false)}
+        title={t('chat.shareTitle')}
+        width={520}
+        footer={null}
+        destroyOnClose
+        styles={{ body: { paddingTop: 12 } }}
+      >
+        <p style={{ fontSize: 13, color: c.body, marginBottom: 16 }}>{t('chat.shareDesc')}</p>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 12, color: c.subtle, marginBottom: 6 }}>{t('chat.embedBotLabel')}</div>
+          <Select
+            style={{ width: '100%' }}
+            value={embedOptions.botId || undefined}
+            placeholder={t('chat.selectBotTip')}
+            onChange={(v) => setEmbedOptions((o) => ({ ...o, botId: v }))}
+            options={botList.map((b: { id: string; name?: string }) => ({
+              label: b.name || b.id,
+              value: b.id,
+            }))}
+          />
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 12, color: c.subtle, marginBottom: 6 }}>{t('chat.embedLayoutLabel')}</div>
+          <Radio.Group
+            value={embedOptions.layout}
+            onChange={(e) =>
+              setEmbedOptions((o) => ({ ...o, layout: e.target.value as ChatEmbedLayout }))
+            }
+          >
+            <Space direction="vertical" size={4}>
+              <Radio value="tabs">{t('chat.embedLayoutTabs')}</Radio>
+              <Radio value="v3">{t('chat.embedLayoutV3')}</Radio>
+              <Radio value="classic">{t('chat.embedLayoutClassic')}</Radio>
+            </Space>
+          </Radio.Group>
+        </div>
+        {embedOptions.layout === 'tabs' && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: c.subtle, marginBottom: 6 }}>{t('chat.embedDefaultTabLabel')}</div>
+            <Radio.Group
+              value={embedOptions.defaultTab}
+              onChange={(e) =>
+                setEmbedOptions((o) => ({
+                  ...o,
+                  defaultTab: e.target.value as 'v3' | 'classic',
+                }))
+              }
+            >
+              <Space wrap>
+                <Radio value="v3">{t('chat.v3Mode', { defaultValue: 'V3 模式 (RPC)' })}</Radio>
+                <Radio value="classic">{t('chat.classicMode', { defaultValue: '经典模式 (HTTP)' })}</Radio>
+              </Space>
+            </Radio.Group>
+          </div>
+        )}
+        <Input.TextArea
+          readOnly
+          value={embedIframeCode}
+          autoSize={{ minRows: 3, maxRows: 8 }}
+          style={{
+            fontFamily: 'monospace',
+            fontSize: 12,
+            background: c.shareTa,
+            color: isDarkMode ? '#e2e8f0' : undefined,
+          }}
+        />
+        <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Button
+            type="primary"
+            size="small"
+            icon={<Copy size={12} />}
+            onClick={() => {
+              navigator.clipboard.writeText(embedIframeCode);
+              message.success(t('chat.copySuccess'));
+            }}
+          >
+            {t('chat.copyIframe')}
+          </Button>
+          <Button size="small" onClick={() => setEmbedShareOpen(false)}>
+            {t('common.close')}
+          </Button>
+        </div>
+      </Modal>
+
       <style>{`
         .typing-indicator {
           display: flex;

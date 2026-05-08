@@ -454,6 +454,8 @@ export interface UseV3MessagesParams {
   status: 'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error';
   sessionKey: string | null;
   setSessionKey: (key: string | null) => void;
+  /** 当前登录用户名（可选）。用于把 username 写入 buddy:direct 会话 key */
+  usernameForSessionKey?: string | null;
   selectedBot: string;
   thinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   sessionModel: string;
@@ -476,6 +478,7 @@ export function useV3Messages({
   status,
   sessionKey,
   setSessionKey,
+  usernameForSessionKey,
   selectedBot,
   thinkingLevel,
   sessionModel,
@@ -2141,7 +2144,7 @@ export function useV3Messages({
     let currentKey = sessionKeyRef.current ?? sessionKey;
     if (!currentKey) {
       const agentId = selectedBot.replace('openclaw:', '');
-      const key = buildBuddyDirectSessionKey(agentId);
+      const key = buildBuddyDirectSessionKey(agentId, usernameForSessionKey);
       // 不传 label，保持空标题，便于后续「无标题时自动总结」逻辑触发
       const res = await sendRPC('sessions.create', { agentId, key });
       if (res.ok) {
