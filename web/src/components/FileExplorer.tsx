@@ -28,6 +28,40 @@ import { FE_THEME_DARK, FE_THEME_LIGHT } from '../theme/feSurfaceTheme';
 
 const { DirectoryTree } = Tree;
 
+/**
+ * `position: fixed` 在任意带 transform/filter/perspective 的祖先下会相对于该祖先定位，而非视口。
+ * 右键菜单锚点使用 fixed + 视口坐标时会出现大幅偏移，需换算为相对该祖先的坐标。
+ */
+function menuAnchorCoordsForFixedInsideMount(
+  clientX: number,
+  clientY: number,
+  mountRoot: HTMLElement | null,
+): { x: number; y: number } {
+  if (
+    !mountRoot ||
+    typeof clientX !== 'number' ||
+    typeof clientY !== 'number' ||
+    !Number.isFinite(clientX) ||
+    !Number.isFinite(clientY)
+  ) {
+    return { x: clientX, y: clientY };
+  }
+  let el: HTMLElement | null = mountRoot;
+  while (el) {
+    const st = window.getComputedStyle(el);
+    if (
+      (st.transform && st.transform !== 'none') ||
+      (st.filter && st.filter !== 'none') ||
+      (st.perspective && st.perspective !== 'none')
+    ) {
+      const r = el.getBoundingClientRect();
+      return { x: clientX - r.left, y: clientY - r.top };
+    }
+    el = el.parentElement;
+  }
+  return { x: clientX, y: clientY };
+}
+
 const protectedFiles = ['soul.md', 'agent.md', 'agents.md', 'identity.md', 'identify.md', 'user.md', 'tools.md', 'heartbeat.md', 'memory.md', 'soul', 'agent', 'memory', 'identity', 'heartbeat'];
 
 interface FileEntry {
@@ -138,6 +172,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
   const [contextPath, setContextPath] = useState('');
   const [contextIsFile, setContextIsFile] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+  const explorerRootRef = useRef<HTMLDivElement>(null);
 
   // Drag and Drop Logic
   const handleDragStart = (e: React.DragEvent, item: FileEntry) => {
@@ -649,12 +684,12 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
     if (event.stopPropagation) event.stopPropagation();
     
     // Support both React.MouseEvent and antd's event wrapper
-    const clientX = event.clientX || (event.nativeEvent && event.nativeEvent.clientX);
-    const clientY = event.clientY || (event.nativeEvent && event.nativeEvent.clientY);
-    
+    const clientX = event.clientX ?? event.nativeEvent?.clientX;
+    const clientY = event.clientY ?? event.nativeEvent?.clientY;
+
     setContextPath(key);
     setContextIsFile(!isDir);
-    setMenuPosition({ x: clientX, y: clientY });
+    setMenuPosition(menuAnchorCoordsForFixedInsideMount(clientX, clientY, explorerRootRef.current));
     setContextMenuVisible(true);
   };
 
@@ -877,7 +912,11 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
 
   return (
     <>
-      <div className={isDarkMode ? 'file-explorer-root file-explorer-root--dark' : 'file-explorer-root'} style={{ height: '100%', display: 'flex', flexDirection: 'column', background: fe.bg, color: fe.text }}>
+      <div
+        ref={explorerRootRef}
+        className={isDarkMode ? 'file-explorer-root file-explorer-root--dark' : 'file-explorer-root'}
+        style={{ height: '100%', display: 'flex', flexDirection: 'column', background: fe.bg, color: fe.text }}
+      >
           {/* Custom Header */}
           {/* Custom Header - Only show if not simplified */}
           {!simplified && (
