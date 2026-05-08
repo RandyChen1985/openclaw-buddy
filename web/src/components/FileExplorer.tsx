@@ -243,13 +243,36 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
   };
 
   const treeTitleRender = (nodeData: any) => {
+    const displayText =
+      typeof nodeData.title === 'string' || typeof nodeData.title === 'number'
+        ? String(nodeData.title)
+        : '';
+    const tip =
+      displayText ||
+      (typeof nodeData.key === 'string' ? nodeData.key.split(/[/\\]/).pop() ?? '' : '');
     return (
       <div
         onDragOver={handleDragOver}
         onDrop={(e) => handleDropOnFolder(e, nodeData.key)}
-        style={{ display: 'inline-flex', alignItems: 'center', width: '100%' }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          minWidth: 0,
+          flex: 1,
+          overflow: 'hidden',
+        }}
       >
-        {nodeData.title}
+        <span
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            minWidth: 0,
+          }}
+          title={tip || undefined}
+        >
+          {nodeData.title}
+        </span>
       </div>
     );
   };
@@ -1666,6 +1689,13 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
           padding: 4px 8px !important;
           display: flex !important;
           align-items: center;
+          min-width: 0 !important;
+          overflow: hidden;
+        }
+        .custom-directory-tree .ant-tree-title {
+          flex: 1 1 0 !important;
+          min-width: 0 !important;
+          overflow: hidden !important;
         }
         .custom-directory-tree .ant-tree-node-selected {
           background-color: ${fe.treeNodeSelBg} !important;
