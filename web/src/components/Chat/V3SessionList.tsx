@@ -657,7 +657,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                           </div>
                           <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>
                               <Button size="small" type="text" icon={<Copy size={12} />} onClick={(e) => { e.stopPropagation(); copyToClipboard(s.key); }} />
-                              {s.key !== 'agent:main:main' && (
+                              {s.key !== 'agent:main:main' && !forbidden && (
                                 <Button size="small" type="text" icon={<Trash2 size={12} />} onClick={(e) => onDeleteSession(e, s.key)} />
                               )}
                           </div>
