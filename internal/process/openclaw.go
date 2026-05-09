@@ -1108,7 +1108,7 @@ func UpdateOpenClawPlugins() error {
 
 // openclawCombinedLargeStdout 将子进程 stdout 写入临时文件再读回，避免管道/流控导致超大 JSON
 // 被截断（例如恰好 64KiB 时 unexpected EOF）。顺序与 exec.CombinedOutput 一致：stdout 后接 stderr。
-func openclawCombinedLargeStdout(args ...string) ([]byte, error) {
+func openclawCombinedLargeStdout(bin string, args ...string) ([]byte, error) {
 	tf, err := os.CreateTemp("", "openclaw-stdout-*.txt")
 	if err != nil {
 		return nil, err
@@ -1117,7 +1117,7 @@ func openclawCombinedLargeStdout(args ...string) ([]byte, error) {
 	defer func() { _ = os.Remove(path) }()
 
 	var stderrBuf bytes.Buffer
-	cmd := exec.Command("openclaw", args...)
+	cmd := exec.Command(bin, args...)
 	cmd.Stdout = tf
 	cmd.Stderr = &stderrBuf
 
@@ -1138,7 +1138,7 @@ func openclawCombinedLargeStdout(args ...string) ([]byte, error) {
 }
 
 func GetOpenClawSkills() (any, error) {
-	out, err := openclawCombinedLargeStdout("skills", "list", "--json")
+	out, err := openclawCombinedLargeStdout(GetOpenClawBinary(), "skills", "list", "--json")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list skills: %v. Output: %s", err, string(out))
 	}
@@ -1205,8 +1205,7 @@ func ReloadOpenClawSkills() error {
 }
 
 func GetOpenClawSessions() ([]OpenClawSession, error) {
-	cmd := exec.Command("openclaw", "sessions", "--all-agents", "--json")
-	out, err := cmd.Output()
+	out, err := openclawCombinedLargeStdout(GetOpenClawBinary(), "sessions", "--all-agents", "--json")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sessions: %v. Output: %s", err, string(out))
 	}
