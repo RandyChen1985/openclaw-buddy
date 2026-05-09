@@ -8,6 +8,9 @@ import { isUntitledSessionLabel } from './labelUtils';
 /** 会话列表每页条数（后端无 offset，通过增大 limit 模拟分页） */
 const V3_SESSION_LIST_PAGE_SIZE = 25;
 
+/** 虾兵蟹将「立即聊天」跳转：阻止 fetchSessions 抢先自动选中 agent:main:main；会话创建成功后清除 */
+export const V3_QUICK_CHAT_PENDING_KEY = 'v3_quick_chat_pending';
+
 function botIdFromAgentSessionKey(key: string): string {
   if (!key || !key.startsWith('agent:')) return 'main';
   const parts = key.split(':');
@@ -200,12 +203,15 @@ export function useV3Sessions({
         const botsArr = botsModelsRef.current?.data?.bots;
         const mainBotAllowed =
           Array.isArray(botsArr) && botsArr.length > 0 && botsArr.some((b: any) => b?.id === 'main');
+        const quickChatPending =
+          typeof window !== 'undefined' && !!window.sessionStorage?.getItem(V3_QUICK_CHAT_PENDING_KEY);
         if (
           !shouldFilter &&
           !isAppend &&
           !didAutoSelectMainRef.current &&
           !sessionKeyRef.current &&
-          mainBotAllowed
+          mainBotAllowed &&
+          !quickChatPending
         ) {
           const main = patchedList.find((s: any) => s.key === 'agent:main:main');
           if (main?.key) {
@@ -321,8 +327,10 @@ export function useV3Sessions({
     const run = async () => {
       try {
         if (status !== 'authenticated') {
-          setSessionKey(null);
-          antdMessage.warning(t('chat.gatewayConnecting'));
+          // 未认证时不清空 sessionKey，避免「连接中」误伤当前会话；带 agentIdOverride 的快捷入口由 ChatV3 在认证后重试，不弹误导性 Toast
+          if (!agentIdOverride) {
+            antdMessage.warning(t('chat.gatewayConnecting'));
+          }
           return;
         }
         const agentId = (agentIdOverride || (selectedBot || '').replace(/^openclaw:/, '')).trim();
@@ -335,8 +343,14 @@ export function useV3Sessions({
         const res = await sendRPC('sessions.create', { agentId, key });
         if (!res.ok) {
           setSessionKey(null);
+          if (typeof window !== 'undefined') {
+            window.sessionStorage.removeItem(V3_QUICK_CHAT_PENDING_KEY);
+          }
           antdMessage.error(t('chat.failedToCreateSession') || `创建会话失败: ${res.error?.message || 'Unknown'}`);
           return;
+        }
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.removeItem(V3_QUICK_CHAT_PENDING_KEY);
         }
         const currentKey = (res.payload?.key as string) || key;
         setSessionKey(currentKey);

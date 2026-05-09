@@ -22,6 +22,7 @@ import { V3TerminalPane } from './chatV3/V3TerminalPane';
 import { V3ExplorerPane } from './chatV3/V3ExplorerPane';
 import FileExplorer from '../components/FileExplorer';
 import { useV3Theme } from '../hooks/chatV3/useV3Theme';
+import { V3_QUICK_CHAT_PENDING_KEY } from '../hooks/chatV3/useV3Sessions';
 import '../styles/ChatV3.css';
 
 // --- Utils & Config ---
@@ -159,6 +160,8 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const inputAreaRef = useRef<InputAreaHandle>(null);
+  /** 虾兵蟹将「立即聊天」：在未认证时暂缓 sessions.create，认证后补执行 */
+  const pendingQuickChatAgentRef = useRef<string | null>(null);
 
   // Hook usage
   const handleSetSelectedBot = React.useCallback((bot: string) => setSelectedBot(bot), []);
@@ -167,6 +170,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
     messages, setMessages,
     status,
     sessionKey,
+    setSessionKey,
     sessionLabel,
     sessionModel,
     thinkingLevel,
@@ -260,29 +264,47 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
   }, [t]);
 
   useEffect(() => {
-    if (botsModels?.data?.bots?.length > 0) {
-      const quickChatBot = window.sessionStorage.getItem('v3_quick_chat_bot');
-      if (quickChatBot) {
-        window.sessionStorage.removeItem('v3_quick_chat_bot');
-        const botId = quickChatBot.replace('openclaw:', '');
-        setSelectedBot(quickChatBot);
+    if (!botsModels?.data?.bots?.length) return;
+    const quickChatBot = window.sessionStorage.getItem('v3_quick_chat_bot');
+    if (quickChatBot) {
+      window.sessionStorage.removeItem('v3_quick_chat_bot');
+      const botId = quickChatBot.replace('openclaw:', '');
+      window.sessionStorage.setItem(V3_QUICK_CHAT_PENDING_KEY, botId);
+      setSessionKey(null);
+      setSelectedBot(quickChatBot);
+      if (status === 'authenticated') {
+        pendingQuickChatAgentRef.current = null;
         startNewSession(botId);
-      } else if (!selectedBot && !sessionKey) {
-        const qp = new URLSearchParams(window.location.search);
-        const urlBot = qp.get('bot');
-        const bots = botsModels.data.bots;
-        let pick = bots[0];
-        if (urlBot) {
-          const found = bots.find((b: any) => b.id === urlBot || b.name === urlBot);
-          if (found) pick = found;
-        }
-        setSelectedBot(`openclaw:${pick.id}`);
+      } else {
+        pendingQuickChatAgentRef.current = botId;
       }
+      return;
     }
-  }, [botsModels, selectedBot, sessionKey, startNewSession]);
+    if (!selectedBot && !sessionKey) {
+      const qp = new URLSearchParams(window.location.search);
+      const urlBot = qp.get('bot');
+      const bots = botsModels.data.bots;
+      let pick = bots[0];
+      if (urlBot) {
+        const found = bots.find((b: any) => b.id === urlBot || b.name === urlBot);
+        if (found) pick = found;
+      }
+      setSelectedBot(`openclaw:${pick.id}`);
+    }
+  }, [botsModels?.data?.bots, selectedBot, sessionKey, startNewSession, setSessionKey, status]);
+
+  /** 网关从未认证变为已就绪后，补执行快捷入口的 sessions.create */
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    const botId = pendingQuickChatAgentRef.current;
+    if (!botId) return;
+    pendingQuickChatAgentRef.current = null;
+    startNewSession(botId);
+  }, [status, startNewSession]);
 
   // 首次进入/刷新：若已恢复 sessionKey，则强制将 bot 下拉与会话 key 对齐，避免“默认选中第一个 bot”造成错配
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.sessionStorage?.getItem(V3_QUICK_CHAT_PENDING_KEY)) return;
     if (!sessionKey) return;
     const { botId } = parseSessionKey(sessionKey);
     const desired = `openclaw:${botId}`;
