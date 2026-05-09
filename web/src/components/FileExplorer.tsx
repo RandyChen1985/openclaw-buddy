@@ -20,7 +20,7 @@ import {
   Upload, Download, Search, LayoutList, Maximize2, Minimize2, 
   FileJson, FileCode2, Image as ImageIcon, Monitor, Terminal, File,
   FolderPlus, FilePlus, Copy, PanelLeftOpen, PanelLeftClose, X,
-  MoreVertical, Edit3, Grid, List as ListIcon, RefreshCcw, Sparkles, Shield
+  MoreVertical, Edit3, Grid, List as ListIcon, RefreshCcw, Sparkles, Shield, ExternalLink
 } from 'lucide-react';
 import Draggable from 'react-draggable';
 import type { DraggableBounds, DraggableData, DraggableEvent } from 'react-draggable';
@@ -657,6 +657,28 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
       })
       .catch(err => message.error(err.message || t('common.downloadFailed')));
   };
+
+  const openHtmlPreviewInNewWindow = useCallback(() => {
+    if (!isHTML || !selectedFile) return;
+    const html = fileContent ?? '';
+    if (!html.trim()) {
+      message.warning(t('common.emptyContent', { defaultValue: '内容为空' }));
+      return;
+    }
+    try {
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!w) {
+        URL.revokeObjectURL(url);
+        message.warning(t('common.popupBlocked', { defaultValue: '无法打开新窗口，请检查浏览器是否拦截弹出式窗口' }));
+        return;
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 120_000);
+    } catch {
+      message.error(t('common.openFailed', { defaultValue: '打开失败' }));
+    }
+  }, [fileContent, isHTML, selectedFile, t]);
 
   const handleUploadClick = () => uploadInputRef.current?.click();
 
@@ -1394,6 +1416,17 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                       />
                     ) : (
                       <div style={{ fontSize: 12, color: fe.textFaint }}>{t('common.unsupported')}</div>
+                    )}
+                    {isHTML && canView && (
+                      <Tooltip title={t('common.openHtmlNewWindow', { defaultValue: '新窗口预览' })}>
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<ExternalLink size={16} />}
+                          onClick={openHtmlPreviewInNewWindow}
+                          aria-label={t('common.openHtmlNewWindow', { defaultValue: '新窗口预览' })}
+                        />
+                      </Tooltip>
                     )}
                     <Tooltip title={t('common.download')}>
                       <Button type="text" size="small" icon={<Download size={16} />} onClick={() => handleDownload(selectedFile)} />

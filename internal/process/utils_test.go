@@ -46,6 +46,20 @@ func TestExtractJSON(t *testing.T) {
 			expected: `plain text`,
 		},
 		{
+			name: "JSON followed by junk containing extra braces",
+			input: `notice line
+{"skills":[]}
+footer with stray } characters }}}`,
+			expected: `{"skills":[]}`,
+		},
+		{
+			name: "Nested skills payload",
+			input: `logs…
+{"skills":[{"name":"a","meta":{"x":1}}]}
+done`,
+			expected: `{"skills":[{"name":"a","meta":{"x":1}}]}`,
+		},
+		{
 			name: "OpenClaw Warnings and Logs",
 			input: `Config warnings:
 - plugins.entries.active-memory: plugin disabled (disabled in config) but config is present

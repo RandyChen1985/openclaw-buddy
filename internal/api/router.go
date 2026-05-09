@@ -172,6 +172,8 @@ func (s *Server) setupRoutes() {
 			systemUsers.GET("/permissions", s.handleListPermissions)
 			systemUsers.GET("/users/:id/permissions", s.handleGetUserPermissions)
 			systemUsers.PUT("/users/:id/permissions", s.handleUpdateUserPermissions)
+			systemUsers.GET("/users/:id/bots", s.handleGetUserBots)
+			systemUsers.PUT("/users/:id/bots", s.handleUpdateUserBots)
 		}
 
 		// OpenClaw related routes
@@ -329,7 +331,20 @@ func (s *Server) renderIndexHTML(c *gin.Context, distFS fs.FS) {
 
 	// Inject window.__WEB_ROOT__ as early as possible
 	script := fmt.Sprintf("<script>window.__WEB_ROOT__='%s';</script>", s.cfg.WebRoot)
-	html = strings.Replace(html, "<title>", script+"<title>", 1)
+
+	// Vite 默认 base 为 ./ 时，资源为 ./assets/...；若用户访问 .../claw（无尾斜杠），
+	// 浏览器会把相对路径解析到错误的目录（变成 .../console/assets）。注入 <base href="WEB_ROOT/">
+	// 强制以挂载点为基准解析相对 URL。
+	baseInject := ""
+	if s.cfg.WebRoot != "/" {
+		href := s.cfg.WebRoot
+		if !strings.HasSuffix(href, "/") {
+			href += "/"
+		}
+		baseInject = fmt.Sprintf("<base href=\"%s\">", href)
+	}
+
+	html = strings.Replace(html, "<title>", script+baseInject+"<title>", 1)
 
 	// Fix asset paths in HTML if WebRoot is not /
 	if s.cfg.WebRoot != "/" {
@@ -374,6 +389,15 @@ func (s *Server) setupStaticFiles() {
 				return
 			}
 			relPath = path[len(prefix):]
+			// .../claw 无尾斜杠时相对资源会解析错位；重定向到 .../claw/
+			if path == prefix && prefix != "" {
+				loc := prefix + "/"
+				if q := c.Request.URL.RawQuery; q != "" {
+					loc += "?" + q
+				}
+				c.Redirect(http.StatusPermanentRedirect, loc)
+				return
+			}
 		}
 
 		// If the relative path starts with /v1/ after prefix, it's an API that wasn't matched

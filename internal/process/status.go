@@ -3,6 +3,7 @@ package process
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os/exec"
 	"regexp"
 	"runtime"
@@ -11,6 +12,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"openclaw-buddy/internal/utils"
 )
 
 var (
@@ -285,20 +288,18 @@ func splitTableLine(line string) []string {
 	return result
 }
 
-// GetBotRanking 聚合计算机器人活跃榜 (前 3 名)
-func GetBotRanking(configDir string) ([]BotRank, error) {
-	sessions, err := GetOpenClawSessions()
-	if err != nil {
-		return nil, err
-	}
+// auditDashboardDefaultWindow 与前端审计大屏初始日期范围一致：从今日 0 点往前共 7 个自然日（含今日）。
+// （AuditDashboard 默认 dateRange 为 subtract(6,'day') .. today）
+func auditDashboardDefaultWindow() (start string, end string) {
+	loc := time.Local
+	now := time.Now().In(loc)
+	endDT := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, loc)
+	startDT := endDT.AddDate(0, 0, -6)
+	startDT = time.Date(startDT.Year(), startDT.Month(), startDT.Day(), 0, 0, 0, 0, loc)
+	return startDT.Format("2006-01-02 15:04:05"), endDT.Format("2006-01-02 15:04:05")
+}
 
-	// 聚合分析：统计每个 Agent 的活跃会话
-	stats := make(map[string]int)
-	for _, sess := range sessions {
-		stats[sess.AgentID]++
-	}
-
-	// 获取所有机器人名称信息以丰富结果
+func enrichBotRanks(configDir string, ranks []BotRank) []BotRank {
 	botsData, _ := GetOpenClawBotsModels(configDir)
 	botNames := make(map[string]string)
 	botEmojis := make(map[string]string)
@@ -308,34 +309,107 @@ func GetBotRanking(configDir string) ([]BotRank, error) {
 			botEmojis[b.ID] = b.Emoji
 		}
 	}
+	for i := range ranks {
+		id := ranks[i].ID
+		if n, ok := botNames[id]; ok {
+			ranks[i].Name = n
+		}
+		if e, ok := botEmojis[id]; ok {
+			ranks[i].Emoji = e
+		}
+	}
+	return ranks
+}
+
+// getBotRankingFromAuditDB 按审计库统计：时间窗内各 agent 的去重 session_key 数量（与审计大屏「会话数」同源：
+// audit_usage ∪ audit_security_events，再去重 session_key；此处按 agent 分组）。
+func getBotRankingFromAuditDB(configDir string) ([]BotRank, error) {
+	if utils.DB == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+	start, end := auditDashboardDefaultWindow()
+	q := `
+SELECT agent_id, COUNT(*) AS cnt FROM (
+  SELECT DISTINCT agent_id, session_key FROM (
+    SELECT agent_id, session_key FROM audit_usage
+    WHERE timestamp >= ? AND timestamp <= ?
+      AND session_key IS NOT NULL AND TRIM(session_key) != ''
+      AND agent_id IS NOT NULL AND TRIM(agent_id) != ''
+    UNION
+    SELECT agent_id, session_key FROM audit_security_events
+    WHERE timestamp >= ? AND timestamp <= ?
+      AND session_key IS NOT NULL AND TRIM(session_key) != ''
+      AND agent_id IS NOT NULL AND TRIM(agent_id) != ''
+  )
+) GROUP BY agent_id ORDER BY cnt DESC LIMIT 3`
+	rows, err := utils.DB.Query(q, start, end, start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ranks []BotRank
+	for rows.Next() {
+		var agentID string
+		var cnt int
+		if err := rows.Scan(&agentID, &cnt); err != nil {
+			return nil, err
+		}
+		ranks = append(ranks, BotRank{
+			ID:       agentID,
+			Name:     agentID,
+			Emoji:    "🤖",
+			Sessions: cnt,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return enrichBotRanks(configDir, ranks), nil
+}
+
+func getBotRankingFromOpenClawSessions(configDir string) ([]BotRank, error) {
+	sessions, err := GetOpenClawSessions()
+	if err != nil {
+		return nil, err
+	}
+
+	stats := make(map[string]int)
+	for _, sess := range sessions {
+		stats[sess.AgentID]++
+	}
 
 	ranks := []BotRank{}
 	for id, count := range stats {
-		name := id
-		if n, ok := botNames[id]; ok {
-			name = n
-		}
-		emoji := "🤖"
-		if e, ok := botEmojis[id]; ok {
-			emoji = e
-		}
 		ranks = append(ranks, BotRank{
 			ID:       id,
-			Name:     name,
-			Emoji:    emoji,
+			Name:     id,
+			Emoji:    "🤖",
 			Sessions: count,
 		})
 	}
 
-	// 按会话数倒序排序
 	sort.Slice(ranks, func(i, j int) bool {
 		return ranks[i].Sessions > ranks[j].Sessions
 	})
 
-	// 仅返回前 3 名
 	if len(ranks) > 3 {
 		ranks = ranks[:3]
 	}
 
-	return ranks, nil
+	return enrichBotRanks(configDir, ranks), nil
+}
+
+// GetBotRanking 聚合计算机器人活跃榜 (前 3 名)。
+// 优先使用 Buddy 审计库（与「审计大屏」相同数据口径）；无库或无数据时回退 OpenClaw CLI 会话列表。
+func GetBotRanking(configDir string) ([]BotRank, error) {
+	if utils.DB != nil {
+		ranks, err := getBotRankingFromAuditDB(configDir)
+		if err != nil {
+			log.Printf("⚠️ [Ranking] 审计库聚合失败，回退 OpenClaw 会话列表: %v", err)
+		} else if len(ranks) > 0 {
+			return ranks, nil
+		}
+	}
+	return getBotRankingFromOpenClawSessions(configDir)
 }

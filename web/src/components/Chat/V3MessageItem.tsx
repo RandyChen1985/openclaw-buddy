@@ -279,6 +279,21 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   // 防止审批按钮重复点击：记录每个 approvalId 是否已点击过“通过”
   const [approvalClicked, setApprovalClicked] = useState<Record<string, boolean>>({});
 
+  /** 编辑框草稿：Virtuoso 下列项重渲染时若反复用父级 editContent 覆盖受控 value，会打断中文 IME */
+  const [editDraft, setEditDraft] = useState('');
+  const editSessionStartedRef = useRef(false);
+  useEffect(() => {
+    const editingHere = editingMsgIndex === index;
+    if (!editingHere) {
+      editSessionStartedRef.current = false;
+      return;
+    }
+    if (!editSessionStartedRef.current) {
+      setEditDraft(editContent);
+      editSessionStartedRef.current = true;
+    }
+  }, [editingMsgIndex, index, editContent]);
+
   const processedContent = useMemo(() => {
     let content = (msg.content || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
@@ -780,8 +795,14 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         {editingMsgIndex === index ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: isMobile ? 220 : 400 }}>
             <Input.TextArea
-              autoFocus autoSize={{ minRows: 2, maxRows: 15 }} value={editContent}
-              onChange={e => setEditContent(e.target.value)}
+              autoFocus
+              autoSize={{ minRows: 2, maxRows: 15 }}
+              value={editDraft}
+              onChange={(e) => {
+                const v = e.target.value;
+                setEditDraft(v);
+                setEditContent(v);
+              }}
               style={{ borderRadius: 12, border: isUser ? '1px solid rgba(255,255,255,0.3)' : (isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0'), background: isUser ? 'rgba(255,255,255,0.1)' : (isDarkMode ? '#0f172a' : 'rgba(255,255,255,0.95)'), color: isUser ? '#fff' : (isDarkMode ? '#e2e8f0' : '#1e293b'), fontSize: isMobile ? 13 : 14 }}
             />
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

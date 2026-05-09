@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Card, Table, Button, Input, Tag, Space, Modal, Form, Select,
-  Switch, message, Typography, Empty, Dropdown, Checkbox, Pagination, Divider,
+  Switch, message, Typography, Empty, Dropdown, Checkbox, Pagination, Divider, Tabs, Row, Col, Spin,
 } from 'antd';
-import { Plus, RefreshCw, KeyRound, Pencil, Search, ShieldCheck, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Plus, RefreshCw, KeyRound, Pencil, Search, ShieldCheck, MoreHorizontal, Trash2, Bot, Cpu, Image as ImageIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import api from '../api';
 import dayjs from 'dayjs';
@@ -39,6 +39,15 @@ interface PermissionItem {
   remark: string;
 }
 
+interface BotItem {
+  id: string;
+  name?: string;
+  model?: string;
+  provider?: string;
+  capabilities?: string[];
+  input?: string[];
+}
+
 interface UserManagerViewProps {
   isDarkMode?: boolean;
   /** 当前主体是否拥有 menu:system:user:manage 权限；通常调用页面只在有权限时才挂载本组件 */
@@ -56,7 +65,11 @@ const UserManagerView: React.FC<UserManagerViewProps> = ({ isDarkMode = false, c
 
   const [userPermOpen, setUserPermOpen] = useState(false);
   const [permTarget, setPermTarget] = useState<UserItem | null>(null);
+  const [userPermTab, setUserPermTab] = useState<'menu' | 'bots'>('menu');
   const [selectedPermKeys, setSelectedPermKeys] = useState<string[]>([]);
+  const [selectedBotIDs, setSelectedBotIDs] = useState<string[]>([]);
+  const [botsLoading, setBotsLoading] = useState(false);
+  const [bots, setBots] = useState<BotItem[]>([]);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<UserItem | null>(null);
@@ -124,13 +137,30 @@ const UserManagerView: React.FC<UserManagerViewProps> = ({ isDarkMode = false, c
   const openUserPerm = async (row: UserItem) => {
     setPermTarget(row);
     setSelectedPermKeys([]);
+    setSelectedBotIDs([]);
+    setUserPermTab('menu');
     setUserPermOpen(true);
+    setBotsLoading(true);
     try {
-      const res = await api.get(`/v1/system/users/${row.id}/permissions`);
-      const keys = (res.data as any)?.permission_keys || [];
+      const [permRes, botsRes, userBotsRes] = await Promise.all([
+        api.get(`/v1/system/users/${row.id}/permissions`),
+        api.get('/v1/openclaw/bots-models'),
+        api.get(`/v1/system/users/${row.id}/bots`),
+      ]);
+      const keys = (permRes.data as any)?.permission_keys || [];
       setSelectedPermKeys(Array.isArray(keys) ? keys : []);
+
+      const botsList = (botsRes.data as any)?.data?.bots || (botsRes.data as any)?.bots || [];
+      setBots(Array.isArray(botsList) ? botsList : []);
+
+      const botIDs = (userBotsRes.data as any)?.bot_ids || [];
+      setSelectedBotIDs(Array.isArray(botIDs) ? botIDs : []);
     } catch {
       setSelectedPermKeys([]);
+      setBots([]);
+      setSelectedBotIDs([]);
+    } finally {
+      setBotsLoading(false);
     }
   };
 
@@ -138,7 +168,10 @@ const UserManagerView: React.FC<UserManagerViewProps> = ({ isDarkMode = false, c
     if (!permTarget) return;
     try {
       setSubmitting(true);
-      await api.put(`/v1/system/users/${permTarget.id}/permissions`, { permission_keys: selectedPermKeys });
+      await Promise.all([
+        api.put(`/v1/system/users/${permTarget.id}/permissions`, { permission_keys: selectedPermKeys }),
+        api.put(`/v1/system/users/${permTarget.id}/bots`, { bot_ids: selectedBotIDs }),
+      ]);
       message.success(t('common.saveSuccess'));
       setUserPermOpen(false);
     } catch (err: any) {
@@ -653,59 +686,182 @@ const UserManagerView: React.FC<UserManagerViewProps> = ({ isDarkMode = false, c
         okText={t('common.save')}
         cancelText={t('common.cancel')}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{
-            border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
-            borderRadius: 12,
-            padding: 12,
-            maxHeight: 360,
-            overflow: 'auto',
-            background: isDarkMode ? '#0f172a' : '#fff',
-          }}>
-            <Checkbox.Group
-              style={{ width: '100%' }}
-              value={selectedPermKeys}
-              onChange={(vals) => setSelectedPermKeys(vals as string[])}
-            >
-              <Space direction="vertical" size={14} style={{ width: '100%' }}>
-                {permGroups.map(g => (
-                  <div key={g.title}>
-                    <div style={{ fontWeight: 900, marginBottom: 8, color: isDarkMode ? '#e2e8f0' : '#0f172a' }}>
-                      {g.title}
-                    </div>
-                    <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                      {g.items.map(it => {
-                        const p = permByMenuKey.get(it.menuKey);
-                        const disabled = !p;
-                        return (
-                          <div key={it.menuKey} style={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: 10,
-                            padding: '10px 12px',
-                            borderRadius: 12,
-                            border: `1px solid ${isDarkMode ? '#1e293b' : '#f1f5f9'}`,
-                            background: isDarkMode ? '#0b1220' : '#fff',
-                            opacity: disabled ? 0.5 : 1,
-                          }}>
-                            <Checkbox value={p?.key} disabled={disabled} />
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontWeight: 800 }}>{it.label}</div>
-                              <div style={{ fontSize: 12, color: isDarkMode ? '#94a3b8' : '#64748b' }}>
-                                {p ? `${p.key} · menu_key=${p.menu_key}` : `缺少权限点（menu_key=${it.menuKey}）`}
-                              </div>
-                            </div>
+        <Tabs
+          activeKey={userPermTab}
+          onChange={(k) => setUserPermTab(k as any)}
+          items={[
+            {
+              key: 'menu',
+              label: t('users.menuPermissions', { defaultValue: '菜单权限' }),
+              children: (
+                <div style={{
+                  border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+                  borderRadius: 12,
+                  padding: 12,
+                  maxHeight: 360,
+                  overflow: 'auto',
+                  background: isDarkMode ? '#0f172a' : '#fff',
+                }}>
+                  <Checkbox.Group
+                    style={{ width: '100%' }}
+                    value={selectedPermKeys}
+                    onChange={(vals) => setSelectedPermKeys(vals as string[])}
+                  >
+                    <Space direction="vertical" size={14} style={{ width: '100%' }}>
+                      {permGroups.map(g => (
+                        <div key={g.title}>
+                          <div style={{ fontWeight: 900, marginBottom: 8, color: isDarkMode ? '#e2e8f0' : '#0f172a' }}>
+                            {g.title}
                           </div>
-                        );
-                      })}
+                          <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                            {g.items.map(it => {
+                              const p = permByMenuKey.get(it.menuKey);
+                              const disabled = !p;
+                              return (
+                                <div key={it.menuKey} style={{
+                                  display: 'flex',
+                                  alignItems: 'flex-start',
+                                  gap: 10,
+                                  padding: '10px 12px',
+                                  borderRadius: 12,
+                                  border: `1px solid ${isDarkMode ? '#1e293b' : '#f1f5f9'}`,
+                                  background: isDarkMode ? '#0b1220' : '#fff',
+                                  opacity: disabled ? 0.5 : 1,
+                                }}>
+                                  <Checkbox value={p?.key} disabled={disabled} />
+                                  <div style={{ flex: 1 }}>
+                                    <div style={{ fontWeight: 800 }}>{it.label}</div>
+                                    <div style={{ fontSize: 12, color: isDarkMode ? '#94a3b8' : '#64748b' }}>
+                                      {p ? `${p.key} · menu_key=${p.menu_key}` : `缺少权限点（menu_key=${it.menuKey}）`}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </Space>
+                        </div>
+                      ))}
+                      {permissions.length === 0 && <Empty description="暂无权限点" />}
                     </Space>
-                  </div>
-                ))}
-                {permissions.length === 0 && <Empty description="暂无权限点" />}
-              </Space>
-            </Checkbox.Group>
-          </div>
-        </div>
+                  </Checkbox.Group>
+                </div>
+              )
+            },
+            {
+              key: 'bots',
+              label: t('users.botPermissions', { defaultValue: 'Bot 权限' }),
+              children: (
+                <div style={{
+                  border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+                  borderRadius: 12,
+                  padding: 12,
+                  maxHeight: 360,
+                  overflow: 'auto',
+                  background: isDarkMode ? '#0f172a' : '#fff',
+                }}>
+                  {botsLoading ? (
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
+                      <Spin />
+                    </div>
+                  ) : (
+                    <>
+                      {bots.length === 0 ? (
+                        <Empty description={t('bots.empty', { defaultValue: '暂无 Bot' })} />
+                      ) : (
+                        <Row gutter={[12, 12]}>
+                          {bots.map((b) => {
+                            const checked = selectedBotIDs.includes(b.id);
+                            const supportsImage = !!(b.capabilities?.includes?.('image') || b.input?.includes?.('image'));
+                            const toggle = () => {
+                              setSelectedBotIDs((prev) => (
+                                prev.includes(b.id) ? prev.filter(x => x !== b.id) : [...prev, b.id]
+                              ));
+                            };
+                            return (
+                              <Col xs={24} sm={24} md={12} lg={12} xl={12} key={b.id}>
+                                <Card
+                                  hoverable
+                                  onClick={toggle}
+                                  styles={{ body: { padding: 14 } }}
+                                  style={{
+                                    borderRadius: 16,
+                                    border: checked
+                                      ? `1px solid ${isDarkMode ? '#60a5fa' : '#3b82f6'}`
+                                      : `1px solid ${isDarkMode ? '#1e293b' : '#e2e8f0'}`,
+                                    background: isDarkMode ? '#0b1220' : '#fff',
+                                    position: 'relative',
+                                    minHeight: 86,
+                                  }}
+                                >
+                                  <Checkbox
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      toggle();
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ position: 'absolute', top: 10, right: 10 }}
+                                  />
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                    <div style={{
+                                      width: 42,
+                                      height: 42,
+                                      borderRadius: 10,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      background: isDarkMode ? '#111827' : '#eff6ff',
+                                      border: `1px solid ${isDarkMode ? '#1f2937' : '#dbeafe'}`,
+                                      flexShrink: 0,
+                                    }}>
+                                      <Bot size={20} color={isDarkMode ? '#93c5fd' : '#2563eb'} />
+                                    </div>
+                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                      <div
+                                        title={b.name || b.id}
+                                        style={{
+                                          fontWeight: 900,
+                                          fontSize: 14,
+                                          color: isDarkMode ? '#e2e8f0' : '#0f172a',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap'
+                                        }}
+                                      >
+                                        {b.name || b.id}
+                                      </div>
+                                      <div
+                                        title={b.model || b.id}
+                                        style={{
+                                          marginTop: 4,
+                                          fontSize: 12,
+                                          color: isDarkMode ? '#94a3b8' : '#64748b',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap'
+                                        }}
+                                      >
+                                        {b.model || b.id}
+                                      </div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, color: isDarkMode ? '#94a3b8' : '#64748b' }}>
+                                      <Cpu size={14} />
+                                      {supportsImage && <ImageIcon size={14} />}
+                                    </div>
+                                  </div>
+                                </Card>
+                              </Col>
+                            );
+                          })}
+                        </Row>
+                      )}
+                    </>
+                  )}
+                </div>
+              )
+            }
+          ]}
+        />
       </Modal>
     </div>
   );

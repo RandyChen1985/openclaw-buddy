@@ -1844,23 +1844,37 @@ func (s *Server) getSystemEvents(c *gin.Context) {
 }
 
 func (s *Server) getTopBots(c *gin.Context) {
-	// 1. 优先尝试从缓存获取 (10 分钟自动更新一次)
+	// ?refresh=true：跳过缓存，同步重算榜单并写入 data_caches（与审计口径一致）
+	if c.Query("refresh") == "true" {
+		if err := process.SyncKeySingle("ranking", s.cfg.OpenClawConfigDir); err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		data, _, err := process.GetCachedData("ranking")
+		if err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		s.Success(c, data)
+		return
+	}
+
+	// 1. 优先尝试从缓存获取 (后台定时 SyncAll 也会刷新)
 	data, _, err := process.GetCachedData("ranking")
 	if err == nil && data != nil {
 		s.Success(c, data)
 		return
 	}
 
-	// 2. 降级逻辑：如果缓存失效或不存在，执行实时计算并异步存入缓存
+	// 2. 缓存失效或不存在：实时计算并异步写入缓存
 	ranks, err := process.GetBotRanking(s.cfg.OpenClawConfigDir)
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	
-	// 异步更新缓存以供下次使用
+
 	go process.SyncKeySingle("ranking", s.cfg.OpenClawConfigDir)
-	
+
 	s.Success(c, ranks)
 }
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Input, Button, Spin, Avatar, Badge as AntBadge, Select } from 'antd';
-import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe, Clock, PenLine, Sparkles, Settings, GitBranch } from 'lucide-react';
+import { Search, Plus, Trash2, History, RefreshCw, Copy, XCircle, AlertCircle, Shield, Zap, Monitor, MessageCircle, Send, Globe, Clock, PenLine, Sparkles, Settings, GitBranch, Lock } from 'lucide-react';
 import Tooltip from '../common/AppTooltip';
 
 export interface V3SessionListProps {
@@ -157,6 +157,22 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
 
   const [activeBotId, setActiveBotId] = React.useState<string>('all');
   const [activeSource, setActiveSource] = React.useState<string>('all');
+
+  /** 有可选 Bot 列表时：会话 key 中的 botId 不在列表内则视为无权访问（不可点开） */
+  const allowedBotIdSet = React.useMemo(() => {
+    const bots = botsModels?.data?.bots;
+    if (!Array.isArray(bots) || bots.length === 0) return null;
+    return new Set(bots.map((b: any) => b.id));
+  }, [botsModels]);
+
+  const isSessionForbidden = React.useCallback(
+    (sessionKeyStr: string) => {
+      if (!allowedBotIdSet) return false;
+      const { botId } = parseSessionKey(sessionKeyStr);
+      return !allowedBotIdSet.has(botId);
+    },
+    [allowedBotIdSet]
+  );
 
   const sourcesInSessions = React.useMemo(() => {
     const sources = new Set<string>();
@@ -420,6 +436,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
           </div>
         ) : (
           (() => {
+            const sessionNoAccessTitle = t('chat.sessionBotNoAccess', { defaultValue: '当前账号无权使用该 Bot，无法打开此会话' });
             const filtered = sessions.filter((s: any) => !sessionSearch || (s.key || '').toLowerCase().includes(sessionSearch.toLowerCase()) || (s.label || '').toLowerCase().includes(sessionSearch.toLowerCase()));
             
             let mainSession = filtered.find((s: any) => s.key === 'agent:main:main');
@@ -486,7 +503,9 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                     </Tooltip>
                   </div>
                   {items.map((s: any) => {
+                    const forbidden = isSessionForbidden(s.key);
                     const isActive = sessionKey === s.key;
+                    const showActive = isActive && !forbidden;
                     const { source, openAIUser, buddyUser } = parseSessionKey(s.key);
                     const sourceMeta = getSourceMeta(source);
                     const sourceLabel = t(sourceMeta.labelKey, { defaultValue: sourceMeta.defaultLabel });
@@ -495,17 +514,22 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                     return (
                       <div 
                           key={s.key}
+                          title={forbidden ? sessionNoAccessTitle : undefined}
                           onClick={() => {
+                            if (forbidden) return;
                             onSelectSession(s.key);
                             if (isMobile) setShowSider(false);
                           }}
                           style={{ 
-                              padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4, transition: 'all 0.2s',
-                              background: isActive ? shell.sessionActiveBg : 'transparent',
-                              border: '1px solid', borderColor: isActive ? shell.sessionActiveBorder : 'transparent',
-                              display: 'flex', alignItems: 'center', gap: 12, position: 'relative'
+                              padding: '10px 12px', borderRadius: 10, cursor: forbidden ? 'not-allowed' : 'pointer', marginBottom: 4, transition: 'all 0.2s',
+                              background: showActive ? shell.sessionActiveBg : 'transparent',
+                              border: '1px solid', borderColor: showActive ? shell.sessionActiveBorder : 'transparent',
+                              display: 'flex', alignItems: 'center', gap: 12, position: 'relative',
+                              opacity: forbidden ? 0.52 : 1,
+                              filter: forbidden ? 'grayscale(0.25)' : undefined,
                           }}
-                          className={`session-item stagger-entry ${isActive ? 'active' : ''}`}
+                          className={`session-item stagger-entry ${showActive ? 'active' : ''}`}
+                          aria-disabled={forbidden ? true : undefined}
                       >
                           <div style={{ position: 'relative', flexShrink: 0 }}>
             <Avatar 
@@ -517,7 +541,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                 display: 'flex', 
                                 alignItems: 'center', 
                                 justifyContent: 'center',
-                                boxShadow: isActive ? `0 0 0 2px ${sourceMeta.color}33` : 'none'
+                                boxShadow: showActive ? `0 0 0 2px ${sourceMeta.color}33` : 'none'
                               }} 
                             />
                             {/* Bot Badge */}
@@ -542,13 +566,23 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
 
                           <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-                                <div style={{ fontSize: 13, fontVariant: 'tabular-nums', fontWeight: 700, color: isActive ? (isDarkMode ? '#f1f5f9' : 'var(--v3-primary-strong, #3730a3)') : (isDarkMode ? '#e2e8f0' : 'var(--v3-text, #1e293b)'), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
+                                <div style={{ fontSize: 13, fontVariant: 'tabular-nums', fontWeight: 700, color: showActive ? (isDarkMode ? '#f1f5f9' : 'var(--v3-primary-strong, #3730a3)') : (isDarkMode ? '#e2e8f0' : 'var(--v3-text, #1e293b)'), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
                                     {s.label || t('chat.noLabel', { defaultValue: '未命名会话' })}
+                                    {forbidden && (
+                                      <span style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: 3,
+                                        fontSize: 10, fontWeight: 700, color: '#94a3b8',
+                                        flexShrink: 0,
+                                      }}>
+                                        <Lock size={11} />
+                                        {t('chat.sessionForbiddenShort', { defaultValue: '无权限' })}
+                                      </span>
+                                    )}
                                     <SessionStatusIcon status={s.status} t={t} />
                                     {typingSessionKeys.includes(s.key) && (
                                       <span className="v3-pencil">
-                                        <PenLine size={12} color={isActive ? (isDarkMode ? '#a5b4fc' : 'var(--v3-primary, #4f46e5)') : '#94a3b8'} />
-                                        <span className="v3-dots" style={{ color: isActive ? (isDarkMode ? '#a5b4fc' : 'var(--v3-primary, #4f46e5)') : '#94a3b8' }} aria-label={t('chat.statusActive', { defaultValue: '正在生成中...' })}>
+                                        <PenLine size={12} color={showActive ? (isDarkMode ? '#a5b4fc' : 'var(--v3-primary, #4f46e5)') : '#94a3b8'} />
+                                        <span className="v3-dots" style={{ color: showActive ? (isDarkMode ? '#a5b4fc' : 'var(--v3-primary, #4f46e5)') : '#94a3b8' }} aria-label={t('chat.statusActive', { defaultValue: '正在生成中...' })}>
                                           <span>.</span><span>.</span><span>.</span>
                                         </span>
                                       </span>
@@ -556,15 +590,15 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                 </div>
                                 {s.messagesCount !== undefined && (
                                   <div style={{ 
-                                    fontSize: 10, background: isActive ? (isDarkMode ? 'rgba(165, 180, 252, 0.18)' : 'rgba(79, 70, 229, 0.1)') : shell.msgCountBg, 
-                                    color: isActive ? (isDarkMode ? '#e0e7ff' : 'var(--v3-primary, #4f46e5)') : shell.textMuted, padding: '0 6px', 
+                                    fontSize: 10, background: showActive ? (isDarkMode ? 'rgba(165, 180, 252, 0.18)' : 'rgba(79, 70, 229, 0.1)') : shell.msgCountBg, 
+                                    color: showActive ? (isDarkMode ? '#e0e7ff' : 'var(--v3-primary, #4f46e5)') : shell.textMuted, padding: '0 6px', 
                                     borderRadius: 6, fontWeight: 600, flexShrink: 0
                                   }}>
                                     {s.messagesCount}
                                   </div>
                                 )}
                               </div>
-                              <div className="session-id-container" style={{ fontSize: 9, color: isActive && isDarkMode ? '#cbd5e1' : '#94a3b8', marginTop: 1, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
+                              <div className="session-id-container" style={{ fontSize: 9, color: showActive && isDarkMode ? '#cbd5e1' : '#94a3b8', marginTop: 1, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
                                   <span>{new Date(s.updatedAt || s.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                   <span>•</span>
                                   <span style={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -574,7 +608,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                   {s.model && (
                                     <>
                                       <span>•</span>
-                                      <span style={{ fontSize: 8, background: isActive ? (isDarkMode ? 'rgba(165, 180, 252, 0.12)' : 'rgba(79, 70, 229, 0.05)') : shell.chipBg, padding: '0 4px', borderRadius: 4, fontWeight: 600, color: isActive ? (isDarkMode ? '#c7d2fe' : 'var(--v3-primary, #6366f1)') : shell.textMuted }}>
+                                      <span style={{ fontSize: 8, background: showActive ? (isDarkMode ? 'rgba(165, 180, 252, 0.12)' : 'rgba(79, 70, 229, 0.05)') : shell.chipBg, padding: '0 4px', borderRadius: 4, fontWeight: 600, color: showActive ? (isDarkMode ? '#c7d2fe' : 'var(--v3-primary, #6366f1)') : shell.textMuted }}>
                                         {s.model.split('/').pop() || s.model}
                                       </span>
                                     </>
@@ -584,7 +618,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                               {s.contextTokens > 0 && (
                                 <div style={{ marginTop: 6, width: '100%' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, fontSize: 9, fontWeight: 600 }}>
-                                       <span style={{ color: isActive ? (isDarkMode ? '#a5b4fc' : '#4f46e5') : '#94a3b8', transform: 'scale(0.9)', transformOrigin: 'left', fontWeight: 800 }}>
+                                       <span style={{ color: showActive ? (isDarkMode ? '#a5b4fc' : '#4f46e5') : '#94a3b8', transform: 'scale(0.9)', transformOrigin: 'left', fontWeight: 800 }}>
                                          {(() => {
                                            const { botId, source, openAIUser, buddyUser } = parseSessionKey(s.key);
                                            const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
@@ -603,18 +637,18 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                                          })()}
                                        </span>
                                        <span style={{ 
-                                         color: (s.totalTokens / s.contextTokens) > 0.8 ? '#ef4444' : (isActive ? (isDarkMode ? '#a5b4fc' : '#4f46e5') : '#64748b'),
+                                         color: (s.totalTokens / s.contextTokens) > 0.8 ? '#ef4444' : (showActive ? (isDarkMode ? '#a5b4fc' : '#4f46e5') : '#64748b'),
                                          opacity: 0.8
                                        }}>
                                          <span style={{ opacity: 0.6, marginRight: 4, fontWeight: 400 }}>CONTEXT</span>
                                          {Math.round((s.totalTokens / s.contextTokens) * 100)}%
                                        </span>
                                     </div>
-                                  <div style={{ height: 3, width: '100%', background: isActive ? (isDarkMode ? 'rgba(165, 180, 252, 0.14)' : 'rgba(79, 70, 229, 0.1)') : shell.trackBg, borderRadius: 2, overflow: 'hidden' }}>
+                                  <div style={{ height: 3, width: '100%', background: showActive ? (isDarkMode ? 'rgba(165, 180, 252, 0.14)' : 'rgba(79, 70, 229, 0.1)') : shell.trackBg, borderRadius: 2, overflow: 'hidden' }}>
                                     <div style={{ 
                                       height: '100%', 
                                       width: `${Math.min(100, (s.totalTokens / s.contextTokens) * 100)}%`,
-                                      background: (s.totalTokens / s.contextTokens) > 0.8 ? '#ef4444' : (isActive ? (isDarkMode ? '#818cf8' : '#4f46e5') : '#94a3b8'),
+                                      background: (s.totalTokens / s.contextTokens) > 0.8 ? '#ef4444' : (showActive ? (isDarkMode ? '#818cf8' : '#4f46e5') : '#94a3b8'),
                                       transition: 'width 0.3s ease'
                                     }} />
                                   </div>
@@ -623,7 +657,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                           </div>
                           <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>
                               <Button size="small" type="text" icon={<Copy size={12} />} onClick={(e) => { e.stopPropagation(); copyToClipboard(s.key); }} />
-                              {s.key !== 'agent:main:main' && (
+                              {s.key !== 'agent:main:main' && !forbidden && (
                                 <Button size="small" type="text" icon={<Trash2 size={12} />} onClick={(e) => onDeleteSession(e, s.key)} />
                               )}
                           </div>
@@ -645,34 +679,41 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                       </span>
                     </div>
                     {(() => {
+                      const mainForbidden = isSessionForbidden(mainSession.key);
                       const isActive = sessionKey === mainSession.key;
+                      const showMainActive = isActive && !mainForbidden;
                       return (
                         <div 
                             key={mainSession.key}
+                            title={mainForbidden ? sessionNoAccessTitle : undefined}
                             onClick={() => {
+                              if (mainForbidden) return;
                               onSelectSession(mainSession.key);
                               if (isMobile) setShowSider(false);
                             }}
                             style={{ 
-                                padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4, transition: 'all 0.2s',
-                                background: isActive ? 'var(--v3-pinned-bg-active, linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(79, 70, 229, 0.16) 100%))' : shell.pinnedIdleBg,
-                                border: '1px solid', borderColor: isActive ? shell.pinnedBorderActive : shell.pinnedBorder,
+                                padding: '10px 12px', borderRadius: 10, cursor: mainForbidden ? 'not-allowed' : 'pointer', marginBottom: 4, transition: 'all 0.2s',
+                                background: showMainActive ? 'var(--v3-pinned-bg-active, linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(79, 70, 229, 0.16) 100%))' : shell.pinnedIdleBg,
+                                border: '1px solid', borderColor: showMainActive ? shell.pinnedBorderActive : shell.pinnedBorder,
                                 display: 'flex', alignItems: 'center', gap: 12, position: 'relative',
-                                boxShadow: isActive ? '0 4px 12px rgba(0, 0, 0, 0.04)' : 'none'
+                                boxShadow: showMainActive ? '0 4px 12px rgba(0, 0, 0, 0.04)' : 'none',
+                                opacity: mainForbidden ? 0.52 : 1,
+                                filter: mainForbidden ? 'grayscale(0.25)' : undefined,
                             }}
                             className="session-item-main"
+                            aria-disabled={mainForbidden ? true : undefined}
                         >
                             <div style={{ position: 'relative', flexShrink: 0 }}>
                               <Avatar 
                                 size={32} 
-                                icon={<Shield size={16} fill={isActive ? '#fff' : 'var(--v3-primary, #6366f1)'} />} 
+                                icon={<Shield size={16} fill={showMainActive ? '#fff' : 'var(--v3-primary, #6366f1)'} />} 
                                 style={{ 
-                                  background: isActive ? 'var(--v3-primary, #4f46e5)' : 'rgba(79, 70, 229, 0.12)', 
-                                  color: isActive ? '#fff' : 'var(--v3-primary-strong, #4338ca)',
+                                  background: showMainActive ? 'var(--v3-primary, #4f46e5)' : 'rgba(79, 70, 229, 0.12)', 
+                                  color: showMainActive ? '#fff' : 'var(--v3-primary-strong, #4338ca)',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
-                                  boxShadow: isActive ? '0 0 0 2px rgba(0, 0, 0, 0.06)' : 'none'
+                                  boxShadow: showMainActive ? '0 0 0 2px rgba(0, 0, 0, 0.06)' : 'none'
                                 }} 
                               />
                               <div style={{
@@ -696,8 +737,18 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
 
                             <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-                                  <div style={{ fontSize: 13, fontWeight: 800, color: isActive ? (isDarkMode ? '#f1f5f9' : 'var(--v3-text, #0f172a)') : (isDarkMode ? '#e2e8f0' : 'var(--v3-primary-strong, #3730a3)'), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center' }}>
+                                  <div style={{ fontSize: 13, fontWeight: 800, color: showMainActive ? (isDarkMode ? '#f1f5f9' : 'var(--v3-text, #0f172a)') : (isDarkMode ? '#e2e8f0' : 'var(--v3-primary-strong, #3730a3)'), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
                                       {t('chat.mainSession', { defaultValue: '主会话' })}
+                                      {mainForbidden && (
+                                        <span style={{
+                                          display: 'inline-flex', alignItems: 'center', gap: 3,
+                                          fontSize: 10, fontWeight: 700, color: '#94a3b8',
+                                          flexShrink: 0,
+                                        }}>
+                                          <Lock size={11} />
+                                          {t('chat.sessionForbiddenShort', { defaultValue: '无权限' })}
+                                        </span>
+                                      )}
                                       <SessionStatusIcon status={mainSession.status} t={t} />
                                   </div>
                                   {mainSession.messagesCount !== undefined && (

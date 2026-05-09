@@ -1,6 +1,7 @@
 package process
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 )
@@ -78,16 +79,24 @@ func ExtractJSON(input string) string {
 		return input
 	}
 
-	var end int
-	if input[start] == '{' {
-		end = strings.LastIndex(input, "}")
-	} else {
-		end = strings.LastIndex(input, "]")
+	if extracted, ok := extractFirstJSONValue(input, start); ok {
+		return extracted
 	}
 
-	if end == -1 || end < start {
-		return input[start:]
-	}
+	// Incomplete JSON (no matching close): return from start so callers decode fail visibly.
+	return input[start:]
+}
 
-	return input[start : end+1]
+// extractFirstJSONValue returns the first complete JSON value beginning at start using encoding/json,
+// so nested objects/arrays and braces inside strings are handled correctly. Junk after the value is ignored.
+func extractFirstJSONValue(s string, start int) (string, bool) {
+	if start < 0 || start >= len(s) {
+		return "", false
+	}
+	dec := json.NewDecoder(strings.NewReader(s[start:]))
+	var raw json.RawMessage
+	if err := dec.Decode(&raw); err != nil {
+		return "", false
+	}
+	return string(raw), true
 }
