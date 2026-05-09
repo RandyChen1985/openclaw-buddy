@@ -284,6 +284,7 @@
     "cpuLoad": "CPU 当前负载",
     "memLoad": "内存 当前负载",
     "topBots": "机器人资源活跃榜",
+    "refreshTopBots": "刷新榜单（重新统计）",
     "analyzing": "数据加载分析中...",
     "syncing": "正在同步 OpenClaw 实时运行数据...",
     "noActiveBots": "暂无活跃会话数据",

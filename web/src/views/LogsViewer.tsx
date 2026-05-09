@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Spin, Input, Tag, Space, Button, Segmented } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Search, Filter, AlertCircle, Info, AlertTriangle, Shield, Terminal } from 'lucide-react';
 import { Virtuoso } from 'react-virtuoso';
+import type { VirtuosoHandle } from 'react-virtuoso';
 import type { WsLogConnectionState } from '../hooks/useWebSocketLogs';
 
 interface LogsViewerProps {
@@ -19,6 +20,9 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceC
   const { t } = useTranslation();
   const [searchText, setSearchText] = useState('');
   const [activeLevel, setActiveLevel] = useState<string>('all');
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  /** 离开 Buddy 源时置 true，进入 Buddy 且首次有内容时滚到底一次 */
+  const buddyTailScrollPrimedRef = useRef(true);
 
   const filteredLogs = useMemo(() => {
     return wsLogs.filter(log => {
@@ -40,6 +44,25 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceC
       return matchesLevel && matchesSearch;
     });
   }, [wsLogs, searchText, activeLevel]);
+
+  useEffect(() => {
+    if (activeSource !== 'buddy') {
+      buddyTailScrollPrimedRef.current = true;
+      return;
+    }
+    if (searchText !== '' || activeLevel !== 'all') return;
+    const n = filteredLogs.length;
+    if (n === 0) return;
+    if (!buddyTailScrollPrimedRef.current) return;
+    buddyTailScrollPrimedRef.current = false;
+    requestAnimationFrame(() => {
+      virtuosoRef.current?.scrollToIndex({
+        index: Math.max(0, n - 1),
+        align: 'end',
+        behavior: 'auto',
+      });
+    });
+  }, [activeSource, filteredLogs.length, searchText, activeLevel]);
 
   const getLogColor = (log: string) => {
     const lowerLog = log.toLowerCase();
@@ -190,8 +213,11 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ wsLogs, activeSource, onSourceC
           </div>
         ) : (
           <Virtuoso
+            key={activeSource}
+            ref={virtuosoRef}
             style={{ flex: 1, minHeight: 0 }}
             data={filteredLogs}
+            initialTopMostItemIndex={filteredLogs.length > 0 ? filteredLogs.length - 1 : 0}
             followOutput={searchText === '' && activeLevel === 'all' ? 'smooth' : false}
             itemContent={(index, log) => (
               <div style={{ display: 'flex', gap: 16, borderBottom: '1px solid #161b22', padding: '2px 0' }}>

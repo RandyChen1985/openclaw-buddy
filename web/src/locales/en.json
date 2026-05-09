@@ -284,6 +284,7 @@
     "cpuLoad": "CPU Load",
     "memLoad": "Memory Load",
     "topBots": "Top Active Bots",
+    "refreshTopBots": "Refresh leaderboard (recompute)",
     "analyzing": "Analyzing real-time data...",
     "syncing": "Syncing OpenClaw runtime assets...",
     "noActiveBots": "No active session data",

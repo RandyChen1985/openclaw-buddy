@@ -21,6 +21,8 @@ interface DashboardOverviewProps {
   canWeChatManage?: boolean;
   systemEvents?: any[];
   topBots?: any[];
+  /** 强制刷新机器人活跃榜（走服务端重算缓存） */
+  onRefreshTopBots?: () => void;
   ocInstalled: boolean | null;
   activeTasks?: any[];
   isTransitioning?: boolean; // 新增：正在执行过渡动作
@@ -49,7 +51,7 @@ interface OcStatus {
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({ 
   status, history, v3Status, isRunning, onControl, onNavigate,
   canGatewayControl = true, canWeChatManage = true,
-  systemEvents = [], topBots = [], ocInstalled, activeTasks = [], isTransitioning = false, loading = false,
+  systemEvents = [], topBots = [], onRefreshTopBots, ocInstalled, activeTasks = [], isTransitioning = false, loading = false,
   onRefreshVersion, onUpgrade, onRestart, isDarkMode = false, tag
 }) => {
   const { t } = useTranslation();
@@ -501,6 +503,21 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               styles={{ body: { padding: '20px 24px' } }} 
               style={{ borderRadius: 12, border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, background: isDarkMode ? '#1e293b' : '#fff', flex: 1 }}
               title={<span style={{ fontSize: 13, fontWeight: 600, color: isDarkMode ? '#f1f5f9' : 'inherit' }}><Trophy size={14} color="#f59e0b" /> {t('dashboard.topBots')}</span>}
+              extra={
+                onRefreshTopBots ? (
+                  <Tooltip title={t('dashboard.refreshTopBots', { defaultValue: '刷新榜单' })}>
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<RefreshCw size={14} />}
+                      loading={loading}
+                      onClick={() => onRefreshTopBots()}
+                      aria-label={t('dashboard.refreshTopBots', { defaultValue: '刷新榜单' })}
+                      style={{ color: isDarkMode ? '#94a3b8' : '#64748b' }}
+                    />
+                  </Tooltip>
+                ) : undefined
+              }
             >
               {loading ? (
                 <div style={{ textAlign: 'center', padding: '40px 0', color: isDarkMode ? '#94a3b8' : '#64748b' }}>

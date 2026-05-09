@@ -519,11 +519,13 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
     } catch (err) {}
   };
 
-  const fetchTopBots = async () => {
+  const fetchTopBots = async (force = false) => {
     setLoadingTopBots(true);
     try {
-      const res = await api.get('/v1/openclaw/bots/top');
-      setTopBots(res.data);
+      const url = force ? '/v1/openclaw/bots/top?refresh=true' : '/v1/openclaw/bots/top';
+      const res = await api.get(url);
+      const list = res.data;
+      setTopBots(Array.isArray(list) ? list : []);
     } catch (err) {
     } finally {
       setLoadingTopBots(false);
@@ -1181,6 +1183,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
           systemEvents={systemEvents}
           topBots={topBots}
           loading={loadingTopBots}
+          onRefreshTopBots={() => fetchTopBots(true)}
           ocInstalled={ocInstalled}
           activeTasks={activeTasks}
           isTransitioning={isTransitioning}
