@@ -139,12 +139,13 @@ interface SelfHealingProps {
   healEvents: any[];
   loadingSets: boolean;
   onToggle: (checked: boolean) => void;
+  onRefresh?: () => void | Promise<void>;
   ocInstalled: boolean | null;
   isDarkMode?: boolean;
 }
 
 const SelfHealing: React.FC<SelfHealingProps> = ({ 
-  selfHealingEnabled, healEvents, onToggle,
+  selfHealingEnabled, healEvents, loadingSets, onToggle, onRefresh,
   isDarkMode = false
 }) => {
   const { t } = useTranslation();
@@ -237,7 +238,11 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
     try {
       const res = await api.get('/v1/heal/reports');
       setReports(res.data || []);
-    } catch (err) { console.error(err); } finally { setLoadingReports(false); }
+    } catch (err) {
+      console.error(err);
+      message.error(t('heal.readReportFailed'));
+      setReports([]);
+    } finally { setLoadingReports(false); }
   };
 
   const fetchBackups = async () => {
@@ -245,7 +250,11 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
     try {
       const res = await api.get('/v1/heal/backups');
       setBackups(res.data || []);
-    } catch (err) { console.error(err); } finally { setLoadingBackups(false); }
+    } catch (err) {
+      console.error(err);
+      message.error(t('heal.readBackupFailed'));
+      setBackups([]);
+    } finally { setLoadingBackups(false); }
   };
 
   const fetchConfig = async () => {
@@ -288,7 +297,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
         try {
           await api.post('/v1/openclaw/config', { content: configContent });
           message.success(t('common.saveSuccess'));
-          fetchBackups();
+          await Promise.all([fetchBackups(), onRefresh?.()]);
         } catch (err: any) {
           const rawMsg = err.response?.data?.message || err.message || String(err);
           const cleaned = cleanErrorMessage(rawMsg);
@@ -325,6 +334,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
         try {
           await api.post('/v1/openclaw/doctor');
           message.success(t('heal.doctorSuccess'));
+          await Promise.all([fetchReports(), fetchBackups(), onRefresh?.()]);
         } catch (err) { 
           message.error(t('heal.doctorFailed')); 
         } finally { 
@@ -364,7 +374,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
     setIsReportModalOpen(true);
     setLoadingContent(true);
     try {
-      const res = await api.get(`/v1/heal/reports/${report.name}`);
+      const res = await api.get(`/v1/heal/reports/${encodeURIComponent(report.name)}`);
       setReportContent(res.data.content);
     } catch (err) { message.error(t('heal.readReportFailed')); setIsReportModalOpen(false); } finally { setLoadingContent(false); }
   };
@@ -375,7 +385,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
     setIsBackupModalOpen(true);
     setLoadingContent(true);
     try {
-      const res = await api.get(`/v1/heal/backups/${backup.name}`);
+      const res = await api.get(`/v1/heal/backups/${encodeURIComponent(backup.name)}`);
       setBackupContent(res.data.content);
     } catch (err) { message.error(t('heal.readBackupFailed')); setIsBackupModalOpen(false); } finally { setLoadingContent(false); }
   };
@@ -386,7 +396,7 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
     setIsBackupModalOpen(true);
     setLoadingContent(true);
     try {
-      const res = await api.get(`/v1/heal/backups/${backup.name}/diff`);
+      const res = await api.get(`/v1/heal/backups/${encodeURIComponent(backup.name)}/diff`);
       setBackupDiff(res.data.diff);
     } catch (err) { message.error(t('heal.diffFailed')); setIsBackupModalOpen(false); } finally { setLoadingContent(false); }
   };
@@ -443,6 +453,8 @@ const SelfHealing: React.FC<SelfHealingProps> = ({
                type={selfHealingEnabled ? "primary" : "primary"} 
                danger={selfHealingEnabled} 
                onClick={() => onToggle(!selfHealingEnabled)} 
+               loading={loadingSets}
+               disabled={loadingSets}
                style={{ borderRadius: 10, minWidth: 120, height: 48, fontWeight: 700, fontSize: 15 }}
             >
               {selfHealingEnabled ? t('heal.disableService') : t('heal.enableNow')}

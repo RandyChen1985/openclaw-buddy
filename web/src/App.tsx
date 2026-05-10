@@ -1257,7 +1257,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
             setActiveTab('dashboard');
             window.location.hash = 'actions';
           }} />,
-      'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} ocInstalled={ocInstalled} isDarkMode={isDarkMode} />,
+      'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} onRefresh={fetchSelfHealing} ocInstalled={ocInstalled} isDarkMode={isDarkMode} />,
       'chat': <OnlineChat
         botsModels={botsModels}
         loadingBots={loadingBots}

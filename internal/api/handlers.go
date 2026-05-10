@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -401,9 +402,15 @@ func (s *Server) getHealEvents(c *gin.Context) {
 	events := []HealEvent{}
 	for rows.Next() {
 		var ev HealEvent
-		if err := rows.Scan(&ev.ID, &ev.Timestamp, &ev.Reason, &ev.Method, &ev.Result, &ev.ReportPath, &ev.VerifyRetries, &ev.VerifyDurationMS, &ev.VerifyError); err != nil {
+		var reason, method, result, reportPath, verifyError sql.NullString
+		if err := rows.Scan(&ev.ID, &ev.Timestamp, &reason, &method, &result, &reportPath, &ev.VerifyRetries, &ev.VerifyDurationMS, &verifyError); err != nil {
 			continue
 		}
+		ev.Reason = reason.String
+		ev.Method = method.String
+		ev.Result = result.String
+		ev.ReportPath = reportPath.String
+		ev.VerifyError = verifyError.String
 		events = append(events, ev)
 	}
 
@@ -413,6 +420,10 @@ func (s *Server) getHealEvents(c *gin.Context) {
 func (s *Server) getHealReports(c *gin.Context) {
 	files, err := os.ReadDir(s.cfg.ReportDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			s.Success(c, []map[string]interface{}{})
+			return
+		}
 		s.Error(c, http.StatusInternalServerError, "无法读取报表目录: "+err.Error())
 		return
 	}
@@ -460,6 +471,10 @@ func (s *Server) getHealReportDetail(c *gin.Context) {
 func (s *Server) getHealBackups(c *gin.Context) {
 	files, err := os.ReadDir(s.cfg.BackupDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			s.Success(c, []map[string]interface{}{})
+			return
+		}
 		s.Error(c, http.StatusInternalServerError, "无法读取备份目录: "+err.Error())
 		return
 	}
@@ -1029,6 +1044,44 @@ func (s *Server) handleGetConfig(c *gin.Context) {
 	s.Success(c, gin.H{"content": string(content)})
 }
 
+func (s *Server) validateOpenClawConfigContent(content string) (bool, string, error) {
+	tmpDir, err := os.MkdirTemp("", "openclaw-config-val-*")
+	if err != nil {
+		return false, "", fmt.Errorf("Failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	if s.cfg.OpenClawConfigDir != "" {
+		absSrc, err := filepath.Abs(s.cfg.OpenClawConfigDir)
+		if err != nil {
+			return false, "", fmt.Errorf("Failed to resolve config dir: %w", err)
+		}
+		entries, err := os.ReadDir(absSrc)
+		if err != nil {
+			return false, "", fmt.Errorf("Failed to read config dir: %w", err)
+		}
+		for _, entry := range entries {
+			name := entry.Name()
+			if name == "openclaw.json" {
+				continue
+			}
+			srcPath := filepath.Join(absSrc, name)
+			dstPath := filepath.Join(tmpDir, name)
+			if err := os.Symlink(srcPath, dstPath); err != nil && !os.IsExist(err) {
+				return false, "", fmt.Errorf("Failed to prepare validation context: %w", err)
+			}
+		}
+	}
+
+	tmpConfigPath := filepath.Join(tmpDir, "openclaw.json")
+	if err := os.WriteFile(tmpConfigPath, []byte(content), 0644); err != nil {
+		return false, "", fmt.Errorf("Failed to write temp config: %w", err)
+	}
+
+	isValid, problem, err := process.CheckConfig(tmpDir)
+	return isValid, problem, err
+}
+
 func (s *Server) handleUpdateConfig(c *gin.Context) {
 	var req struct {
 		Content string `json:"content" binding:"required"`
@@ -1039,36 +1092,34 @@ func (s *Server) handleUpdateConfig(c *gin.Context) {
 	}
 
 	configPath := filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json")
-	backupPath := configPath + ".bak.tmp"
 
-	// 1. 备份当前配置
-	oldContent, err := os.ReadFile(configPath)
+	// 1. 先在隔离目录校验新配置，避免把坏配置短暂写入真实 openclaw.json
+	isValid, problem, err := s.validateOpenClawConfigContent(req.Content)
 	if err != nil {
-		s.Error(c, http.StatusInternalServerError, "Failed to backup current config: "+err.Error())
+		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := os.WriteFile(backupPath, oldContent, 0644); err != nil {
-		s.Error(c, http.StatusInternalServerError, "Failed to write backup: "+err.Error())
-		return
-	}
-	defer os.Remove(backupPath)
-
-	// 2. 写入新配置
-	if err := os.WriteFile(configPath, []byte(req.Content), 0644); err != nil {
-		s.Error(c, http.StatusInternalServerError, "Failed to update config: "+err.Error())
-		return
-	}
-
-	// 3. 校验新配置 (深度 Check)
-	isValid, problem, _ := process.CheckConfig(s.cfg.OpenClawConfigDir)
 	if !isValid {
-		// 校验失败，回滚
-		_ = os.WriteFile(configPath, oldContent, 0644)
 		s.Error(c, http.StatusBadRequest, "Configuration validation failed: "+problem)
 		return
 	}
 
-	// 校验成功
+	// 2. 校验通过后写入同目录临时文件，再原子替换真实配置
+	mode := os.FileMode(0644)
+	if info, err := os.Stat(configPath); err == nil {
+		mode = info.Mode().Perm()
+	}
+	tmpPath := fmt.Sprintf("%s.tmp-%d", configPath, time.Now().UnixNano())
+	if err := os.WriteFile(tmpPath, []byte(req.Content), mode); err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to write temp config: "+err.Error())
+		return
+	}
+	if err := os.Rename(tmpPath, configPath); err != nil {
+		_ = os.Remove(tmpPath)
+		s.Error(c, http.StatusInternalServerError, "Failed to update config: "+err.Error())
+		return
+	}
+
 	utils.RecordSystemEvent("CONFIG", "用户通过 Web 控制台手动更新了核心配置 openclaw.json")
 	s.Success(c, nil)
 }
@@ -1082,40 +1133,11 @@ func (s *Server) handleValidateConfig(c *gin.Context) {
 		return
 	}
 
-	// 1. 创建临时目录进行隔离校验 (避免污染真实运行路径)
-	tmpDir, err := os.MkdirTemp("", "openclaw-config-val-*")
+	isValid, problem, err := s.validateOpenClawConfigContent(req.Content)
 	if err != nil {
-		s.Error(c, http.StatusInternalServerError, "Failed to create temp dir: "+err.Error())
+		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer os.RemoveAll(tmpDir)
-
-	// 补丁：为了让校验器支持“深度校验”(如识别渠道插件)，需要把真实配置目录的内容软链接过来
-	// 但排除掉 openclaw.json 本身，我们将使用待校验的内容
-	if s.cfg.OpenClawConfigDir != "" {
-		absSrc, _ := filepath.Abs(s.cfg.OpenClawConfigDir)
-		entries, _ := os.ReadDir(absSrc)
-		for _, entry := range entries {
-			name := entry.Name()
-			if name == "openclaw.json" {
-				continue
-			}
-			srcPath := filepath.Join(absSrc, name)
-			dstPath := filepath.Join(tmpDir, name)
-			// 创建软链接，让临时目录拥有完整的上下文环境
-			_ = os.Symlink(srcPath, dstPath)
-		}
-	}
-
-	// 2. 写入待校验的配置
-	tmpConfigPath := filepath.Join(tmpDir, "openclaw.json")
-	if err := os.WriteFile(tmpConfigPath, []byte(req.Content), 0644); err != nil {
-		s.Error(c, http.StatusInternalServerError, "Failed to write temp config: "+err.Error())
-		return
-	}
-
-	// 3. 调用底座校验
-	isValid, problem, _ := process.CheckConfig(tmpDir)
 	if !isValid {
 		s.Error(c, http.StatusBadRequest, "Configuration validation failed: "+problem)
 		return
