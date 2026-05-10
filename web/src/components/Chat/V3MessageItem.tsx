@@ -998,7 +998,19 @@ export default React.memo(V3MessageItem, (prev, next) => {
   return prev.isMobile === next.isMobile &&
          prev.isDarkMode === next.isDarkMode &&
          prev.index === next.index &&
-         prev.editContent === next.editContent && 
+         prev.t === next.t &&
+         prev.selectedBot === next.selectedBot &&
+         prev.setEditContent === next.setEditContent &&
+         prev.onEdit === next.onEdit &&
+         prev.onSaveEdit === next.onSaveEdit &&
+         prev.onCancelEdit === next.onCancelEdit &&
+         prev.onDelete === next.onDelete &&
+         prev.onQuote === next.onQuote &&
+         prev.onSend === next.onSend &&
+         prev.onSaveToWorkspace === next.onSaveToWorkspace &&
+         prev.onRegenerate === next.onRegenerate &&
+         prev.copyToClipboard === next.copyToClipboard &&
+         prev.editContent === next.editContent &&
          prev.editingMsgIndex === next.editingMsgIndex &&
          prev.msg.content === next.msg.content &&
          (prev.metaContent || '') === (next.metaContent || '') &&

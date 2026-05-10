@@ -123,7 +123,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
 
   const handleAddLog = useCallback((log: any) => {
     // 💡 只有开启调试模式且非心跳包时才记录，防止内存溢出与性能损耗
-    if (!storage.getItem('v3_show_debug')) return;
+    if (storage.getItem('v3_show_debug') !== 'true') return;
     if (log.data?.event === 'health') return; 
     setWsLogs(prev => [...prev.slice(-99), log]);
   }, []);
@@ -530,6 +530,36 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
     });
   }, [botsModels, isCreatingNewSession, isTyping, sessionKey, startNewSession, status, t]);
 
+  const handleEditMessage = useCallback((idx: number, content: string) => {
+    setEditingMsgIndex(idx);
+    setEditContent(content);
+  }, []);
+
+  const handleSaveEditingMessage = useCallback(() => {
+    if (editingMsgIndex === null) return;
+    void handleSaveEdit(editingMsgIndex, editContent);
+    setEditingMsgIndex(null);
+  }, [editContent, editingMsgIndex, handleSaveEdit]);
+
+  const handleCancelEditingMessage = useCallback(() => {
+    setEditingMsgIndex(null);
+  }, []);
+
+  const handleDeleteMessage = useCallback((idx: number) => {
+    setMessages((prev: any) => {
+      const target = prev[idx];
+      if (!target) return prev;
+      // 主气泡被删除时，同步清理同 runId 的思考信息附录气泡（_uiMetaOnly），避免孤儿
+      const runId = target.runId;
+      const isMainDeletion = !target._uiMetaOnly && !!runId;
+      return prev.filter((m: any, i: number) => {
+        if (i === idx) return false;
+        if (isMainDeletion && m._uiMetaOnly && m.runId === runId) return false;
+        return true;
+      });
+    });
+  }, [setMessages]);
+
   return (
     <>
       <div
@@ -742,28 +772,10 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
           editingMsgIndex={editingMsgIndex}
           editContent={editContent}
           setEditContent={setEditContent}
-          onEdit={(idx, content) => {
-            setEditingMsgIndex(idx);
-            setEditContent(content);
-          }}
-          onSaveEdit={() => {
-            if (editingMsgIndex === null) return;
-            handleSaveEdit(editingMsgIndex, editContent);
-            setEditingMsgIndex(null);
-          }}
-          onCancelEdit={() => setEditingMsgIndex(null)}
-          onDelete={(idx) => setMessages((prev: any) => {
-            const target = prev[idx];
-            if (!target) return prev;
-            // 主气泡被删除时，同步清理同 runId 的思考信息附录气泡（_uiMetaOnly），避免孤儿
-            const runId = target.runId;
-            const isMainDeletion = !target._uiMetaOnly && !!runId;
-            return prev.filter((m: any, i: number) => {
-              if (i === idx) return false;
-              if (isMainDeletion && m._uiMetaOnly && m.runId === runId) return false;
-              return true;
-            });
-          })}
+          onEdit={handleEditMessage}
+          onSaveEdit={handleSaveEditingMessage}
+          onCancelEdit={handleCancelEditingMessage}
+          onDelete={handleDeleteMessage}
           onQuote={setQuotedMsg}
           onSend={handleWrappedSend}
           onSaveToWorkspace={handleSaveToWorkspace}
@@ -782,7 +794,10 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
             setShowScrollTopBtn(false);
           }}
           onScrollBottom={() => {
-            virtuosoRef.current?.scrollToIndex({ index: messages.length - 1, behavior: 'smooth', align: 'end' });
+            scrollRef.current?.scrollTo({
+              top: scrollRef.current.scrollHeight,
+              behavior: 'smooth'
+            });
             setHasNewMessages(false);
             setShowScrollBtn(false);
           }}

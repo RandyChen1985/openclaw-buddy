@@ -448,7 +448,13 @@ const V3InputArea = React.memo(forwardRef(V3InputAreaInner), (prev, next) => {
          prev.isComposing === next.isComposing &&
          prev.isFocused === next.isFocused &&
          prev.selectedBot === next.selectedBot &&
-         prev.supportsImage === next.supportsImage;
+         prev.supportsImage === next.supportsImage &&
+         prev.t === next.t &&
+         prev.botsModels === next.botsModels &&
+         prev.onSend === next.onSend &&
+         prev.onStop === next.onStop &&
+         prev.setIsComposing === next.setIsComposing &&
+         prev.setIsFocused === next.setIsFocused;
 });
 
 export default V3InputArea;

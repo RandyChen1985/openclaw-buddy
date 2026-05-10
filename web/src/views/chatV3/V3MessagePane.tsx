@@ -367,10 +367,10 @@ export function V3MessagePane({
                   editingMsgIndex={editingMsgIndex}
                   editContent={editContent}
                   setEditContent={setEditContent}
-                  onEdit={(idx, content) => onEdit(idx, content)}
+                  onEdit={onEdit}
                   onSaveEdit={onSaveEdit}
                   onCancelEdit={onCancelEdit}
-                  onDelete={(idx) => onDelete(idx)}
+                  onDelete={onDelete}
                   onQuote={onQuote}
                   onSend={onSend}
                   onSaveToWorkspace={onSaveToWorkspace}

@@ -153,14 +153,19 @@ export function useV3Sessions({
    * @param isAppend 追加模式（在动态 Limit 模式下，实际是扩大 Limit 重新抓取）
    */
   const fetchSessions = useCallback(async (isSilent = false, isAppend = false) => {
-    if (loadingSessionsRef.current && isAppend) return;
-    if (!isSilent) {
+    if (loadingSessionsRef.current) return;
+    loadingSessionsRef.current = true;
+    const showLoading = !isSilent || isAppend;
+    if (showLoading) {
       setLoadingSessions(true);
-      loadingSessionsRef.current = true;
     }
 
     // 💡 策略：由于后端 sessions.list 不支持 offset，我们通过逐渐增大 limit 来模拟分页
-    const nextLimit = isAppend ? (sessionLimitRef.current + V3_SESSION_LIST_PAGE_SIZE) : V3_SESSION_LIST_PAGE_SIZE;
+    const nextLimit = isAppend
+      ? (sessionLimitRef.current + V3_SESSION_LIST_PAGE_SIZE)
+      : isSilent
+        ? Math.max(sessionLimitRef.current, V3_SESSION_LIST_PAGE_SIZE)
+        : V3_SESSION_LIST_PAGE_SIZE;
 
     try {
       const res = await sendRPC('sessions.list', { limit: nextLimit });
@@ -232,10 +237,10 @@ export function useV3Sessions({
         console.error('[Sessions] Failed to fetch sessions:', res.error);
       }
     } finally {
-      if (!isSilent) {
+      if (showLoading) {
         setLoadingSessions(false);
-        loadingSessionsRef.current = false;
       }
+      loadingSessionsRef.current = false;
       if (!isAppend && statusRef.current === 'authenticated') {
         setInitialSessionListFetched(true);
       }
@@ -314,15 +319,6 @@ export function useV3Sessions({
    */
   const startNewSession = useCallback((agentIdOverride?: string) => {
     if (creatingNewSessionRef.current) return;
-    creatingNewSessionRef.current = true;
-    setIsCreatingNewSession(true);
-    messageOpsRef.current.resetTypingState?.('');
-    if (sessionKey) {
-      sendRPC('sessions.messages.unsubscribe', { key: sessionKey }).catch(() => {});
-    }
-    messageOpsRef.current.setMessages?.([]);
-    setSessionLabel(null);
-    messageOpsRef.current.setHasNewMessages?.(false);
 
     const run = async () => {
       try {
@@ -335,10 +331,20 @@ export function useV3Sessions({
         }
         const agentId = (agentIdOverride || (selectedBot || '').replace(/^openclaw:/, '')).trim();
         if (!agentId) {
-          setSessionKey(null);
           antdMessage.warning(t('chat.selectBot'));
           return;
         }
+
+        creatingNewSessionRef.current = true;
+        setIsCreatingNewSession(true);
+        messageOpsRef.current.resetTypingState?.('');
+        if (sessionKey) {
+          sendRPC('sessions.messages.unsubscribe', { key: sessionKey }).catch(() => {});
+        }
+        messageOpsRef.current.setMessages?.([]);
+        setSessionLabel(null);
+        messageOpsRef.current.setHasNewMessages?.(false);
+
         const key = buildBuddyDirectSessionKey(agentId, usernameForSessionKey);
         const res = await sendRPC('sessions.create', { agentId, key });
         if (!res.ok) {
@@ -636,4 +642,3 @@ export function useV3Sessions({
     status
   ]);
 }
-

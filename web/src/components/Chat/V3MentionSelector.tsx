@@ -193,9 +193,11 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
+      if (filteredItems.length === 0) return;
       setActiveIndex(prev => (prev + 1) % filteredItems.length);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
+      if (filteredItems.length === 0) return;
       setActiveIndex(prev => (prev - 1 + filteredItems.length) % filteredItems.length);
     } else if (e.key === 'Enter' && filteredItems[activeIndex]) {
       e.preventDefault();
