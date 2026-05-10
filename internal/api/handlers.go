@@ -2,8 +2,13 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/gif"
+	"image/jpeg"
+	_ "image/png"
 	"io"
 	"log"
 	"net/http"
@@ -17,18 +22,14 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"openclaw-buddy/internal/analyzer"
 	"openclaw-buddy/internal/config"
 	"openclaw-buddy/internal/process"
-	"openclaw-buddy/internal/utils"
 	"openclaw-buddy/internal/scheduler"
-	"openclaw-buddy/internal/analyzer"
-	"image"
-	_ "image/gif"
-	"image/jpeg"
-	_ "image/png"
+	"openclaw-buddy/internal/utils"
 
 	"github.com/gin-gonic/gin"
-	"context"
 )
 
 // APIResponse 统一业务响应格式
@@ -95,7 +96,7 @@ func (s *Server) proxyLobsterDashboard(c *gin.Context) {
 		prefix = ""
 	}
 	fullPrefix := prefix + "/v1/proxy"
-	
+
 	c.Request.URL.Path = strings.TrimPrefix(c.Request.URL.Path, fullPrefix)
 	if c.Request.URL.Path == "" {
 		c.Request.URL.Path = "/"
@@ -386,14 +387,14 @@ func (s *Server) getHealEvents(c *gin.Context) {
 	defer rows.Close()
 
 	type HealEvent struct {
-		ID         int    `json:"id"`
-		Timestamp  string `json:"timestamp"`
-		Reason     string `json:"reason"`
-		Method     string `json:"method"`
-		Result     string `json:"result"`
-		ReportPath string `json:"report_path"`
-		VerifyRetries    int   `json:"verify_retries"`
-		VerifyDurationMS int64 `json:"verify_duration_ms"`
+		ID               int    `json:"id"`
+		Timestamp        string `json:"timestamp"`
+		Reason           string `json:"reason"`
+		Method           string `json:"method"`
+		Result           string `json:"result"`
+		ReportPath       string `json:"report_path"`
+		VerifyRetries    int    `json:"verify_retries"`
+		VerifyDurationMS int64  `json:"verify_duration_ms"`
 		VerifyError      string `json:"verify_error"`
 	}
 
@@ -773,8 +774,6 @@ func (s *Server) chatProxy(c *gin.Context) {
 	}
 	// body["user"] = "lobster" // 固定写这个用户
 
-
-
 	jsonBody, _ := json.Marshal(body)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
@@ -791,11 +790,11 @@ func (s *Server) chatProxy(c *gin.Context) {
 
 	// 4. 执行请求 (增加 6 分钟显式超时保护)
 	startTime := time.Now()
-	
+
 	// 设置带超时的上下文，防止后端网关长时间挂起占用资源
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 6*time.Minute)
 	defer cancel()
-	
+
 	req = req.WithContext(ctx)
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -815,16 +814,27 @@ func (s *Server) chatProxy(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	fmt.Printf("%s ✅ [Chat] Request: Model=%s, Msgs=%d, Stream=%v, Latency=%dms, Status=%d\n", 
+	fmt.Printf("%s ✅ [Chat] Request: Model=%s, Msgs=%d, Stream=%v, Latency=%dms, Status=%d\n",
 		nowStr, model, msgCount, isStream, duration, resp.StatusCode)
-	
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		for k, vv := range resp.Header {
+			for _, v := range vv {
+				c.Header(k, v)
+			}
+		}
+		c.Status(resp.StatusCode)
+		io.Copy(c.Writer, resp.Body)
+		return
+	}
+
 	// 5. 处理流式响应 (WAF 穿透增强)
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") || isStream {
 		c.Header("Content-Type", "text/event-stream")
 		c.Header("Cache-Control", "no-cache, no-transform") // 核心：禁止中间缓存和压缩
 		c.Header("Connection", "keep-alive")
 		c.Header("X-Accel-Buffering", "no") // 核心：专门针对 Nginx/WAF 的非缓冲指令
-		
+
 		c.Stream(func(w io.Writer) bool {
 			// 使用带 Flush 功能的 Writer 确保实时性
 			reader := resp.Body
@@ -838,7 +848,7 @@ func (s *Server) chatProxy(c *gin.Context) {
 					}
 					// Gin 的 c.Stream 会在每次循环后自动调用 Flush，
 					// 但为了极端情况下的平滑度，手动 Read 确保了更细粒度的控制。
-					return true 
+					return true
 				}
 				if err != nil {
 					return false // 读取结束或出错
@@ -1532,7 +1542,7 @@ func (s *Server) addOpenClawProvider(c *gin.Context) {
 	}
 
 	log.Printf("🎮 [控制] 用户请求: 【添加/更新模型提供商】 (Provider: %s)", req.Name)
-	
+
 	// 动态检测是【添加】还是【更新】，以优化任务中心日志语义
 	taskName := fmt.Sprintf("添加渠道: %s", req.Name)
 	if providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir); err == nil {
@@ -1568,7 +1578,7 @@ func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 		ProviderName string                 `json:"providerName" binding:"required"`
 		ModelConfig  map[string]interface{} `json:"modelConfig" binding:"required"`
 	}
-	
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		s.Error(c, http.StatusBadRequest, "参数错误，请提供提供商名称和模型配置")
 		return
@@ -1576,7 +1586,7 @@ func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 
 	modelID, _ := req.ModelConfig["id"].(string)
 	log.Printf("🎮 [控制] 用户请求: 【向渠道追加/更新模型】 (Provider: %s, ModelID: %s)", req.ProviderName, modelID)
-	
+
 	// 动态检测是【追加】还是【更新】
 	taskName := fmt.Sprintf("渠道 %s 追加模型: %s", req.ProviderName, modelID)
 	if providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir); err == nil {
@@ -1615,7 +1625,7 @@ func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 func (s *Server) deleteOpenClawModelFromProvider(c *gin.Context) {
 	providerName := c.Param("provider")
 	modelID := c.Param("id")
-	
+
 	if providerName == "" || modelID == "" {
 		s.Error(c, http.StatusBadRequest, "参数错误，请提供提供商名称和模型ID")
 		return
@@ -1665,7 +1675,6 @@ func (s *Server) deleteOpenClawProvider(c *gin.Context) {
 		return "tasks.results.provider_removed", nil
 	})
 }
-
 
 func (s *Server) testOpenClawModelDirect(c *gin.Context) {
 	var req struct {
@@ -1902,7 +1911,7 @@ func (s *Server) getOpenClawVersion(c *gin.Context) {
 
 	out, err := exec.Command(path, "--version").Output()
 	if err != nil {
-		// 尝试不带 -- 
+		// 尝试不带 --
 		out, err = exec.Command(path, "version").Output()
 	}
 
@@ -2391,7 +2400,7 @@ func (s *Server) summarizeSession(c *gin.Context) {
 	// 2. 确定具体的提供商配置（支持不区分大小写的匹配）
 	var rawProv map[string]interface{}
 	var found bool
-	
+
 	// 首先尝试精确匹配
 	if p, ok := providers[providerName].(map[string]interface{}); ok {
 		rawProv = p
@@ -2423,7 +2432,9 @@ func (s *Server) summarizeSession(c *gin.Context) {
 	summarizePrompt := "请为以下对话总结一个 10 字以内的简短标题。只需输出标题文本，不要包含引号或任何解释说明性文字。"
 	historyText := ""
 	for i, msg := range req.Messages {
-		if i > 5 { break } // 只取前 6 条以节省 token
+		if i > 5 {
+			break
+		} // 只取前 6 条以节省 token
 		role, _ := msg["role"].(string)
 		content, _ := msg["content"].(string)
 		historyText += fmt.Sprintf("[%s]: %s\n", role, content)
@@ -2441,7 +2452,7 @@ func (s *Server) summarizeSession(c *gin.Context) {
 
 	targetUrl := strings.TrimSuffix(baseUrl, "/") + "/chat/completions"
 	log.Printf("🤖 [Summarize] Requesting AI Provider: %s (Model: %s)", targetUrl, defaultModelID)
-	
+
 	httpReq, err := http.NewRequest("POST", targetUrl, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, "创建请求失败: "+err.Error())
@@ -2488,7 +2499,7 @@ func (s *Server) summarizeSession(c *gin.Context) {
 	}
 
 	s.Success(c, gin.H{"title": title})
-	}
+}
 
 func (s *Server) handleChatUpload(c *gin.Context) {
 	// 0. 安全限制：50MB 大小限制
@@ -2549,13 +2560,13 @@ func (s *Server) handleChatUpload(c *gin.Context) {
 	// 3.1 临时测试：不生成缩略图，直接使用原图地址作为预览图地址
 	thumbName := ""
 	/* 暂时注释掉缩略图生成逻辑
-	if strings.HasPrefix(c.Request.Header.Get("Content-Type"), "image/") || 
+	if strings.HasPrefix(c.Request.Header.Get("Content-Type"), "image/") ||
 	   matchExt(ext, ".jpg", ".jpeg", ".png", ".webp", ".gif") {
 		thumbName = uniqueName + ".thumb.jpg"
 		err := generateThumbnail(filePath, filepath.Join(uploadDir, thumbName))
 		if err != nil {
 			log.Printf("⚠️ [Upload] 生成缩略图失败: %v", err)
-			thumbName = "" 
+			thumbName = ""
 		}
 	}
 	*/
@@ -2567,7 +2578,9 @@ func (s *Server) handleChatUpload(c *gin.Context) {
 	var fullURL, thumbURL string
 	escapedName := url.PathEscape(uniqueName)
 	webRoot := s.cfg.WebRoot
-	if webRoot == "/" { webRoot = "" }
+	if webRoot == "/" {
+		webRoot = ""
+	}
 
 	if botId != "" {
 		fullURL = fmt.Sprintf("%s/v1/openclaw/chat/files/%s/%s", webRoot, botId, escapedName)
@@ -2594,7 +2607,9 @@ func (s *Server) handleChatUpload(c *gin.Context) {
 // 辅助函数：匹配后缀
 func matchExt(ext string, targets ...string) bool {
 	for _, t := range targets {
-		if ext == t { return true }
+		if ext == t {
+			return true
+		}
 	}
 	return false
 }
@@ -2602,27 +2617,33 @@ func matchExt(ext string, targets ...string) bool {
 // 简单的缩略图生成逻辑 (使用原生 image 库)
 func generateThumbnail(srcPath, dstPath string) error {
 	file, err := os.Open(srcPath)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer file.Close()
 
 	img, _, err := image.Decode(file)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
 	// 计算缩放比例 (宽度固定 200px)
 	bounds := img.Bounds()
 	width := bounds.Dx()
 	height := bounds.Dy()
-	
+
 	// 如果原图宽度已经小于等于 200px，直接复制一份作为缩略图
 	if width <= 200 {
 		return utils.CopyFile(srcPath, dstPath)
 	}
-	
+
 	newWidth := 200
-	if width < 200 { newWidth = width } // 如果原图就很小，保持原宽
-	
+	if width < 200 {
+		newWidth = width
+	} // 如果原图就很小，保持原宽
+
 	newHeight := (height * newWidth) / width
-	
+
 	newImg := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
 	// 简单的重采样 (Nearest Neighbor)
 	for y := 0; y < newHeight; y++ {
@@ -2632,7 +2653,9 @@ func generateThumbnail(srcPath, dstPath string) error {
 	}
 
 	out, err := os.Create(dstPath)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer out.Close()
 
 	// 统一存为 JPEG 提高加载速度，质量设为 75
@@ -2655,7 +2678,7 @@ func (s *Server) handleGetChatFile(c *gin.Context) {
 	}
 
 	filePath := filepath.Join(uploadDir, filename)
-	
+
 	// 安全校验：防止路径穿越 (Path Traversal)
 	absUploadDir, err := filepath.Abs(uploadDir)
 	if err != nil {

@@ -60,12 +60,29 @@ api.interceptors.response.use(
  */
 export const getFullUrl = (url: string) => {
   const base = getBaseURL();
+  const normalizedUrl = url.startsWith('/') ? url : '/' + url;
+  let path = normalizedUrl;
   if (url && url.startsWith('/') && !url.startsWith('http')) {
     if (base !== '/' && !url.startsWith(base + '/')) {
-      return base + url;
+      path = base + url;
     }
   }
-  return url;
+
+  const apiBase = import.meta.env.VITE_API_URL?.trim();
+  if (!apiBase || url.startsWith('http')) return url.startsWith('http') ? url : path;
+
+  try {
+    const baseUrl = new URL(apiBase, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+    const apiBasePath = baseUrl.pathname && baseUrl.pathname !== '/'
+      ? baseUrl.pathname.replace(/\/$/, '')
+      : '';
+    const fullPath = apiBasePath && !path.startsWith(apiBasePath + '/')
+      ? apiBasePath + path
+      : path;
+    return `${baseUrl.origin}${fullPath}`;
+  } catch {
+    return path;
+  }
 };
 
 /**
