@@ -6,12 +6,12 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"openclaw-buddy/internal/config"
+	"openclaw-buddy/internal/guardian"
+	"openclaw-buddy/internal/scheduler"
+	"openclaw-buddy/internal/utils"
 	"strings"
 	"time"
-	"openclaw-buddy/internal/config"
-	"openclaw-buddy/internal/scheduler"
-	"openclaw-buddy/internal/guardian"
-	"openclaw-buddy/internal/utils"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -70,7 +70,7 @@ func NewServer(cfg *config.Config, g *guardian.Guardian) *Server {
 	s.setupRoutes()
 	// 显式拉起全局任务调度器，确保串行队列就绪
 	_ = scheduler.GetScheduler()
-	
+
 	// 移除 s.engine.Static("/v1/openclaw/chat/files", "./data/uploads")
 	// 该功能已迁移至 v1 路由组下的 handleGetChatFile 动态处理
 
@@ -219,7 +219,9 @@ func (s *Server) setupRoutes() {
 			oc.GET("/skills/files/list", s.getSkillFilesList)
 			oc.GET("/skills/files/get", s.getSkillFileContent)
 			oc.POST("/skills/files/save", s.saveSkillFileContent)
-			
+			oc.POST("/skills/files/create", s.createSkillFile)
+			oc.POST("/skills/files/mkdir", s.createSkillDir)
+
 			// Generic File Explorer
 			oc.GET("/files/list", s.getExplorerFilesList)
 			oc.GET("/files/get", s.getExplorerFileContent)
@@ -265,14 +267,14 @@ func (s *Server) setupRoutes() {
 
 		v1.GET("/stats/health", s.getHealthStats)
 		v1.GET("/wechat/qrcode", s.getWeChatQRCode)
-		
+
 		audit := v1.Group("/audit")
 		{
 			audit.GET("/dashboard/summary", s.handleGetAuditSummary)
 			audit.GET("/dashboard/tools", s.handleGetAuditTools)
 			audit.GET("/logs", s.handleGetAuditLogs)
 		}
-		
+
 		channels := v1.Group("/channels")
 		{
 			channels.GET("/metadata", s.getChannelsMetadata)
@@ -437,10 +439,10 @@ func (s *Server) setupStaticFiles() {
 
 func (s *Server) Run() error {
 	go s.StartWebSocketBroadcaster()
-	
+
 	addr := fmt.Sprintf(":%d", s.cfg.WebPort)
 	log.Printf("🚀 Web Server starting on %s (WebRoot: %s)", addr, s.cfg.WebRoot)
-	
+
 	// 为自重启场景增加重试逻辑 (最多等待 15 秒)
 	// 使用更宽松的错误判定，确保在任何端口冲突情况下都能坚持等待旧进程退出
 	var err error
@@ -448,9 +450,9 @@ func (s *Server) Run() error {
 		err = s.engine.Run(addr)
 		if err != nil {
 			errStr := strings.ToLower(err.Error())
-			if strings.Contains(errStr, "address already in use") || 
-			   strings.Contains(errStr, "bind") || 
-			   strings.Contains(errStr, "permission denied") {
+			if strings.Contains(errStr, "address already in use") ||
+				strings.Contains(errStr, "bind") ||
+				strings.Contains(errStr, "permission denied") {
 				log.Printf("⚠️ [API] 端口 %s 暂时无法绑定，可能旧进程正在退出，200ms 后重试 (%d/30)...", addr, i+1)
 				time.Sleep(200 * time.Millisecond)
 				continue

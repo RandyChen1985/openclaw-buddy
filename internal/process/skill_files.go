@@ -6,16 +6,17 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
 	"openclaw-buddy/internal/utils"
 )
 
 // FileEntry represents a file or directory in the skill resource explorer
 type FileEntry struct {
-	Name     string `json:"name"`
-	Path     string `json:"path"` // Absolute path
-	IsDir    bool   `json:"is_dir"`
-	Size     int64  `json:"size"`
-	ModTime  string `json:"mod_time"`
+	Name    string `json:"name"`
+	Path    string `json:"path"` // Absolute path
+	IsDir   bool   `json:"is_dir"`
+	Size    int64  `json:"size"`
+	ModTime string `json:"mod_time"`
 }
 
 // GetAllowedSkillBases returns the list of allowed root directories for skills
@@ -49,6 +50,67 @@ func GetBundledSkillsPath() string {
 	return ""
 }
 
+func pathWithinSkillBase(path, base string) bool {
+	rel, err := filepath.Rel(base, path)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
+}
+
+func evalSkillBase(base string) (string, error) {
+	absBase, err := filepath.Abs(base)
+	if err != nil {
+		return "", err
+	}
+	evaluated, err := filepath.EvalSymlinks(absBase)
+	if err != nil {
+		return absBase, nil
+	}
+	return evaluated, nil
+}
+
+func evalSkillPath(path string) (string, error) {
+	if evaluated, err := filepath.EvalSymlinks(path); err == nil {
+		return filepath.Abs(evaluated)
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	parts := strings.Split(filepath.Clean(absPath), string(os.PathSeparator))
+	for i := len(parts); i > 0; i-- {
+		prefix := filepath.Join(parts[:i]...)
+		if filepath.IsAbs(absPath) {
+			prefix = string(os.PathSeparator) + prefix
+		}
+		if st, err := os.Stat(prefix); err == nil && st.IsDir() {
+			evaluatedPrefix, err := filepath.EvalSymlinks(prefix)
+			if err != nil {
+				return "", err
+			}
+			remainder := filepath.Join(parts[i:]...)
+			if remainder == "." || remainder == "" {
+				return filepath.Abs(evaluatedPrefix)
+			}
+			return filepath.Abs(filepath.Join(evaluatedPrefix, remainder))
+		}
+	}
+	return absPath, nil
+}
+
+func cleanSkillChildName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", fmt.Errorf("name is required")
+	}
+	if name != filepath.Base(name) || name == "." || name == ".." || strings.Contains(name, "..") {
+		return "", fmt.Errorf("invalid name")
+	}
+	return name, nil
+}
+
 // VerifySkillPath checks if the given path is within any of the allowed skill directories
 // and returns the absolute, expanded path.
 func VerifySkillPath(path string) (string, error) {
@@ -56,8 +118,7 @@ func VerifySkillPath(path string) (string, error) {
 		return "", fmt.Errorf("path is empty")
 	}
 
-	expanded := utils.ExpandPath(path)
-	cleanPath, err := filepath.Abs(expanded)
+	cleanPath, err := evalSkillPath(utils.ExpandPath(path))
 	if err != nil {
 		return "", fmt.Errorf("failed to get absolute path: %v", err)
 	}
@@ -65,18 +126,13 @@ func VerifySkillPath(path string) (string, error) {
 	allowedBases := GetAllowedSkillBases()
 	isAllowed := false
 	for _, base := range allowedBases {
-		absBase, err := filepath.Abs(base)
+		absBase, err := evalSkillBase(base)
 		if err != nil {
 			continue
 		}
-		// Use HasPrefix with directory boundaries to avoid common traversal/prefix issues
-		// e.g. /home/user/.openclaw/skills-secret vs /home/user/.openclaw/skills
-		if strings.HasPrefix(cleanPath, absBase) {
-			// Ensure it's either the base itself or a child (checking for path separator)
-			if len(cleanPath) == len(absBase) || cleanPath[len(absBase)] == os.PathSeparator {
-				isAllowed = true
-				break
-			}
+		if pathWithinSkillBase(cleanPath, absBase) {
+			isAllowed = true
+			break
 		}
 	}
 
@@ -165,4 +221,48 @@ func SaveSkillResource(path, content string) error {
 	}
 
 	return os.WriteFile(absPath, []byte(content), 0644)
+}
+
+func CreateSkillResourceFile(dirPath, filename, content string) (string, error) {
+	absDir, err := VerifySkillPath(dirPath)
+	if err != nil {
+		return "", err
+	}
+	filename, err = cleanSkillChildName(filename)
+	if err != nil {
+		return "", err
+	}
+	destPath := filepath.Join(absDir, filename)
+	if _, err := VerifySkillPath(destPath); err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(destPath); err == nil {
+		return "", fmt.Errorf("file already exists")
+	}
+	if err := os.WriteFile(destPath, []byte(content), 0644); err != nil {
+		return "", err
+	}
+	return destPath, nil
+}
+
+func CreateSkillResourceDir(dirPath, dirname string) (string, error) {
+	absDir, err := VerifySkillPath(dirPath)
+	if err != nil {
+		return "", err
+	}
+	dirname, err = cleanSkillChildName(dirname)
+	if err != nil {
+		return "", err
+	}
+	destPath := filepath.Join(absDir, dirname)
+	if _, err := VerifySkillPath(destPath); err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(destPath); err == nil {
+		return "", fmt.Errorf("directory already exists")
+	}
+	if err := os.MkdirAll(destPath, 0755); err != nil {
+		return "", err
+	}
+	return destPath, nil
 }

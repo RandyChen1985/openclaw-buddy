@@ -1330,10 +1330,10 @@ func (s *Server) getSkillFileContent(c *gin.Context) {
 func (s *Server) saveSkillFileContent(c *gin.Context) {
 	var req struct {
 		Path    string `json:"path" binding:"required"`
-		Content string `json:"content" binding:"required"`
+		Content string `json:"content"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		s.Error(c, http.StatusBadRequest, "path and content are required")
+		s.Error(c, http.StatusBadRequest, "path is required")
 		return
 	}
 
@@ -1344,6 +1344,45 @@ func (s *Server) saveSkillFileContent(c *gin.Context) {
 		return
 	}
 	s.Success(c, gin.H{"status": "success"})
+}
+
+func (s *Server) createSkillFile(c *gin.Context) {
+	var req struct {
+		Path     string `json:"path" binding:"required"`
+		Filename string `json:"filename" binding:"required"`
+		Content  string `json:"content"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "path and filename are required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【新建技能资源文件】 (Dir: %s, Name: %s)", req.Path, req.Filename)
+	destPath, err := process.CreateSkillResourceFile(req.Path, req.Filename, req.Content)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success", "path": destPath})
+}
+
+func (s *Server) createSkillDir(c *gin.Context) {
+	var req struct {
+		Path    string `json:"path" binding:"required"`
+		Dirname string `json:"dirname" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "path and dirname are required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【新建技能资源文件夹】 (Dir: %s, Name: %s)", req.Path, req.Dirname)
+	destPath, err := process.CreateSkillResourceDir(req.Path, req.Dirname)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success", "path": destPath})
 }
 
 // Generic File Explorer Handlers
@@ -1381,10 +1420,10 @@ func (s *Server) getExplorerFileContent(c *gin.Context) {
 func (s *Server) saveExplorerFileContent(c *gin.Context) {
 	var req struct {
 		Path    string `json:"path" binding:"required"`
-		Content string `json:"content" binding:"required"`
+		Content string `json:"content"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		s.Error(c, http.StatusBadRequest, "path and content are required")
+		s.Error(c, http.StatusBadRequest, "path is required")
 		return
 	}
 
@@ -1462,9 +1501,18 @@ func (s *Server) uploadExplorerFile(c *gin.Context) {
 	}
 	defer file.Close()
 
-	data := make([]byte, header.Size)
-	if _, err := file.Read(data); err != nil {
+	const maxExplorerUploadSize = 100 * 1024 * 1024
+	if header.Size > maxExplorerUploadSize {
+		s.Error(c, http.StatusRequestEntityTooLarge, "file is too large (max 100MB)")
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxExplorerUploadSize+1))
+	if err != nil {
 		s.Error(c, http.StatusInternalServerError, "failed to read file: "+err.Error())
+		return
+	}
+	if int64(len(data)) > maxExplorerUploadSize {
+		s.Error(c, http.StatusRequestEntityTooLarge, "file is too large (max 100MB)")
 		return
 	}
 
