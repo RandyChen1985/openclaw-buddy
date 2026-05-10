@@ -1150,6 +1150,15 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
         return hasMenuPerm(item.key);
       })
     })).filter(group => group.children && group.children.length > 0);
+  const visibleMenuKeys = menuItems.flatMap(group => (group.children || []).map(item => item.key));
+  const visibleMenuKeySignature = visibleMenuKeys.join('|');
+
+  useEffect(() => {
+    if (!authMe || activeTab === 'lobster-panel') return;
+    const keys = visibleMenuKeySignature ? visibleMenuKeySignature.split('|') : [];
+    if (keys.includes(activeTab)) return;
+    setActiveTab(keys[0] || 'chat');
+  }, [authMe, activeTab, visibleMenuKeySignature]);
 
   // Helper to find label for breadcrumb
   const getActiveLabel = (key: string) => {

@@ -58,7 +58,12 @@ func (s *Server) Error(c *gin.Context, httpStatus int, msg string) {
 }
 
 func (s *Server) handleGetTicket(c *gin.Context) {
-	ticket := s.tickets.Generate()
+	p := GetPrincipal(c)
+	if p == nil {
+		s.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	ticket := s.tickets.Generate(p)
 	s.Success(c, gin.H{"ticket": ticket, "expires_in": 60})
 }
 
@@ -146,10 +151,60 @@ func (s *Server) getOpenClawBotsModels(c *gin.Context) {
 			s.Error(c, http.StatusInternalServerError, err.Error())
 			return
 		}
-		s.Success(c, gin.H{"data": res, "updated_at": "实时"})
+		s.Success(c, gin.H{"data": s.filterBotsModelsForPrincipal(c, res), "updated_at": "实时"})
 		return
 	}
-	s.Success(c, gin.H{"data": data, "updated_at": updatedAt})
+	s.Success(c, gin.H{"data": s.filterBotsModelsForPrincipal(c, data), "updated_at": updatedAt})
+}
+
+func (s *Server) filterBotsModelsForPrincipal(c *gin.Context, data any) any {
+	p := GetPrincipal(c)
+	if p == nil || p.HasPermission(permBots) {
+		return data
+	}
+	if p.User == nil {
+		return data
+	}
+
+	allowedIDs, err := utils.GetUserBotIDs(p.User.ID)
+	if err != nil {
+		return data
+	}
+	allowed := make(map[string]bool, len(allowedIDs))
+	for _, id := range allowedIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			allowed[id] = true
+		}
+	}
+
+	var res process.OpenClawBotsModelsResponse
+	raw, err := json.Marshal(data)
+	if err != nil || json.Unmarshal(raw, &res) != nil {
+		return data
+	}
+
+	modelIDs := map[string]bool{}
+	filteredBots := make([]process.OpenClawBot, 0, len(res.Bots))
+	for _, bot := range res.Bots {
+		if !allowed[bot.ID] {
+			continue
+		}
+		filteredBots = append(filteredBots, bot)
+		if bot.Model != "" {
+			modelIDs[bot.Model] = true
+		}
+	}
+
+	filteredModels := make([]process.OpenClawModel, 0, len(res.Models))
+	for _, model := range res.Models {
+		if modelIDs[model.ID] {
+			filteredModels = append(filteredModels, model)
+		}
+	}
+	res.Bots = filteredBots
+	res.Models = filteredModels
+	return res
 }
 
 func (s *Server) getOpenClawDevices(c *gin.Context) {

@@ -24,6 +24,24 @@ type Server struct {
 	guardian *guardian.Guardian
 }
 
+const (
+	permDashboard   = "menu:monitor:dashboard:view"
+	permAudit       = "menu:monitor:audit:view"
+	permLogs        = "menu:monitor:logs:view"
+	permTools       = "menu:monitor:self_healing:manage"
+	permShell       = "menu:monitor:shell:manage"
+	permSecurity    = "menu:monitor:security:manage"
+	permCron        = "menu:monitor:cron:view"
+	permTUI         = "menu:assets:tui:view"
+	permBots        = "menu:assets:bots:manage"
+	permSkills      = "menu:assets:skills:manage"
+	permPlugins     = "menu:assets:plugins:manage"
+	permExperts     = "menu:assets:experts:view"
+	permChannels    = "menu:binding:channels:manage"
+	permDevices     = "menu:binding:devices:manage"
+	permLobsterPane = "menu:external:lobster_panel:open"
+)
+
 func NewServer(cfg *config.Config, g *guardian.Guardian) *Server {
 	gin.DisableConsoleColor()
 	engine := gin.New()
@@ -182,28 +200,30 @@ func (s *Server) setupRoutes() {
 			oc.GET("/status", s.getOpenClawStatus)
 			oc.GET("/gateway-token", s.getGatewayToken)
 			oc.GET("/version", s.getOpenClawVersion)
-			oc.GET("/dashboard-url", s.getDashboardURL)
+			oc.GET("/dashboard-url", RequirePermission(permLobsterPane), s.getDashboardURL)
 			oc.GET("/bots-models", s.getOpenClawBotsModels)
-			oc.GET("/devices", s.getOpenClawDevices)
-			oc.POST("/devices/approve", s.approveDevice)
-			oc.POST("/bots/add", s.addOpenClawBot)
-			oc.POST("/bots/set-identity", s.setOpenClawBotIdentity)
-			oc.POST("/bots/set-model", s.setOpenClawBotModel)
-			oc.POST("/bots/update", s.updateOpenClawBot)
-			oc.POST("/bots/delete", s.deleteOpenClawBot)
-			oc.GET("/bots/top", s.getTopBots)
+			oc.GET("/devices", RequirePermission(permDevices), s.getOpenClawDevices)
+			oc.POST("/devices/approve", RequirePermission(permDevices), s.approveDevice)
+			oc.POST("/bots/add", RequirePermission(permBots), s.addOpenClawBot)
+			oc.POST("/bots/set-identity", RequirePermission(permBots), s.setOpenClawBotIdentity)
+			oc.POST("/bots/set-model", RequirePermission(permBots), s.setOpenClawBotModel)
+			oc.POST("/bots/update", RequirePermission(permBots), s.updateOpenClawBot)
+			oc.POST("/bots/delete", RequirePermission(permBots), s.deleteOpenClawBot)
+			oc.GET("/bots/top", RequirePermission(permDashboard), s.getTopBots)
+			// Bot soul files are also used by the V3 chat editor; keep them authenticated
+			// and let the handler/path guard constrain what can be touched.
 			oc.GET("/bots/file", s.getOpenClawBotFile)
 			oc.POST("/bots/file", s.updateOpenClawBotFile)
-			oc.GET("/bots/memory/list", s.listOpenClawBotMemoryFiles)
-			oc.DELETE("/bots/memory/file", s.deleteOpenClawBotMemoryFile)
-			oc.POST("/models/set-default", s.setDefaultModel)
-			oc.GET("/models/config", s.getOpenClawModelsConfig)
-			oc.POST("/models/test-direct", s.testOpenClawModelDirect)
-			oc.POST("/models/provider", s.addOpenClawProvider)
-			oc.DELETE("/models/provider/:provider", s.deleteOpenClawProvider)
-			oc.POST("/models/provider/model", s.addOpenClawModelToProvider)
-			oc.DELETE("/models/provider/:provider/model/:id", s.deleteOpenClawModelFromProvider)
-			oc.DELETE("/models/provider/model", s.deleteOpenClawModelFromProvider)
+			oc.GET("/bots/memory/list", RequireAnyPermission(permBots), s.listOpenClawBotMemoryFiles)
+			oc.DELETE("/bots/memory/file", RequireAnyPermission(permBots), s.deleteOpenClawBotMemoryFile)
+			oc.POST("/models/set-default", RequirePermission(permBots), s.setDefaultModel)
+			oc.GET("/models/config", RequirePermission(permBots), s.getOpenClawModelsConfig)
+			oc.POST("/models/test-direct", RequirePermission(permBots), s.testOpenClawModelDirect)
+			oc.POST("/models/provider", RequirePermission(permBots), s.addOpenClawProvider)
+			oc.DELETE("/models/provider/:provider", RequirePermission(permBots), s.deleteOpenClawProvider)
+			oc.POST("/models/provider/model", RequirePermission(permBots), s.addOpenClawModelToProvider)
+			oc.DELETE("/models/provider/:provider/model/:id", RequirePermission(permBots), s.deleteOpenClawModelFromProvider)
+			oc.DELETE("/models/provider/model", RequirePermission(permBots), s.deleteOpenClawModelFromProvider)
 			oc.POST("/chat/completions", s.chatProxy)
 			oc.POST("/chat/summarize", s.summarizeSession)
 			oc.GET("/chat/status", s.getChatStatus)
@@ -213,14 +233,14 @@ func (s *Server) setupRoutes() {
 			oc.GET("/chat/quick-commands", s.getQuickCommands)
 			oc.POST("/chat/quick-commands", s.addQuickCommand)
 			oc.DELETE("/chat/quick-commands/:id", s.deleteQuickCommand)
-			oc.GET("/skills", s.getOpenClawSkills)
-			oc.DELETE("/skills/:name", s.uninstallSkill)
-			oc.POST("/skills/reload", s.reloadSkills)
-			oc.GET("/skills/files/list", s.getSkillFilesList)
-			oc.GET("/skills/files/get", s.getSkillFileContent)
-			oc.POST("/skills/files/save", s.saveSkillFileContent)
-			oc.POST("/skills/files/create", s.createSkillFile)
-			oc.POST("/skills/files/mkdir", s.createSkillDir)
+			oc.GET("/skills", RequirePermission(permSkills), s.getOpenClawSkills)
+			oc.DELETE("/skills/:name", RequirePermission(permSkills), s.uninstallSkill)
+			oc.POST("/skills/reload", RequirePermission(permSkills), s.reloadSkills)
+			oc.GET("/skills/files/list", RequirePermission(permSkills), s.getSkillFilesList)
+			oc.GET("/skills/files/get", RequirePermission(permSkills), s.getSkillFileContent)
+			oc.POST("/skills/files/save", RequirePermission(permSkills), s.saveSkillFileContent)
+			oc.POST("/skills/files/create", RequirePermission(permSkills), s.createSkillFile)
+			oc.POST("/skills/files/mkdir", RequirePermission(permSkills), s.createSkillDir)
 
 			// Generic File Explorer
 			oc.GET("/files/list", s.getExplorerFilesList)
@@ -234,41 +254,42 @@ func (s *Server) setupRoutes() {
 			oc.POST("/files/rename", s.renameExplorerFile)
 			oc.GET("/files/search", s.searchExplorerFiles)
 
-			oc.GET("/plugins", s.getOpenClawPlugins)
-			oc.POST("/plugins/reload", s.reloadPlugins)
-			oc.POST("/plugins/enable", s.enablePlugin)
-			oc.POST("/plugins/disable", s.disablePlugin)
-			oc.DELETE("/plugins/:id", s.uninstallPlugin)
-			oc.POST("/plugins/update", s.updatePlugins)
-			oc.GET("/cron-jobs", s.getOpenClawCronJobs)
-			oc.POST("/cron-jobs/enable", s.enableCronJob)
-			oc.POST("/cron-jobs/disable", s.disableCronJob)
-			oc.DELETE("/cron-jobs/:id", s.removeCronJob)
-			oc.GET("/experts", s.getOpenClawExperts)
-			oc.POST("/bots/template", s.createBotFromExpert)
+			oc.GET("/plugins", RequireAnyPermission(permPlugins, permChannels), s.getOpenClawPlugins)
+			oc.POST("/plugins/reload", RequirePermission(permPlugins), s.reloadPlugins)
+			oc.POST("/plugins/enable", RequirePermission(permPlugins), s.enablePlugin)
+			oc.POST("/plugins/disable", RequirePermission(permPlugins), s.disablePlugin)
+			oc.DELETE("/plugins/:id", RequirePermission(permPlugins), s.uninstallPlugin)
+			oc.POST("/plugins/update", RequirePermission(permPlugins), s.updatePlugins)
+			oc.GET("/cron-jobs", RequirePermission(permCron), s.getOpenClawCronJobs)
+			oc.POST("/cron-jobs/enable", RequirePermission(permCron), s.enableCronJob)
+			oc.POST("/cron-jobs/disable", RequirePermission(permCron), s.disableCronJob)
+			oc.DELETE("/cron-jobs/:id", RequirePermission(permCron), s.removeCronJob)
+			oc.GET("/experts", RequirePermission(permExperts), s.getOpenClawExperts)
+			oc.POST("/bots/template", RequirePermission(permExperts), s.createBotFromExpert)
 			oc.GET("/sessions", s.getSessions)
 			// Configuration & Maintenance
-			oc.GET("/config", s.handleGetConfig)
-			oc.POST("/config", s.handleUpdateConfig)
-			oc.POST("/config/validate", s.handleValidateConfig)
-			oc.POST("/doctor", s.handleRunDoctor)
+			oc.GET("/config", RequirePermission(permTools), s.handleGetConfig)
+			oc.POST("/config", RequirePermission(permTools), s.handleUpdateConfig)
+			oc.POST("/config/validate", RequirePermission(permTools), s.handleValidateConfig)
+			oc.POST("/doctor", RequirePermission(permTools), s.handleRunDoctor)
 			// Security related
-			oc.GET("/security/status", s.getSecurityStatus)
-			oc.POST("/security/task", s.triggerSecurityTask)
+			oc.GET("/security/status", RequirePermission(permSecurity), s.getSecurityStatus)
+			oc.POST("/security/task", RequirePermission(permSecurity), s.triggerSecurityTask)
 		}
 
 		gateway := v1.Group("/gateway")
 		{
-			gateway.POST("/start", s.startGateway)
-			gateway.POST("/stop", s.stopGateway)
-			gateway.POST("/restart", s.restartGateway)
-			gateway.GET("/usage-cost", s.getUsageCost)
+			gateway.POST("/start", RequirePermission(permTools), s.startGateway)
+			gateway.POST("/stop", RequirePermission(permTools), s.stopGateway)
+			gateway.POST("/restart", RequirePermission(permTools), s.restartGateway)
+			gateway.GET("/usage-cost", RequirePermission(permDashboard), s.getUsageCost)
 		}
 
 		v1.GET("/stats/health", s.getHealthStats)
-		v1.GET("/wechat/qrcode", s.getWeChatQRCode)
+		v1.GET("/wechat/qrcode", RequirePermission(permChannels), s.getWeChatQRCode)
 
 		audit := v1.Group("/audit")
+		audit.Use(RequirePermission(permAudit))
 		{
 			audit.GET("/dashboard/summary", s.handleGetAuditSummary)
 			audit.GET("/dashboard/tools", s.handleGetAuditTools)
@@ -276,6 +297,7 @@ func (s *Server) setupRoutes() {
 		}
 
 		channels := v1.Group("/channels")
+		channels.Use(RequirePermission(permChannels))
 		{
 			channels.GET("/metadata", s.getChannelsMetadata)
 			channels.GET("/status", s.getChannelsStatus)
@@ -286,33 +308,33 @@ func (s *Server) setupRoutes() {
 			channels.POST("/setup", s.saveChannelConfig)
 			channels.DELETE("/:channelId/setup", s.unbindChannel)
 		}
-		v1.GET("/wechat/plugin/status", s.checkWeChatPlugin)
-		v1.GET("/wechat/config/status", s.getWeChatConfigStatus)
-		v1.POST("/wechat/install", s.installWeChatPlugin)
-		v1.DELETE("/wechat/unbind/:id", s.unbindWeChatAccount)
-		v1.GET("/ws/logs", s.streamLogs)
-		v1.GET("/ws/tui", s.handleTUI)
-		v1.GET("/ws/shell", s.handleShell)
+		v1.GET("/wechat/plugin/status", RequirePermission(permChannels), s.checkWeChatPlugin)
+		v1.GET("/wechat/config/status", RequirePermission(permChannels), s.getWeChatConfigStatus)
+		v1.POST("/wechat/install", RequirePermission(permChannels), s.installWeChatPlugin)
+		v1.DELETE("/wechat/unbind/:id", RequirePermission(permChannels), s.unbindWeChatAccount)
+		v1.GET("/ws/logs", RequirePermission(permLogs), s.streamLogs)
+		v1.GET("/ws/tui", RequirePermission(permTUI), s.handleTUI)
+		v1.GET("/ws/shell", RequirePermission(permShell), s.handleShell)
 		v1.GET("/ws/gateway", s.handleGatewayProxy)
 
 		// Self-healing management
-		v1.GET("/settings/self-healing", s.getSelfHealingSetting)
-		v1.POST("/settings/self-healing", s.updateSelfHealingSetting)
-		v1.GET("/heal/events", s.getHealEvents)
-		v1.GET("/heal/reports", s.getHealReports)
-		v1.GET("/heal/reports/:name", s.getHealReportDetail)
-		v1.GET("/heal/backups", s.getHealBackups)
-		v1.GET("/heal/backups/:name", s.getHealBackupDetail)
-		v1.GET("/heal/backups/:name/diff", s.getHealBackupDiff)
+		v1.GET("/settings/self-healing", RequirePermission(permTools), s.getSelfHealingSetting)
+		v1.POST("/settings/self-healing", RequirePermission(permTools), s.updateSelfHealingSetting)
+		v1.GET("/heal/events", RequirePermission(permTools), s.getHealEvents)
+		v1.GET("/heal/reports", RequirePermission(permTools), s.getHealReports)
+		v1.GET("/heal/reports/:name", RequirePermission(permTools), s.getHealReportDetail)
+		v1.GET("/heal/backups", RequirePermission(permTools), s.getHealBackups)
+		v1.GET("/heal/backups/:name", RequirePermission(permTools), s.getHealBackupDetail)
+		v1.GET("/heal/backups/:name/diff", RequirePermission(permTools), s.getHealBackupDiff)
 		v1.GET("/tasks/status", s.getTasksStatus)
-		v1.GET("/system/events", s.getSystemEvents)
+		v1.GET("/system/events", RequireAnyPermission(permDashboard, permLogs, permTools), s.getSystemEvents)
 		v1.GET("/system/version", s.getSystemVersion)
-		v1.POST("/system/upgrade", s.handleUpgrade)
-		v1.POST("/system/restart", s.handleRestart)
-		v1.GET("/system/info", s.getServerInfo)
+		v1.POST("/system/upgrade", RequirePermission(permDashboard), s.handleUpgrade)
+		v1.POST("/system/restart", RequirePermission(permDashboard), s.handleRestart)
+		v1.GET("/system/info", RequireAnyPermission(permDashboard, permShell), s.getServerInfo)
 
 		// Proxy for external dashboard
-		v1.Any("/proxy/*path", s.proxyLobsterDashboard)
+		v1.Any("/proxy/*path", RequirePermission(permLobsterPane), s.proxyLobsterDashboard)
 	}
 
 	s.setupStaticFiles()

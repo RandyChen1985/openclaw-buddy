@@ -59,11 +59,13 @@ func AuthMiddleware(token string, tickets *TicketStore) gin.HandlerFunc {
 			}
 		}
 
-		// 3. 一次性 ticket（仅用于 WS / 显式短期授权，视为 superadmin 等价权限）
+		// 3. 一次性 ticket（仅用于 WS / 显式短期授权，继承签发时的主体权限）
 		if principal == nil && tickets != nil {
 			queryTicket := strings.TrimSpace(c.Query("ticket"))
-			if queryTicket != "" && tickets.Consume(queryTicket) {
-				principal = &Principal{IsSuperAdmin: true}
+			if queryTicket != "" {
+				if p, ok := tickets.Consume(queryTicket); ok {
+					principal = p
+				}
 				hasTicketAuth = true
 			}
 		}
@@ -99,6 +101,31 @@ func AuthMiddleware(token string, tickets *TicketStore) gin.HandlerFunc {
 
 		SetPrincipal(c, principal)
 		c.Next()
+	}
+}
+
+// RequireAnyPermission 用于路由级权限校验，任一权限满足即可，superadmin 直通。
+// 传空权限列表时退化为“仅需已认证”。
+func RequireAnyPermission(keys ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		p := GetPrincipal(c)
+		if p == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			c.Abort()
+			return
+		}
+		if len(keys) == 0 {
+			c.Next()
+			return
+		}
+		for _, key := range keys {
+			if p.HasPermission(key) {
+				c.Next()
+				return
+			}
+		}
+		c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: missing permission"})
+		c.Abort()
 	}
 }
 
