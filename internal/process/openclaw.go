@@ -6,6 +6,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"openclaw-buddy/internal/utils"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,7 +14,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"openclaw-buddy/internal/utils"
 )
 
 //go:embed experts
@@ -39,6 +39,21 @@ type OpenClawModel struct {
 	IsDefault    bool     `json:"isDefault"`
 	Capabilities []string `json:"capabilities"`
 	Input        []string `json:"input"`
+}
+
+func cleanOpenClawMemoryFilename(filename string) (string, error) {
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
+		return "", fmt.Errorf("filename is required")
+	}
+	if filename != filepath.Base(filename) || strings.Contains(filename, "..") {
+		return "", fmt.Errorf("invalid memory filename")
+	}
+	ext := strings.ToLower(filepath.Ext(filename))
+	if ext != ".md" && ext != ".txt" {
+		return "", fmt.Errorf("memory filename must end with .md or .txt")
+	}
+	return filename, nil
 }
 
 type OpenClawSession struct {
@@ -73,9 +88,9 @@ type OpenClawSkill struct {
 }
 
 type OpenClawBotsModelsResponse struct {
-	Bots     []OpenClawBot     `json:"bots"`
-	Models   []OpenClawModel   `json:"models"`
-	UpdateAt string            `json:"updated_at"`
+	Bots     []OpenClawBot   `json:"bots"`
+	Models   []OpenClawModel `json:"models"`
+	UpdateAt string          `json:"updated_at"`
 }
 
 type OpenClawGatewayConfig struct {
@@ -94,15 +109,15 @@ type OpenClawGatewayConfig struct {
 }
 
 type Expert struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	NameEn        string   `json:"name_en"`
-	Description   string   `json:"description"`
-	DescriptionEn string   `json:"description_en"`
-	Emoji         string   `json:"emoji"`
-	Category      string   `json:"category"`
-	CategoryZh    string   `json:"category_zh"`
-	Soul          string   `json:"soul"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	NameEn        string `json:"name_en"`
+	Description   string `json:"description"`
+	DescriptionEn string `json:"description_en"`
+	Emoji         string `json:"emoji"`
+	Category      string `json:"category"`
+	CategoryZh    string `json:"category_zh"`
+	Soul          string `json:"soul"`
 	Identity      struct {
 		Name string `json:"name"`
 		Bio  string `json:"bio"`
@@ -160,8 +175,8 @@ type OpenClawApprovalsSnapshot struct {
 
 type SecurityStatusData struct {
 	Policy        *OpenClawExecPolicyResponse `json:"policy"`
-	Snapshot      *OpenClawApprovalsSnapshot   `json:"snapshot"`
-	VersionTooLow bool                         `json:"versionTooLow"`
+	Snapshot      *OpenClawApprovalsSnapshot  `json:"snapshot"`
+	VersionTooLow bool                        `json:"versionTooLow"`
 }
 
 type cliBot struct {
@@ -248,7 +263,7 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 		var currentBot *OpenClawBot
 		isAgentsSection := false
 		var scannerBots *bufio.Scanner
-		
+
 		// 如果 JSON 模式失败，重新获取纯文本输出（为了保持原始逻辑的健壮性）
 		cmdBotsPlain := exec.Command("openclaw", "agents", "list")
 		outBotsPlain, _ := cmdBotsPlain.CombinedOutput()
@@ -317,7 +332,7 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 		cleanOut := StripANSI(string(modelsOut))
 		jsonStr := ExtractJSON(cleanOut)
 		var cliModels []cliModel
-		
+
 		// 增强解析：兼容对象包装和直接数组
 		var wrapper struct {
 			Models []cliModel `json:"models"`
@@ -447,20 +462,20 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 	// 注入模型能力
 	for i := range res.Models {
 		m := &res.Models[i]
-		
+
 		// 优先从物理配置匹配
 		idParts := strings.Split(m.ID, "/")
 		baseID := idParts[len(idParts)-1]
-		
+
 		if caps, ok := modelCaps[m.ID]; ok {
 			m.Capabilities = caps
 		} else if caps, ok := modelCaps[baseID]; ok {
 			m.Capabilities = caps
 		}
-		
+
 		// 兼容旧字段
 		m.Input = m.Capabilities
-		
+
 		// 如果物理配置没填，应用启发式规则
 		if !contains(m.Capabilities, "image") && isVisionModel(m.ID) {
 			m.Capabilities = append(m.Capabilities, "image")
@@ -482,7 +497,6 @@ func GetOpenClawBotsModels(configDir string) (*OpenClawBotsModelsResponse, error
 
 	return res, nil
 }
-
 
 func AddOpenClawBot(id, model, workspace string) error {
 	// 如果 workspace 为空，则根据 id 自动生成
@@ -598,10 +612,11 @@ func GetOpenClawBotFileContent(configDir, id, fileType, filename, workspace stri
 	case "agents":
 		filePath = filepath.Join(botWorkspace, "AGENTS.md")
 	case "memory_file":
-		if filename == "" {
-			return "", fmt.Errorf("filename is required for memory_file type")
+		cleanFilename, err := cleanOpenClawMemoryFilename(filename)
+		if err != nil {
+			return "", err
 		}
-		filePath = filepath.Join(botWorkspace, "memory", filename)
+		filePath = filepath.Join(botWorkspace, "memory", cleanFilename)
 	default:
 		return "", fmt.Errorf("unsupported file type: %s", fileType)
 	}
@@ -669,14 +684,15 @@ func SaveOpenClawBotFileContent(configDir, id, fileType, filename, content, work
 	case "agents":
 		filePath = filepath.Join(botWorkspace, "AGENTS.md")
 	case "memory_file":
-		if filename == "" {
-			return fmt.Errorf("filename is required for memory_file type")
+		cleanFilename, err := cleanOpenClawMemoryFilename(filename)
+		if err != nil {
+			return err
 		}
 		memoryDir := filepath.Join(botWorkspace, "memory")
 		if err := os.MkdirAll(memoryDir, 0755); err != nil {
 			return fmt.Errorf("failed to create memory directory: %w", err)
 		}
-		filePath = filepath.Join(memoryDir, filename)
+		filePath = filepath.Join(memoryDir, cleanFilename)
 	default:
 		return fmt.Errorf("unsupported file type: %s", fileType)
 	}
@@ -749,8 +765,9 @@ func ListOpenClawBotMemoryFiles(configDir, id, workspace string) ([]string, erro
 
 // DeleteOpenClawBotMemoryFile 删除机器人记忆目录下的指定文件
 func DeleteOpenClawBotMemoryFile(configDir, id, filename, workspace string) error {
-	if filename == "" {
-		return fmt.Errorf("filename is required")
+	cleanFilename, err := cleanOpenClawMemoryFilename(filename)
+	if err != nil {
+		return err
 	}
 
 	botWorkspace := workspace
@@ -771,7 +788,7 @@ func DeleteOpenClawBotMemoryFile(configDir, id, filename, workspace string) erro
 		return fmt.Errorf("bot %s not found and no workspace provided", id)
 	}
 
-	filePath := filepath.Join(utils.ExpandPath(botWorkspace), "memory", filename)
+	filePath := filepath.Join(utils.ExpandPath(botWorkspace), "memory", cleanFilename)
 	return os.Remove(filePath)
 }
 
@@ -861,7 +878,7 @@ func GetOpenClawGatewayConfig(configDir string) (*OpenClawGatewayConfig, error) 
 }
 
 func EnableChatCompletions(configDir string) error {
-    // ... (unchanged content if any, but I'll replace the end)
+	// ... (unchanged content if any, but I'll replace the end)
 	configPath := filepath.Join(configDir, "openclaw.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -953,28 +970,28 @@ type OpenClawCronState struct {
 }
 
 type OpenClawCronJob struct {
-	ID            string              `json:"id"`
-	AgentID       string              `json:"agentId"`
-	SessionKey    string              `json:"sessionKey"`
-	Name          string              `json:"name"`
-	Enabled       bool                `json:"enabled"`
-	CreatedAtMs   int64               `json:"createdAtMs"`
-	UpdatedAtMs   int64               `json:"updatedAtMs"`
+	ID            string               `json:"id"`
+	AgentID       string               `json:"agentId"`
+	SessionKey    string               `json:"sessionKey"`
+	Name          string               `json:"name"`
+	Enabled       bool                 `json:"enabled"`
+	CreatedAtMs   int64                `json:"createdAtMs"`
+	UpdatedAtMs   int64                `json:"updatedAtMs"`
 	Schedule      OpenClawCronSchedule `json:"schedule"`
-	SessionTarget string              `json:"sessionTarget"`
-	WakeMode      string              `json:"wakeMode"`
-	Payload       OpenClawCronPayload `json:"payload"`
+	SessionTarget string               `json:"sessionTarget"`
+	WakeMode      string               `json:"wakeMode"`
+	Payload       OpenClawCronPayload  `json:"payload"`
 	Delivery      OpenClawCronDelivery `json:"delivery"`
-	State         OpenClawCronState   `json:"state"`
+	State         OpenClawCronState    `json:"state"`
 }
 
 type OpenClawCronJobsResponse struct {
-	Jobs      []OpenClawCronJob `json:"jobs"`
-	Total     int               `json:"total"`
-	Offset    int               `json:"offset"`
-	Limit     int               `json:"limit"`
-	HasMore   bool              `json:"hasMore"`
-	NextOffset *int             `json:"nextOffset"`
+	Jobs       []OpenClawCronJob `json:"jobs"`
+	Total      int               `json:"total"`
+	Offset     int               `json:"offset"`
+	Limit      int               `json:"limit"`
+	HasMore    bool              `json:"hasMore"`
+	NextOffset *int              `json:"nextOffset"`
 }
 
 func GetOpenClawCronJobs() (any, error) {
@@ -1567,7 +1584,6 @@ func DeleteOpenClawProvider(configDir, providerName string) error {
 	return os.WriteFile(configPath, newData, 0644)
 }
 
-
 func GetOpenClawExperts() ([]Expert, error) {
 	files, err := expertTemplates.ReadDir("experts")
 	if err != nil {
@@ -1594,7 +1610,7 @@ func GetOpenClawExperts() ([]Expert, error) {
 func CreateBotFromExpert(expertID, newBotID, modelID, customSoul, customIdentityMD string) error {
 	// [Hardening] 预检 BotID 是否已占用，防止覆盖 SOUL.md 和误操作
 	// 这里通过尝试列出机器人来实现，如果 GetOpenClawBotsModels 返回了该 ID，则拦截
-	currentBots, err := GetOpenClawBotsModels("") 
+	currentBots, err := GetOpenClawBotsModels("")
 	if err == nil {
 		for _, b := range currentBots.Bots {
 			if b.ID == newBotID {
@@ -1857,8 +1873,10 @@ func GetBotWorkspace(configDir, botID string) (string, error) {
 
 	for _, item := range list {
 		bot, ok := item.(map[string]interface{})
-		if !ok { continue }
-		
+		if !ok {
+			continue
+		}
+
 		id, _ := bot["id"].(string)
 		if id == botID {
 			ws, _ := bot["workspace"].(string)

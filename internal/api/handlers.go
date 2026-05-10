@@ -1631,7 +1631,7 @@ func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 		Name:   taskName,
 		Module: "bots",
 		Action: "add-model",
-		Target: req.ProviderName,
+		Target: fmt.Sprintf("%s/%s", req.ProviderName, modelID),
 	}
 
 	s.runAsyncTask(c, task, func() (string, error) {
@@ -1647,6 +1647,12 @@ func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 func (s *Server) deleteOpenClawModelFromProvider(c *gin.Context) {
 	providerName := c.Param("provider")
 	modelID := c.Param("id")
+	if providerName == "" {
+		providerName = c.Query("provider")
+	}
+	if modelID == "" {
+		modelID = c.Query("id")
+	}
 
 	if providerName == "" || modelID == "" {
 		s.Error(c, http.StatusBadRequest, "参数错误，请提供提供商名称和模型ID")

@@ -130,10 +130,11 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   };
 
   const isModelProcessing = (modelFullId: string) => {
+    const [providerName] = modelFullId.split('/');
     return activeTasks.some(t => 
       t.module === 'bots' && 
       (t.action === 'set-default-model' || t.action === 'delete-model' || t.action === 'add-model') && 
-      t.target === modelFullId && 
+      (t.target === modelFullId || (t.action === 'add-model' && t.target === providerName)) &&
       t.status === 'Running'
     );
   };
@@ -142,7 +143,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     return activeTasks.some(t => 
       t.module === 'bots' && 
       (t.action === 'add-provider' || t.action === 'add-model' || t.action === 'delete-provider' || t.action === 'update-provider') && 
-      t.target === providerName && 
+      (t.target === providerName || (t.action === 'add-model' && String(t.target || '').startsWith(`${providerName}/`))) &&
       t.status === 'Running'
     );
   };
@@ -234,6 +235,9 @@ const BotsManager: React.FC<BotsManagerProps> = ({
 
   const handleEditModel = (providerName: string, m: any) => {
     setIsEditingModel(true);
+    const modelInput = Array.isArray(m.input) && m.input.length > 0
+      ? m.input
+      : (Array.isArray(m.capabilities) && m.capabilities.length > 0 ? m.capabilities : ['text']);
     // 回填表单
     modelForm.setFieldsValue({
       provider_name: providerName,
@@ -241,7 +245,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       name: m.name,
       api: m.api || 'openai-completions',
       reasoning: !!m.reasoning,
-      input: m.input || ['text'],
+      input: modelInput,
       maxTokens: m.maxTokens || 2000000,
       contextWindow: m.contextWindow || 2000000,
     });
@@ -262,7 +266,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           name: values.name || values.id,
           api: values.api,
           reasoning: !!values.reasoning,
-          input: values.input,
+          input: values.input || ['text'],
+          capabilities: values.input || ['text'],
           maxTokens: parseInt(values.maxTokens) || 2000000,
           contextWindow: parseInt(values.contextWindow) || 2000000,
         }
@@ -310,7 +315,9 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       onOk: async () => {
         try {
           // 物理调用模型删除接口 (任务 ID 会被全局 App.tsx 捕捉并自动重刷)
-          await api.delete(`/v1/openclaw/models/provider/${provider}/model/${modelId}`);
+          await api.delete('/v1/openclaw/models/provider/model', {
+            params: { provider, id: modelId }
+          });
           message.success(t('common.waitingGateway'));
         } catch (err: any) {
           message.error(t('bots.deleteFailed') + ': ' + (err.response?.data?.error || err.message));
@@ -329,7 +336,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          await api.delete(`/v1/openclaw/models/provider/${name}`);
+          await api.delete(`/v1/openclaw/models/provider/${encodeURIComponent(name)}`);
           message.success(t('common.waitingGateway'));
         } catch (err: any) {
           message.error(t('bots.deleteFailed') + ': ' + (err.response?.data?.error || err.message));
@@ -411,9 +418,9 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       
       const currentTab = tabOverride || activeMemoryTab;
       
-      let url = `/v1/openclaw/bots/file?id=${botId}&type=${type}${workspaceParam}`;
+      let url = `/v1/openclaw/bots/file?id=${encodeURIComponent(botId)}&type=${encodeURIComponent(type)}${workspaceParam}`;
       if (type === 'memory' && currentTab === 'daily' && filename) {
-        url = `/v1/openclaw/bots/file?id=${botId}&type=memory_file&filename=${encodeURIComponent(filename)}${workspaceParam}`;
+        url = `/v1/openclaw/bots/file?id=${encodeURIComponent(botId)}&type=memory_file&filename=${encodeURIComponent(filename)}${workspaceParam}`;
         setSelectedMemoryFile(filename);
       } else if (type === 'memory' && currentTab === 'long') {
         setSelectedMemoryFile(null);
@@ -439,7 +446,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
     setLoadingMemoryList(true);
     try {
       const workspaceParam = workspace ? `&workspace=${encodeURIComponent(workspace)}` : '';
-      const res = await api.get(`/v1/openclaw/bots/memory/list?id=${botId}${workspaceParam}`);
+      const res = await api.get(`/v1/openclaw/bots/memory/list?id=${encodeURIComponent(botId)}${workspaceParam}`);
       setMemoryFiles(res.data.files || []);
     } catch (err: any) {
       message.error(t('common.loadFailed') + ': ' + (err.response?.data?.error || err.message));
@@ -451,7 +458,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   const handleDeleteMemoryFile = async (botId: string, filename: string, workspace?: string) => {
     try {
       const workspaceParam = workspace ? `&workspace=${encodeURIComponent(workspace)}` : '';
-      await api.delete(`/v1/openclaw/bots/memory/file?id=${botId}&filename=${encodeURIComponent(filename)}${workspaceParam}`);
+      await api.delete(`/v1/openclaw/bots/memory/file?id=${encodeURIComponent(botId)}&filename=${encodeURIComponent(filename)}${workspaceParam}`);
       message.success(t('common.success'));
       fetchMemoryList(botId, workspace);
       if (selectedMemoryFile === filename) {
@@ -1724,8 +1731,12 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                             </div>
                           ),
                           onOk: async () => {
-                            const filename = (document.getElementById('new-memory-filename') as HTMLInputElement).value;
+                            const filename = (document.getElementById('new-memory-filename') as HTMLInputElement).value.trim();
                             if (filename) {
+                              if (!/^[^/\\]+\.(md|txt)$/i.test(filename) || filename.includes('..')) {
+                                message.error(t('bots.invalidMemoryFilename', { defaultValue: '文件名只能是不含路径的 .md 或 .txt 文件' }));
+                                return Promise.reject(new Error('invalid filename'));
+                              }
                               setSelectedMemoryFile(filename);
                               setEditorContent('');
                               // 自动触发一次保存来创建文件
