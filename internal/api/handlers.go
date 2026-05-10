@@ -2,8 +2,14 @@ package api
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/gif"
+	"image/jpeg"
+	_ "image/png"
 	"io"
 	"log"
 	"net/http"
@@ -17,18 +23,14 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"openclaw-buddy/internal/analyzer"
 	"openclaw-buddy/internal/config"
 	"openclaw-buddy/internal/process"
-	"openclaw-buddy/internal/utils"
 	"openclaw-buddy/internal/scheduler"
-	"openclaw-buddy/internal/analyzer"
-	"image"
-	_ "image/gif"
-	"image/jpeg"
-	_ "image/png"
+	"openclaw-buddy/internal/utils"
 
 	"github.com/gin-gonic/gin"
-	"context"
 )
 
 // APIResponse 统一业务响应格式
@@ -56,7 +58,12 @@ func (s *Server) Error(c *gin.Context, httpStatus int, msg string) {
 }
 
 func (s *Server) handleGetTicket(c *gin.Context) {
-	ticket := s.tickets.Generate()
+	p := GetPrincipal(c)
+	if p == nil {
+		s.Error(c, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	ticket := s.tickets.Generate(p)
 	s.Success(c, gin.H{"ticket": ticket, "expires_in": 60})
 }
 
@@ -95,7 +102,7 @@ func (s *Server) proxyLobsterDashboard(c *gin.Context) {
 		prefix = ""
 	}
 	fullPrefix := prefix + "/v1/proxy"
-	
+
 	c.Request.URL.Path = strings.TrimPrefix(c.Request.URL.Path, fullPrefix)
 	if c.Request.URL.Path == "" {
 		c.Request.URL.Path = "/"
@@ -144,10 +151,60 @@ func (s *Server) getOpenClawBotsModels(c *gin.Context) {
 			s.Error(c, http.StatusInternalServerError, err.Error())
 			return
 		}
-		s.Success(c, gin.H{"data": res, "updated_at": "实时"})
+		s.Success(c, gin.H{"data": s.filterBotsModelsForPrincipal(c, res), "updated_at": "实时"})
 		return
 	}
-	s.Success(c, gin.H{"data": data, "updated_at": updatedAt})
+	s.Success(c, gin.H{"data": s.filterBotsModelsForPrincipal(c, data), "updated_at": updatedAt})
+}
+
+func (s *Server) filterBotsModelsForPrincipal(c *gin.Context, data any) any {
+	p := GetPrincipal(c)
+	if p == nil || p.HasPermission(permBots) {
+		return data
+	}
+	if p.User == nil {
+		return data
+	}
+
+	allowedIDs, err := utils.GetUserBotIDs(p.User.ID)
+	if err != nil {
+		return data
+	}
+	allowed := make(map[string]bool, len(allowedIDs))
+	for _, id := range allowedIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			allowed[id] = true
+		}
+	}
+
+	var res process.OpenClawBotsModelsResponse
+	raw, err := json.Marshal(data)
+	if err != nil || json.Unmarshal(raw, &res) != nil {
+		return data
+	}
+
+	modelIDs := map[string]bool{}
+	filteredBots := make([]process.OpenClawBot, 0, len(res.Bots))
+	for _, bot := range res.Bots {
+		if !allowed[bot.ID] {
+			continue
+		}
+		filteredBots = append(filteredBots, bot)
+		if bot.Model != "" {
+			modelIDs[bot.Model] = true
+		}
+	}
+
+	filteredModels := make([]process.OpenClawModel, 0, len(res.Models))
+	for _, model := range res.Models {
+		if modelIDs[model.ID] {
+			filteredModels = append(filteredModels, model)
+		}
+	}
+	res.Bots = filteredBots
+	res.Models = filteredModels
+	return res
 }
 
 func (s *Server) getOpenClawDevices(c *gin.Context) {
@@ -386,23 +443,29 @@ func (s *Server) getHealEvents(c *gin.Context) {
 	defer rows.Close()
 
 	type HealEvent struct {
-		ID         int    `json:"id"`
-		Timestamp  string `json:"timestamp"`
-		Reason     string `json:"reason"`
-		Method     string `json:"method"`
-		Result     string `json:"result"`
-		ReportPath string `json:"report_path"`
-		VerifyRetries    int   `json:"verify_retries"`
-		VerifyDurationMS int64 `json:"verify_duration_ms"`
+		ID               int    `json:"id"`
+		Timestamp        string `json:"timestamp"`
+		Reason           string `json:"reason"`
+		Method           string `json:"method"`
+		Result           string `json:"result"`
+		ReportPath       string `json:"report_path"`
+		VerifyRetries    int    `json:"verify_retries"`
+		VerifyDurationMS int64  `json:"verify_duration_ms"`
 		VerifyError      string `json:"verify_error"`
 	}
 
 	events := []HealEvent{}
 	for rows.Next() {
 		var ev HealEvent
-		if err := rows.Scan(&ev.ID, &ev.Timestamp, &ev.Reason, &ev.Method, &ev.Result, &ev.ReportPath, &ev.VerifyRetries, &ev.VerifyDurationMS, &ev.VerifyError); err != nil {
+		var reason, method, result, reportPath, verifyError sql.NullString
+		if err := rows.Scan(&ev.ID, &ev.Timestamp, &reason, &method, &result, &reportPath, &ev.VerifyRetries, &ev.VerifyDurationMS, &verifyError); err != nil {
 			continue
 		}
+		ev.Reason = reason.String
+		ev.Method = method.String
+		ev.Result = result.String
+		ev.ReportPath = reportPath.String
+		ev.VerifyError = verifyError.String
 		events = append(events, ev)
 	}
 
@@ -412,6 +475,10 @@ func (s *Server) getHealEvents(c *gin.Context) {
 func (s *Server) getHealReports(c *gin.Context) {
 	files, err := os.ReadDir(s.cfg.ReportDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			s.Success(c, []map[string]interface{}{})
+			return
+		}
 		s.Error(c, http.StatusInternalServerError, "无法读取报表目录: "+err.Error())
 		return
 	}
@@ -459,6 +526,10 @@ func (s *Server) getHealReportDetail(c *gin.Context) {
 func (s *Server) getHealBackups(c *gin.Context) {
 	files, err := os.ReadDir(s.cfg.BackupDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			s.Success(c, []map[string]interface{}{})
+			return
+		}
 		s.Error(c, http.StatusInternalServerError, "无法读取备份目录: "+err.Error())
 		return
 	}
@@ -773,8 +844,6 @@ func (s *Server) chatProxy(c *gin.Context) {
 	}
 	// body["user"] = "lobster" // 固定写这个用户
 
-
-
 	jsonBody, _ := json.Marshal(body)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
@@ -791,11 +860,11 @@ func (s *Server) chatProxy(c *gin.Context) {
 
 	// 4. 执行请求 (增加 6 分钟显式超时保护)
 	startTime := time.Now()
-	
+
 	// 设置带超时的上下文，防止后端网关长时间挂起占用资源
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 6*time.Minute)
 	defer cancel()
-	
+
 	req = req.WithContext(ctx)
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -815,16 +884,27 @@ func (s *Server) chatProxy(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	fmt.Printf("%s ✅ [Chat] Request: Model=%s, Msgs=%d, Stream=%v, Latency=%dms, Status=%d\n", 
+	fmt.Printf("%s ✅ [Chat] Request: Model=%s, Msgs=%d, Stream=%v, Latency=%dms, Status=%d\n",
 		nowStr, model, msgCount, isStream, duration, resp.StatusCode)
-	
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		for k, vv := range resp.Header {
+			for _, v := range vv {
+				c.Header(k, v)
+			}
+		}
+		c.Status(resp.StatusCode)
+		io.Copy(c.Writer, resp.Body)
+		return
+	}
+
 	// 5. 处理流式响应 (WAF 穿透增强)
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") || isStream {
 		c.Header("Content-Type", "text/event-stream")
 		c.Header("Cache-Control", "no-cache, no-transform") // 核心：禁止中间缓存和压缩
 		c.Header("Connection", "keep-alive")
 		c.Header("X-Accel-Buffering", "no") // 核心：专门针对 Nginx/WAF 的非缓冲指令
-		
+
 		c.Stream(func(w io.Writer) bool {
 			// 使用带 Flush 功能的 Writer 确保实时性
 			reader := resp.Body
@@ -838,7 +918,7 @@ func (s *Server) chatProxy(c *gin.Context) {
 					}
 					// Gin 的 c.Stream 会在每次循环后自动调用 Flush，
 					// 但为了极端情况下的平滑度，手动 Read 确保了更细粒度的控制。
-					return true 
+					return true
 				}
 				if err != nil {
 					return false // 读取结束或出错
@@ -1019,6 +1099,44 @@ func (s *Server) handleGetConfig(c *gin.Context) {
 	s.Success(c, gin.H{"content": string(content)})
 }
 
+func (s *Server) validateOpenClawConfigContent(content string) (bool, string, error) {
+	tmpDir, err := os.MkdirTemp("", "openclaw-config-val-*")
+	if err != nil {
+		return false, "", fmt.Errorf("Failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	if s.cfg.OpenClawConfigDir != "" {
+		absSrc, err := filepath.Abs(s.cfg.OpenClawConfigDir)
+		if err != nil {
+			return false, "", fmt.Errorf("Failed to resolve config dir: %w", err)
+		}
+		entries, err := os.ReadDir(absSrc)
+		if err != nil {
+			return false, "", fmt.Errorf("Failed to read config dir: %w", err)
+		}
+		for _, entry := range entries {
+			name := entry.Name()
+			if name == "openclaw.json" {
+				continue
+			}
+			srcPath := filepath.Join(absSrc, name)
+			dstPath := filepath.Join(tmpDir, name)
+			if err := os.Symlink(srcPath, dstPath); err != nil && !os.IsExist(err) {
+				return false, "", fmt.Errorf("Failed to prepare validation context: %w", err)
+			}
+		}
+	}
+
+	tmpConfigPath := filepath.Join(tmpDir, "openclaw.json")
+	if err := os.WriteFile(tmpConfigPath, []byte(content), 0644); err != nil {
+		return false, "", fmt.Errorf("Failed to write temp config: %w", err)
+	}
+
+	isValid, problem, err := process.CheckConfig(tmpDir)
+	return isValid, problem, err
+}
+
 func (s *Server) handleUpdateConfig(c *gin.Context) {
 	var req struct {
 		Content string `json:"content" binding:"required"`
@@ -1029,36 +1147,34 @@ func (s *Server) handleUpdateConfig(c *gin.Context) {
 	}
 
 	configPath := filepath.Join(s.cfg.OpenClawConfigDir, "openclaw.json")
-	backupPath := configPath + ".bak.tmp"
 
-	// 1. 备份当前配置
-	oldContent, err := os.ReadFile(configPath)
+	// 1. 先在隔离目录校验新配置，避免把坏配置短暂写入真实 openclaw.json
+	isValid, problem, err := s.validateOpenClawConfigContent(req.Content)
 	if err != nil {
-		s.Error(c, http.StatusInternalServerError, "Failed to backup current config: "+err.Error())
+		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := os.WriteFile(backupPath, oldContent, 0644); err != nil {
-		s.Error(c, http.StatusInternalServerError, "Failed to write backup: "+err.Error())
-		return
-	}
-	defer os.Remove(backupPath)
-
-	// 2. 写入新配置
-	if err := os.WriteFile(configPath, []byte(req.Content), 0644); err != nil {
-		s.Error(c, http.StatusInternalServerError, "Failed to update config: "+err.Error())
-		return
-	}
-
-	// 3. 校验新配置 (深度 Check)
-	isValid, problem, _ := process.CheckConfig(s.cfg.OpenClawConfigDir)
 	if !isValid {
-		// 校验失败，回滚
-		_ = os.WriteFile(configPath, oldContent, 0644)
 		s.Error(c, http.StatusBadRequest, "Configuration validation failed: "+problem)
 		return
 	}
 
-	// 校验成功
+	// 2. 校验通过后写入同目录临时文件，再原子替换真实配置
+	mode := os.FileMode(0644)
+	if info, err := os.Stat(configPath); err == nil {
+		mode = info.Mode().Perm()
+	}
+	tmpPath := fmt.Sprintf("%s.tmp-%d", configPath, time.Now().UnixNano())
+	if err := os.WriteFile(tmpPath, []byte(req.Content), mode); err != nil {
+		s.Error(c, http.StatusInternalServerError, "Failed to write temp config: "+err.Error())
+		return
+	}
+	if err := os.Rename(tmpPath, configPath); err != nil {
+		_ = os.Remove(tmpPath)
+		s.Error(c, http.StatusInternalServerError, "Failed to update config: "+err.Error())
+		return
+	}
+
 	utils.RecordSystemEvent("CONFIG", "用户通过 Web 控制台手动更新了核心配置 openclaw.json")
 	s.Success(c, nil)
 }
@@ -1072,40 +1188,11 @@ func (s *Server) handleValidateConfig(c *gin.Context) {
 		return
 	}
 
-	// 1. 创建临时目录进行隔离校验 (避免污染真实运行路径)
-	tmpDir, err := os.MkdirTemp("", "openclaw-config-val-*")
+	isValid, problem, err := s.validateOpenClawConfigContent(req.Content)
 	if err != nil {
-		s.Error(c, http.StatusInternalServerError, "Failed to create temp dir: "+err.Error())
+		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer os.RemoveAll(tmpDir)
-
-	// 补丁：为了让校验器支持“深度校验”(如识别渠道插件)，需要把真实配置目录的内容软链接过来
-	// 但排除掉 openclaw.json 本身，我们将使用待校验的内容
-	if s.cfg.OpenClawConfigDir != "" {
-		absSrc, _ := filepath.Abs(s.cfg.OpenClawConfigDir)
-		entries, _ := os.ReadDir(absSrc)
-		for _, entry := range entries {
-			name := entry.Name()
-			if name == "openclaw.json" {
-				continue
-			}
-			srcPath := filepath.Join(absSrc, name)
-			dstPath := filepath.Join(tmpDir, name)
-			// 创建软链接，让临时目录拥有完整的上下文环境
-			_ = os.Symlink(srcPath, dstPath)
-		}
-	}
-
-	// 2. 写入待校验的配置
-	tmpConfigPath := filepath.Join(tmpDir, "openclaw.json")
-	if err := os.WriteFile(tmpConfigPath, []byte(req.Content), 0644); err != nil {
-		s.Error(c, http.StatusInternalServerError, "Failed to write temp config: "+err.Error())
-		return
-	}
-
-	// 3. 调用底座校验
-	isValid, problem, _ := process.CheckConfig(tmpDir)
 	if !isValid {
 		s.Error(c, http.StatusBadRequest, "Configuration validation failed: "+problem)
 		return
@@ -1298,10 +1385,10 @@ func (s *Server) getSkillFileContent(c *gin.Context) {
 func (s *Server) saveSkillFileContent(c *gin.Context) {
 	var req struct {
 		Path    string `json:"path" binding:"required"`
-		Content string `json:"content" binding:"required"`
+		Content string `json:"content"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		s.Error(c, http.StatusBadRequest, "path and content are required")
+		s.Error(c, http.StatusBadRequest, "path is required")
 		return
 	}
 
@@ -1312,6 +1399,45 @@ func (s *Server) saveSkillFileContent(c *gin.Context) {
 		return
 	}
 	s.Success(c, gin.H{"status": "success"})
+}
+
+func (s *Server) createSkillFile(c *gin.Context) {
+	var req struct {
+		Path     string `json:"path" binding:"required"`
+		Filename string `json:"filename" binding:"required"`
+		Content  string `json:"content"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "path and filename are required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【新建技能资源文件】 (Dir: %s, Name: %s)", req.Path, req.Filename)
+	destPath, err := process.CreateSkillResourceFile(req.Path, req.Filename, req.Content)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success", "path": destPath})
+}
+
+func (s *Server) createSkillDir(c *gin.Context) {
+	var req struct {
+		Path    string `json:"path" binding:"required"`
+		Dirname string `json:"dirname" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "path and dirname are required")
+		return
+	}
+
+	log.Printf("🎮 [控制] 用户请求: 【新建技能资源文件夹】 (Dir: %s, Name: %s)", req.Path, req.Dirname)
+	destPath, err := process.CreateSkillResourceDir(req.Path, req.Dirname)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"status": "success", "path": destPath})
 }
 
 // Generic File Explorer Handlers
@@ -1349,10 +1475,10 @@ func (s *Server) getExplorerFileContent(c *gin.Context) {
 func (s *Server) saveExplorerFileContent(c *gin.Context) {
 	var req struct {
 		Path    string `json:"path" binding:"required"`
-		Content string `json:"content" binding:"required"`
+		Content string `json:"content"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		s.Error(c, http.StatusBadRequest, "path and content are required")
+		s.Error(c, http.StatusBadRequest, "path is required")
 		return
 	}
 
@@ -1430,9 +1556,18 @@ func (s *Server) uploadExplorerFile(c *gin.Context) {
 	}
 	defer file.Close()
 
-	data := make([]byte, header.Size)
-	if _, err := file.Read(data); err != nil {
+	const maxExplorerUploadSize = 100 * 1024 * 1024
+	if header.Size > maxExplorerUploadSize {
+		s.Error(c, http.StatusRequestEntityTooLarge, "file is too large (max 100MB)")
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxExplorerUploadSize+1))
+	if err != nil {
 		s.Error(c, http.StatusInternalServerError, "failed to read file: "+err.Error())
+		return
+	}
+	if int64(len(data)) > maxExplorerUploadSize {
+		s.Error(c, http.StatusRequestEntityTooLarge, "file is too large (max 100MB)")
 		return
 	}
 
@@ -1532,7 +1667,7 @@ func (s *Server) addOpenClawProvider(c *gin.Context) {
 	}
 
 	log.Printf("🎮 [控制] 用户请求: 【添加/更新模型提供商】 (Provider: %s)", req.Name)
-	
+
 	// 动态检测是【添加】还是【更新】，以优化任务中心日志语义
 	taskName := fmt.Sprintf("添加渠道: %s", req.Name)
 	if providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir); err == nil {
@@ -1568,7 +1703,7 @@ func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 		ProviderName string                 `json:"providerName" binding:"required"`
 		ModelConfig  map[string]interface{} `json:"modelConfig" binding:"required"`
 	}
-	
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		s.Error(c, http.StatusBadRequest, "参数错误，请提供提供商名称和模型配置")
 		return
@@ -1576,7 +1711,7 @@ func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 
 	modelID, _ := req.ModelConfig["id"].(string)
 	log.Printf("🎮 [控制] 用户请求: 【向渠道追加/更新模型】 (Provider: %s, ModelID: %s)", req.ProviderName, modelID)
-	
+
 	// 动态检测是【追加】还是【更新】
 	taskName := fmt.Sprintf("渠道 %s 追加模型: %s", req.ProviderName, modelID)
 	if providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir); err == nil {
@@ -1599,7 +1734,7 @@ func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 		Name:   taskName,
 		Module: "bots",
 		Action: "add-model",
-		Target: req.ProviderName,
+		Target: fmt.Sprintf("%s/%s", req.ProviderName, modelID),
 	}
 
 	s.runAsyncTask(c, task, func() (string, error) {
@@ -1615,7 +1750,13 @@ func (s *Server) addOpenClawModelToProvider(c *gin.Context) {
 func (s *Server) deleteOpenClawModelFromProvider(c *gin.Context) {
 	providerName := c.Param("provider")
 	modelID := c.Param("id")
-	
+	if providerName == "" {
+		providerName = c.Query("provider")
+	}
+	if modelID == "" {
+		modelID = c.Query("id")
+	}
+
 	if providerName == "" || modelID == "" {
 		s.Error(c, http.StatusBadRequest, "参数错误，请提供提供商名称和模型ID")
 		return
@@ -1665,7 +1806,6 @@ func (s *Server) deleteOpenClawProvider(c *gin.Context) {
 		return "tasks.results.provider_removed", nil
 	})
 }
-
 
 func (s *Server) testOpenClawModelDirect(c *gin.Context) {
 	var req struct {
@@ -1902,7 +2042,7 @@ func (s *Server) getOpenClawVersion(c *gin.Context) {
 
 	out, err := exec.Command(path, "--version").Output()
 	if err != nil {
-		// 尝试不带 -- 
+		// 尝试不带 --
 		out, err = exec.Command(path, "version").Output()
 	}
 
@@ -2391,7 +2531,7 @@ func (s *Server) summarizeSession(c *gin.Context) {
 	// 2. 确定具体的提供商配置（支持不区分大小写的匹配）
 	var rawProv map[string]interface{}
 	var found bool
-	
+
 	// 首先尝试精确匹配
 	if p, ok := providers[providerName].(map[string]interface{}); ok {
 		rawProv = p
@@ -2423,7 +2563,9 @@ func (s *Server) summarizeSession(c *gin.Context) {
 	summarizePrompt := "请为以下对话总结一个 10 字以内的简短标题。只需输出标题文本，不要包含引号或任何解释说明性文字。"
 	historyText := ""
 	for i, msg := range req.Messages {
-		if i > 5 { break } // 只取前 6 条以节省 token
+		if i > 5 {
+			break
+		} // 只取前 6 条以节省 token
 		role, _ := msg["role"].(string)
 		content, _ := msg["content"].(string)
 		historyText += fmt.Sprintf("[%s]: %s\n", role, content)
@@ -2441,7 +2583,7 @@ func (s *Server) summarizeSession(c *gin.Context) {
 
 	targetUrl := strings.TrimSuffix(baseUrl, "/") + "/chat/completions"
 	log.Printf("🤖 [Summarize] Requesting AI Provider: %s (Model: %s)", targetUrl, defaultModelID)
-	
+
 	httpReq, err := http.NewRequest("POST", targetUrl, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, "创建请求失败: "+err.Error())
@@ -2488,7 +2630,7 @@ func (s *Server) summarizeSession(c *gin.Context) {
 	}
 
 	s.Success(c, gin.H{"title": title})
-	}
+}
 
 func (s *Server) handleChatUpload(c *gin.Context) {
 	// 0. 安全限制：50MB 大小限制
@@ -2549,13 +2691,13 @@ func (s *Server) handleChatUpload(c *gin.Context) {
 	// 3.1 临时测试：不生成缩略图，直接使用原图地址作为预览图地址
 	thumbName := ""
 	/* 暂时注释掉缩略图生成逻辑
-	if strings.HasPrefix(c.Request.Header.Get("Content-Type"), "image/") || 
+	if strings.HasPrefix(c.Request.Header.Get("Content-Type"), "image/") ||
 	   matchExt(ext, ".jpg", ".jpeg", ".png", ".webp", ".gif") {
 		thumbName = uniqueName + ".thumb.jpg"
 		err := generateThumbnail(filePath, filepath.Join(uploadDir, thumbName))
 		if err != nil {
 			log.Printf("⚠️ [Upload] 生成缩略图失败: %v", err)
-			thumbName = "" 
+			thumbName = ""
 		}
 	}
 	*/
@@ -2567,7 +2709,9 @@ func (s *Server) handleChatUpload(c *gin.Context) {
 	var fullURL, thumbURL string
 	escapedName := url.PathEscape(uniqueName)
 	webRoot := s.cfg.WebRoot
-	if webRoot == "/" { webRoot = "" }
+	if webRoot == "/" {
+		webRoot = ""
+	}
 
 	if botId != "" {
 		fullURL = fmt.Sprintf("%s/v1/openclaw/chat/files/%s/%s", webRoot, botId, escapedName)
@@ -2594,7 +2738,9 @@ func (s *Server) handleChatUpload(c *gin.Context) {
 // 辅助函数：匹配后缀
 func matchExt(ext string, targets ...string) bool {
 	for _, t := range targets {
-		if ext == t { return true }
+		if ext == t {
+			return true
+		}
 	}
 	return false
 }
@@ -2602,27 +2748,33 @@ func matchExt(ext string, targets ...string) bool {
 // 简单的缩略图生成逻辑 (使用原生 image 库)
 func generateThumbnail(srcPath, dstPath string) error {
 	file, err := os.Open(srcPath)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer file.Close()
 
 	img, _, err := image.Decode(file)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
 	// 计算缩放比例 (宽度固定 200px)
 	bounds := img.Bounds()
 	width := bounds.Dx()
 	height := bounds.Dy()
-	
+
 	// 如果原图宽度已经小于等于 200px，直接复制一份作为缩略图
 	if width <= 200 {
 		return utils.CopyFile(srcPath, dstPath)
 	}
-	
+
 	newWidth := 200
-	if width < 200 { newWidth = width } // 如果原图就很小，保持原宽
-	
+	if width < 200 {
+		newWidth = width
+	} // 如果原图就很小，保持原宽
+
 	newHeight := (height * newWidth) / width
-	
+
 	newImg := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
 	// 简单的重采样 (Nearest Neighbor)
 	for y := 0; y < newHeight; y++ {
@@ -2632,7 +2784,9 @@ func generateThumbnail(srcPath, dstPath string) error {
 	}
 
 	out, err := os.Create(dstPath)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer out.Close()
 
 	// 统一存为 JPEG 提高加载速度，质量设为 75
@@ -2655,7 +2809,7 @@ func (s *Server) handleGetChatFile(c *gin.Context) {
 	}
 
 	filePath := filepath.Join(uploadDir, filename)
-	
+
 	// 安全校验：防止路径穿越 (Path Traversal)
 	absUploadDir, err := filepath.Abs(uploadDir)
 	if err != nil {

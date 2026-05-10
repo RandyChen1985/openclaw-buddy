@@ -326,7 +326,7 @@ const SkillFileExplorer: React.FC<SkillFileExplorerProps> = ({ open, onClose, ro
     if (!newName) return;
     try {
       const payload = createType === 'file' ? { path: createParentPath, filename: newName } : { path: createParentPath, dirname: newName };
-      await api.post(createType === 'file' ? '/v1/openclaw/files/create' : '/v1/openclaw/files/mkdir', payload);
+      await api.post(createType === 'file' ? '/v1/openclaw/skills/files/create' : '/v1/openclaw/skills/files/mkdir', payload);
       message.success(t('common.createSuccess'));
       setCreateModalOpen(false);
       loadFiles(currentPath);

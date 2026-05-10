@@ -308,6 +308,100 @@ func TestRBACEndToEnd(t *testing.T) {
 	}
 }
 
+func TestRBACProtectsOperationalAPIsAndBotData(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	s := buildTestServer(t)
+
+	w := doJSON(t, s, http.MethodPost, "/v1/system/users", "test-buddy-token", map[string]any{
+		"username":  "bob",
+		"real_name": "Bob",
+		"password":  "bobpwd1",
+		"role_keys": []string{"user"},
+	})
+	if w.Code != 200 {
+		t.Fatalf("create user: got %d body=%s", w.Code, w.Body.String())
+	}
+
+	w = doJSON(t, s, http.MethodGet, "/v1/system/users", "test-buddy-token", nil)
+	if w.Code != 200 {
+		t.Fatalf("list users: got %d body=%s", w.Code, w.Body.String())
+	}
+	items, _ := decode(t, w)["data"].(map[string]any)["items"].([]any)
+	var bobID int64
+	for _, it := range items {
+		m, ok := it.(map[string]any)
+		if !ok || m["username"] != "bob" {
+			continue
+		}
+		if v, ok := m["id"].(float64); ok {
+			bobID = int64(v)
+		}
+	}
+	if bobID == 0 {
+		t.Fatalf("cannot resolve bob id")
+	}
+	if err := utils.SetUserBots(bobID, []string{"bot-a"}); err != nil {
+		t.Fatalf("set user bots: %v", err)
+	}
+
+	cached, _ := json.Marshal(map[string]any{
+		"bots": []map[string]any{
+			{"id": "bot-a", "name": "Bot A", "model": "model-a"},
+			{"id": "bot-b", "name": "Bot B", "model": "model-b"},
+		},
+		"models": []map[string]any{
+			{"id": "model-a", "name": "Model A"},
+			{"id": "model-b", "name": "Model B"},
+		},
+	})
+	if err := utils.SetCache("bots_models", string(cached)); err != nil {
+		t.Fatalf("set cache: %v", err)
+	}
+
+	w = doJSON(t, s, http.MethodPost, "/login", "", map[string]any{
+		"username": "bob",
+		"password": "bobpwd1",
+	})
+	if w.Code != 200 {
+		t.Fatalf("password login bob: got %d body=%s", w.Code, w.Body.String())
+	}
+	bobToken, _ := decode(t, w)["data"].(map[string]any)["token"].(string)
+
+	w = doJSON(t, s, http.MethodPost, "/v1/openclaw/bots/add", bobToken, map[string]any{})
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("bob add bot: expected 403, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	w = doJSON(t, s, http.MethodGet, "/v1/openclaw/bots-models", bobToken, nil)
+	if w.Code != 200 {
+		t.Fatalf("bob bots-models: got %d body=%s", w.Code, w.Body.String())
+	}
+	data := decode(t, w)["data"].(map[string]any)["data"].(map[string]any)
+	bots, _ := data["bots"].([]any)
+	models, _ := data["models"].([]any)
+	if len(bots) != 1 || bots[0].(map[string]any)["id"] != "bot-a" {
+		t.Fatalf("expected only bot-a, got %v", bots)
+	}
+	if len(models) != 1 || models[0].(map[string]any)["id"] != "model-a" {
+		t.Fatalf("expected only model-a, got %v", models)
+	}
+
+	w = doJSON(t, s, http.MethodPost, "/v1/auth/ticket", bobToken, nil)
+	if w.Code != 200 {
+		t.Fatalf("ticket: got %d body=%s", w.Code, w.Body.String())
+	}
+	ticket, _ := decode(t, w)["data"].(map[string]any)["ticket"].(string)
+	w = doJSON(t, s, http.MethodGet, "/v1/ws/shell?ticket="+ticket, "", nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("ticket should not elevate to shell access: expected 403, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
 func itoa(i int64) string {
 	// 简单 int64 转字符串，避免引入 strconv 多余依赖
 	if i == 0 {

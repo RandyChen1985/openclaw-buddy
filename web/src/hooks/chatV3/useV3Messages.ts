@@ -40,6 +40,16 @@ type SessionStreamCache = {
 const MAX_METADATA_ENTRIES_PER_SESSION = 20;
 const MAX_METADATA_BYTES_PER_ENTRY = 64 * 1024; // 单条 64KB 上限，防止极长 thinking 占爆内存
 
+function isSessionRunningStatus(status?: string): boolean {
+  const s = (status || '').toLowerCase();
+  return s === 'running' || s === 'started' || s === 'pending' || s === 'queued';
+}
+
+function isSessionTerminalStatus(status?: string): boolean {
+  const s = (status || '').toLowerCase();
+  return s === 'done' || s === 'error' || s === 'failed' || s === 'aborted' || s === 'cancelled' || s === 'canceled';
+}
+
 /**
  * 网关 transcript 可能把「工具/审批」与「:::thinking」拆成两条相邻 assistant。
  * 后一条若仅有思考块，合并进上一条开头，避免 UI 上思考跑到工具下面。
@@ -992,9 +1002,8 @@ export function useV3Messages({
               : true;
 
             if (!showScrollBtnRef.current || isNearBottom) {
-              virtuosoRef.current.scrollToIndex({
-                index: messagesCountRef.current - 1,
-                align: 'end',
+              scrollRef.current?.scrollTo({
+                top: scrollRef.current.scrollHeight,
                 behavior: 'auto'
               });
             }
@@ -1193,6 +1202,7 @@ export function useV3Messages({
     if (!payload) return;
     const evtKey = payload.sessionKey;
     if (evtKey && evtKey !== sessionKeyRef.current) return;
+    const effectiveKey = evtKey || sessionKeyRef.current;
     const { id, request } = payload;
     const approvalId = (id || '').toString();
     const slug = approvalId ? approvalId.substring(0, 8) : '';
@@ -1236,10 +1246,11 @@ export function useV3Messages({
     });
 
     // 审批出现时应解除 typing，并清理 stall 标记，避免 UI 卡在“生成中”
+    if (effectiveKey) markSessionTyping(effectiveKey, false);
     setIsTyping(false);
     streamingAssistantIndexRef.current = null;
     clearStallTimer();
-  }, [clearStallTimer, t]);
+  }, [clearStallTimer, markSessionTyping, t]);
 
   /**
    * 处理审批结果事件：更新消息中对应审批卡片的状态（approved/denied）。
@@ -1574,23 +1585,33 @@ export function useV3Messages({
         if (payload.phase !== 'message') {
           const oldStatus = sessionStatusMapRef.current.get(evtKey);
           const newStatus = payload.status || payload.session?.status || payload.data?.status;
-          const terminal =
-            newStatus === 'done' || newStatus === 'error' || newStatus === 'failed';
+          const statusStr = String(newStatus || '').toLowerCase();
+          const running = isSessionRunningStatus(statusStr);
+          const terminal = isSessionTerminalStatus(statusStr);
           if (terminal) {
             sessionStatusMapRef.current.delete(evtKey);
+            const cache = sessionCacheRef.current.get(evtKey);
+            if (cache) {
+              cache.isTyping = false;
+              cache.activeRuns?.clear();
+            }
+            markSessionTyping(evtKey, false);
+          } else if (running) {
+            sessionStatusMapRef.current.set(evtKey, 'running');
+            markSessionTyping(evtKey, true);
           } else if (newStatus) {
-            sessionStatusMapRef.current.set(evtKey, newStatus);
+            sessionStatusMapRef.current.set(evtKey, statusStr);
           }
 
           // 如果状态变更为 done/error，且当前会话无活跃运行中 run，尝试触发延时解锁。
-          if (evtKey === sessionKeyRef.current && newStatus === 'running') {
+          if (evtKey === sessionKeyRef.current && running) {
             setIsTyping(true);
             // 仅当状态从非 running 切换到 running 时才重置 stall 计时器（初始化）。
             // 后续在该状态下的元数据更新（如 token count 变化）不应重置它，否则会遮蔽“文字流停顿”的提示
             if (oldStatus !== 'running') {
               resetStallTimer();
             }
-          } else if (newStatus === 'done' || newStatus === 'error' || newStatus === 'failed') {
+          } else if (terminal) {
             releaseTypingLock(evtKey);
           }
         }
@@ -1754,7 +1775,9 @@ export function useV3Messages({
         const cache = getOrCreateSessionCache(effectiveKey);
         const runId = (agentData?.runId as string | undefined)
           || (data.payload?.runId as string | undefined)
-          || streamingAssistantIndexRef.current !== null ? messagesRef.current[streamingAssistantIndexRef.current!]?.runId : undefined;
+          || (streamingAssistantIndexRef.current !== null
+            ? messagesRef.current[streamingAssistantIndexRef.current!]?.runId
+            : undefined);
         if (runId) cache.activeRuns.add(runId);
 
         cancelPendingFinalUiRelease(effectiveKey);
@@ -2119,11 +2142,14 @@ export function useV3Messages({
     if (history.length > 0) {
       setTimeout(() => {
         if (!isActiveRequest()) return;
-        virtuosoRef.current?.scrollToIndex({ index: history.length - 1, align: 'end', behavior: 'auto' });
+        scrollRef.current?.scrollTo({
+          top: scrollRef.current.scrollHeight,
+          behavior: 'auto'
+        });
       }, 50);
     }
     setIsLoadingHistory(false);
-  }, [clearStallTimer, extractApprovalSlugFromHint, formatMessageContent, isApprovalHintText, resetStallTimer, sendRPC, t, touchAndPruneSessionCache, virtuosoRef]);
+  }, [clearStallTimer, extractApprovalSlugFromHint, formatMessageContent, isApprovalHintText, resetStallTimer, scrollRef, sendRPC, t, touchAndPruneSessionCache, virtuosoRef]);
 
   /**
    * 发送消息：必要时创建会话并写入初始占位消息，然后向网关发起 chat.send。
@@ -2239,9 +2265,8 @@ export function useV3Messages({
     resetStallTimer();
 
     setTimeout(() => {
-      virtuosoRef.current?.scrollToIndex({
-        index: messagesCountRef.current + 1,
-        align: 'end',
+      scrollRef.current?.scrollTo({
+        top: scrollRef.current.scrollHeight,
         behavior: 'smooth'
       });
     }, 100);
@@ -2351,9 +2376,8 @@ export function useV3Messages({
     resetStallTimer();
 
     setTimeout(() => {
-      virtuosoRef.current?.scrollToIndex({
-        index: messagesCountRef.current,
-        align: 'end',
+      scrollRef.current?.scrollTo({
+        top: scrollRef.current.scrollHeight,
         behavior: 'smooth'
       });
     }, 100);
@@ -2396,7 +2420,7 @@ export function useV3Messages({
       }
       markSessionTyping(sessionKey, false);
     }
-  }, [cancelPendingFinalUiRelease, clearStallTimer, isTyping, markSessionTyping, resetStallTimer, sendRPC, sessionComposeBlocked, sessionKey, status, t, touchAndPruneSessionCache, virtuosoRef]);
+  }, [cancelPendingFinalUiRelease, clearStallTimer, isTyping, markSessionTyping, resetStallTimer, scrollRef, sendRPC, sessionComposeBlocked, sessionKey, status, t, touchAndPruneSessionCache, virtuosoRef]);
 
   /**
    * 停止生成：更新 UI 并通过 chat.abort 中止 Agent 运行，不污染对话历史。
@@ -2600,21 +2624,41 @@ export function useV3Messages({
     // 💡 核心保护：如果在当前认证会话中，该 Key 已经自动同步过历史，则不再重复触发
     if (lastAutoSyncedKeyRef.current === key) return;
 
-    const cache = sessionCacheRef.current.get(key);
-    if (cache && cache.isTyping) {
-      // 断连前有流正在进行，标记 stalled 提示用户
-      setIsStalled(true);
-      setIsTyping(false);
-      cache.isTyping = false;
-      streamingAssistantIndexRef.current = null;
-      markSessionTyping(key, false);
-    }
-    
     // 标记已同步，防止死循环
     lastAutoSyncedKeyRef.current = key;
-    // 无论如何都重新加载历史，确保与服务端状态一致
-    loadSessionHistory(key);
-  }, [status, loadSessionHistory, markSessionTyping]);
+
+    void (async () => {
+      const cache = sessionCacheRef.current.get(key);
+      if (cache && cache.isTyping) {
+        // 断线前有流正在进行：先向网关确认当前会话状态，避免重连时把后台仍在跑的任务误清掉。
+        setIsStalled(true);
+        streamingAssistantIndexRef.current = null;
+
+        const res = await sendRPC('sessions.get', { key, limit: 1 });
+        if (sessionKeyRef.current !== key) return;
+
+        const sessionDetail = res.ok
+          ? (res.payload?.session || res.payload?.item || res.payload?.data || res.payload)
+          : null;
+        const remoteStatus = String(sessionDetail?.status || '').toLowerCase();
+
+        if (isSessionRunningStatus(remoteStatus)) {
+          sessionStatusMapRef.current.set(key, 'running');
+          markSessionTyping(key, true);
+          setIsTyping(true);
+        } else if (isSessionTerminalStatus(remoteStatus)) {
+          sessionStatusMapRef.current.delete(key);
+          cache.isTyping = false;
+          markSessionTyping(key, false);
+          setIsTyping(false);
+          clearStallTimer();
+        }
+      }
+
+      // 无论如何都重新加载历史，确保与服务端状态一致
+      loadSessionHistory(key);
+    })();
+  }, [status, loadSessionHistory, markSessionTyping, sendRPC, clearStallTimer]);
 
   /**
    * 注入 assistant 消息到当前会话的 transcript（不触发 AI 回复）。
@@ -2673,4 +2717,3 @@ export function useV3Messages({
     };
   }, [handleApprovalRequested, handleChatDelta, handleGatewayEvent, handleInjectMessage, handleRegenerate, handleSaveEdit, handleSend, handleStopGeneration, hasNewMessages, isLoadingHistory, isStalled, isTyping, messages, resetTypingState, setMessages, tpsData, typingSessionKeys, showScrollBtnRef]);
 }
-

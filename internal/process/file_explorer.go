@@ -3,11 +3,14 @@ package process
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
+	"openclaw-buddy/internal/utils"
 	"os"
 	"path/filepath"
 	"strings"
-	"openclaw-buddy/internal/utils"
 )
+
+const maxExplorerSearchVisits = 20000
 
 // ExplorerFileEntry represents a file or directory in the file explorer
 type ExplorerFileEntry struct {
@@ -69,6 +72,67 @@ func GetAllowedExplorerPaths(configDir string) ([]string, error) {
 	return finalBases, nil
 }
 
+func pathWithinBase(path, base string) bool {
+	rel, err := filepath.Rel(base, path)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
+}
+
+func evalAllowedBase(base string) (string, error) {
+	absBase, err := filepath.Abs(base)
+	if err != nil {
+		return "", err
+	}
+	evaluated, err := filepath.EvalSymlinks(absBase)
+	if err != nil {
+		return absBase, nil
+	}
+	return evaluated, nil
+}
+
+func evalPathForExplorer(path string) (string, error) {
+	if evaluated, err := filepath.EvalSymlinks(path); err == nil {
+		return filepath.Abs(evaluated)
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	parts := strings.Split(filepath.Clean(absPath), string(os.PathSeparator))
+	for i := len(parts); i > 0; i-- {
+		prefix := filepath.Join(parts[:i]...)
+		if filepath.IsAbs(absPath) {
+			prefix = string(os.PathSeparator) + prefix
+		}
+		if st, err := os.Stat(prefix); err == nil && st.IsDir() {
+			evaluatedPrefix, err := filepath.EvalSymlinks(prefix)
+			if err != nil {
+				return "", err
+			}
+			remainder := filepath.Join(parts[i:]...)
+			if remainder == "." || remainder == "" {
+				return filepath.Abs(evaluatedPrefix)
+			}
+			return filepath.Abs(filepath.Join(evaluatedPrefix, remainder))
+		}
+	}
+	return absPath, nil
+}
+
+func cleanExplorerChildName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", fmt.Errorf("name is required")
+	}
+	if name != filepath.Base(name) || name == "." || name == ".." || strings.Contains(name, "..") {
+		return "", fmt.Errorf("invalid name")
+	}
+	return name, nil
+}
+
 // VerifyExplorerPath checks if the given path is within any allowed directories
 // and returns the absolute, expanded path.
 func VerifyExplorerPath(path, configDir string) (string, error) {
@@ -76,8 +140,7 @@ func VerifyExplorerPath(path, configDir string) (string, error) {
 		return "", fmt.Errorf("path is empty")
 	}
 
-	expanded := utils.ExpandPath(path)
-	cleanPath, err := filepath.Abs(expanded)
+	cleanPath, err := evalPathForExplorer(utils.ExpandPath(path))
 	if err != nil {
 		return "", fmt.Errorf("failed to get absolute path: %v", err)
 	}
@@ -89,12 +152,13 @@ func VerifyExplorerPath(path, configDir string) (string, error) {
 
 	isAllowed := false
 	for _, base := range allowedBases {
-		absBase, _ := filepath.Abs(base)
-		if strings.HasPrefix(cleanPath, absBase) {
-			if len(cleanPath) == len(absBase) || cleanPath[len(absBase)] == os.PathSeparator {
-				isAllowed = true
-				break
-			}
+		absBase, err := evalAllowedBase(base)
+		if err != nil {
+			continue
+		}
+		if pathWithinBase(cleanPath, absBase) {
+			isAllowed = true
+			break
 		}
 	}
 
@@ -218,13 +282,15 @@ func UploadExplorerFile(dirPath, filename string, data []byte, configDir string)
 		return "", fmt.Errorf("target path is not a directory")
 	}
 
-	// Sanitize filename
-	filename = filepath.Base(filename)
-	if filename == "" || filename == "." || filename == ".." {
-		return "", fmt.Errorf("invalid filename")
+	filename, err = cleanExplorerChildName(filename)
+	if err != nil {
+		return "", err
 	}
 
 	destPath := filepath.Join(absDir, filename)
+	if _, err := VerifyExplorerPath(destPath, configDir); err != nil {
+		return "", err
+	}
 	if err := os.WriteFile(destPath, data, 0644); err != nil {
 		return "", err
 	}
@@ -262,8 +328,15 @@ func CreateExplorerFile(dirPath, filename, content, configDir string) (string, e
 	if err != nil {
 		return "", err
 	}
+	filename, err = cleanExplorerChildName(filename)
+	if err != nil {
+		return "", err
+	}
 
 	destPath := filepath.Join(absDir, filename)
+	if _, err := VerifyExplorerPath(destPath, configDir); err != nil {
+		return "", err
+	}
 	// Check if already exists
 	if _, err := os.Stat(destPath); err == nil {
 		return "", fmt.Errorf("file already exists")
@@ -312,16 +385,39 @@ func SearchExplorerFiles(rootPath, query, configDir string) ([]ExplorerFileEntry
 
 	var results []ExplorerFileEntry
 	query = strings.ToLower(query)
+	visited := 0
 
 	err = filepath.Walk(absRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil // Skip errors
 		}
+		visited++
+		if visited > maxExplorerSearchVisits {
+			return filepath.SkipAll
+		}
+		if info.IsDir() {
+			switch info.Name() {
+			case ".git", "node_modules", "dist", "build", ".next", ".cache":
+				if path != absRoot {
+					return filepath.SkipDir
+				}
+			}
+			if mode := info.Mode(); mode&fs.ModeSymlink != 0 {
+				return filepath.SkipDir
+			}
+		}
 
 		if strings.Contains(strings.ToLower(info.Name()), query) {
+			verifiedPath, verifyErr := VerifyExplorerPath(path, configDir)
+			if verifyErr != nil {
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 			results = append(results, ExplorerFileEntry{
 				Name:    info.Name(),
-				Path:    path,
+				Path:    verifiedPath,
 				IsDir:   info.IsDir(),
 				Size:    info.Size(),
 				ModTime: info.ModTime().Format("2006-01-02 15:04:05"),
@@ -345,8 +441,15 @@ func CreateExplorerDir(dirPath, dirname, configDir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	dirname, err = cleanExplorerChildName(dirname)
+	if err != nil {
+		return "", err
+	}
 
 	destPath := filepath.Join(absDir, dirname)
+	if _, err := VerifyExplorerPath(destPath, configDir); err != nil {
+		return "", err
+	}
 	if _, err := os.Stat(destPath); err == nil {
 		return "", fmt.Errorf("directory already exists")
 	}

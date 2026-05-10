@@ -18,6 +18,9 @@ import Tooltip from '../components/common/AppTooltip';
 
 
 const { Option } = Select;
+const LEGACY_CHAT_HISTORY_KEY = 'chat_history';
+const CLASSIC_CHAT_HISTORY_PREFIX = 'chat_history_classic';
+const CLASSIC_SESSION_ID_KEY = 'chat_session_id';
 
 // Components moved to ChatComponents.tsx
 
@@ -53,18 +56,62 @@ interface ChatClassicProps {
   usernameForSessionId?: string | null;
 }
 
+function sanitizeClassicSessionUsername(username?: string | null): string {
+  const raw = (username || '').trim();
+  return raw
+    ? raw.replace(/:/g, '_').replace(/\s+/g, '').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 48)
+    : '';
+}
+
+function ensureClassicSessionId(urlUser: string | null, username?: string | null): string | null {
+  if (urlUser) return null;
+
+  let storedSessionId = storage.getItem(CLASSIC_SESSION_ID_KEY);
+  const safeU = sanitizeClassicSessionUsername(username);
+  const shouldForceUsernameSession = !!safeU && (!storedSessionId || !storedSessionId.includes(safeU));
+
+  if (!storedSessionId || shouldForceUsernameSession) {
+    storedSessionId = safeU
+      ? `s-${Date.now()}-${safeU}`
+      : `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    storage.setItem(CLASSIC_SESSION_ID_KEY, storedSessionId);
+  }
+
+  return storedSessionId;
+}
+
+function loadClassicMessages(key: string, allowLegacyFallback = false): Message[] {
+  const savedForKey = storage.getItem(key);
+  const legacySaved = allowLegacyFallback && key !== LEGACY_CHAT_HISTORY_KEY ? storage.getItem(LEGACY_CHAT_HISTORY_KEY) : null;
+  const saved = savedForKey || legacySaved;
+  if (!saved) return [];
+
+  try {
+    const parsed = JSON.parse(saved);
+    if (!savedForKey && legacySaved) storage.removeItem(LEGACY_CHAT_HISTORY_KEY);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    storage.removeItem(key);
+    if (key !== LEGACY_CHAT_HISTORY_KEY) storage.removeItem(LEGACY_CHAT_HISTORY_KEY);
+    return [];
+  }
+}
+
 const ChatClassic: React.FC<ChatClassicProps> = ({ 
   botsModels, loadingBots, onRefreshBots, isMobile, onRestartGateway, isDarkMode = false, usernameForSessionId
 }) => {
 
 
   const { t } = useTranslation();
+  const queryParams = new URLSearchParams(window.location.search);
+  const urlBot = queryParams.get('bot');
+  const urlUser = queryParams.get('user');
+  const isEmbedMode = queryParams.get('embed') === 'true';
+
   const [selectedBot, setSelectedBot] = useState<string>('');
   const [inputText, setInputText] = useState('');
-  const [messages, setMessages] = useState<Message[]>(() => {
-    const saved = storage.getItem('chat_history');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [generatedSessionId, setGeneratedSessionId] = useState<string | null>(() => ensureClassicSessionId(urlUser, usernameForSessionId));
+  const [messages, setMessages] = useState<Message[]>([]);
   const [quotedMsg, setQuotedMsg] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<FileInfo[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -83,11 +130,6 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
     return <div style={{ ...iconStyle, fontSize: size * 0.8 }}>🍭</div>;
   };
   
-  // 持久化存储
-  useEffect(() => {
-    storage.setItem('chat_history', JSON.stringify(messages));
-  }, [messages]);
-
   // --- Markdown 预处理逻辑 ---
   const preprocessMarkdown = (content: string) => {
     if (!content) return '';
@@ -109,18 +151,20 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
       .replace(/(\n\|[^\n]+\|)\n(\|(?:\s*:-+\s*\|)+)/g, '$1\n$2');
   };
 
-   const [isTyping, setIsTyping] = useState(false);
-   const [showScrollButton, setShowScrollButton] = useState(false);
-   const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);   const [isComposing, setIsComposing] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
   const inputRef = useRef<any>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [chatEnabled, setChatEnabled] = useState<boolean | null>(null);
   const [checkingEnabled, setCheckingEnabled] = useState(true);
   const [enabling, setEnabling] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [generatedSessionId, setGeneratedSessionId] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const historyLoadedKeyRef = useRef<string | null>(null);
+  const suppressNextHistoryPersistRef = useRef(false);
   
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
   const [showQuickActions, setShowQuickActions] = useState<boolean>(() => {
@@ -139,10 +183,31 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
     defaultTab: 'v3' | 'classic';
   }>({ botId: '', layout: 'tabs', defaultTab: 'v3' });
 
-  const queryParams = new URLSearchParams(window.location.search);
-  const urlBot = queryParams.get('bot');
-  const urlUser = queryParams.get('user');
-  const isEmbedMode = queryParams.get('embed') === 'true';
+  const historyStorageKey = useMemo(() => {
+    const userPart = urlUser
+      ? `embed-${urlUser}`
+      : generatedSessionId
+        ? `session-${generatedSessionId}`
+        : 'anonymous';
+    const botPart = selectedBot || 'default';
+    return `${CLASSIC_CHAT_HISTORY_PREFIX}:${userPart}:${botPart}`;
+  }, [generatedSessionId, selectedBot, urlUser]);
+
+  useEffect(() => {
+    suppressNextHistoryPersistRef.current = true;
+    historyLoadedKeyRef.current = historyStorageKey;
+    setMessages(loadClassicMessages(historyStorageKey, !!selectedBot));
+  }, [historyStorageKey, selectedBot]);
+
+  // 持久化存储
+  useEffect(() => {
+    if (historyLoadedKeyRef.current !== historyStorageKey) return;
+    if (suppressNextHistoryPersistRef.current) {
+      suppressNextHistoryPersistRef.current = false;
+      return;
+    }
+    storage.setItem(historyStorageKey, JSON.stringify(messages));
+  }, [historyStorageKey, messages]);
 
   /** 与 V3 一致：应用内「铺满视口」全屏，不使用浏览器原生 Fullscreen API（避免整页进入 OS 级全屏） */
   const toggleFullscreen = () => setIsFullscreen((prev) => !prev);
@@ -162,27 +227,7 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
   }, []);
 
   useEffect(() => {
-    if (!urlUser) {
-      let storedSessionId = storage.getItem('chat_session_id');
-      const rawU = (usernameForSessionId || '').trim();
-      const safeU = rawU
-        ? rawU.replace(/:/g, '_').replace(/\s+/g, '').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 48)
-        : '';
-
-      // 用户名登录时：如果当前 sessionId 不包含用户名，则自动更新（避免沿用历史随机段导致不可辨识）
-      const shouldForceUsernameSession =
-        !!safeU && (!storedSessionId || !storedSessionId.includes(safeU));
-
-      if (!storedSessionId || shouldForceUsernameSession) {
-        storedSessionId = safeU
-          ? `s-${Date.now()}-${safeU}`
-          : `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-        storage.setItem('chat_session_id', storedSessionId);
-      }
-      setGeneratedSessionId(storedSessionId);
-    } else {
-      setGeneratedSessionId(null);
-    }
+    setGeneratedSessionId(ensureClassicSessionId(urlUser, usernameForSessionId));
   }, [urlUser, usernameForSessionId]);
 
   useEffect(() => {
@@ -455,6 +500,15 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
     const assistantTimestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const assistantMessage: Message = { role: 'assistant', content: thinkingTip, timestamp: assistantTimestamp };
     setMessages([...conversationMessages, assistantMessage]);
+    const replaceLastAssistant = (content: string) => {
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last && last.role === 'assistant') {
+          return [...prev.slice(0, -1), { ...last, content }];
+        }
+        return prev;
+      });
+    };
 
     const formattedMessages = conversationMessages.map(m => {
         let content = m.content;
@@ -482,6 +536,15 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
     let displayedContent = thinkingTip;
     const charQueue: string[] = [];
     let isStreamingFinished = false;
+    let queueDrained = false;
+    let resolveQueueDrained: () => void = () => {};
+    const queueDrainedPromise = new Promise<void>((resolve) => {
+      resolveQueueDrained = () => {
+        if (queueDrained) return;
+        queueDrained = true;
+        resolve();
+      };
+    });
 
     const processQueue = () => {
       if (charQueue.length > 0) {
@@ -502,6 +565,8 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
 
       if (!isStreamingFinished || charQueue.length > 0) {
         requestAnimationFrame(processQueue);
+      } else {
+        resolveQueueDrained();
       }
     };
 
@@ -520,66 +585,86 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
       });
 
       if (!response.ok) {
+        let errorMessage = t('chat.networkError');
         if (response.status === 403 || response.status === 401) {
           try {
             const errorData = await response.clone().json();
             if (errorData.error?.message?.includes('operator.write')) {
-              message.error(t('chat.permissionError'), 10);
-              setIsTyping(false);
-              return;
+              errorMessage = t('chat.permissionError');
+            } else {
+              errorMessage = errorData.error?.message || errorData.message || errorMessage;
             }
           } catch (e) {}
+        } else {
+          try {
+            const errorData = await response.clone().json();
+            errorMessage = errorData.error?.message || errorData.message || errorMessage;
+          } catch (e) {}
         }
-        throw new Error(t('chat.networkError'));
+        throw new Error(errorMessage);
       }
 
       const reader = response.body?.getReader();
       if (!reader) throw new Error(t('chat.streamError'));
 
       const decoder = new TextDecoder();
-      let accumulatedContent = '';
       let isFirstChunk = true; 
       let firstTokenTime: number | null = null;
       const startTime = Date.now();
       let totalLength = 0;
+      let pendingLine = '';
+      const handleDataLine = (line: string) => {
+        if (!line.startsWith('data:')) return false;
+        const dataStr = line.slice(5).trim();
+        if (!dataStr) return false;
+        if (dataStr === '[DONE]') {
+          isStreamingFinished = true;
+          return true;
+        }
+        const data = JSON.parse(dataStr);
+        if (data.error) {
+          const errMessage = data.error.message || data.error || t('chat.streamError');
+          throw new Error(errMessage);
+        }
+        const content = data.choices?.[0]?.delta?.content ?? data.choices?.[0]?.message?.content ?? '';
+        if (content) {
+          if (isFirstChunk) {
+            // 首个有效字符到达，彻底抹除“正在思考中...”提示
+            displayedContent = '';
+            isFirstChunk = false;
+          }
+          for (const char of content) {
+            charQueue.push(char);
+          }
+          totalLength += content.length;
+        }
+        return false;
+      };
       
       streamLoop: while (true) {
         const { done, value } = await reader.read();
         if (done) {
+          pendingLine += decoder.decode();
+          if (pendingLine.trim()) {
+            const lines = pendingLine.split(/\r?\n/);
+            for (const line of lines) {
+              if (handleDataLine(line)) break streamLoop;
+            }
+          }
           isStreamingFinished = true;
           break streamLoop;
         }
 
-        const chunk = decoder.decode(value);
+        const chunk = decoder.decode(value, { stream: true });
         if (!firstTokenTime && (chunk.includes('"content":') || chunk.includes('"delta":'))) {
           firstTokenTime = Date.now();
         }
 
-        const lines = chunk.split('\n');
+        pendingLine += chunk;
+        const lines = pendingLine.split(/\r?\n/);
+        pendingLine = lines.pop() || '';
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const dataStr = line.slice(6).trim();
-            if (dataStr === '[DONE]') {
-              isStreamingFinished = true;
-              break streamLoop;
-            }
-            try {
-                const data = JSON.parse(dataStr);
-                const content = data.choices[0]?.delta?.content || '';
-                if (content) {
-                  if (isFirstChunk) {
-                    // 核心变更：首个有效字符到达，彻底抹除“正在思考中...”提示
-                    displayedContent = ''; 
-                    isFirstChunk = false;
-                  }
-                  for (const char of content) {
-                    charQueue.push(char);
-                  }
-                  totalLength += content.length;
-                  accumulatedContent += content;
-                }
-            } catch (e) {}
-          }
+          if (handleDataLine(line)) break streamLoop;
         }
       }
 
@@ -605,12 +690,18 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
     } catch (err: any) {
       if (err.name === 'AbortError') {
         message.info(t('chat.stopGenerating'));
+        if (!displayedContent || displayedContent === thinkingTip) {
+          replaceLastAssistant(t('chat.terminated', { defaultValue: '已停止' }));
+        }
       } else {
-        message.error(t('common.error'));
+        const errorText = err?.message || t('common.error');
+        message.error(errorText);
+        replaceLastAssistant(`> ${t('common.error')}: ${errorText}`);
       }
     } finally {
       // 任意出口（含 try 内 return / 抛错）都必须结束，否则 rAF 在「流未标记结束且队列已空」时会空转占满 CPU
       isStreamingFinished = true;
+      await queueDrainedPromise;
       setIsTyping(false);
       abortControllerRef.current = null;
     }
@@ -699,15 +790,13 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
       centered: true,
       onOk: () => {
         setMessages([]);
-        storage.removeItem('chat_history');
-        const rawU = (usernameForSessionId || '').trim();
-        const safeU = rawU
-          ? rawU.replace(/:/g, '_').replace(/\s+/g, '').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 48)
-          : '';
+        storage.removeItem(historyStorageKey);
+        storage.removeItem(LEGACY_CHAT_HISTORY_KEY);
+        const safeU = sanitizeClassicSessionUsername(usernameForSessionId);
         const newSessionId = safeU
           ? `s-${Date.now()}-${safeU}`
           : `s-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-        storage.setItem('chat_session_id', newSessionId);
+        storage.setItem(CLASSIC_SESSION_ID_KEY, newSessionId);
         setGeneratedSessionId(newSessionId);
         message.success(t('chat.historyCleared'));
       }
@@ -1458,7 +1547,7 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
             <div style={{ flexShrink: 0, marginBottom: 2 }}>
               <Upload
                 name="file"
-                action={`${getBaseURL()}/v1/openclaw/chat/upload`}
+                action={getFullUrl('/v1/openclaw/chat/upload')}
                 data={{ botId: selectedBot.replace('openclaw:', '') }}
                 headers={{
                   Authorization: `Bearer ${storage.getItem('guardian_token')}`
@@ -1598,7 +1687,7 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                 icon={<Send size={18} />} 
                 style={{ borderRadius: 12, height: 40, width: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
                 onClick={() => handleSend()}
-                disabled={!selectedBot || !inputText.trim()}
+                disabled={!selectedBot || isUploading || (!inputText.trim() && attachedFiles.length === 0)}
               />
             )}
           </div>

@@ -994,28 +994,49 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
     }
   };
 
-  /** 聊天/仪表盘需要实时网关 WS；其它页面暂停 WS 时用工 HTTP gateway.status 兜底展示“运行中” */
+  const httpGatewayStatus = String((status as any)?.gateway?.status || '').toLowerCase();
+  const httpGatewayRunning = httpGatewayStatus === 'running';
+
+  /** 聊天/仪表盘需要实时网关 WS；其它页面暂停 WS 时用 HTTP gateway.status 兜底展示“运行中” */
   const isRunning =
     v3Status === 'authenticated' ||
-    (!gatewayWsDesired && (status as any)?.gateway?.status === 'running');
+    (!gatewayWsDesired && httpGatewayRunning);
 
-  // 顶栏状态：连接中不应显示“已停止”
-  const isConnecting = ['connecting', 'handshaking', 'challenging', 'authorizing', 'identifying'].includes((v3Status || '') as any);
+  // 顶栏状态：连接中 / 等待授权 / HTTP 已运行但 WS 重连中，都不应误报“已停止”。
+  const isConnecting = ['connecting', 'handshaking', 'challenging', 'identifying'].includes((v3Status || '') as any);
+  const isAuthorizing = v3Status === 'authorizing';
+  const isWsRecovering = gatewayWsDesired && httpGatewayRunning && ['disconnected', 'error'].includes(v3Status || '');
   const gatewayStateText = isRunning
     ? t('dashboard.running')
-    : (isConnecting ? t('chat.gatewayConnecting') : t('dashboard.stopped'));
+    : isAuthorizing
+      ? t('chat.gatewayAuthorizing', { defaultValue: '等待设备授权' })
+      : isConnecting
+        ? t('chat.gatewayConnecting')
+        : isWsRecovering
+          ? (v3Status === 'error'
+            ? t('chat.gatewayConnectionError', { defaultValue: '连接异常' })
+            : t('chat.gatewayReconnecting', { defaultValue: '网关重连中...' }))
+          : t('dashboard.stopped');
+  const gatewayBadgeStatus: 'success' | 'processing' | 'error' =
+    isRunning ? 'success' : ((isConnecting || isAuthorizing || isWsRecovering) ? 'processing' : 'error');
+  const gatewayLatency = v3Status === 'authenticated' && lastHealth?.latency !== undefined
+    ? lastHealth.latency
+    : undefined;
+  const gatewayHealthTime = lastHealth?.ts
+    ? new Date(lastHealth.ts < 1_000_000_000_000 ? lastHealth.ts * 1000 : lastHealth.ts).toLocaleTimeString()
+    : '';
 
   // [自动刷新] 连通性自愈：当 HTTP 轮询发现网关已启动，但 WebSocket 处于断开或错误状态时，主动拉起连接
   useEffect(() => {
     if (!gatewayWsDesired) return;
     // 仅在非过渡态且 HTTP 状态明确为 running 时触发
-    if (!isTransitioning && status?.gateway?.status === 'running') {
+    if (!isTransitioning && httpGatewayRunning) {
       if (v3Status === 'disconnected' || v3Status === 'error') {
         console.log('🔄 [Connectivity] Gateway is running (HTTP), but WebSocket is inactive. Triggering auto-reconnect...');
         v3Connect();
       }
     }
-  }, [gatewayWsDesired, status?.gateway?.status, v3Status, v3Connect, isTransitioning]);
+  }, [gatewayWsDesired, httpGatewayRunning, v3Status, v3Connect, isTransitioning]);
 
 
   // --- Menu Configuration ---
@@ -1150,6 +1171,15 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
         return hasMenuPerm(item.key);
       })
     })).filter(group => group.children && group.children.length > 0);
+  const visibleMenuKeys = menuItems.flatMap(group => (group.children || []).map(item => item.key));
+  const visibleMenuKeySignature = visibleMenuKeys.join('|');
+
+  useEffect(() => {
+    if (!authMe || activeTab === 'lobster-panel') return;
+    const keys = visibleMenuKeySignature ? visibleMenuKeySignature.split('|') : [];
+    if (keys.includes(activeTab)) return;
+    setActiveTab(keys[0] || 'chat');
+  }, [authMe, activeTab, visibleMenuKeySignature]);
 
   // Helper to find label for breadcrumb
   const getActiveLabel = (key: string) => {
@@ -1257,7 +1287,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
             setActiveTab('dashboard');
             window.location.hash = 'actions';
           }} />,
-      'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} ocInstalled={ocInstalled} isDarkMode={isDarkMode} />,
+      'tools': <SelfHealing selfHealingEnabled={selfHealingEnabled} healEvents={healEvents} loadingSets={loadingSets} onToggle={toggleSelfHealing} onRefresh={fetchSelfHealing} ocInstalled={ocInstalled} isDarkMode={isDarkMode} />,
       'chat': <OnlineChat
         botsModels={botsModels}
         loadingBots={loadingBots}
@@ -1516,7 +1546,10 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
     const gatewayTitle = [
       'Gateway',
       gatewayStateText,
-      isRunning && lastHealth?.latency !== undefined ? `${lastHealth.latency}ms` : '',
+      `HTTP: ${httpGatewayStatus || 'unknown'}`,
+      `WS: ${v3Status || 'unknown'}`,
+      gatewayLatency !== undefined ? `${gatewayLatency}ms` : '',
+      gatewayHealthTime ? `Last: ${gatewayHealthTime}` : '',
     ].filter(Boolean).join(' · ');
 
     const gatewayBadgeText = (
@@ -1535,9 +1568,9 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
       >
         {!isMobile && 'Gateway '}
         {gatewayStateText}
-        {isRunning && lastHealth?.latency !== undefined && (
+        {gatewayLatency !== undefined && (
           <span style={{ color: '#10b981', marginLeft: isMobile ? 2 : 4, fontWeight: 700 }}>
-            {isMobile ? `${lastHealth.latency}ms` : `(${lastHealth.latency}ms)`}
+            {isMobile ? `${gatewayLatency}ms` : `(${gatewayLatency}ms)`}
           </span>
         )}
       </span>
@@ -1649,22 +1682,20 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
           <Tooltip title={gatewayTitle}>
             <span style={{ display: 'inline-flex', alignItems: 'center' }}>
               <Badge
-                status={
-                  isRunning ? 'success' : 
-                  (['challenging', 'authorizing'].includes(v3Status) ? 'processing' : 'error')
-                }
+                status={gatewayBadgeStatus}
                 text={gatewayBadgeText}
               />
             </span>
           </Tooltip>
         ) : (
-          <Badge
-            status={
-              isRunning ? 'success' : 
-              (['challenging', 'authorizing'].includes(v3Status) ? 'processing' : 'error')
-            }
-            text={gatewayBadgeText}
-          />
+          <Tooltip title={gatewayTitle}>
+            <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <Badge
+                status={gatewayBadgeStatus}
+                text={gatewayBadgeText}
+              />
+            </span>
+          </Tooltip>
         )}
       </div>
     </Header>
