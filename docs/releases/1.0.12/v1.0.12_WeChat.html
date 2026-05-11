@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+</head>
+<body style="background-color: #ffde03; color: #000000; font-family: -apple-system-font, 'PingFang SC', 'Microsoft YaHei', sans-serif; line-height: 1.4; margin: 0; padding: 20px 10px;">
+    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 8px solid #000000; padding: 30px; box-sizing: border-box; box-shadow: 15px 15px 0 rgba(0,0,0,0.1);">
+        
+        <!-- Pop Header -->
+        <header style="text-align: center; margin-bottom: 40px; border: 0;">
+            <div style="margin-bottom: 25px;">
+                <div style="background-color: #ff5722; color: #ffffff; display: inline-block; padding: 8px 15px; border: 5px solid #000; font-weight: 900; -webkit-transform: rotate(-3deg); transform: rotate(-3deg); font-size: 20px; letter-spacing: 1px; box-shadow: 6px 6px 0 #000;">
+                    BOOM! 1.0.12 IS HERE!
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <h1 style="font-size: 38px; margin: 0; letter-spacing: -1px; font-weight: 900; text-transform: uppercase; -webkit-text-stroke: 1.5px #000; line-height: 1.1; color: #1e1b4b;">
+                    OpenClaw Buddy v1.0.12
+                </h1>
+            </div>
+
+            <div>
+                <div style="font-size: 18px; font-weight: 900; background-color: #03a9f4; color: #fff; display: inline-block; padding: 8px 15px; border: 4px solid #000; -webkit-transform: rotate(1deg); transform: rotate(1deg); box-shadow: 6px 6px 0 #000;">
+                    边界清晰处，才有真正的自由
+                </div>
+            </div>
+        </header>
+
+        <!-- Banner Image -->
+        <div style="margin-bottom: 40px; border: 5px solid #000; line-height: 0;">
+            <img src="./openclaw-buddy-v1.0.12-banner.png" style="width: 100%; height: auto; display: block;" />
+        </div>
+
+        <!-- Intro -->
+        <section style="background-color: #fff; border: 5px solid #000; padding: 25px; margin-bottom: 60px; position: relative; border-radius: 30px; box-shadow: 10px 10px 0 #000;">
+            <p style="margin: 0 0 15px 0; font-size: 15px; font-weight: 800; font-style: italic; line-height: 1.8; color: #1a1a1a; text-align: left;">
+                “权限不是为了挡住谁，而是为了让大家知道自己站在哪里。
+            </p>
+            <p style="margin: 0 0 15px 0; font-size: 15px; font-weight: 800; font-style: italic; line-height: 1.8; color: #1a1a1a; text-align: left;">
+                这一版里，我们为控制台加上了『看得见』的边界：谁能改 Bot、谁能碰网关、谁能打开 Shell—— ticket 不再是一把万能钥匙；记忆文件名有了自己的戒律；配置写入前先问过校验之神。
+            </p>
+            <p style="margin: 0 0 15px 0; font-size: 15px; font-weight: 800; font-style: italic; line-height: 1.8; color: #1a1a1a; text-align: left;">
+                与此同时，我们把工坊变得更顺手：CodeMirror 接棒编辑器、运维终端有了多 Tab、日志与活跃榜更贴近真实战场；经典聊天在流式与隔离之间学会了喘息。
+            </p>
+            <p style="margin: 0; font-size: 15px; font-weight: 800; font-style: italic; line-height: 1.8; color: #1a1a1a; text-align: left;">
+                五月，我们把『可信』写进默认路径。”
+            </p>
+            <!-- Bubble Tail -->
+            <div style="height: 25px; margin-left: 40px; width: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; border-top: 25px solid #000;"></div>
+        </section>
+
+        <!-- Meta Info Bar -->
+        <section style="margin: 30px 0; padding: 16px; background-color: #f3f4f6; border-left: 6px solid #000; line-height: 1.8; font-family: monospace;">
+            <p style="margin: 0; font-size: 13px; color: #1f2937; font-weight: bold;">
+                🔖 版本 (Version): v1.0.12<br>
+                📅 发布日期 (Date): 2026-05-11<br>
+                🆔 基准代码 (Base): 92d2ca2<br>
+                🆔 当前提交 (Commit): e49e76d<br>
+                💠 核心主题: 用户与 RBAC、OpenClaw API 权限收口、聊天与会话隔离、控制台性能与编辑体验、自愈与 Bots 安全加固。
+            </p>
+        </section>
+
+        <div style="height: 10px; background-color: #000; margin: 40px 0;"></div>
+
+        <!-- Features -->
+        <h2 style="font-size: 30px; font-weight: 900; margin-bottom: 30px; -webkit-text-stroke: 1px #000; color: #ff5722;">🚀 新增特性 (NEW FEATURES)</h2>
+
+        <!-- Feature 1 -->
+        <div style="background-color: #ffffff; border: 5px solid #000; padding: 20px; margin-bottom: 40px; box-shadow: 10px 10px 0 #ff5722;">
+            <div style="margin-bottom: 15px;">
+                <span style="background: #000; color: #fff; padding: 4px 10px; font-weight: 900; font-size: 18px; margin-right: 10px;">01</span>
+                <span style="font-size: 20px; font-weight: 900; color: #000; text-transform: uppercase;">身份、权限与数据边界：用户管理与 RBAC 👥</span>
+            </div>
+            <div style="font-size: 15px; font-weight: 800; margin: 0 0 15px; line-height: 1.6;">
+                <div style="margin-bottom: 8px;">• <strong style="color: #ff5722;">用户管理与角色</strong>: 新增系统用户管理能力，配合后端 RBAC（菜单/操作粒度权限），为控制台各模块建立可审计的访问控制。</div>
+                <div style="margin-bottom: 8px;">• <strong style="color: #ff5722;">Bot 绑定与过滤</strong>: 支持按用户配置可见 Bot；接口层对 <code style="background: #f3f4f6; padding: 1px 4px; border: 1px solid #ddd;">bots-models</code> 等数据进行基于绑定关系的过滤，避免『看见了不该看的』。</div>
+                <div style="margin-bottom: 8px;">• <strong style="color: #ff5722;">会话隔离</strong>: 会话 ID 与用户名注入、按用户区分存储与列表过滤；经典聊天侧同步收紧，减少多人共用环境下的串会话风险。</div>
+            </div>
+            <section style="margin: 20px 0; padding: 16px; background-color: #f7f7f7; border-left: 4px solid #ff5722; line-height: 1.6;">
+                <p style="margin: 0; font-size: 14px; color: #555;">
+                    <span style="font-weight: bold; color: #000;">💡 大白话：</span>谁在后台能点哪儿，现在有谱了；每个人看到的 Bot 列表更符合自己的授权；聊天会话也不容易跟别人混在一起。
+                </p>
+            </section>
+        </div>
+
+        <!-- Feature 2 -->
+        <div style="background-color: #ffffff; border: 5px solid #000; padding: 20px; margin-bottom: 40px; box-shadow: 10px 10px 0 #03a9f4;">
+            <div style="margin-bottom: 15px;">
+                <span style="background: #000; color: #fff; padding: 4px 10px; font-weight: 900; font-size: 18px; margin-right: 10px;">02</span>
+                <span style="font-size: 20px; font-weight: 900; color: #000; text-transform: uppercase;">OpenClaw API 权限与 Ticket 语义修正 🔐</span>
+            </div>
+            <div style="font-size: 15px; font-weight: 800; margin: 0 0 15px; line-height: 1.6;">
+                <div style="margin-bottom: 8px;">• <strong style="color: #03a9f4;">路由级权限</strong>: 大量 OpenClaw / 网关 / 审计 / 渠道 / WebSocket 相关路由挂载菜单权限校验；新增 <code style="background: #f3f4f6; padding: 1px 4px; border: 1px solid #ddd;">RequireAnyPermission</code>，支持『任一权限即可』的组合场景。</div>
+                <div style="margin-bottom: 8px;">• <strong style="color: #03a9f4;">一次性 Ticket</strong>: 签发 Ticket 时绑定当前登录主体，消费时继承该主体的权限；<strong>不再</strong>将 Ticket 视为超级管理员替身；签发 Ticket 需已登录。</div>
+            </div>
+            <section style="margin: 20px 0; padding: 16px; background-color: #f7f7f7; border-left: 4px solid #03a9f4; line-height: 1.6;">
+                <p style="margin: 0; font-size: 14px; color: #555;">
+                    <span style="font-weight: bold; color: #000;">💡 大白话：</span>以前『拿个 ticket 好像无所不能』的路被堵上了；现在 ticket 只是把你当时的权限暂时接力出去，而不是凭空升格。
+                </p>
+            </section>
+        </div>
+
+        <!-- Feature 3 -->
+        <div style="background-color: #ffffff; border: 5px solid #000; padding: 20px; margin-bottom: 40px; box-shadow: 10px 10px 0 #4caf50;">
+            <div style="margin-bottom: 15px;">
+                <span style="background: #000; color: #fff; padding: 4px 10px; font-weight: 900; font-size: 18px; margin-right: 10px;">03</span>
+                <span style="font-size: 20px; font-weight: 900; color: #000; text-transform: uppercase;">控制台体验：更轻、更快、更像 IDE ⚡</span>
+            </div>
+            <div style="font-size: 15px; font-weight: 800; margin: 0 0 15px; line-height: 1.6;">
+                <div style="margin-bottom: 8px;">• <strong style="color: #4caf50;">懒加载与实时信号</strong>: 控制台路由懒加载；WS / 网关状态与缓存策略优化；Buddy 日志支持末尾历史批量推送；实时日志默认滚到底、活跃榜支持强制刷新并与审计大屏口径对齐。</div>
+                <div style="margin-bottom: 8px;">• <strong style="color: #4caf50;">顶栏网关状态</strong>: HTTP <code style="background: #f3f4f6; padding: 1px 4px; border: 1px solid #ddd;">gateway.status</code> <strong>大小写不敏感</strong> 判定运行中；区分『授权中』『WS 重连 / 异常』与『已停止』；Badge / Tooltip 展示 HTTP·WS·延迟与健康时间。</div>
+                <div style="margin-bottom: 8px;">• <strong style="color: #4caf50;">运维终端多 Tab</strong>: 终端侧支持多会话 Tab，并优化选中态底线样式。</div>
+            </div>
+            <section style="margin: 20px 0; padding: 16px; background-color: #f7f7f7; border-left: 4px solid #4caf50; line-height: 1.6;">
+                <p style="margin: 0; font-size: 14px; color: #555;">
+                    <span style="font-weight: bold; color: #000;">💡 大白话：</span>控制台首开更顺，网关状态不再一惊一乍；运维终端可以像本机终端一样开多个 Tab。
+                </p>
+            </section>
+        </div>
+
+        <!-- Feature 4 -->
+        <div style="background-color: #ffffff; border: 5px solid #000; padding: 20px; margin-bottom: 40px; box-shadow: 10px 10px 0 #9c27b0;">
+            <div style="margin-bottom: 15px;">
+                <span style="background: #000; color: #fff; padding: 4px 10px; font-weight: 900; font-size: 18px; margin-right: 10px;">04</span>
+                <span style="font-size: 20px; font-weight: 900; color: #000; text-transform: uppercase;">文件 / 技能工坊：CodeMirror、预览与路径安全 📂</span>
+            </div>
+            <div style="font-size: 15px; font-weight: 800; margin: 0 0 15px; line-height: 1.6;">
+                <div style="margin-bottom: 8px;">• <strong style="color: #9c27b0;">编辑器换代</strong>: 文件浏览器与技能资源浏览器集成 <strong>CodeMirror</strong>，替换 Monaco；对齐标题栏与编辑浮标体验。</div>
+                <div style="margin-bottom: 8px;">• <strong style="color: #9c27b0;">交互增强</strong>: 目录侧栏支持拖拽调宽；目录树长文件名单行省略；右键菜单定位修正；HTML 等类型支持新窗口预览。</div>
+                <div style="margin-bottom: 8px;">• <strong style="color: #9c27b0;">技能资源 API</strong>: 新增技能文件创建 / 目录创建等接口；路径校验（含符号链接解析与目录逃逸防护）；浏览器侧上传体积上限与遍历限流。</div>
+            </div>
+            <section style="margin: 20px 0; padding: 16px; background-color: #f7f7f7; border-left: 4px solid #9c27b0; line-height: 1.6;">
+                <p style="margin: 0; font-size: 14px; color: #555;">
+                    <span style="font-weight: bold; color: #000;">💡 大白话：</span>编辑更轻、拖拽更顺手；技能文件新建与上传多了一层『别乱跑目录』的保险。
+                </p>
+            </section>
+        </div>
+
+        <!-- Feature 5 -->
+        <div style="background-color: #ffffff; border: 5px solid #000; padding: 20px; margin-bottom: 40px; box-shadow: 10px 10px 0 #ff9800;">
+            <div style="margin-bottom: 15px;">
+                <span style="background: #000; color: #fff; padding: 4px 10px; font-weight: 900; font-size: 18px; margin-right: 10px;">05</span>
+                <span style="font-size: 20px; font-weight: 900; color: #000; text-transform: uppercase;">聊天：经典模式与 V3 双线打磨 💬</span>
+            </div>
+            <div style="font-size: 15px; font-weight: 800; margin: 0 0 15px; line-height: 1.6;">
+                <div style="margin-bottom: 8px;">• <strong style="color: #ff9800;">经典模式</strong>: 流式输出与会话存储重写（SSE 行缓冲、中止与错误气泡、队列排空策略）；HTTP 聊天补齐上下文路径、全屏与 Bot 能力提示；代理在上游非 2xx 时<strong>透传</strong>状态码与正文。</div>
+                <div style="margin-bottom: 8px;">• <strong style="color: #ff9800;">嵌入与布局</strong>: 聊天嵌入可选项、经典模式布局与全屏对齐 V3；编辑重发、技能帮助 Popover、ClawHub 链接等交互补完。</div>
+                <div style="margin-bottom: 8px;">• <strong style="color: #ff9800;">V3</strong>: 会话列表首屏加载、bootstrap 去重、分页条数与 memo 优化；缓解长时间使用后的列表/详情变慢；侧栏默认展开时全屏误取消等问题修复。</div>
+            </div>
+            <section style="margin: 20px 0; padding: 16px; background-color: #f7f7f7; border-left: 4px solid #ff9800; line-height: 1.6;">
+                <p style="margin: 0; font-size: 14px; color: #555;">
+                    <span style="font-weight: bold; color: #000;">💡 大白话：</span>经典聊天更跟手、报错更真实；V3 在大会话量下不那么『越用越卡』。
+                </p>
+            </section>
+        </div>
+
+        <div style="height: 10px; background-color: #000; margin: 40px 0;"></div>
+
+        <!-- Stability & Optimizations -->
+        <h2 style="font-size: 24px; font-weight: 900; margin: 50px 0 20px; -webkit-text-stroke: 1px #000; color: #000;">🛠️ 稳定性、修复与文档 (FIXES, ROBUSTNESS & DOCS)</h2>
+
+        <!-- Optimization 1 -->
+        <section style="margin: 20px 0; padding: 16px; background-color: #f7f7f7; border-left: 5px solid #ff5722; line-height: 1.6; border-radius: 4px;">
+            <p style="margin: 0 0 10px 0; font-size: 16px; font-weight: 900; color: #000;">1. 自愈与配置写入 🩹</p>
+            <div style="font-size: 14px; color: #333; font-weight: 800;">
+                <div style="margin-bottom: 6px;">• OpenClaw 配置 <strong>先校验再通过临时文件原子 rename 写入</strong>，避免半成品配置落盘。</div>
+                <div style="margin-bottom: 6px;">• 自愈事件扫描对可空文本列更健壮；报表 / 备份目录不存在时返回空列表；自愈页刷新联动仪表盘与失败提示优化。</div>
+            </div>
+        </section>
+
+        <!-- Optimization 2 -->
+        <section style="margin: 20px 0; padding: 16px; background-color: #f7f7f7; border-left: 5px solid #03a9f4; line-height: 1.6; border-radius: 4px;">
+            <p style="margin: 0 0 10px 0; font-size: 16px; font-weight: 900; color: #000;">2. Bots 与进程侧 🔧</p>
+            <div style="font-size: 14px; color: #333; font-weight: 800;">
+                <div style="margin-bottom: 6px;">• 记忆文件名仅允许 <code style="background: #fff; padding: 1px 4px; border: 1px solid #ddd;">.md</code> / <code style="background: #fff; padding: 1px 4px; border: 1px solid #ddd;">.txt</code>，禁止路径穿越；模型异步任务 Target、删除接口等与前端 Bots 管理对齐。</div>
+                <div style="margin-bottom: 6px;">• 会话列表超大 JSON 输出改走临时文件，降低截断风险。</div>
+                <div style="margin-bottom: 6px;">• 『虾兵蟹将』立即聊天与网关就绪、会话恢复等边界冲突修复。</div>
+            </div>
+        </section>
+
+        <!-- Optimization 3 -->
+        <section style="margin: 20px 0; padding: 16px; background-color: #f7f7f7; border-left: 5px solid #4caf50; line-height: 1.6; border-radius: 4px;">
+            <p style="margin: 0 0 10px 0; font-size: 16px; font-weight: 900; color: #000;">3. 前端构建与杂项 🌐</p>
+            <div style="font-size: 14px; color: #333; font-weight: 800;">
+                <div style="margin-bottom: 6px;">• WebRoot 相对构建、技能列表解析与 V3 中文编辑等问题修复；禁用状态下隐藏会话删除按钮。</div>
+                <div style="margin-bottom: 6px;">• README / README_en 增补 Stars、Forks、Release 徽章与 Star History；API 文档微调。</div>
+                <div style="margin-bottom: 6px;">• 仓库横幅图 <code style="background: #fff; padding: 1px 4px; border: 1px solid #ddd;">docs/images/banner.png</code> 体积压缩（同步用于本发行说明 <code style="background: #fff; padding: 1px 4px; border: 1px solid #ddd;">./banner.png</code>）。</div>
+            </div>
+        </section>
+
+        <!-- Commit Log -->
+        <h2 style="font-size: 24px; font-weight: 900; margin: 50px 0 20px; -webkit-text-stroke: 1px #000; color: #000;">📄 变更清单 (COMMIT LOG)</h2>
+        <section style="margin: 20px 0; padding: 16px; background-color: #f3f4f6; border-left: 5px solid #000; line-height: 1.6;">
+            <p style="margin: 0; font-size: 14px; color: #333; font-weight: 800;">
+                下列为 <strong><code style="background: #fff; padding: 1px 4px; border: 1px solid #ddd;">92d2ca2..e49e76d</code></strong> 区间内 <strong>非 merge</strong> 提交（时间新 → 旧）。合并节点参见 GitHub PR #29–#33。
+            </p>
+        </section>
+        <div style="overflow-x: auto; margin-bottom: 40px; border: 4px solid #000;">
+            <table style="width: 100%; border-collapse: collapse; font-family: monospace; font-size: 12px; background: #fff;">
+                <thead>
+                    <tr style="background: #000; color: #fff;">
+                        <th style="padding: 10px; border: 1px solid #000; text-align: left;">简写</th>
+                        <th style="padding: 10px; border: 1px solid #000; text-align: left;">描述</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">e49e76d</td><td style="padding: 8px; border: 1px solid #000;">docs(images): 压缩横幅图 banner.png</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">0b9f3cb</td><td style="padding: 8px; border: 1px solid #000;">feat(web): 优化顶栏网关状态与 HTTP/WS 兜底展示</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">1ddba54</td><td style="padding: 8px; border: 1px solid #000;">feat(api): 路由 RBAC、ticket 继承主体与 bots-models 过滤</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">1f52945</td><td style="padding: 8px; border: 1px solid #000;">feat(skills): 技能资源新建 API 与路径校验，浏览器上传限流</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">8f52ee8</td><td style="padding: 8px; border: 1px solid #000;">fix(bots): 记忆文件名安全校验与模型任务、删除接口对齐</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">5fc8521</td><td style="padding: 8px; border: 1px solid #000;">fix(heal): OpenClaw 配置先校验再原子写入，自愈事件与页面容错</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">2e1c697</td><td style="padding: 8px; border: 1px solid #000;">fix(chat): 经典模式流式与会话存储，chat 代理透传上游错误</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">c41be7b</td><td style="padding: 8px; border: 1px solid #000;">fix(v3): 会话状态、滚动与列表拉取及 memo 优化</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">1722d25</td><td style="padding: 8px; border: 1px solid #000;">feat: 活跃榜强制刷新与实时日志默认滚到底</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">c991396</td><td style="padding: 8px; border: 1px solid #000;">fix(process): 机器人活跃榜与审计大屏口径对齐</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">5f7f7ad</td><td style="padding: 8px; border: 1px solid #000;">feat(web): 文件浏览器 HTML 支持新窗口预览</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">c3bcca2</td><td style="padding: 8px; border: 1px solid #000;">fix(chat): 虾兵蟹将立即聊天与网关就绪及会话恢复冲突</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">674f74d</td><td style="padding: 8px; border: 1px solid #000;">fix(process): 会话列表 JSON 大输出走临时文件避免截断</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">ddac29f</td><td style="padding: 8px; border: 1px solid #000;">fix(web): WebRoot 相对构建、技能列表解析与 V3 中文编辑</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">14a2d18</td><td style="padding: 8px; border: 1px solid #000;">fix(web): 禁用状态隐藏会话删除按钮</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">00c82e0</td><td style="padding: 8px; border: 1px solid #000;">feat: 用户 Bot 权限与 V3 聊天体验</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">4ec11cf</td><td style="padding: 8px; border: 1px solid #000;">feat(web): 文件浏览器目录侧栏支持拖拽调整宽度</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">ebcd600</td><td style="padding: 8px; border: 1px solid #000;">fix(web): 目录树长文件名改为单行省略</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">ce5c60c</td><td style="padding: 8px; border: 1px solid #000;">fix(web): 文件浏览器目录树右键菜单定位修正</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">598785f</td><td style="padding: 8px; border: 1px solid #000;">fix(web): 经典聊天会话ID写入用户名</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">553b071</td><td style="padding: 8px; border: 1px solid #000;">feat(web): 会话ID注入用户名并按用户过滤</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">91f2bc9</td><td style="padding: 8px; border: 1px solid #000;">feat: 新增用户管理与 RBAC 权限控制</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">21dfec1</td><td style="padding: 8px; border: 1px solid #000;">feat(web): 经典聊天编辑重发、技能帮助 Popover 与 ClawHub 链接</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">04b73ba</td><td style="padding: 8px; border: 1px solid #000;">feat(web): 聊天嵌入可选项与经典模式布局、全屏对齐 V3</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">5675b61</td><td style="padding: 8px; border: 1px solid #000;">feat(web): 运维终端支持多 Tab 并优化选中底线样式</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">975c7dc</td><td style="padding: 8px; border: 1px solid #000;">feat(web): 控制台懒加载、WS/网关与缓存；Buddy 日志末尾历史批推送</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">d999216</td><td style="padding: 8px; border: 1px solid #000;">feat(web): 技能资源浏览器对齐文件浏览器标题栏与编辑浮标</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">4859064</td><td style="padding: 8px; border: 1px solid #000;">docs: README 新增 Stars/Forks/Release 徽章及 Star History 图表</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">4901480</td><td style="padding: 8px; border: 1px solid #000;">feat(web): 文件与技能资源浏览器集成 CodeMirror 替换 Monaco</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">70eb0a1</td><td style="padding: 8px; border: 1px solid #000;">fix(web): HTTP 聊天模式补齐上下文路径、全屏与 bot 能力提示</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">6649d94</td><td style="padding: 8px; border: 1px solid #000;">fix(v3): 修复侧栏默认展开时文件浏览器与终端全屏被误取消</td></tr>
+                    <tr style="background: #f9f9f9;"><td style="padding: 8px; border: 1px solid #000;">df1b8a5</td><td style="padding: 8px; border: 1px solid #000;">perf(v3): 缓解长时间使用后会话列表与详情变慢</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #000;">adc8151</td><td style="padding: 8px; border: 1px solid #000;">fix(v3): 会话列表首屏加载态、去重 bootstrap 与分页条数</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Footer -->
+        <footer style="text-align: center; margin-top: 20px; border-top: 10px solid #000; padding-top: 40px;">
+            <h2 style="font-size: 24px; font-weight: 900; margin: 20px 0 20px; -webkit-text-stroke: 1px #000; color: #000; text-align: left;">📦 发布产物 (RELEASE ARTIFACTS)</h2>
+            <section style="margin: 20px 0; padding: 16px; background-color: #f7f7f7; border-left: 5px solid #000; line-height: 1.8; text-align: left;">
+                <div style="font-size: 14px; color: #333; font-family: monospace; font-weight: 800;">
+                    🐧 Linux (amd64): openclaw-buddy-linux-1.0.12.tar.gz<br>
+                    🍎 macOS (Universal): openclaw-buddy-mac-1.0.12.tar.gz<br>
+                    🔗 下载地址: <a href="https://github.com/RandyChen1985/openclaw-buddy/releases/tag/1.0.12" style="color: #ff5722; text-decoration: none;">GitHub Releases v1.0.12</a>
+                </div>
+            </section>
+            
+            <h2 style="font-size: 24px; font-weight: 900; margin: 50px 0 20px; -webkit-text-stroke: 1px #000; color: #000; text-align: left;">❤️ 特别致谢</h2>
+            <p style="margin: 0 0 25px 0; font-size: 15px; font-weight: 800; color: #333; line-height: 1.8; text-align: left;">
+                感谢每一位把 Buddy 带进真实运维现场的同伴——你们在工单里写的每一句话，最后都变成了提交说明里的动词。
+            </p>
+
+            <!-- New Quote Style -->
+            <section style="margin: 50px 0; text-align: center;">
+                <div style="display: inline-block; position: relative; padding: 30px 40px; background: #ffffff; border: 4px solid #000; box-shadow: 10px 10px 0 #ff5722; border-radius: 4px;">
+                    <span style="font-size: 60px; color: #ff5722; font-family: Georgia, serif; position: absolute; top: -20px; left: 10px; opacity: 0.8;">“</span>
+                    <p style="margin: 0; font-size: 19px; font-weight: 900; color: #1a1a1a; line-height: 1.8; font-style: italic; position: relative; z-index: 1;">
+                        自由的前提，是边界被温柔地讲清楚。
+                    </p>
+                    <span style="font-size: 60px; color: #ff5722; font-family: Georgia, serif; position: absolute; bottom: -45px; right: 10px; opacity: 0.8;">”</span>
+                </div>
+            </section>
+
+            <div style="font-size: 16px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 15px;">RandyChen1985 / openclaw-buddy / 2026</div>
+            
+            <a href="https://github.com/RandyChen1985/openclaw-buddy/releases/tag/1.0.12" style="text-decoration: none;">
+                <div style="font-size: 26px; font-weight: 900; margin-top: 20px; color: #ff5722; text-shadow: 3px 3px 0 #000; -webkit-text-stroke: 1px #000;">
+                    🔗 UPGRADE TO v1.0.12 NOW! 🦞
+                </div>
+            </a>
+        </footer>
+    </div>
+</body>
+</html>

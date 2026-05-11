@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Tabs } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { Zap, MessageSquare } from 'lucide-react';
+import { AlertCircle, Bot, MessageSquare, Zap } from 'lucide-react';
 import ChatClassic from './ChatClassic';
 import ChatV3Final from './ChatV3';
 
@@ -50,17 +50,117 @@ const OnlineChat: React.FC<OnlineChatProps> = ({ isMobile, isDarkMode = false, u
 
   const childProps = useMemo(() => ({ ...props, botsModels: filteredBotsModels }), [props, filteredBotsModels]);
 
-  const { singleEmbedPane, initialChatTab } = useMemo(() => {
+  const { isEmbed, singleEmbedPane, initialChatTab, urlBot } = useMemo(() => {
     const qp = new URLSearchParams(window.location.search);
     const isEmbed = qp.get('embed') === 'true';
+    const urlBot = (qp.get('bot') || '').trim();
     const raw = (qp.get('embedLayout') || '').toLowerCase();
     const single =
       isEmbed && (raw === 'v3' || raw === 'classic') ? (raw as 'v3' | 'classic') : null;
     const tab: 'v3' | 'classic' = qp.get('chatTab') === 'classic' ? 'classic' : 'v3';
-    return { singleEmbedPane: single, initialChatTab: tab };
+    return { isEmbed, singleEmbedPane: single, initialChatTab: tab, urlBot };
   }, []);
 
   const [activeTab, setActiveTab] = useState<'v3' | 'classic'>(initialChatTab);
+  const visibleBots = filteredBotsModels?.data?.bots;
+  const hasLoadedVisibleBots = Array.isArray(visibleBots);
+  const embedBot = hasLoadedVisibleBots && urlBot
+    ? visibleBots.find((b: any) => b?.id === urlBot || b?.name === urlBot)
+    : null;
+  const isEmbedBotBlocked = isEmbed && hasLoadedVisibleBots && (!urlBot || !embedBot);
+
+  const blockedOverlay = (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 20,
+        background: isDarkMode ? 'rgba(15, 23, 42, 0.96)' : 'rgba(248, 250, 252, 0.98)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+        boxSizing: 'border-box',
+      }}
+      role="alert"
+      aria-live="assertive"
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 440,
+          padding: isMobile ? '28px 22px' : '36px 40px',
+          borderRadius: 20,
+          background: isDarkMode ? '#1e293b' : '#fff',
+          border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+          boxShadow: isDarkMode
+            ? '0 25px 50px -12px rgba(0, 0, 0, 0.55)'
+            : '0 25px 50px -12px rgba(15, 23, 42, 0.15)',
+          textAlign: 'center',
+        }}
+      >
+        <div
+          style={{
+            width: 56,
+            height: 56,
+            margin: '0 auto 16px',
+            borderRadius: 14,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: isDarkMode ? '#0f172a' : '#fef3c7',
+            border: `1px solid ${isDarkMode ? '#334155' : '#fde68a'}`,
+          }}
+        >
+          <Bot size={28} color={isDarkMode ? '#93c5fd' : '#d97706'} strokeWidth={2} />
+        </div>
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 12,
+            fontWeight: 800,
+            fontSize: 17,
+            color: isDarkMode ? '#f1f5f9' : '#0f172a',
+          }}
+        >
+          <AlertCircle size={20} color="#f59e0b" strokeWidth={2.5} />
+          {t('chat.embedBotDeniedTitle', { defaultValue: '没有权限访问该 Bot' })}
+        </div>
+        <p
+          style={{
+            margin: 0,
+            fontSize: 14,
+            lineHeight: 1.65,
+            color: isDarkMode ? '#94a3b8' : '#64748b',
+          }}
+        >
+          {t('chat.embedBotDeniedDesc', {
+            defaultValue: '当前嵌入链接指定的 Bot 不存在，或当前账号无权访问。请检查链接或联系管理员。',
+          })}
+        </p>
+      </div>
+    </div>
+  );
+
+  if (isEmbedBotBlocked) {
+    return (
+      <div
+        style={{
+          height: '100%',
+          width: '100%',
+          position: 'relative',
+          background: isDarkMode ? '#0f172a' : '#f8fafc',
+          overflow: 'hidden',
+        }}
+      >
+        {blockedOverlay}
+      </div>
+    );
+  }
 
   if (singleEmbedPane === 'v3') {
     return (
