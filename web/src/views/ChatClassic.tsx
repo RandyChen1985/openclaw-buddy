@@ -412,12 +412,11 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
       subtle: '#94a3b8',
       dot: isDarkMode ? '#475569' : '#cbd5e1',
       uploadDashed: isDarkMode ? '#1e3a5f' : '#eff6ff',
-      /** 欢迎页空状态 */
+      /** 欢迎页外层：浅色模式与滚动区融为一体（无边无影）；深色保留极弱渐变与轻阴影 */
       welcomeHeroBg: isDarkMode
-        ? 'linear-gradient(165deg, rgba(37,99,235,0.12) 0%, rgba(30,41,59,0.55) 42%, rgba(15,23,42,0) 100%)'
-        : 'linear-gradient(165deg, rgba(239,246,255,0.98) 0%, rgba(248,250,252,0.75) 48%, rgba(250,250,250,0) 100%)',
-      welcomeHeroBorder: isDarkMode ? 'rgba(51,65,85,0.5)' : 'rgba(226,232,240,0.95)',
-      welcomeHeroInset: isDarkMode ? 'inset 0 1px 0 rgba(148,163,184,0.07)' : 'inset 0 1px 0 rgba(255,255,255,0.85)',
+        ? 'linear-gradient(185deg, rgba(30,41,59,0.35) 0%, rgba(15,23,42,0.05) 52%, rgba(15,23,42,0) 100%)'
+        : 'transparent',
+      welcomeHeroShadow: isDarkMode ? '0 12px 36px -10px rgba(0,0,0,0.28)' : 'none',
       welcomeAccent: isDarkMode ? '#60a5fa' : '#2563eb',
       welcomeCardShadow: isDarkMode
         ? '0 4px 20px rgba(0,0,0,0.28)'
@@ -1117,8 +1116,9 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                   padding: isMobile ? '22px 18px 26px' : '32px 36px 38px',
                   borderRadius: isMobile ? 18 : 22,
                   background: c.welcomeHeroBg,
-                  border: `1px solid ${c.welcomeHeroBorder}`,
-                  boxShadow: c.welcomeHeroInset,
+                  border: 'none',
+                  outline: 'none',
+                  boxShadow: c.welcomeHeroShadow,
                 }}
               >
                 <h2
@@ -1855,30 +1855,92 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                 marginBottom: manageModalCurrentCommandsOpen ? 12 : 0,
               }}
             >
-              <h4 style={{ fontSize: 13, color: c.body, margin: 0 }}>{t('chat.currentCommands')}</h4>
+              <h4 style={{ fontSize: 13, color: c.body, margin: 0, flexShrink: 0 }}>{t('chat.currentCommands')}</h4>
+              {!manageModalCurrentCommandsOpen && (
+                <span
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: 12,
+                    color: c.subtle,
+                    textAlign: 'right',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {t('chat.currentCommandsCollapsedHint', { count: quickCommands.length })}
+                </span>
+              )}
               {manageModalCurrentCommandsOpen ? (
-                <ChevronUp size={18} color={c.subtle} aria-hidden />
+                <ChevronUp size={18} color={c.subtle} aria-hidden style={{ flexShrink: 0 }} />
               ) : (
-                <ChevronDown size={18} color={c.subtle} aria-hidden />
+                <ChevronDown size={18} color={c.subtle} aria-hidden style={{ flexShrink: 0 }} />
               )}
             </div>
             {manageModalCurrentCommandsOpen && (
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
                 {quickCommands.map(cmd => (
-                    <div key={cmd.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', background: c.cmdRowBg, borderRadius: 8, border: `1px solid ${c.cmdRowBorder}`, minWidth: 0 }}>
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                            <div style={{ fontWeight: 600, color: c.heading, fontSize: 14 }}>{cmd.label}</div>
-                            <div style={{ fontSize: 12, color: c.subtle, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd.prompt}</div>
+                    <div
+                      key={cmd.id}
+                      style={{
+                        position: 'relative',
+                        overflow: 'hidden',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        padding: '10px 12px',
+                        paddingTop: cmd.is_system ? 14 : 10,
+                        paddingRight: cmd.is_system ? 36 : 12,
+                        background: c.cmdRowBg,
+                        borderRadius: 8,
+                        border: `1px solid ${c.cmdRowBorder}`,
+                        minWidth: 0,
+                      }}
+                    >
+                      {cmd.is_system && (
+                        <div
+                          title={t('chat.systemQuickCommandTip')}
+                          style={{
+                            position: 'absolute',
+                            top: 14,
+                            right: -42,
+                            width: 132,
+                            padding: '6px 0',
+                            fontSize: 10,
+                            fontWeight: 800,
+                            letterSpacing: '0.22em',
+                            color: isDarkMode ? '#1e293b' : '#64748b',
+                            textAlign: 'center',
+                            background: isDarkMode
+                              ? 'linear-gradient(135deg, #cbd5e1 0%, #e2e8f0 48%, #cbd5e1 100%)'
+                              : 'linear-gradient(135deg, #eef2f7 0%, #f8fafc 50%, #eef2f7 100%)',
+                            transform: 'rotate(45deg)',
+                            transformOrigin: 'center',
+                            boxShadow: isDarkMode ? '0 1px 6px rgba(0,0,0,0.22)' : '0 1px 6px rgba(15,23,42,0.08)',
+                            userSelect: 'none',
+                            zIndex: 2,
+                            pointerEvents: 'auto',
+                          }}
+                        >
+                          {t('chat.systemQuickCommandBadge')}
                         </div>
-                        {!cmd.is_system && (
-                            <Button 
-                                type="text" 
-                                danger 
-                                icon={<Trash2 size={14} />} 
-                                size="small" 
-                                onClick={() => handleDeleteQuickCommand(cmd.id)}
-                            />
-                        )}
+                      )}
+                      <div style={{ minWidth: 0, flex: 1, paddingRight: cmd.is_system ? 8 : 0 }}>
+                        <div style={{ fontWeight: 600, color: c.heading, fontSize: 14 }}>{cmd.label}</div>
+                        <div style={{ fontSize: 12, color: c.subtle, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd.prompt}</div>
+                      </div>
+                      {!cmd.is_system && (
+                        <Button
+                          type="text"
+                          danger
+                          icon={<Trash2 size={14} />}
+                          size="small"
+                          style={{ flexShrink: 0 }}
+                          onClick={() => handleDeleteQuickCommand(cmd.id)}
+                        />
+                      )}
                     </div>
                 ))}
               </div>

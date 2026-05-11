@@ -248,25 +248,86 @@ export function V3QuickCommands({
               marginBottom: manageModalCurrentCommandsOpen ? 12 : 0,
             }}
           >
-            <h4 style={{ fontSize: 13, color: isDarkMode ? '#94a3b8' : '#64748b', margin: 0 }}>
+            <h4 style={{ fontSize: 13, color: isDarkMode ? '#94a3b8' : '#64748b', margin: 0, flexShrink: 0 }}>
               {t('chat.currentCommands', { defaultValue: '已添加' })}
             </h4>
+            {!manageModalCurrentCommandsOpen && (
+              <span
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  fontSize: 12,
+                  color: '#94a3b8',
+                  textAlign: 'right',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {t('chat.currentCommandsCollapsedHint', { count: quickCommands.length })}
+              </span>
+            )}
             {manageModalCurrentCommandsOpen ? (
-              <ChevronUp size={18} color="#94a3b8" aria-hidden />
+              <ChevronUp size={18} color="#94a3b8" aria-hidden style={{ flexShrink: 0 }} />
             ) : (
-              <ChevronDown size={18} color="#94a3b8" aria-hidden />
+              <ChevronDown size={18} color="#94a3b8" aria-hidden style={{ flexShrink: 0 }} />
             )}
           </div>
           {manageModalCurrentCommandsOpen && (
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
               {quickCommands.map((cmd: any) => (
-                <div key={cmd.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', background: isDarkMode ? '#0f172a' : '#f8fafc', borderRadius: 8, border: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9', minWidth: 0 }}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  key={cmd.id}
+                  style={{
+                    position: 'relative',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    padding: '10px 12px',
+                    paddingTop: cmd.is_system ? 14 : 10,
+                    paddingRight: cmd.is_system ? 36 : 12,
+                    background: isDarkMode ? '#0f172a' : '#f8fafc',
+                    borderRadius: 8,
+                    border: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9',
+                    minWidth: 0,
+                  }}
+                >
+                  {cmd.is_system && (
+                    <div
+                      title={t('chat.systemQuickCommandTip')}
+                      style={{
+                        position: 'absolute',
+                        top: 14,
+                        right: -42,
+                        width: 132,
+                        padding: '6px 0',
+                        fontSize: 10,
+                        fontWeight: 800,
+                        letterSpacing: '0.22em',
+                        color: isDarkMode ? '#1e293b' : '#64748b',
+                        textAlign: 'center',
+                        background: isDarkMode
+                          ? 'linear-gradient(135deg, #cbd5e1 0%, #e2e8f0 48%, #cbd5e1 100%)'
+                          : 'linear-gradient(135deg, #eef2f7 0%, #f8fafc 50%, #eef2f7 100%)',
+                        transform: 'rotate(45deg)',
+                        transformOrigin: 'center',
+                        boxShadow: isDarkMode ? '0 1px 6px rgba(0,0,0,0.22)' : '0 1px 6px rgba(15,23,42,0.08)',
+                        userSelect: 'none',
+                        zIndex: 2,
+                        pointerEvents: 'auto',
+                      }}
+                    >
+                      {t('chat.systemQuickCommandBadge')}
+                    </div>
+                  )}
+                  <div style={{ minWidth: 0, flex: 1, paddingRight: cmd.is_system ? 8 : 0 }}>
                     <div style={{ fontWeight: 600, color: isDarkMode ? '#e2e8f0' : '#1e293b', fontSize: 14 }}>{cmd.label}</div>
                     <div style={{ fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd.prompt}</div>
                   </div>
                   {!cmd.is_system && (
-                    <Button type="text" danger icon={<Trash2 size={14} />} size="small" onClick={() => handleDeleteQuickCommand(cmd.id)} />
+                    <Button type="text" danger icon={<Trash2 size={14} />} size="small" style={{ flexShrink: 0 }} onClick={() => handleDeleteQuickCommand(cmd.id)} />
                   )}
                 </div>
               ))}
