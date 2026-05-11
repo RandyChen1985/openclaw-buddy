@@ -1376,6 +1376,9 @@ func AddOpenClawModelToProvider(configDir, providerName string, modelConfig map[
 		providerModels = []interface{}{}
 	}
 
+	// OpenClaw model schema uses "input"; "capabilities" is only a UI compatibility alias.
+	delete(modelConfig, "capabilities")
+
 	// 补齐模型配置默认值
 	if _, ok := modelConfig["cost"]; !ok {
 		modelConfig["cost"] = map[string]interface{}{

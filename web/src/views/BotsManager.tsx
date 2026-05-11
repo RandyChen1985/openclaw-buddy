@@ -267,7 +267,6 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           api: values.api,
           reasoning: !!values.reasoning,
           input: values.input || ['text'],
-          capabilities: values.input || ['text'],
           maxTokens: parseInt(values.maxTokens) || 2000000,
           contextWindow: parseInt(values.contextWindow) || 2000000,
         }
