@@ -808,52 +808,37 @@ func UpdateOpenClawBotConfig(configDir, botID string, name, model *string) error
 
 	// 2. 只有在修改模型时，才执行磁盘 JSON 物理重写逻辑
 	if model != nil {
-		configPath := filepath.Join(configDir, "openclaw.json")
-		data, err := os.ReadFile(configPath)
-		if err != nil {
-			return fmt.Errorf("failed to read openclaw.json: %v", err)
-		}
-
-		var fullCfg map[string]interface{}
-		if err := json.Unmarshal(data, &fullCfg); err != nil {
-			return fmt.Errorf("failed to unmarshal config: %v", err)
-		}
-
-		agents, ok := fullCfg["agents"].(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("invalid config: agents key not found")
-		}
-
-		list, ok := agents["list"].([]interface{})
-		if !ok {
-			return fmt.Errorf("invalid config: agents.list not found or not an array")
-		}
-
-		found := false
-		for i := range list {
-			bot, ok := list[i].(map[string]interface{})
+		return updateOpenClawConfig(configDir, func(fullCfg map[string]interface{}) error {
+			agents, ok := fullCfg["agents"].(map[string]interface{})
 			if !ok {
-				continue
+				return fmt.Errorf("invalid config: agents key not found")
 			}
-			if id, ok := bot["id"].(string); ok && id == botID {
-				// 修改模型
-				bot["model"] = *model
-				found = true
-				break
+
+			list, ok := agents["list"].([]interface{})
+			if !ok {
+				return fmt.Errorf("invalid config: agents.list not found or not an array")
 			}
-		}
 
-		if !found {
-			return fmt.Errorf("bot with ID '%s' not found", botID)
-		}
+			found := false
+			for i := range list {
+				bot, ok := list[i].(map[string]interface{})
+				if !ok {
+					continue
+				}
+				if id, ok := bot["id"].(string); ok && id == botID {
+					// 修改模型
+					bot["model"] = *model
+					found = true
+					break
+				}
+			}
 
-		newData, err := json.MarshalIndent(fullCfg, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal config: %v", err)
-		}
-		if err := os.WriteFile(configPath, newData, 0644); err != nil {
-			return fmt.Errorf("failed to write openclaw.json: %v", err)
-		}
+			if !found {
+				return fmt.Errorf("bot with ID '%s' not found", botID)
+			}
+
+			return nil
+		})
 	}
 
 	return nil
@@ -878,51 +863,14 @@ func GetOpenClawGatewayConfig(configDir string) (*OpenClawGatewayConfig, error) 
 }
 
 func EnableChatCompletions(configDir string) error {
-	// ... (unchanged content if any, but I'll replace the end)
-	configPath := filepath.Join(configDir, "openclaw.json")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return err
-	}
-
-	var fullCfg map[string]interface{}
-	if err := json.Unmarshal(data, &fullCfg); err != nil {
-		return err
-	}
-
-	gateway, ok := fullCfg["gateway"].(map[string]interface{})
-	if !ok {
-		gateway = make(map[string]interface{})
-		fullCfg["gateway"] = gateway
-	}
-
-	httpCfg, ok := gateway["http"].(map[string]interface{})
-	if !ok {
-		httpCfg = make(map[string]interface{})
-		gateway["http"] = httpCfg
-	}
-
-	endpoints, ok := httpCfg["endpoints"].(map[string]interface{})
-	if !ok {
-		endpoints = make(map[string]interface{})
-		httpCfg["endpoints"] = endpoints
-	}
-
-	chatCompletions, ok := endpoints["chatCompletions"].(map[string]interface{})
-	if !ok {
-		chatCompletions = make(map[string]interface{})
-		endpoints["chatCompletions"] = chatCompletions
-	}
-
-	chatCompletions["enabled"] = true
-
-	// 序列化回文件
-	newData, err := json.MarshalIndent(fullCfg, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(configPath, newData, 0644)
+	return updateOpenClawConfig(configDir, func(fullCfg map[string]interface{}) error {
+		gateway := ensureMap(fullCfg, "gateway")
+		httpCfg := ensureMap(gateway, "http")
+		endpoints := ensureMap(httpCfg, "endpoints")
+		chatCompletions := ensureMap(endpoints, "chatCompletions")
+		chatCompletions["enabled"] = true
+		return nil
+	})
 }
 
 type OpenClawPlugin struct {
@@ -1242,14 +1190,8 @@ func GetOpenClawSessions() ([]OpenClawSession, error) {
 }
 
 func GetOpenClawModelsConfig(configDir string) (map[string]interface{}, error) {
-	configPath := filepath.Join(configDir, "openclaw.json")
-	data, err := os.ReadFile(configPath)
+	fullCfg, err := readOpenClawConfig(configDir)
 	if err != nil {
-		return nil, err
-	}
-
-	var fullCfg map[string]interface{}
-	if err := json.Unmarshal(data, &fullCfg); err != nil {
 		return nil, err
 	}
 
@@ -1267,324 +1209,216 @@ func GetOpenClawModelsConfig(configDir string) (map[string]interface{}, error) {
 }
 
 func AddOpenClawProvider(configDir, name string, config map[string]interface{}) error {
-	configPath := filepath.Join(configDir, "openclaw.json")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return err
-	}
+	return updateOpenClawConfig(configDir, func(fullCfg map[string]interface{}) error {
+		models := ensureMap(fullCfg, "models")
+		providers := ensureMap(models, "providers")
 
-	var fullCfg map[string]interface{}
-	if err := json.Unmarshal(data, &fullCfg); err != nil {
-		return err
-	}
-
-	models, ok := fullCfg["models"].(map[string]interface{})
-	if !ok {
-		models = make(map[string]interface{})
-		fullCfg["models"] = models
-	}
-
-	providers, ok := models["providers"].(map[string]interface{})
-	if !ok {
-		providers = make(map[string]interface{})
-		models["providers"] = providers
-	}
-
-	// 如果 Provider 已存在，保留原有的 models 列表
-	if existing, ok := providers[name].(map[string]interface{}); ok {
-		if existingModels, ok := existing["models"]; ok {
-			config["models"] = existingModels
+		// 如果 Provider 已存在，保留原有的 models 列表
+		if existing, ok := providers[name].(map[string]interface{}); ok {
+			if existingModels, ok := existing["models"]; ok {
+				config["models"] = existingModels
+			}
+		} else if _, ok := config["models"]; !ok {
+			config["models"] = []interface{}{}
 		}
-	} else if _, ok := config["models"]; !ok {
-		config["models"] = []interface{}{}
-	}
 
-	providers[name] = config
+		providers[name] = config
 
-	// --- 3. 处理 agents.defaults.models 注册部分 (同步该 Provider 下所有已定义模型) ---
-	agents, ok := fullCfg["agents"].(map[string]interface{})
-	if !ok {
-		agents = make(map[string]interface{})
-		fullCfg["agents"] = agents
-	}
+		// --- 3. 处理 agents.defaults.models 注册部分 (同步该 Provider 下所有已定义模型) ---
+		agents := ensureMap(fullCfg, "agents")
+		defaults := ensureMap(agents, "defaults")
+		registeredModels := ensureMap(defaults, "models")
 
-	defaults, ok := agents["defaults"].(map[string]interface{})
-	if !ok {
-		defaults = make(map[string]interface{})
-		agents["defaults"] = defaults
-	}
-
-	registeredModels, ok := defaults["models"].(map[string]interface{})
-	if !ok {
-		registeredModels = make(map[string]interface{})
-		defaults["models"] = registeredModels
-	}
-
-	if providerModels, ok := config["models"].([]interface{}); ok {
-		for _, m := range providerModels {
-			if model, isMap := m.(map[string]interface{}); isMap {
-				if modelID, idOk := model["id"].(string); idOk && modelID != "" {
-					registrationKey := fmt.Sprintf("%s/%s", name, modelID)
-					if _, exists := registeredModels[registrationKey]; !exists {
-						registeredModels[registrationKey] = make(map[string]interface{})
+		if providerModels, ok := config["models"].([]interface{}); ok {
+			for _, m := range providerModels {
+				if model, isMap := m.(map[string]interface{}); isMap {
+					if modelID, idOk := model["id"].(string); idOk && modelID != "" {
+						registrationKey := fmt.Sprintf("%s/%s", name, modelID)
+						if _, exists := registeredModels[registrationKey]; !exists {
+							registeredModels[registrationKey] = make(map[string]interface{})
+						}
 					}
 				}
 			}
 		}
-	}
-
-	newData, err := json.MarshalIndent(fullCfg, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(configPath, newData, 0644)
+		return nil
+	})
 }
 
 func AddOpenClawModelToProvider(configDir, providerName string, modelConfig map[string]interface{}) error {
-	configPath := filepath.Join(configDir, "openclaw.json")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return err
-	}
+	return updateOpenClawConfig(configDir, func(fullCfg map[string]interface{}) error {
+		// --- 1. 处理 models.providers 部分 ---
+		models := ensureMap(fullCfg, "models")
+		providers := ensureMap(models, "providers")
 
-	var fullCfg map[string]interface{}
-	if err := json.Unmarshal(data, &fullCfg); err != nil {
-		return err
-	}
-
-	// --- 1. 处理 models.providers 部分 ---
-	models, ok := fullCfg["models"].(map[string]interface{})
-	if !ok {
-		models = make(map[string]interface{})
-		fullCfg["models"] = models
-	}
-
-	providers, ok := models["providers"].(map[string]interface{})
-	if !ok {
-		providers = make(map[string]interface{})
-		models["providers"] = providers
-	}
-
-	provider, ok := providers[providerName].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("provider %s not found", providerName)
-	}
-
-	providerModels, ok := provider["models"].([]interface{})
-	if !ok {
-		providerModels = []interface{}{}
-	}
-
-	// OpenClaw model schema uses "input"; "capabilities" is only a UI compatibility alias.
-	delete(modelConfig, "capabilities")
-
-	// 补齐模型配置默认值
-	if _, ok := modelConfig["cost"]; !ok {
-		modelConfig["cost"] = map[string]interface{}{
-			"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0,
+		provider, ok := providers[providerName].(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("provider %s not found", providerName)
 		}
-	}
-	if _, ok := modelConfig["contextWindow"]; !ok {
-		modelConfig["contextWindow"] = 128000
-	}
-	if _, ok := modelConfig["maxTokens"]; !ok {
-		modelConfig["maxTokens"] = 4096
-	}
-	if _, ok := modelConfig["compat"]; !ok {
-		modelConfig["compat"] = map[string]interface{}{
-			"supportsStore": false, "supportsDeveloperRole": false,
-		}
-	}
 
-	// [Hardening] 检查是否存在相同 ID 的模型，如有则更新
-	modelID, _ := modelConfig["id"].(string)
-	foundIdx := -1
-	for i, m := range providerModels {
-		if model, isMap := m.(map[string]interface{}); isMap {
-			if id, idOk := model["id"].(string); idOk && id == modelID {
-				foundIdx = i
-				break
+		providerModels, ok := provider["models"].([]interface{})
+		if !ok {
+			providerModels = []interface{}{}
+		}
+
+		// OpenClaw model schema uses "input"; "capabilities" is only a UI compatibility alias.
+		delete(modelConfig, "capabilities")
+
+		// 补齐模型配置默认值
+		if _, ok := modelConfig["cost"]; !ok {
+			modelConfig["cost"] = map[string]interface{}{
+				"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0,
 			}
 		}
-	}
-
-	if foundIdx >= 0 {
-		providerModels[foundIdx] = modelConfig
-	} else {
-		providerModels = append(providerModels, modelConfig)
-	}
-	provider["models"] = providerModels
-
-	// --- 2. 处理 agents.defaults.models 注册部分 ---
-	agents, ok := fullCfg["agents"].(map[string]interface{})
-	if !ok {
-		agents = make(map[string]interface{})
-		fullCfg["agents"] = agents
-	}
-
-	defaults, ok := agents["defaults"].(map[string]interface{})
-	if !ok {
-		defaults = make(map[string]interface{})
-		agents["defaults"] = defaults
-	}
-
-	registeredModels, ok := defaults["models"].(map[string]interface{})
-	if !ok {
-		registeredModels = make(map[string]interface{})
-		defaults["models"] = registeredModels
-	}
-
-	// 注册格式: "provider/id": {}
-	if modelID != "" {
-		registrationKey := fmt.Sprintf("%s/%s", providerName, modelID)
-		if _, exists := registeredModels[registrationKey]; !exists {
-			registeredModels[registrationKey] = make(map[string]interface{})
+		if _, ok := modelConfig["contextWindow"]; !ok {
+			modelConfig["contextWindow"] = 128000
 		}
-	}
+		if _, ok := modelConfig["maxTokens"]; !ok {
+			modelConfig["maxTokens"] = 4096
+		}
+		if _, ok := modelConfig["compat"]; !ok {
+			modelConfig["compat"] = map[string]interface{}{
+				"supportsStore": false, "supportsDeveloperRole": false,
+			}
+		}
 
-	// 序列化回文件
-	newData, err := json.MarshalIndent(fullCfg, "", "  ")
-	if err != nil {
-		return err
-	}
+		// [Hardening] 检查是否存在相同 ID 的模型，如有则更新
+		modelID, _ := modelConfig["id"].(string)
+		foundIdx := -1
+		for i, m := range providerModels {
+			if model, isMap := m.(map[string]interface{}); isMap {
+				if id, idOk := model["id"].(string); idOk && id == modelID {
+					foundIdx = i
+					break
+				}
+			}
+		}
 
-	return os.WriteFile(configPath, newData, 0644)
+		if foundIdx >= 0 {
+			providerModels[foundIdx] = modelConfig
+		} else {
+			providerModels = append(providerModels, modelConfig)
+		}
+		provider["models"] = providerModels
+
+		// --- 2. 处理 agents.defaults.models 注册部分 ---
+		agents := ensureMap(fullCfg, "agents")
+		defaults := ensureMap(agents, "defaults")
+		registeredModels := ensureMap(defaults, "models")
+
+		// 注册格式: "provider/id": {}
+		if modelID != "" {
+			registrationKey := fmt.Sprintf("%s/%s", providerName, modelID)
+			if _, exists := registeredModels[registrationKey]; !exists {
+				registeredModels[registrationKey] = make(map[string]interface{})
+			}
+		}
+		return nil
+	})
 }
 
 func DeleteOpenClawModelFromProvider(configDir, providerName, modelID string) error {
-	configPath := filepath.Join(configDir, "openclaw.json")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return err
-	}
-
-	var fullCfg map[string]interface{}
-	if err := json.Unmarshal(data, &fullCfg); err != nil {
-		return err
-	}
-
-	// --- 1. 处理 models.providers 部分 ---
-	models, ok := fullCfg["models"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("models section not found")
-	}
-
-	providers, ok := models["providers"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("providers section not found")
-	}
-
-	provider, ok := providers[providerName].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("provider %s not found", providerName)
-	}
-
-	providerModels, ok := provider["models"].([]interface{})
-	if !ok {
-		return fmt.Errorf("models list not found for provider %s", providerName)
-	}
-
-	newProviderModels := []interface{}{}
-	found := false
-	for _, m := range providerModels {
-		if model, isMap := m.(map[string]interface{}); isMap {
-			if id, idOk := model["id"].(string); idOk && id == modelID {
-				found = true
-				continue
-			}
+	return updateOpenClawConfig(configDir, func(fullCfg map[string]interface{}) error {
+		// --- 1. 处理 models.providers 部分 ---
+		models, ok := fullCfg["models"].(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("models section not found")
 		}
-		newProviderModels = append(newProviderModels, m)
-	}
 
-	if !found {
-		return fmt.Errorf("model %s not found in provider %s", modelID, providerName)
-	}
-
-	provider["models"] = newProviderModels
-	providers[providerName] = provider // 更新 provider
-
-	// --- 2. 处理 agents.defaults.models 注册部分 ---
-	// 同样需要从 defaults.models 中移除
-	agents, ok := fullCfg["agents"].(map[string]interface{})
-	if ok { // 只有 agents 存在才处理
-		defaults, ok := agents["defaults"].(map[string]interface{})
-		if ok { // 只有 defaults 存在才处理
-			registeredModels, ok := defaults["models"].(map[string]interface{})
-			if ok { // 只有 registeredModels 存在才处理
-				registrationKey := fmt.Sprintf("%s/%s", providerName, modelID)
-				delete(registeredModels, registrationKey)
-				defaults["models"] = registeredModels
-			}
-			agents["defaults"] = defaults
+		providers, ok := models["providers"].(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("providers section not found")
 		}
-		fullCfg["agents"] = agents
-	}
 
-	// 序列化回文件
-	newData, err := json.MarshalIndent(fullCfg, "", "  ")
-	if err != nil {
-		return err
-	}
+		provider, ok := providers[providerName].(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("provider %s not found", providerName)
+		}
 
-	return os.WriteFile(configPath, newData, 0644)
+		providerModels, ok := provider["models"].([]interface{})
+		if !ok {
+			return fmt.Errorf("models list not found for provider %s", providerName)
+		}
+
+		newProviderModels := []interface{}{}
+		found := false
+		for _, m := range providerModels {
+			if model, isMap := m.(map[string]interface{}); isMap {
+				if id, idOk := model["id"].(string); idOk && id == modelID {
+					found = true
+					continue
+				}
+			}
+			newProviderModels = append(newProviderModels, m)
+		}
+
+		if !found {
+			return fmt.Errorf("model %s not found in provider %s", modelID, providerName)
+		}
+
+		provider["models"] = newProviderModels
+		providers[providerName] = provider // 更新 provider
+
+		// --- 2. 处理 agents.defaults.models 注册部分 ---
+		// 同样需要从 defaults.models 中移除
+		agents, ok := fullCfg["agents"].(map[string]interface{})
+		if ok { // 只有 agents 存在才处理
+			defaults, ok := agents["defaults"].(map[string]interface{})
+			if ok { // 只有 defaults 存在才处理
+				registeredModels, ok := defaults["models"].(map[string]interface{})
+				if ok { // 只有 registeredModels 存在才处理
+					registrationKey := fmt.Sprintf("%s/%s", providerName, modelID)
+					delete(registeredModels, registrationKey)
+					defaults["models"] = registeredModels
+				}
+				agents["defaults"] = defaults
+			}
+			fullCfg["agents"] = agents
+		}
+		return nil
+	})
 }
 
 func DeleteOpenClawProvider(configDir, providerName string) error {
-	configPath := filepath.Join(configDir, "openclaw.json")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return err
-	}
-
-	var fullCfg map[string]interface{}
-	if err := json.Unmarshal(data, &fullCfg); err != nil {
-		return err
-	}
-
-	// 1. 从 models.providers 中移除
-	models, ok := fullCfg["models"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("models section not found")
-	}
-
-	providers, ok := models["providers"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("providers section not found")
-	}
-
-	if _, ok := providers[providerName]; !ok {
-		return fmt.Errorf("provider %s not found", providerName)
-	}
-
-	delete(providers, providerName)
-
-	// 2. 从 agents.defaults.models 中移除该渠道下的所有模型注册
-	agents, ok := fullCfg["agents"].(map[string]interface{})
-	if ok {
-		defaults, ok := agents["defaults"].(map[string]interface{})
-		if ok {
-			registeredModels, ok := defaults["models"].(map[string]interface{})
-			if ok {
-				prefix := providerName + "/"
-				for key := range registeredModels {
-					if strings.HasPrefix(key, prefix) {
-						delete(registeredModels, key)
-					}
-				}
-				defaults["models"] = registeredModels
-			}
-			agents["defaults"] = defaults
+	return updateOpenClawConfig(configDir, func(fullCfg map[string]interface{}) error {
+		// 1. 从 models.providers 中移除
+		models, ok := fullCfg["models"].(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("models section not found")
 		}
-		fullCfg["agents"] = agents
-	}
 
-	newData, err := json.MarshalIndent(fullCfg, "", "  ")
-	if err != nil {
-		return err
-	}
+		providers, ok := models["providers"].(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("providers section not found")
+		}
 
-	return os.WriteFile(configPath, newData, 0644)
+		if _, ok := providers[providerName]; !ok {
+			return fmt.Errorf("provider %s not found", providerName)
+		}
+
+		delete(providers, providerName)
+
+		// 2. 从 agents.defaults.models 中移除该渠道下的所有模型注册
+		agents, ok := fullCfg["agents"].(map[string]interface{})
+		if ok {
+			defaults, ok := agents["defaults"].(map[string]interface{})
+			if ok {
+				registeredModels, ok := defaults["models"].(map[string]interface{})
+				if ok {
+					prefix := providerName + "/"
+					for key := range registeredModels {
+						if strings.HasPrefix(key, prefix) {
+							delete(registeredModels, key)
+						}
+					}
+					defaults["models"] = registeredModels
+				}
+				agents["defaults"] = defaults
+			}
+			fullCfg["agents"] = agents
+		}
+		return nil
+	})
 }
 
 func GetOpenClawExperts() ([]Expert, error) {

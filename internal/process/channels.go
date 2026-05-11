@@ -1258,39 +1258,3 @@ func BindDingTalkToAgent(configDir, agentID string) error {
 // 注意：DingTalk 不是 openclaw 的有效渠道（不在 openclaw extensions 中），
 // 因此没有 BindDingTalkToAgent 和 UnbindDingTalkFromAgent 函数。
 // 如果将来 openclaw 官方支持 DingTalk，再添加。
-
-func updateOpenClawConfig(configDir string, fn func(map[string]interface{}) error) error {
-	configPath := filepath.Join(configDir, "openclaw.json")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return err
-	}
-	var cfg map[string]interface{}
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return err
-	}
-	if err := fn(cfg); err != nil {
-		return err
-	}
-	newData, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(configPath, newData, 0644)
-}
-
-func ensureMap(parent map[string]interface{}, key string) map[string]interface{} {
-	v, ok := parent[key]
-	if !ok || v == nil {
-		m := make(map[string]interface{})
-		parent[key] = m
-		return m
-	}
-	m, ok := v.(map[string]interface{})
-	if !ok {
-		m = make(map[string]interface{})
-		parent[key] = m
-		return m
-	}
-	return m
-}
