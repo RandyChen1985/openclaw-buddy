@@ -1084,7 +1084,7 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
           }}
         >
           {messages.length === 0 ? (
-            <div style={{ margin: 'auto', textAlign: 'center', maxWidth: 640, padding: isMobile ? '20px' : '40px', width: '100%' }}>
+            <div style={{ margin: 'auto', textAlign: 'center', maxWidth: 640, padding: isMobile ? '16px 0' : '40px', width: '100%' }}>
               <div style={{ marginBottom: 24, position: 'relative', display: 'inline-block' }}>
                 <img 
                   src={`${getBaseURL()}/openclaw.png`} 
@@ -1102,7 +1102,7 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                 {t('chat.welcomeSubtitle')}
               </p>
               
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: isMobile ? 8 : 12 }}>
                 {[
                   ...quickCommands.map(c => ({ icon: '🍭', title: c.label || t('chat.quickCommand'), text: c.prompt })),
                   { icon: '💡', title: t('login.features.monit'), text: t('chat.guidePrompt') },
@@ -1121,19 +1121,20 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                         handleSend(item.text);
                     }}
                     style={{ 
-                      padding: '16px', background: c.pickCard, borderRadius: 14, border: `1px solid ${c.border}`, 
+                      padding: isMobile ? '12px 10px' : '16px', background: c.pickCard, borderRadius: 14, border: `1px solid ${c.border}`,
                       cursor: isTyping ? 'not-allowed' : 'pointer', transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                      minWidth: 0,
                       display: 'flex', flexDirection: 'column', gap: 6,
                       boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
                       opacity: isTyping ? 0.6 : 1,
                       '--delay': `${i * 0.05}s`
                     } as React.CSSProperties}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 18 }}>{item.icon}</span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: c.heading }}>{item.title}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 8, minWidth: 0 }}>
+                        <span style={{ fontSize: isMobile ? 16 : 18, flexShrink: 0 }}>{item.icon}</span>
+                        <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: 700, color: c.heading, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</span>
                     </div>
-                    <span style={{ fontSize: 12, color: c.body, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.text}</span>
+                    <span style={{ fontSize: isMobile ? 11 : 12, color: c.body, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.text}</span>
                   </div>
                 ))}
               </div>
