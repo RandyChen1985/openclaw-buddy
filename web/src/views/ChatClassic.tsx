@@ -10,7 +10,6 @@ import rehypeSanitize from 'rehype-sanitize';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import api, { getFullUrl } from '../api';
-import { getBaseURL } from '../utils/url';
 import { buildChatEmbedPageUrl, type ChatEmbedLayout } from '../utils/chatEmbedUrl';
 import storage from '../utils/storage';
 import { Mermaid, CodeBlock, ECharts, isEchartsCodeFenceLanguage } from '../components/ChatComponents';
@@ -171,6 +170,8 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
     return storage.getItem('chat_show_quick_actions') !== 'false';
   });
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+  /** 管理弹窗内「当前指令」列表：桌面默认展开，移动端默认折叠 */
+  const [manageModalCurrentCommandsOpen, setManageModalCurrentCommandsOpen] = useState(() => !isMobile);
   const [form] = Form.useForm();
 
   const [editingUserMsgIndex, setEditingUserMsgIndex] = useState<number | null>(null);
@@ -408,10 +409,24 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
       cmdRowBg: isDarkMode ? '#0f172a' : '#f8fafc',
       cmdRowBorder: hairline,
       shareTa: isDarkMode ? '#0f172a' : '#f8fafc',
-      mascotRing: isDarkMode ? '#1e293b' : '#fff',
       subtle: '#94a3b8',
       dot: isDarkMode ? '#475569' : '#cbd5e1',
-      uploadDashed: isDarkMode ? '#1e3a5f' : '#eff6ff'
+      uploadDashed: isDarkMode ? '#1e3a5f' : '#eff6ff',
+      /** 欢迎页空状态 */
+      welcomeHeroBg: isDarkMode
+        ? 'linear-gradient(165deg, rgba(37,99,235,0.12) 0%, rgba(30,41,59,0.55) 42%, rgba(15,23,42,0) 100%)'
+        : 'linear-gradient(165deg, rgba(239,246,255,0.98) 0%, rgba(248,250,252,0.75) 48%, rgba(250,250,250,0) 100%)',
+      welcomeHeroBorder: isDarkMode ? 'rgba(51,65,85,0.5)' : 'rgba(226,232,240,0.95)',
+      welcomeHeroInset: isDarkMode ? 'inset 0 1px 0 rgba(148,163,184,0.07)' : 'inset 0 1px 0 rgba(255,255,255,0.85)',
+      welcomeAccent: isDarkMode ? '#60a5fa' : '#2563eb',
+      welcomeCardShadow: isDarkMode
+        ? '0 4px 20px rgba(0,0,0,0.28)'
+        : '0 2px 12px rgba(15,23,42,0.05), 0 4px 20px rgba(15,23,42,0.04)',
+      welcomeCardShadowHover: isDarkMode
+        ? '0 12px 36px -4px rgba(0,0,0,0.45)'
+        : '0 10px 28px -6px rgba(15,23,42,0.1), 0 4px 12px rgba(37,99,235,0.08)',
+      welcomeIconBg: isDarkMode ? 'rgba(59,130,246,0.16)' : 'rgba(239,246,255,0.98)',
+      welcomeIconBorder: isDarkMode ? 'rgba(96,165,250,0.3)' : 'rgba(191,219,254,0.95)'
     };
   }, [isDarkMode]);
 
@@ -487,6 +502,15 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
         .markdown-body p { margin-bottom: 4px; }
         .markdown-body ul, .markdown-body ol { padding-left: 16px; margin-bottom: 4px; }
         .markdown-body blockquote { margin-bottom: 6px; }
+      }
+
+      .chat-classic-welcome-card {
+        transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.28s ease, border-color 0.22s ease;
+      }
+      .chat-classic-welcome-card:hover {
+        transform: translateY(-3px);
+        box-shadow: ${c.welcomeCardShadowHover};
+        border-color: ${c.welcomeAccent}99 !important;
       }
     `}</style>
   ), [c]);
@@ -990,7 +1014,9 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                 })}
               </Select>
             </div>
-            <Button icon={<RefreshCw size={14} />} onClick={onRefreshBots} loading={loadingBots} title={t('common.refresh')} />
+            {!isEmbedMode && (
+              <Button icon={<RefreshCw size={14} />} onClick={onRefreshBots} loading={loadingBots} title={t('common.refresh')} />
+            )}
             {!isMobile && !isEmbedMode && (
               <Button
                 icon={<ExternalLink size={14} />}
@@ -1084,59 +1110,144 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
           }}
         >
           {messages.length === 0 ? (
-            <div style={{ margin: 'auto', textAlign: 'center', maxWidth: 640, padding: isMobile ? '16px 0' : '40px', width: '100%' }}>
-              <div style={{ marginBottom: 24, position: 'relative', display: 'inline-block' }}>
-                <img 
-                  src={`${getBaseURL()}/openclaw.png`} 
-                  style={{ width: 80, height: 80, borderRadius: 20, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: `4px solid ${c.mascotRing}` }} 
-                  alt="Mascot"
+            <div style={{ margin: 'auto', width: '100%', maxWidth: 680, padding: isMobile ? '12px 4px 24px' : '28px 8px 48px' }}>
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: isMobile ? '22px 18px 26px' : '32px 36px 38px',
+                  borderRadius: isMobile ? 18 : 22,
+                  background: c.welcomeHeroBg,
+                  border: `1px solid ${c.welcomeHeroBorder}`,
+                  boxShadow: c.welcomeHeroInset,
+                }}
+              >
+                <h2
+                  style={{
+                    color: c.heading,
+                    fontWeight: 800,
+                    fontSize: isMobile ? 21 : 28,
+                    letterSpacing: '-0.03em',
+                    lineHeight: 1.25,
+                    margin: '0 0 12px',
+                  }}
+                >
+                  {t('chat.welcomeTitle')}
+                </h2>
+                <div
+                  style={{
+                    width: 52,
+                    height: 4,
+                    margin: '0 auto 18px',
+                    borderRadius: 4,
+                    background: `linear-gradient(90deg, ${c.welcomeAccent}, ${isDarkMode ? '#818cf8' : '#6366f1'})`,
+                    opacity: isDarkMode ? 0.95 : 1,
+                  }}
                 />
-                <div style={{ position: 'absolute', bottom: -5, right: -5, width: 24, height: 24, background: '#22c55e', borderRadius: '50%', border: `4px solid ${c.mascotRing}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Zap size={10} color="#fff" fill="#fff" />
-                </div>
-              </div>
-              <h2 style={{ color: c.heading, fontWeight: 800, fontSize: isMobile ? 20 : 26, letterSpacing: '-0.02em', marginBottom: 8 }}>
-                {t('chat.welcomeTitle')}
-              </h2>
-              <p style={{ color: c.body, fontSize: isMobile ? 13 : 15, marginBottom: 32, maxWidth: 440, margin: '0 auto 32px' }}>
-                {t('chat.welcomeSubtitle')}
-              </p>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: isMobile ? 8 : 12 }}>
-                {[
-                  ...quickCommands.map(c => ({ icon: '🍭', title: c.label || t('chat.quickCommand'), text: c.prompt })),
-                  { icon: '💡', title: t('login.features.monit'), text: t('chat.guidePrompt') },
-                  { icon: '🚀', title: t('common.restart'), text: t('chat.latencyPrompt') },
-                  { icon: '🛡️', title: t('common.dashboard'), text: t('chat.guardianPrompt') },
-                  { icon: '🔧', title: t('common.assets'), text: t('chat.codePrompt') }
-                ].filter((v, i, a) => a.findIndex(t => t.text === v.text) === i).slice(0, 8).map((item, i) => (
-                  <div 
-                    key={i} 
-                    className="stagger-entry card-float"
-                    onClick={() => {
+                <p
+                  style={{
+                    color: c.body,
+                    fontSize: isMobile ? 13 : 15,
+                    lineHeight: 1.65,
+                    margin: '0 auto 28px',
+                    maxWidth: 460,
+                  }}
+                >
+                  {t('chat.welcomeSubtitle')}
+                </p>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                    gap: isMobile ? 10 : 14,
+                    textAlign: 'left',
+                  }}
+                >
+                  {[
+                    ...quickCommands.map(q => ({ icon: '', title: q.label || t('chat.quickCommand'), text: q.prompt })),
+                    { icon: '💡', title: t('login.features.monit'), text: t('chat.guidePrompt') },
+                    { icon: '🚀', title: t('common.restart'), text: t('chat.latencyPrompt') },
+                    { icon: '🛡️', title: t('common.dashboard'), text: t('chat.guardianPrompt') },
+                    { icon: '🔧', title: t('common.assets'), text: t('chat.codePrompt') }
+                  ].filter((v, i, a) => a.findIndex(t => t.text === v.text) === i).slice(0, 8).map((item, i) => (
+                    <div
+                      key={i}
+                      className="stagger-entry chat-classic-welcome-card"
+                      onClick={() => {
                         if (!selectedBot || isTyping) {
-                            if (!selectedBot) message.warning(t('chat.selectBot'));
-                            return;
+                          if (!selectedBot) message.warning(t('chat.selectBot'));
+                          return;
                         }
                         handleSend(item.text);
-                    }}
-                    style={{ 
-                      padding: isMobile ? '12px 10px' : '16px', background: c.pickCard, borderRadius: 14, border: `1px solid ${c.border}`,
-                      cursor: isTyping ? 'not-allowed' : 'pointer', transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                      minWidth: 0,
-                      display: 'flex', flexDirection: 'column', gap: 6,
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-                      opacity: isTyping ? 0.6 : 1,
-                      '--delay': `${i * 0.05}s`
-                    } as React.CSSProperties}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 8, minWidth: 0 }}>
-                        <span style={{ fontSize: isMobile ? 16 : 18, flexShrink: 0 }}>{item.icon}</span>
-                        <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: 700, color: c.heading, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</span>
+                      }}
+                      style={{
+                        padding: isMobile ? '12px 12px' : '14px 16px',
+                        background: c.pickCard,
+                        borderRadius: 16,
+                        border: `1px solid ${c.hairline}`,
+                        cursor: isTyping ? 'not-allowed' : 'pointer',
+                        minWidth: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                        boxShadow: c.welcomeCardShadow,
+                        opacity: isTyping ? 0.6 : 1,
+                        '--delay': `${i * 0.05}s`,
+                      } as React.CSSProperties}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: isMobile ? 8 : 10, minWidth: 0 }}>
+                        {item.icon ? (
+                          <span
+                            style={{
+                              width: isMobile ? 36 : 40,
+                              height: isMobile ? 36 : 40,
+                              borderRadius: 12,
+                              flexShrink: 0,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: isMobile ? 17 : 19,
+                              lineHeight: 1,
+                              background: c.welcomeIconBg,
+                              border: `1px solid ${c.welcomeIconBorder}`,
+                            }}
+                          >
+                            {item.icon}
+                          </span>
+                        ) : null}
+                        <span
+                          style={{
+                            fontSize: isMobile ? 12 : 13,
+                            fontWeight: 700,
+                            color: c.heading,
+                            minWidth: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            lineHeight: 1.35,
+                            paddingTop: item.icon ? 2 : 0,
+                          }}
+                        >
+                          {item.title}
+                        </span>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: isMobile ? 11 : 12,
+                          color: c.body,
+                          lineHeight: 1.45,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          paddingLeft: item.icon ? (isMobile ? 44 : 50) : 0,
+                        }}
+                      >
+                        {item.text}
+                      </span>
                     </div>
-                    <span style={{ fontSize: isMobile ? 11 : 12, color: c.body, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.text}</span>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           ) : (
@@ -1719,14 +1830,42 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
         open={isManageModalOpen}
         onCancel={() => setIsManageModalOpen(false)}
         footer={null}
-        width={500}
+        width={isMobile ? 500 : 560}
         bodyStyle={{ paddingTop: 16 }}
       >
         <div style={{ marginBottom: 24 }}>
-            <h4 style={{ fontSize: 13, color: c.body, marginBottom: 12 }}>{t('chat.currentCommands')}</h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div
+              role="button"
+              tabIndex={0}
+              aria-expanded={manageModalCurrentCommandsOpen}
+              onClick={() => setManageModalCurrentCommandsOpen((v) => !v)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setManageModalCurrentCommandsOpen((v) => !v);
+                }
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                cursor: 'pointer',
+                userSelect: 'none',
+                marginBottom: manageModalCurrentCommandsOpen ? 12 : 0,
+              }}
+            >
+              <h4 style={{ fontSize: 13, color: c.body, margin: 0 }}>{t('chat.currentCommands')}</h4>
+              {manageModalCurrentCommandsOpen ? (
+                <ChevronUp size={18} color={c.subtle} aria-hidden />
+              ) : (
+                <ChevronDown size={18} color={c.subtle} aria-hidden />
+              )}
+            </div>
+            {manageModalCurrentCommandsOpen && (
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
                 {quickCommands.map(cmd => (
-                    <div key={cmd.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: c.cmdRowBg, borderRadius: 8, border: `1px solid ${c.cmdRowBorder}` }}>
+                    <div key={cmd.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', background: c.cmdRowBg, borderRadius: 8, border: `1px solid ${c.cmdRowBorder}`, minWidth: 0 }}>
                         <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ fontWeight: 600, color: c.heading, fontSize: 14 }}>{cmd.label}</div>
                             <div style={{ fontSize: 12, color: c.subtle, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd.prompt}</div>
@@ -1742,7 +1881,8 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                         )}
                     </div>
                 ))}
-            </div>
+              </div>
+            )}
         </div>
 
         <div style={{ borderTop: `1px solid ${c.hairline}`, paddingTop: 24 }}>

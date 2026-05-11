@@ -34,6 +34,8 @@ export function V3QuickCommands({
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
   const [showQuickActions, setShowQuickActions] = useState<boolean>(() => localStorage.getItem('v3_show_quick_actions') !== 'false');
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+  /** 管理弹窗内「当前指令」：桌面默认展开，移动端默认折叠 */
+  const [manageModalCurrentCommandsOpen, setManageModalCurrentCommandsOpen] = useState(() => !isMobile);
   const [form] = Form.useForm();
 
   const canSend = status === 'authenticated' && !sendBlocked;
@@ -217,7 +219,7 @@ export function V3QuickCommands({
         open={isManageModalOpen}
         onCancel={() => setIsManageModalOpen(false)}
         footer={null}
-        width={500}
+        width={isMobile ? 500 : 560}
         styles={isDarkMode ? {
           content: { background: '#1e293b' },
           header: { background: '#1e293b', borderBottom: '1px solid #334155', color: '#f1f5f9' },
@@ -225,20 +227,51 @@ export function V3QuickCommands({
         } : undefined}
       >
         <div style={{ marginBottom: 24 }}>
-          <h4 style={{ fontSize: 13, color: isDarkMode ? '#94a3b8' : '#64748b', marginBottom: 12 }}>{t('chat.currentCommands', { defaultValue: '已添加' })}</h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {quickCommands.map((cmd: any) => (
-              <div key={cmd.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: isDarkMode ? '#0f172a' : '#f8fafc', borderRadius: 8, border: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9' }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontWeight: 600, color: isDarkMode ? '#e2e8f0' : '#1e293b', fontSize: 14 }}>{cmd.label}</div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd.prompt}</div>
-                </div>
-                {!cmd.is_system && (
-                  <Button type="text" danger icon={<Trash2 size={14} />} size="small" onClick={() => handleDeleteQuickCommand(cmd.id)} />
-                )}
-              </div>
-            ))}
+          <div
+            role="button"
+            tabIndex={0}
+            aria-expanded={manageModalCurrentCommandsOpen}
+            onClick={() => setManageModalCurrentCommandsOpen((v) => !v)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setManageModalCurrentCommandsOpen((v) => !v);
+              }
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+              cursor: 'pointer',
+              userSelect: 'none',
+              marginBottom: manageModalCurrentCommandsOpen ? 12 : 0,
+            }}
+          >
+            <h4 style={{ fontSize: 13, color: isDarkMode ? '#94a3b8' : '#64748b', margin: 0 }}>
+              {t('chat.currentCommands', { defaultValue: '已添加' })}
+            </h4>
+            {manageModalCurrentCommandsOpen ? (
+              <ChevronUp size={18} color="#94a3b8" aria-hidden />
+            ) : (
+              <ChevronDown size={18} color="#94a3b8" aria-hidden />
+            )}
           </div>
+          {manageModalCurrentCommandsOpen && (
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+              {quickCommands.map((cmd: any) => (
+                <div key={cmd.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', background: isDarkMode ? '#0f172a' : '#f8fafc', borderRadius: 8, border: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9', minWidth: 0 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 600, color: isDarkMode ? '#e2e8f0' : '#1e293b', fontSize: 14 }}>{cmd.label}</div>
+                    <div style={{ fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd.prompt}</div>
+                  </div>
+                  {!cmd.is_system && (
+                    <Button type="text" danger icon={<Trash2 size={14} />} size="small" onClick={() => handleDeleteQuickCommand(cmd.id)} />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div style={{ borderTop: isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9', paddingTop: 24 }}>
           <h4 style={{ fontSize: 13, color: isDarkMode ? '#94a3b8' : '#64748b', marginBottom: 12 }}>{t('chat.addCommand', { defaultValue: '添加新指令' })}</h4>
