@@ -86,6 +86,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
 
   const { t } = useTranslation();
   const v3Theme = useV3Theme();
+  const isEmbedMode = new URLSearchParams(window.location.search).get('embed') === 'true';
 
   /**
    * 获取会话来源（渠道）的 icon/color/label。
@@ -491,6 +492,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
   }, [handleOpenWorkspace, t]);
 
   const handleRequestNewSessionWithBot = React.useCallback((botValue: string) => {
+    if (isEmbedMode) return;
     const nextBot = (botValue || '').trim();
     if (!nextBot) return;
 
@@ -528,7 +530,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
         startNewSession(agentId);
       }
     });
-  }, [botsModels, isCreatingNewSession, isTyping, sessionKey, startNewSession, status, t]);
+  }, [botsModels, isCreatingNewSession, isTyping, isEmbedMode, sessionKey, startNewSession, status, t]);
 
   const handleEditMessage = useCallback((idx: number, content: string) => {
     setEditingMsgIndex(idx);
@@ -838,6 +840,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
               }}
               loadingBots={loadingBots}
               selectedBot={selectedBot}
+              lockBotSelection={isEmbedMode}
               onRequestNewSessionWithBot={handleRequestNewSessionWithBot}
               currentSessionBotId={currentSessionBotId}
               botsModels={botsModels}

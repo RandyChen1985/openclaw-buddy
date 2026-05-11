@@ -932,7 +932,14 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
           </div>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flex: isMobile ? 1 : 'none', justifyContent: 'flex-end', minWidth: 0 }}>
-            {!isMobile && <span style={{ color: c.body, fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap' }}>{t('chat.selectBotTip')}:</span>}
+            {!isMobile && (
+              <span style={{ color: c.body, fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap' }}>
+                {isEmbedMode
+                  ? t('chat.currentBotLabel', { defaultValue: '当前机器人' })
+                  : t('chat.selectBotTip')}
+                :
+              </span>
+            )}
             <div
               style={{
                 display: 'flex',
@@ -953,6 +960,7 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                 value={selectedBot}
                 onChange={setSelectedBot}
                 loading={loadingBots}
+                disabled={isEmbedMode}
                 variant="borderless"
                 dropdownStyle={{ borderRadius: 8, minWidth: 280 }}
                 listHeight={400}

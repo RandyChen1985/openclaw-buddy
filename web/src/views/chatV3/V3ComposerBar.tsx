@@ -21,6 +21,8 @@ export interface V3ComposerBarProps {
   loadingBots: boolean;
 
   selectedBot: string;
+  /** 嵌入模式下 bot 由 URL 固定，不允许在页面中切换 */
+  lockBotSelection?: boolean;
   /**
    * 请求“以某个 bot 创建新会话”（会弹确认框，由上层决定是否执行）。
    * 说明：v3 在已有 sessionKey 的页面里，切换 bot 视为创建新会话，而不是切换当前会话。
@@ -62,6 +64,7 @@ export function V3ComposerBar({
   onRefreshSession,
   loadingBots,
   selectedBot,
+  lockBotSelection = false,
   onRequestNewSessionWithBot,
   currentSessionBotId = null,
   botsModels,
@@ -185,7 +188,7 @@ export function V3ComposerBar({
             value={selectedBot}
             onChange={onRequestNewSessionWithBot}
             loading={loadingBots}
-            disabled={isTyping || sessionComposeBlocked}
+            disabled={lockBotSelection || isTyping || sessionComposeBlocked}
             variant="borderless"
             dropdownStyle={{ borderRadius: 10, minWidth: 240 }}
             dropdownMatchSelectWidth={false}
@@ -209,7 +212,7 @@ export function V3ComposerBar({
                     </span>
                   </div>
 
-                  {bot.id !== currentSessionBotId && (
+                  {!lockBotSelection && bot.id !== currentSessionBotId && (
                     <Tooltip title={t('chat.newSession', { defaultValue: '新会话' })}>
                       <Button
                         size="small"
