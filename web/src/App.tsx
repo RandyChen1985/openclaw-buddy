@@ -1916,6 +1916,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
 // --- App Root ---------------------------------------------------------------------
 export default function App() {
   const { t } = useTranslation();
+  const isEmbed = new URLSearchParams(window.location.search).get('embed') === 'true';
   // 只从持久化存储获取初始 Token (不再信任 URL 传来的未经验证的 Token)
   const [token, setToken] = useState<string | null>(storage.getItem('guardian_token'));
   const [isValidating, setIsValidating] = useState(false);
@@ -1992,7 +1993,7 @@ export default function App() {
             }
           }
           setToken(uToken);
-          message.success(t('common.autoLogin'));
+          if (!isEmbed) message.success(t('common.autoLogin'));
         }
       } catch (err: any) {
         // 验证失败，不更新 Token 状态，停留在 LoginView
@@ -2011,7 +2012,7 @@ export default function App() {
     if (urlToken) {
       validateUrlToken(urlToken, urlTag);
     }
-  }, [t]);
+  }, [isEmbed, t]);
 
   if (isValidating) {
     return <CrayfishLoading isDarkMode={isDarkMode} />;
