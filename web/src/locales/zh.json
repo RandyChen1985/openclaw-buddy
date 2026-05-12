@@ -1045,6 +1045,19 @@
     "rolesPlaceholder": "请选择一个或多个角色",
     "usernameRule": "请输入用户名（仅允许字母、数字、下划线，长度 2~32）",
     "permissions": "权限",
-    "userPermissions": "用户权限"
+    "userPermissions": "用户权限",
+    "apiToken": "访问令牌",
+    "apiTokenTitle": "访问令牌",
+    "apiTokenHint": "与环境变量 BUDDY_TOKEN 类似：支持 Authorization: Bearer、URL ?token= 与 /login 的 token 登录，权限为该用户的角色与菜单授权。",
+    "apiTokenConfigured": "已配置",
+    "apiTokenUnset": "未配置",
+    "apiTokenGenerate": "生成令牌",
+    "apiTokenCopy": "复制令牌",
+    "apiTokenCopyLoginUrl": "复制登录链接",
+    "apiTokenReset": "重置令牌",
+    "apiTokenResetConfirm": "重置后旧令牌立即失效，是否继续？",
+    "apiTokenGenerated": "已生成访问令牌",
+    "apiTokenResetDone": "已重置访问令牌",
+    "apiTokenCopySuccess": "已复制到剪贴板"
   }
 }

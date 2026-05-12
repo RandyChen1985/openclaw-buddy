@@ -104,10 +104,11 @@ func (s *Server) setupRoutes() {
 		c.JSON(200, APIResponse{Code: 200, Message: "success", Data: gin.H{"status": "ok"}})
 	})
 
-	// Login endpoint：支持两种登录方式
+	// Login endpoint：支持多种登录方式
 	//   1) {token} —— 与 BUDDY_TOKEN 比对，授予最高权限（兼容旧前端/链接）
-	//   2) {username, password} —— 校验用户密码，签发会话 token
-	// 两种方式的响应均包含 token 字段，便于前端统一存入 storage 走 Bearer
+	//   2) {token} —— 与用户 api_token 比对，以该用户权限登录（与 URL ?token= 一致）
+	//   3) {username, password} —— 校验用户密码，签发会话 token
+	// 成功响应均包含 token 字段，便于前端统一存入 storage 走 Bearer / Query
 	root.POST("/login", func(c *gin.Context) {
 		var req struct {
 			Token    string `json:"token"`
@@ -131,6 +132,17 @@ func (s *Server) setupRoutes() {
 					"status":     "success",
 					"token":      t,
 					"login_type": "token",
+				})
+				return
+			}
+			if u, err := utils.GetUserByAPIToken(t); err == nil && u != nil {
+				c.SetCookie("guardian_token", t, 3600*24*7, cookiePath, "", false, true)
+				s.Success(c, gin.H{
+					"status":     "success",
+					"token":      t,
+					"login_type": "api_token",
+					"username":   u.Username,
+					"real_name":  u.RealName,
 				})
 				return
 			}
@@ -185,6 +197,9 @@ func (s *Server) setupRoutes() {
 			systemUsers.POST("/users", s.handleCreateUser)
 			systemUsers.PUT("/users/:id", s.handleUpdateUser)
 			systemUsers.POST("/users/:id/reset-password", s.handleResetUserPassword)
+			systemUsers.GET("/users/:id/api-token", s.handleGetUserAPIToken)
+			systemUsers.POST("/users/:id/api-token/generate", s.handleEnsureUserAPIToken)
+			systemUsers.POST("/users/:id/api-token/reset", s.handleResetUserAPIToken)
 			systemUsers.DELETE("/users/:id", s.handleDeleteUser)
 			systemUsers.GET("/roles", s.handleListRoles)
 			systemUsers.GET("/permissions", s.handleListPermissions)

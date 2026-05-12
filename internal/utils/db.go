@@ -211,6 +211,8 @@ func createTables(existingToken string) (string, error) {
 	_, _ = DB.Exec("ALTER TABLE audit_usage ADD COLUMN session_key TEXT")
 	_, _ = DB.Exec("ALTER TABLE audit_tool_calls ADD COLUMN session_key TEXT")
 	_, _ = DB.Exec("ALTER TABLE audit_security_events ADD COLUMN session_key TEXT")
+	_, _ = DB.Exec("ALTER TABLE users ADD COLUMN api_token TEXT DEFAULT ''")
+	_, _ = DB.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_api_token ON users(api_token) WHERE IFNULL(api_token,'') <> ''`)
 
 	// 初始化“首次启动时间”
 	firstRun := GetSetting("first_run_at", "")

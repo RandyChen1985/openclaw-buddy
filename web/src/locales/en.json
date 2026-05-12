@@ -1049,6 +1049,19 @@
     "rolesPlaceholder": "Pick one or more roles",
     "usernameRule": "Letters, digits and underscores only, 2~32 chars",
     "permissions": "Permissions",
-    "userPermissions": "User permissions"
+    "userPermissions": "User permissions",
+    "apiToken": "API token",
+    "apiTokenTitle": "API access token",
+    "apiTokenHint": "Like BUDDY_TOKEN in env: use as Bearer token, URL ?token=, or /login with { token }. Permissions follow this user’s roles and menu grants.",
+    "apiTokenConfigured": "Configured",
+    "apiTokenUnset": "Not set",
+    "apiTokenGenerate": "Generate token",
+    "apiTokenCopy": "Copy token",
+    "apiTokenCopyLoginUrl": "Copy login URL",
+    "apiTokenReset": "Reset token",
+    "apiTokenResetConfirm": "The old token stops working immediately. Continue?",
+    "apiTokenGenerated": "API token created",
+    "apiTokenResetDone": "API token reset",
+    "apiTokenCopySuccess": "Copied to clipboard"
   }
 }
