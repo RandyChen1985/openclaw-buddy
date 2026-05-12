@@ -2,6 +2,50 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { message as antdMessage } from 'antd';
 import type { FileInfo, Message } from '../useChatV3WebSocket';
 import { buildBuddyDirectSessionKey } from '../../utils/buddySessionKey';
+import { extractApprovalSlugFromHint, hasApprovalCardForSlug, isApprovalHintText } from './approvalUtils';
+import {
+  buildSendMessageContent,
+  createAssistantPlaceholder,
+  createInjectedAssistantMessage,
+  createTypingSessionCache,
+  createUserMessage,
+} from './messageDrafts';
+import { formatMessageContent } from './messageFormat';
+import { normalizeTranscriptNoise } from './transcriptNoise';
+import { buildSessionToolBody, pickFirst } from './toolFormat';
+import {
+  extractAgentErrorMessage,
+  formatAgentMetadataEvent,
+  isAgentMetadataStream,
+  sealPendingToolMarkers,
+} from './agentEventFormat';
+import {
+  buildHistoryMessages,
+  mergeSessionCacheIntoHistory,
+  restoreCachedMetadataMessages,
+  sortMessagesByTimeline,
+} from './historyUtils';
+import {
+  MAX_METADATA_BYTES_PER_ENTRY,
+  MAX_METADATA_ENTRIES_PER_SESSION,
+  MAX_SESSION_CACHE_ENTRIES,
+  type SessionStreamCache,
+} from './sessionCacheTypes';
+import {
+  appendToAgentBlock,
+  assistantMessageLooksSubstantial,
+  findLastMainAssistantIndex,
+  isAssistantUiThinkingPlaceholder,
+  isSessionRunningStatus,
+  isSessionTerminalStatus,
+  mergeTrailingThinkingIntoPreviousAssistant,
+  partitionAssistantContent,
+  shouldBypassSessionMessageTypingGuard,
+  stripApprovalBlockWithSlug,
+  stripTrailingUiThinkingPlaceholderAfterAssistantReply,
+  updateMetaMessage,
+  upsertAgentBlock,
+} from './messageUtils';
 
 /** 收到 chat final 后延迟再松 typing，避免多段 final / 尾包 delta 时误以为已可输入 */
 const FINAL_UI_SETTLE_MS = 1000;
@@ -11,453 +55,6 @@ const CHAT_HISTORY_PANEL_LIMIT = 200;
 
 /** 生成结束后的侧栏静默刷新防抖（ms），避免每条 assistant 完成都打 sessions.list */
 const SESSION_LIST_SILENT_REFRESH_DEBOUNCE_MS = 3000;
-
-const MAX_SESSION_CACHE_ENTRIES = 30;
-
-type SessionStreamCache = {
-  fullText: string;
-  runId?: string;
-  isTyping: boolean;
-  startTime: number;
-  firstTokenTime: number;
-  ttftRecorded: boolean;
-  tokenCount: number;
-  tpsData: number[];
-  lastUserMsg?: Message;
-  lastTouched: number;
-  /**
-   * 按 runId 记录流式阶段累积的「元数据块」(thinking/plan/commandOutput/toolCall/工具状态行等)。
-   * 这些元数据只来自 WS 的 agent / session.tool 事件，网关 transcript 通常不持久化它们。
-   * 存下来以便切回该会话重新加载历史时能把折叠卡片贴回对应的 assistant 消息。
-   */
-  metadataByRunId: Map<string, string>;
-  /**
-   * 当前会话活跃中的 RunId 集合。用于并行任务场景下，只有当所有 Run 都结束时才真正关闭 typing 锁。
-   */
-  activeRuns: Set<string>;
-};
-
-const MAX_METADATA_ENTRIES_PER_SESSION = 20;
-const MAX_METADATA_BYTES_PER_ENTRY = 64 * 1024; // 单条 64KB 上限，防止极长 thinking 占爆内存
-
-function isSessionRunningStatus(status?: string): boolean {
-  const s = (status || '').toLowerCase();
-  return s === 'running' || s === 'started' || s === 'pending' || s === 'queued';
-}
-
-function isSessionTerminalStatus(status?: string): boolean {
-  const s = (status || '').toLowerCase();
-  return s === 'done' || s === 'error' || s === 'failed' || s === 'aborted' || s === 'cancelled' || s === 'canceled';
-}
-
-/**
- * 网关 transcript 可能把「工具/审批」与「:::thinking」拆成两条相邻 assistant。
- * 后一条若仅有思考块，合并进上一条开头，避免 UI 上思考跑到工具下面。
- */
-function isAssistantThinkingOnlyContent(content: string): boolean {
-  const t = (content || '').trim();
-  if (!t) return false;
-  // 支持多种元数据块：思考、计划、命令输出、工具调用标记
-  const hasMetadata = t.includes(':::thinking') || t.includes(':::plan') || t.includes(':::commandOutput') || t.includes(':::toolCall') || t.includes('🔧') || t.includes('✅') || t.includes('❌');
-  if (!hasMetadata) return false;
-  
-  const rest = t
-    .replace(/> :::thinking[\s\S]*?:::\s*/g, '')
-    .replace(/> :::plan[\s\S]*?:::\s*/g, '')
-    .replace(/> :::commandOutput[\s\S]*?:::\n*/g, '')
-    .replace(/> :::toolCall[\s\S]*?:::\n*/g, '')
-    .replace(/>\s*[🔧✅❌]\s*`[^`]+`\s*(?:执行中(?:…|\.{3})|完成|失败)(?:\s*<!--[\s\S]*?-->)?/g, '')
-    .replace(/<!--\s*tool:[^>]*-->/g, '')
-    .trim();
-  return rest.length === 0;
-}
-
-function isAssistantMergableTarget(content: string): boolean {
-  if (!content) return false;
-  // 任何 assistant 消息都是合法的合并目标（包括正式回复）
-  return true;
-}
-
-function canMergeAssistantRunId(a?: string, b?: string): boolean {
-  if (a && b) return a === b;
-  return true;
-}
-
-const AGENT_ITEM_MARKER_PREFIX = '<!--agentItem:';
-
-/**
- * 把一行文本转成 blockquote 行：前置 `> `，多行原样保留并逐行前置。
- */
-function toBlockquoteLines(text: string): string {
-  return text
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .map(line => `> ${line}`)
-    .join('\n');
-}
-
-/**
- * 在 metadata 中按 `itemId` 查找对应的 fenced 块并整块替换；若不存在则追加到末尾。
- * 用于 agent 事件流（thinking/plan/commandOutput/toolCall），保证同一个 itemId 的多次 delta
- * 只对应一个折叠块，而不是每个 delta 开一张新卡片。
- */
-function upsertAgentBlock(
-  metadata: string,
-  segmentName: string,
-  itemId: string,
-  title: string,
-  body: string,
-): string {
-  const marker = itemId ? `${AGENT_ITEM_MARKER_PREFIX}${segmentName}:${itemId}-->` : '';
-  const lines: string[] = [`> :::${segmentName}`];
-  if (marker) lines.push(`> ${marker}`);
-  if (title) lines.push(`> **${title}**`);
-  if (body) lines.push(toBlockquoteLines(body));
-  lines.push(`> :::`);
-  const newBlock = lines.join('\n');
-
-  if (marker && metadata.includes(marker)) {
-    // 用按行扫描定位 marker 所属的 fenced 块并整块替换
-    const arr = metadata.split('\n');
-    const markerLineIdx = arr.findIndex(l => l.includes(marker));
-    if (markerLineIdx !== -1) {
-      let startIdx = -1;
-      for (let i = markerLineIdx; i >= 0; i--) {
-        if (/^\s*>\s*:::\w+/.test(arr[i])) { startIdx = i; break; }
-      }
-      let endIdx = -1;
-      for (let i = markerLineIdx + 1; i < arr.length; i++) {
-        if (/^\s*>\s*:::\s*$/.test(arr[i])) { endIdx = i; break; }
-      }
-      if (startIdx !== -1 && endIdx !== -1) {
-        const before = arr.slice(0, startIdx).join('\n').replace(/\s+$/, '');
-        const after = arr.slice(endIdx + 1).join('\n').replace(/^\s+/, '');
-        const sepBefore = before ? '\n\n' : '';
-        const sepAfter = after ? '\n\n' : '';
-        return `${before}${sepBefore}${newBlock}${sepAfter}${after}`;
-      }
-    }
-  }
-
-  if (!metadata) return newBlock;
-  const sep = metadata.endsWith('\n\n') ? '' : (metadata.endsWith('\n') ? '\n' : '\n\n');
-  return metadata + sep + newBlock;
-}
-
-/**
- * 在已有 agent block 的末尾追加内容（非替换），常用于 command_output 的 delta/chunk 累积。
- * 若块不存在则回退到 upsertAgentBlock 新建。
- */
-function appendToAgentBlock(
-  metadata: string,
-  segmentName: string,
-  itemId: string,
-  additionalBody: string,
-  title: string = '',
-): string {
-  if (!additionalBody) return metadata;
-  const marker = itemId ? `${AGENT_ITEM_MARKER_PREFIX}${segmentName}:${itemId}-->` : '';
-  if (marker && metadata.includes(marker)) {
-    const markerIdx = metadata.indexOf(marker);
-    const afterMarker = metadata.slice(markerIdx);
-    // 定位本 block 的关闭行 "> :::"
-    const closeRelMatch = afterMarker.match(/\n>\s*:::\s*(?=\n|$)/);
-    if (closeRelMatch && closeRelMatch.index !== undefined) {
-      const absCloseIdx = markerIdx + closeRelMatch.index;
-      const insertion = `\n${toBlockquoteLines(additionalBody)}`;
-      return metadata.slice(0, absCloseIdx) + insertion + metadata.slice(absCloseIdx);
-    }
-  }
-  // 块不存在：新建（把 additionalBody 当作初始 body）
-  return upsertAgentBlock(metadata, segmentName, itemId, title, additionalBody);
-}
-
-const META_MESSAGE_ID_PREFIX = 'meta-';
-
-/**
- * 在消息列表里找/新建某个 run 的 "思考信息附录气泡"（_uiMetaOnly = true），
- * 并用 updateFn 更新它的 content。meta 气泡独立于正文气泡存在，
- * - 跟在同 runId 的正文气泡后面显示；
- * - 不参与 session.message 的合并/去重（它是纯 UI、无持久化 id 的）；
- * - showThinking 关闭时整体在渲染层过滤掉。
- *
- * 若新建时 updateFn 返回空串，直接返回原列表（避免建出空气泡）。
- */
-function updateMetaMessage(
-  prev: Message[],
-  runId: string | undefined,
-  updateFn: (currentContent: string) => string,
-): Message[] {
-  const metaId = runId ? `${META_MESSAGE_ID_PREFIX}${runId}` : `${META_MESSAGE_ID_PREFIX}floating`;
-
-  let mainIdx = -1;
-  let metaIdx = -1;
-  for (let i = 0; i < prev.length; i++) {
-    const m = prev[i];
-    if (m._uiMetaOnly && m.id === metaId) {
-      metaIdx = i;
-    } else if (!m._uiMetaOnly && m.role === 'assistant' && runId && m.runId === runId && mainIdx === -1) {
-      mainIdx = i;
-    }
-  }
-
-  if (metaIdx !== -1) {
-    const meta = prev[metaIdx];
-    const newContent = updateFn(meta.content || '');
-    if (newContent === (meta.content || '')) return prev;
-    const next = [...prev];
-    next[metaIdx] = { ...meta, content: newContent };
-    return next;
-  }
-
-  // 兜底定位：没匹配到同 runId 主气泡时，取列表里最后一条非 meta 的 assistant
-  if (mainIdx === -1) {
-    for (let i = prev.length - 1; i >= 0; i--) {
-      const m = prev[i];
-      if (!m._uiMetaOnly && m.role === 'assistant') { mainIdx = i; break; }
-    }
-  }
-
-  const parentSortTs = mainIdx !== -1 ? (prev[mainIdx]._sortTs || Date.now()) : Date.now();
-  const newContent = updateFn('');
-  if (!newContent) return prev;
-
-  const newMeta: Message = {
-    id: metaId,
-    runId: runId,
-    role: 'assistant',
-    content: newContent,
-    timestamp: new Date(parentSortTs + 1).toLocaleTimeString(),
-    _sortTs: parentSortTs + 1,
-    _uiMetaOnly: true,
-  };
-
-  if (mainIdx !== -1) {
-    const next = [...prev];
-    next.splice(mainIdx + 1, 0, newMeta);
-    return next;
-  }
-  return [...prev, newMeta];
-}
-
-/** 列表中最后一条「正文」助手消息下标（排除 _uiMetaOnly 附录气泡）。审批等必须落在主气泡，不能跟在最后一条 meta 上。 */
-function findLastMainAssistantIndex(prev: Message[]): number {
-  for (let i = prev.length - 1; i >= 0; i--) {
-    const m = prev[i];
-    if (m.role === 'assistant' && !m._uiMetaOnly) return i;
-  }
-  return -1;
-}
-
-/** 从内容中移除与 slug 对应的一条 :::approval 块（用于纠正误写入 meta 气泡的历史数据） */
-function stripApprovalBlockWithSlug(content: string, slug: string): string {
-  if (!content || !slug || !content.includes(':::approval')) return content;
-  const esc = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const blockRe = new RegExp(
-    `(?:^|\\n)\\n?> :::approval\\n> \\*\\*${esc}\\*\\*\\n[\\s\\S]*?\\n> :::\\n*`,
-    'g',
-  );
-  return content.replace(blockRe, '\n').replace(/\n{3,}/g, '\n\n').trimEnd();
-}
-
-/**
- * 网关 transcript 的 session.message 是否应对齐到「已有主气泡」的同一 runId。
- * 若为 true，在 typing / streamEndGrace 期间仍应处理：否则审批后正文只走 transcript、
- * 不走 chat.delta 时会被防冲突逻辑整段丢弃，用户只能重新拉历史才看见。
- */
-function sessionMessageMergesExistingAssistantRun(rows: Message[], msg: { role?: string; runId?: string }): boolean {
-  if (!msg || msg.role !== 'assistant' || !msg.runId) return false;
-  const rid = String(msg.runId);
-  for (let i = 0; i < rows.length; i++) {
-    const m = rows[i];
-    if (m._uiMetaOnly) continue;
-    if (m.role !== 'assistant') continue;
-    if (m.runId === rid) return true;
-  }
-  return false;
-}
-
-/** 列表中时间上最后一条 user 消息的纯文本（trim），用于识别刚发出的 /approve */
-function lastUserMessageContent(rows: Message[]): string {
-  for (let i = rows.length - 1; i >= 0; i--) {
-    if (rows[i].role === 'user') return String(rows[i].content || '').trim();
-  }
-  return '';
-}
-
-/** 用户显式发送的 /approve（单次或永久），用于 session.message 守卫放行等 */
-const APPROVE_USER_CMD_LINE_RE = /^\/approve\s+[a-f0-9-]+\s+(allow-once|allow-always)$/i;
-
-/**
- * session.message 在 typing / streamEndGrace 窗口下是否仍应收下。
- * 除「同 runId 可合并进已有主气泡」外，用户刚发 /approve 后网关常仍标 typing、且 transcript 的 runId
- * 可能与 UI 气泡不一致或缺失——若仅依赖 runId 合并判断会间歇丢正文。
- */
-function shouldBypassSessionMessageTypingGuard(rows: Message[], msg: { role?: string; runId?: string }): boolean {
-  if (!msg || msg.role !== 'assistant') return false;
-  if (sessionMessageMergesExistingAssistantRun(rows, msg)) return true;
-  if (APPROVE_USER_CMD_LINE_RE.test(lastUserMessageContent(rows))) return true;
-  return false;
-}
-
-/**
- * 将 assistant 消息内容拆分为「元数据区」(metadata) 和「正文区」(transcript)。
- * 元数据区包括 :::thinking / :::plan / :::commandOutput / :::toolCall / :::toolResult / :::warning
- * 以及工具状态行（> 🔧/✅/❌/⚠️ …）、<!-- tool:xxx --> 标记、/approve 指令等。
- *
- * 实现采用按行状态机解析，避免正则 `[\s\S]*?(?::::|$)` 在流式未闭合块时
- * 把后续正文全部吞进 metadata 的越界问题。
- */
-function partitionAssistantContent(content: string): { metadata: string, transcript: string } {
-  if (!content) return { metadata: '', transcript: '' };
-
-  const fencedOpenRe = /^\s*(?:>\s*)?:::(?:thinking|toolCall|plan|commandOutput|toolResult|warning)\b/;
-  const fencedCloseRe = /^\s*(?:>\s*)?:::\s*$/;
-  const toolStatusRe = /^\s*(?:>\s*)?[🔧✅❌⚠️]\s*`[^`]+`\s*(?:执行中(?:…|\.{3})|完成|失败|错误)(?:\s*<!--[\s\S]*?-->)?\s*$/;
-  const toolMarkerRe = /^\s*<!--\s*tool:[^>]*-->\s*$/;
-  const approveCmdRe = /^\s*(?:>\s*)?\/approve\s+[a-f0-9-]+\s+(allow-once|allow-always)\s*$/i;
-  const approveConfirmRe = /^\s*(?:>\s*)?[\s\u2705]*✅?\s*Approval\s+\S+\s+submitted\s+for\s+[a-f0-9-]+/i;
-  const blockquoteLineRe = /^\s*>/;
-
-  const lines = content.split('\n');
-  const metadataLines: string[] = [];
-  const transcriptLines: string[] = [];
-
-  let inFenced = false;
-  // 标记紧跟在一个 metadata 块后面：用来吸收块与块之间的一个空行，
-  // 避免重新拼接时多个 fenced 块塌成一个 blockquote（否则 markdown 会把连续 `>` 行合并成单块，
-  // 导致 V3MessageItem 的 blockquote 渲染器只按第一个命中的 `:::xxx` 类型来渲染整坨，后面的块被吞掉）。
-  let justClosedBlock = false;
-
-  const closeBlock = () => {
-    // 在每个 metadata 块之间插入一个空行，让 markdown 渲染时能把它们视为不同的 blockquote
-    metadataLines.push('');
-    justClosedBlock = false;
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    if (inFenced) {
-      if (fencedCloseRe.test(line)) {
-        metadataLines.push(line);
-        inFenced = false;
-        justClosedBlock = true;
-        continue;
-      }
-      // 块内预期应为 `> ...`（blockquote）或空行；若出现非 blockquote 非空行，
-      // 认为前一个块实际已经没闭合（流式异常/未闭合），提前退出，避免把正文吞进元数据。
-      if (line.trim() !== '' && !blockquoteLineRe.test(line)) {
-        inFenced = false;
-        transcriptLines.push(line);
-        continue;
-      }
-      metadataLines.push(line);
-      continue;
-    }
-
-    // 块外的空行：若刚关闭一个块，则吸收一个空行用作块间分隔；否则进入 transcript
-    if (line.trim() === '') {
-      if (justClosedBlock) {
-        closeBlock();
-        continue;
-      }
-      transcriptLines.push(line);
-      continue;
-    }
-
-    if (fencedOpenRe.test(line)) {
-      if (justClosedBlock) closeBlock();
-      metadataLines.push(line);
-      if (!fencedCloseRe.test(line)) inFenced = true;
-      continue;
-    }
-
-    if (
-      toolStatusRe.test(line) ||
-      toolMarkerRe.test(line) ||
-      approveCmdRe.test(line) ||
-      approveConfirmRe.test(line)
-    ) {
-      if (justClosedBlock) closeBlock();
-      metadataLines.push(line);
-      continue;
-    }
-
-    justClosedBlock = false;
-    transcriptLines.push(line);
-  }
-
-  const metadata = metadataLines.join('\n').replace(/\n{4,}/g, '\n\n\n').replace(/^\s+|\s+$/g, '');
-  const transcript = transcriptLines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
-  return { metadata, transcript };
-}
-
-function mergeTrailingThinkingIntoPreviousAssistant(prev: Message[], incoming: Message): Message[] | null {
-  if (incoming.role !== 'assistant' || !isAssistantThinkingOnlyContent(incoming.content)) return null;
-  const last = prev[prev.length - 1];
-  if (!last || last.role !== 'assistant') return null;
-  if (!isAssistantMergableTarget(last.content)) return null;
-  if (!canMergeAssistantRunId(last.runId, incoming.runId)) return null;
-  
-  const head = (incoming.content || '').trim();
-  const lastContentRaw = (last.content || '').trim();
-  
-  // 避免过度合并相同内容
-  if (lastContentRaw.includes(head)) return null;
-  
-  // 始终将“思考/工具元数据”追加在“正式回复”之前（如果是同一个 Run ID）
-  // 如果 last 已经是正式回复，则 head 放在最上面
-  return [...prev.slice(0, -1), { ...last, content: `${head}\n\n${last.content}` }];
-}
-
-function compactAssistantThinkingAfterToolInPlace(rows: Message[]): void {
-  for (let i = 1; i < rows.length; i++) {
-    const cur = rows[i];
-    const prev = rows[i - 1];
-    if (!cur || !prev || cur.role !== 'assistant' || prev.role !== 'assistant') continue;
-    if (!isAssistantThinkingOnlyContent(cur.content || '')) continue;
-    if (!isAssistantMergableTarget(prev.content || '')) continue;
-    if (!canMergeAssistantRunId(prev.runId, cur.runId)) continue;
-    
-    const head = (cur.content || '').trim();
-    if ((prev.content || '').trim().includes(head)) {
-      rows.splice(i, 1);
-      i--;
-      continue;
-    }
-    prev.content = `${head}\n\n${prev.content || ''}`;
-    rows.splice(i, 1);
-    i--;
-  }
-}
-
-/** UI 占位「正在思考」被误写入 transcript 时，会紧跟在已有回复后多一条 assistant —— 直接丢弃 */
-export function isAssistantUiThinkingPlaceholder(content: string, thinkingLabel: string, deepLabel: string): boolean {
-  const x = (content || '').trim();
-  if (x === thinkingLabel.trim() || x === deepLabel.trim() || x === '思考中...') return true;
-  // 英文/轻微变体：短句 + Lobster + thinking
-  if (/^Lobster\s+/i.test(x) && x.length < 140 && /thinking|思考/i.test(x)) return true;
-  return false;
-}
-
-function assistantMessageLooksSubstantial(content: string, thinkingLabel: string, deepLabel: string): boolean {
-  const x = (content || '').trim();
-  if (x.length < 32) return false;
-  return !isAssistantUiThinkingPlaceholder(x, thinkingLabel, deepLabel);
-}
-
-function stripTrailingUiThinkingPlaceholderAfterAssistantReply(rows: Message[], thinkingLabel: string, deepLabel: string): void {
-  for (let i = rows.length - 1; i >= 1; i--) {
-    const cur = rows[i];
-    const prev = rows[i - 1];
-    if (!cur || !prev || cur.role !== 'assistant' || prev.role !== 'assistant') continue;
-    if (!isAssistantUiThinkingPlaceholder(cur.content || '', thinkingLabel, deepLabel)) continue;
-    if (!assistantMessageLooksSubstantial(prev.content || '', thinkingLabel, deepLabel)) continue;
-    rows.splice(i, 1);
-    i--;
-  }
-}
 
 export interface UseV3MessagesParams {
   t: any;
@@ -755,132 +352,6 @@ export function useV3Messages({
 
 
   /**
-   * 将多种 content 结构统一格式化为 Markdown 文本，供渲染层消费。
-   */
-  const formatMessageContent = useCallback((msg: any, _depth = 0): string => {
-    if (!msg) return '';
-    if (_depth > 5) return typeof msg === 'string' ? msg : JSON.stringify(msg);
-
-    const content = (msg.content !== undefined && msg.content !== null) ? msg.content : msg;
-    const topThought = msg.thought || msg.thinking || msg.reasoning || '';
-
-    let prefix = '';
-    if (topThought) {
-      prefix = `> :::thinking\n> \n> ${String(topThought).replace(/\n/g, '\n> ')}\n> \n> :::\n\n`;
-    }
-
-    let body = '';
-    if (typeof content === 'string') {
-      const trimmed = content.trim();
-      if (trimmed === '[]' || trimmed === '{}') body = '';
-      else if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          body = formatMessageContent(parsed, _depth + 1);
-        } catch {
-          body = content;
-        }
-      } else {
-        body = content;
-      }
-    } else if (Array.isArray(content)) {
-      body = content.map((c: any) => {
-        let matched = false;
-
-        let thinkingPart = '';
-        if (c.thinking || c.thought || c.reasoning || c.type === 'thinking') {
-          const thought = c.thinking || c.thought || c.reasoning || c.content || '';
-          thinkingPart = `> :::thinking\n> \n> ${String(thought).replace(/\n/g, '\n> ')}\n> \n> :::\n\n`;
-          matched = true;
-        }
-
-        let planPart = '';
-        if (c.type === 'plan' || c.plan) {
-          const plan = c.plan || c.content || '';
-          planPart = `> :::plan\n> \n> ${String(plan).replace(/\n/g, '\n> ')}\n> \n> :::\n\n`;
-          matched = true;
-        }
-
-        let commandOutputPart = '';
-        if (c.type === 'command_output' || c.command_output || c.commandOutput) {
-          const output = c.command_output || c.commandOutput || c.content || '';
-          commandOutputPart = `> :::commandOutput\n> ${String(output).replace(/\n/g, '\n> ')}\n> :::\n\n`;
-          matched = true;
-        }
-
-        let toolCallPart = '';
-        if (c.type === 'toolCall' || c.toolCall || c.tool_call) {
-          const tc = c.toolCall || c.tool_call || c;
-          const name = tc.name || tc.function?.name || 'unknown_tool';
-          const args = typeof tc.arguments === 'string' ? tc.arguments : JSON.stringify(tc.arguments || {});
-          toolCallPart = `> :::toolCall\n> **${name}**\n> \`\`\`json\n> ${args}\n> \`\`\`\n> :::\n\n`;
-          matched = true;
-        }
-
-        let toolResultPart = '';
-        if (c.type === 'toolResult' || c.toolResult || c.tool_result) {
-          const tr = c.toolResult || c.tool_result || c;
-          const toolName = tr.toolName || tr.tool_name || tr.name || '';
-          const result = typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content || tr.result || {});
-          toolResultPart = `> :::toolResult\n> ${toolName ? `**${toolName}**\n> ` : ''}\`\`\`json\n> ${result}\n> \`\`\`\n> :::\n\n`;
-          matched = true;
-        }
-
-        const textPart = c.text || (typeof c.content === 'string' ? c.content : '');
-        if (textPart) matched = true;
-
-        let fallbackPart = '';
-        if (!matched && typeof c === 'object' && c !== null && Object.keys(c).length > 0) {
-          fallbackPart = `\n> :::warning 未知消息块 (${c.type || 'unknown'})\n> \`\`\`json\n> ${JSON.stringify(c, null, 2).split('\n').join('\n> ')}\n> \`\`\`\n> :::\n\n`;
-        }
-
-        return thinkingPart + planPart + commandOutputPart + toolCallPart + toolResultPart + fallbackPart + textPart;
-      }).join('');
-    } else if (typeof content === 'object' && content !== null) {
-      body = formatMessageContent([content], _depth + 1);
-    } else {
-      body = String(content);
-    }
-
-    return prefix + body;
-  }, []);
-
-  /**
-   * 降噪：Agent 在触发审批卡片（exec.approval.requested）时，往往还会在文本流里重复输出
-   * “需要批准…请运行 /approve … allow-once|allow-always” 的提示语。UI 已有审批卡片时，这段文字应隐藏。
-   */
-  const extractApprovalSlugFromHint = useCallback((text: string): string => {
-    if (!text) return '';
-    const m = /\/approve\s+([a-f0-9-]+)\s+(allow-once|allow-always)/i.exec(text);
-    if (!m) return '';
-    const id = m[1].replace(/-/g, '');
-    return id.length >= 8 ? id.slice(0, 8) : id;
-  }, []);
-
-  const isApprovalHintText = useCallback((text: string): boolean => {
-    if (!text) return false;
-    const t = text.toLowerCase();
-    return (
-      (text.includes('需要批准') || text.includes('审批') || t.includes('approve')) &&
-      t.includes('/approve') &&
-      (t.includes('allow-once') || t.includes('allow-always'))
-    );
-  }, []);
-
-  const hasApprovalCardForSlug = useCallback((slug: string): boolean => {
-    if (!slug) return false;
-    const current = messagesRef.current || [];
-    // 💡 优化：对于长列表，从后往前搜往往能更快命中（审批卡片通常在最后几条）
-    for (let i = current.length - 1; i >= 0; i--) {
-      const m = current[i];
-      if (m.role === 'assistant' && typeof m.content === 'string' && m.content.includes(':::approval') && m.content.includes(slug)) {
-        return true;
-      }
-    }
-    return false;
-  }, []);
-
-  /**
    * 处理 chat 流式事件：delta/final/error 合并到 messages，并维护性能优化索引。
    */
   const handleChatDelta = useCallback((payload: any) => {
@@ -943,7 +414,7 @@ export function useV3Messages({
       // 如果是审批提示语，且审批卡片已存在，则丢弃（避免重复提示污染消息流）
       if (isApprovalHintText(fullText)) {
         const slug = extractApprovalSlugFromHint(fullText);
-        if (slug && hasApprovalCardForSlug(slug)) return;
+        if (slug && hasApprovalCardForSlug(messagesRef.current || [], slug)) return;
       }
       if (fullText === cache.fullText) return;
       if (!fullText.trim() && cache.fullText.trim()) return;
@@ -1044,7 +515,7 @@ export function useV3Messages({
         const incomingContent = payload.message ? formatMessageContent(payload.message) : cache.fullText;
         if (isApprovalHintText(incomingContent)) {
           const slug = extractApprovalSlugFromHint(incomingContent);
-          if (slug && hasApprovalCardForSlug(slug)) {
+          if (slug && hasApprovalCardForSlug(messagesRef.current || [], slug)) {
             // final 若只是重复提示语，则不覆盖现有 assistant 内容
             cancelPendingFinalUiRelease(pSessionKey);
             markSessionTyping(pSessionKey, false);
@@ -1189,7 +660,7 @@ export function useV3Messages({
         setTimeout(() => inputAreaRef.current?.focus(), 100);
       }
     }
-  }, [cancelPendingFinalUiRelease, clearStallTimer, fetchSessions, formatMessageContent, getOrCreateSessionCache, inputAreaRef, markSessionTyping, releaseTypingLock, rememberMetadataForRun, resetStallTimer, scrollRef, showScrollBtnRef, t, touchAndPruneSessionCache, virtuosoRef]);
+  }, [cancelPendingFinalUiRelease, clearStallTimer, fetchSessions, getOrCreateSessionCache, inputAreaRef, markSessionTyping, releaseTypingLock, rememberMetadataForRun, resetStallTimer, scrollRef, showScrollBtnRef, t, touchAndPruneSessionCache, virtuosoRef]);
 
   /**
    * 处理审批请求事件：将审批卡片以 Markdown block 注入到消息流中，确保 UI 一定可见。
@@ -1348,38 +819,11 @@ export function useV3Messages({
     // 如果是审批提示语且审批卡片已存在，则忽略（避免重复提示）
     if (isApprovalHintText(content)) {
       const slug = extractApprovalSlugFromHint(content);
-      if (slug && hasApprovalCardForSlug(slug)) return;
+      if (slug && hasApprovalCardForSlug(messagesRef.current || [], slug)) return;
     }
 
-    // 降噪：部分网关/Agent 会把工具回执/元信息写入 transcript，且错误地标记为 role=user，
-    // 导致 UI 看起来像“用户发了一条系统提示”。这里识别常见模板并改写为 toolResult（UI 默认隐藏）。
-    const isExecCompletionTemplate =
-      typeof content === 'string' &&
-      content.includes('An async command the user already approved has completed.') &&
-      content.includes('Exact completion details:') &&
-      content.includes('Exec finished');
-
-    const isSenderMetadataTemplate =
-      typeof content === 'string' &&
-      (content.includes('Sender (untrusted metadata):') || content.includes('Sender(untrusted metadata):'));
-
-    if (isExecCompletionTemplate || isSenderMetadataTemplate) {
-      const safeText = content.trim().split('\n').join('\n> ');
-      const toolName = isSenderMetadataTemplate ? 'sender_metadata' : 'exec';
-      content = `> :::toolResult\n> **${toolName}**\n> ${safeText}\n> :::\n`;
-    }
-
-    // 降噪：网关对 /approve 的确认回执（allow-once / allow-always 等）
-    const isApprovalConfirm = /Approval\s+\S+\s+submitted\s+for\s+[a-f0-9-]+/i.test(content.trim());
-    if (isApprovalConfirm) {
-      content = `> :::toolResult\n> **approval**\n> ${content.trim()}\n> :::\n`;
-    }
-
-    // 降噪：用户发出的 "/approve <id> allow-once|allow-always"
-    const isApproveCommand = /^\/approve\s+[a-f0-9-]+\s+(allow-once|allow-always)$/i.test(content.trim());
-    if (isApproveCommand) {
-      content = `> :::toolResult\n> **approval**\n> ${content.trim()}\n> :::\n`;
-    }
+    const normalizedNoise = normalizeTranscriptNoise(content);
+    content = normalizedNoise.content;
 
     const msgId = msg.id || payload.messageId || `msg-sm-${Date.now()}`;
 
@@ -1455,7 +899,7 @@ export function useV3Messages({
       const newMsg = {
         id: msgId,
         runId: msg.runId,
-        role: (msg.role === 'toolResult' || isExecCompletionTemplate || isSenderMetadataTemplate || isApprovalConfirm || isApproveCommand) ? 'assistant' : msg.role,
+        role: (msg.role === 'toolResult' || normalizedNoise.forceAssistantRole) ? 'assistant' : msg.role,
         content,
         timestamp: new Date(rawTs).toLocaleTimeString(),
         _sortTs: rawTs,
@@ -1465,7 +909,7 @@ export function useV3Messages({
       if (merged) return merged;
       return [...prev, newMsg];
     });
-  }, [clearStallTimer, extractApprovalSlugFromHint, formatMessageContent, hasApprovalCardForSlug, isApprovalHintText, t]);
+  }, [clearStallTimer, t]);
 
   /**
    * 处理 session.tool 事件：展示工具调用进度。
@@ -1484,43 +928,13 @@ export function useV3Messages({
     // 优先用 payload 自带 runId，其次用当前 streaming 主气泡的 runId 兜底
     const runId = (toolData.runId as string | undefined) || (payload.runId as string | undefined);
 
-    // 尽可能从 payload 里提取"参数/命令"与"结果/输出"。不同后端实现字段名不一致，做宽泛匹配：
-    const pickFirst = (obj: any, keys: string[]) => {
-      for (const k of keys) {
-        const v = obj?.[k];
-        if (v !== undefined && v !== null && v !== '') return v;
-      }
-      return undefined;
-    };
     const argsRaw = pickFirst(toolData, ['arguments', 'args', 'input', 'params', 'command', 'cmd', 'request']);
     const resultRaw = phase === 'end' || phase === 'error'
       ? pickFirst(toolData, ['result', 'output', 'stdout', 'response', 'data', 'error'])
       : undefined;
 
-    const formatAsCode = (v: any, lang = 'json') => {
-      if (v === undefined || v === null) return '';
-      if (typeof v === 'string') {
-        // 看起来是 json 字符串就当 json；否则按纯文本
-        const trimmed = v.trim();
-        const looksJson = (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
-        return `\`\`\`${looksJson ? 'json' : ''}\n${v}\n\`\`\``;
-      }
-      try { return `\`\`\`${lang}\n${JSON.stringify(v, null, 2)}\n\`\`\``; } catch { return `\`\`\`\n${String(v)}\n\`\`\``; }
-    };
-
     const buildToolBody = (currentStatus: 'running' | 'done' | 'failed') => {
-      const statusLine =
-        currentStatus === 'running' ? `> 🔧 \`${toolName}\` 执行中…<!-- ${marker} -->` :
-        currentStatus === 'done' ? `> ✅ \`${toolName}\` 完成` :
-        `> ❌ \`${toolName}\` 失败`;
-      const parts: string[] = [statusLine];
-      if (argsRaw !== undefined) {
-        parts.push(`**参数:**\n${formatAsCode(argsRaw)}`);
-      }
-      if (resultRaw !== undefined) {
-        parts.push(`**结果:**\n${formatAsCode(resultRaw, '')}`);
-      }
-      return parts.join('\n\n');
+      return buildSessionToolBody(toolName, marker, currentStatus, argsRaw, resultRaw);
     };
 
     if (phase === 'start' || phase === '') {
@@ -1692,32 +1106,7 @@ export function useV3Messages({
           setIsTyping(false);
           streamingAssistantIndexRef.current = null;
 
-          // 扩大 error 字段兜底：很多后端把错因放在非标准字段，只看 .error.message / .message 会得到空串后落到"Agent error"硬编码
-          const extractErrMsg = (d: any): string => {
-            if (!d) return '';
-            if (typeof d === 'string') return d;
-            const candidates = [
-              d?.error?.message,
-              d?.error?.detail,
-              d?.error?.reason,
-              typeof d?.error === 'string' ? d.error : '',
-              d?.message,
-              d?.errorMessage,
-              d?.reason,
-              d?.detail,
-              d?.stopReason,
-              d?.errorKind,
-              d?.code,
-            ].filter(x => typeof x === 'string' && x.trim());
-            if (candidates.length > 0) return candidates.join(' | ');
-            // 最后兜底：把整个对象序列化并截断，避免只展示"Agent error"三字看不出根因
-            try {
-              const json = JSON.stringify(d);
-              if (json && json !== '{}') return json.length > 500 ? json.slice(0, 500) + '…' : json;
-            } catch {}
-            return '';
-          };
-          const errMsg = extractErrMsg(agentData) || 'Agent error';
+          const errMsg = extractAgentErrorMessage(agentData) || 'Agent error';
 
           setMessages(prev => {
             // 1) 找到最近一条主气泡（非 meta），追加 Agent 错误 banner
@@ -1733,21 +1122,10 @@ export function useV3Messages({
               ? `> **⚠️ Agent 错误**\n> ${errMsg}`
               : `${main.content}\n\n> **⚠️ Agent 错误**\n> ${errMsg}`;
 
-            // 2) 同 runId 的 meta 气泡：把所有 "🔧 xxx 执行中…" 封印为 "❌ xxx 已中断"
-            const sealPending = (raw: string) => {
-              if (!raw) return raw;
-              return raw
-                .replace(
-                  /(?<=(?:^|\n)\s*(?:>\s*)?)🔧\s*(`[^`]+`)\s*执行中(?:…|\.\.\.)/g,
-                  '❌ $1 已中断',
-                )
-                .replace(/<!--\s*tool:[^>]*-->/g, '');
-            };
-
             const next = prev.map((m, i) => {
               if (i === mainIdx) return { ...m, content: mainNextContent };
               if (m._uiMetaOnly && m.runId === main.runId) {
-                const sealed = sealPending(m.content || '');
+                const sealed = sealPendingToolMarkers(m.content || '');
                 if (sealed === m.content) return m;
                 return { ...m, content: sealed };
               }
@@ -1763,12 +1141,7 @@ export function useV3Messages({
       //   output|content|text|delta|chunk|stdout|stderr|reasoning|thinking,
       //   arguments|args|input|params|command, result, status }
       // 同一个 itemId 在整个运行期间只对应一个折叠块（按 itemId 做 upsert / append）。
-      if (
-        stream === 'thinking' ||
-        stream === 'plan' ||
-        stream === 'command_output' ||
-        stream === 'tool'
-      ) {
+      if (isAgentMetadataStream(stream)) {
         if (!effectiveKey || effectiveKey !== sessionKeyRef.current) return;
 
         // transcript 已 final 但 agent 侧仍在推 thinking/tool：撤掉 final 的延时解锁，并保持会话「生成中」
@@ -1787,116 +1160,12 @@ export function useV3Messages({
         // 只有收到真正的文字 delta 才会重置，这样在长时工具执行期间会准时显示安抚文案。
         setIsTyping(true);
 
-        const pickFirst = (obj: any, keys: string[]) => {
-          for (const k of keys) {
-            const v = obj?.[k];
-            if (v !== undefined && v !== null && v !== '') return v;
-          }
-          return undefined;
-        };
-        const toText = (v: any): string => {
-          if (v === undefined || v === null) return '';
-          if (typeof v === 'string') return v;
-          try { return JSON.stringify(v, null, 2); } catch { return String(v); }
-        };
-        const formatAsCode = (v: any, lang = 'json'): string => {
-          if (v === undefined || v === null) return '';
-          if (typeof v === 'string') {
-            const trimmed = v.trim();
-            const looksJson = (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
-            return `\`\`\`${looksJson ? 'json' : ''}\n${v}\n\`\`\``;
-          }
-          try { return `\`\`\`${lang}\n${JSON.stringify(v, null, 2)}\n\`\`\``; } catch { return `\`\`\`\n${String(v)}\n\`\`\``; }
-        };
-
-        let itemId = '';
-        let title = '';
-        let body = '';
-        let deltaOnly = false;
-        const phase = (agentData?.phase as string) || '';
-
-        if (typeof agentData === 'string') {
-          body = agentData;
-        } else if (agentData && typeof agentData === 'object') {
-          itemId = agentData.itemId || agentData.toolCallId || agentData.callId || agentData.id || '';
-          title = agentData.title || agentData.name || agentData.tool || '';
-
-          if (stream === 'tool') {
-            const status = (agentData.status as string) || (phase === 'end' ? 'done' : phase === 'error' ? 'failed' : 'running');
-            const statusLine =
-              status === 'done' ? `> ✅ \`${title || 'tool'}\` 完成` :
-              status === 'failed' ? `> ❌ \`${title || 'tool'}\` 失败` :
-              `> 🔧 \`${title || 'tool'}\` 执行中…<!-- tool:${itemId} -->`;
-            const parts: string[] = [statusLine];
-            const argsRaw = pickFirst(agentData, ['arguments', 'args', 'input', 'params', 'command', 'cmd', 'request']);
-            const resultRaw = pickFirst(agentData, ['result', 'output', 'stdout', 'response', 'data']);
-            const errorRaw = pickFirst(agentData, ['error', 'stderr']);
-            if (argsRaw !== undefined) parts.push(`**参数:**\n${formatAsCode(argsRaw)}`);
-            if (resultRaw !== undefined) parts.push(`**结果:**\n${formatAsCode(resultRaw, '')}`);
-            if (errorRaw !== undefined) parts.push(`**错误:**\n${formatAsCode(errorRaw, '')}`);
-            body = parts.join('\n\n');
-          } else if (stream === 'command_output') {
-            // 优先取全量字段；只有增量字段时标记 deltaOnly 走 append 路径
-            const full = pickFirst(agentData, ['output', 'stdout', 'content', 'text', 'result']);
-            const err = pickFirst(agentData, ['stderr', 'error']);
-            const delta = pickFirst(agentData, ['delta', 'chunk']);
-            const cmd = pickFirst(agentData, ['command', 'cmd']);
-
-            if (full !== undefined || err !== undefined) {
-              // 全量：title 带命令摘要，body 是完整输出
-              const parts: string[] = [];
-              if (cmd) parts.push(`**command ${toText(cmd)}**`);
-              if (full !== undefined) parts.push(`\`\`\`\n${toText(full)}\n\`\`\``);
-              if (err !== undefined) parts.push(`**stderr:**\n\`\`\`\n${toText(err)}\n\`\`\``);
-              body = parts.join('\n\n');
-              if (!title && cmd) title = `command ${toText(cmd).slice(0, 80)}`;
-            } else if (delta !== undefined) {
-              deltaOnly = true;
-              body = toText(delta);
-            } else if (cmd) {
-              // start 阶段只有 command，body 暂时给个提示
-              body = `**command ${toText(cmd)}**\n\n_执行中…_`;
-              if (!title) title = `command ${toText(cmd).slice(0, 80)}`;
-            }
-          } else {
-            // thinking / plan：主体为累积的文本
-            const full = pickFirst(agentData, ['content', 'text', 'reasoning', 'thinking', 'plan', 'output']);
-            const delta = pickFirst(agentData, ['delta', 'chunk']);
-            if (full !== undefined) body = toText(full);
-            else if (delta !== undefined) { deltaOnly = true; body = toText(delta); }
-          }
-
-          // 兜底：已知字段都没命中，但 payload 里确实携带数据，
-          // 把未识别字段全量 JSON 化，避免 UI 上只看到"执行中…"空壳而不知道为什么。
-          if (!body) {
-            const knownKeys = new Set([
-              'itemId', 'toolCallId', 'callId', 'id', 'title', 'name', 'tool',
-              'phase', 'status', 'seq', 'ts', 'runId', 'sessionKey',
-              // 上面各分支已识别的业务字段（不需要再回显）
-              'arguments', 'args', 'input', 'params', 'command', 'cmd', 'request',
-              'result', 'output', 'stdout', 'stderr', 'response', 'data',
-              'delta', 'chunk', 'content', 'text', 'reasoning', 'thinking', 'plan',
-              'error',
-            ]);
-            const rest: Record<string, any> = {};
-            for (const k of Object.keys(agentData || {})) {
-              if (!knownKeys.has(k)) rest[k] = agentData[k];
-            }
-            if (Object.keys(rest).length > 0) {
-              body = `_（未识别的事件字段，已原样展示以便排查）_\n\n\`\`\`json\n${JSON.stringify(rest, null, 2)}\n\`\`\``;
-            }
-          }
-        }
+        const { itemId, title, body, deltaOnly, segmentName } = formatAgentMetadataEvent(stream, agentData);
 
         if (!body && !title) {
           // 已在上方锁定 UI；无 meta 可写则跳过 setMessages（避免空事件误刷列表）
           return;
         }
-
-        const segmentName =
-          stream === 'command_output' ? 'commandOutput' :
-          stream === 'tool' ? 'toolCall' :
-          stream; // thinking | plan
 
         setMessages(prev => {
           const idx = streamingAssistantIndexRef.current;
@@ -1950,170 +1219,22 @@ export function useV3Messages({
     }
 
     const rawItems = res.payload.messages || res.payload.items || [];
-    const items = [...rawItems].sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
-
-    // 💡 优化：提前收集 items 中所有的审批卡片 slug，避免在 map 循环中 O(N^2) 重复格式化与扫描
-    const approvalSlugs = new Set<string>();
-    for (const it of items) {
-      if (it.role === 'assistant' || it.role === 'bot') {
-        const c = formatMessageContent(it.content);
-        if (c && c.includes(':::approval')) {
-          const m = /\/approve\s+([a-f0-9-]+)\s+(allow-once|allow-always)/i.exec(c);
-          if (m) {
-            const id = m[1].replace(/-/g, '');
-            approvalSlugs.add(id.length >= 8 ? id.slice(0, 8) : id);
-          }
-        }
-      }
-    }
-
-    const history = items.map((item: any) => {
-      let content = formatMessageContent(item.content);
-      if (item.role === 'toolResult' && !content.includes(':::toolResult')) {
-        const toolName = item.toolName || 'unknown';
-        const text = typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
-        content = `> :::toolResult\n> **${toolName}**\n> ${text.split('\n').join('\n> ')}\n> :::\n`;
-      }
-
-      // 降噪（与实时 handleSessionMessage 保持一致）：
-      // 1) exec 完成回执被网关错误标记为 user —— 改写为隐藏的 toolResult
-      let roleOverride: string | null = null;
-      const isExec =
-        typeof content === 'string' &&
-        content.includes('An async command the user already approved has completed.') &&
-        content.includes('Exact completion details:') &&
-        content.includes('Exec finished');
-      const isSender =
-        typeof content === 'string' &&
-        (content.includes('Sender (untrusted metadata):') || content.includes('Sender(untrusted metadata):'));
-      if (isExec || isSender) {
-        const safeText = content.trim().split('\n').join('\n> ');
-        const toolName = isSender ? 'sender_metadata' : 'exec';
-        content = `> :::toolResult\n> **${toolName}**\n> ${safeText}\n> :::\n`;
-        roleOverride = 'assistant';
-      }
-
-      // 2) 审批提示语（与审批卡片重复）—— 直接丢弃
-      if (isApprovalHintText(content)) {
-        const slug = extractApprovalSlugFromHint(content);
-        if (slug && approvalSlugs.has(slug)) {
-          content = '';
-        }
-      }
-
-      // 3) "Approval … submitted for <id>." —— 网关确认回执
-      if (/Approval\s+\S+\s+submitted\s+for\s+[a-f0-9-]+/i.test(content.trim())) {
-        content = `> :::toolResult\n> **approval**\n> ${content.trim()}\n> :::\n`;
-        roleOverride = 'assistant';
-      }
-
-      // 4) "/approve <id> allow-once|allow-always" —— 用户指令消息
-      if (/^\/approve\s+[a-f0-9-]+\s+(allow-once|allow-always)$/i.test(content.trim())) {
-        content = `> :::toolResult\n> **approval**\n> ${content.trim()}\n> :::\n`;
-        roleOverride = 'assistant';
-      }
-
-      const rawTs = new Date(item.createdAt || item.timestamp || Date.now()).getTime();
-      const finalRole = roleOverride || (item.role === 'toolResult' ? 'assistant' : item.role);
-      return {
-        id: item.id || `msg-${rawTs}-${Math.random().toString(36).substring(2, 7)}`,
-        runId: item.runId,
-        role: finalRole,
-        content: content || '',
-        timestamp: new Date(rawTs).toLocaleTimeString(),
-        metrics: item.metrics,
-        _sortTs: rawTs,
-        senderLabel: item.senderLabel
-      } as Message;
-    }).filter((msg: any) => msg.content && msg.content.trim() !== '');
-    compactAssistantThinkingAfterToolInPlace(history);
-
-    let shouldKeepTyping = false;
+    const history = buildHistoryMessages(rawItems);
     const cache = sessionCacheRef.current.get(key);
 
     // 还原缓存里保留的 thinking/plan/toolCall 等折叠块：
     // 这些 metadata 只在 WS 的 agent / session.tool 事件里出现，DB transcript 通常不持久化它们。
     // 新架构下 metadata 不再贴到主消息 content，而是以独立的 _uiMetaOnly 气泡插入到对应主消息后面。
     // 注意：同一 runId 可能有多条 assistant 消息（思考/工具/正文被拆），meta 气泡只插在最后一条后面，避免重复。
-    if (cache?.metadataByRunId && cache.metadataByRunId.size > 0) {
-      const lastIdxByRunId = new Map<string, number>();
-      for (let i = 0; i < history.length; i++) {
-        const row: any = history[i];
-        if (row.role !== 'assistant' || !row.runId) continue;
-        if (!cache.metadataByRunId.has(row.runId)) continue;
-        lastIdxByRunId.set(row.runId, i);
-      }
-      // 倒序插入以免影响前面 index
-      const ordered = Array.from(lastIdxByRunId.entries()).sort((a, b) => b[1] - a[1]);
-      for (const [runId, idx] of ordered) {
-        const row: any = history[idx];
-        const saved = cache.metadataByRunId.get(runId);
-        if (!saved) continue;
-        // 已存在同 runId 的 meta 气泡则跳过
-        const alreadyHasMeta = history.some((m: any) => m._uiMetaOnly && m.runId === runId);
-        if (alreadyHasMeta) continue;
+    restoreCachedMetadataMessages(history, cache);
 
-        const parentSortTs = (row as any)._sortTs || Date.now();
-        const metaMsg: Message = {
-          id: `${META_MESSAGE_ID_PREFIX}${runId}`,
-          runId,
-          role: 'assistant',
-          content: saved,
-          timestamp: new Date(parentSortTs + 1).toLocaleTimeString(),
-          _sortTs: parentSortTs + 1,
-          _uiMetaOnly: true,
-        };
-        history.splice(idx + 1, 0, metaMsg as any);
-      }
-    }
-
+    let shouldKeepTyping = false;
     if (cache) {
       touchAndPruneSessionCache(key, cache);
-      let userMsgSortTs = cache.lastUserMsg?._sortTs || Date.now();
-      if (cache.lastUserMsg) {
-        const dbUserMsg = history.find((m: any) => m.id === cache.lastUserMsg?.id || (m.role === 'user' && m.content === cache.lastUserMsg?.content));
-        if (!dbUserMsg) {
-          history.push(cache.lastUserMsg);
-        } else {
-          userMsgSortTs = (dbUserMsg as any)._sortTs || userMsgSortTs;
-        }
-      }
-      if (cache.isTyping && cache.fullText) {
-        const existingIndex = cache.runId ? history.findIndex((m: any) => m.runId === cache.runId) : -1;
-        if (existingIndex !== -1) {
-          (history[existingIndex] as any).content = cache.fullText;
-        } else {
-          const lastAsst = [...history].reverse().find((m: any) => m.role === 'assistant');
-          const cacheText = (cache.fullText || '').trim();
-          const lastText = ((lastAsst as any)?.content || '').trim();
-          // 历史里已有较长助手回复且与缓存流内容高度重合时，不再追加一条 recovered，避免「上面已回复、下面又多一条」
-          if (
-            lastAsst &&
-            lastText.length >= 40 &&
-            cacheText.length > 0 &&
-            (lastText === cacheText || lastText.includes(cacheText.slice(0, Math.min(120, cacheText.length))))
-          ) {
-            /* skip duplicate recovered row */
-          } else {
-            history.push({
-              id: `msg-ai-recovered-${Date.now()}`,
-              role: 'assistant' as const,
-              content: cache.fullText,
-              timestamp: new Date().toLocaleTimeString(),
-              _sortTs: userMsgSortTs + 1
-            } as Message);
-          }
-        }
-        shouldKeepTyping = true;
-      }
+      shouldKeepTyping = mergeSessionCacheIntoHistory(history, cache);
     }
 
-    const roleOrder: Record<string, number> = { system: 0, user: 1, assistant: 2 };
-    const finalMessages = [...history].sort((a: any, b: any) => {
-      const diff = (a._sortTs || 0) - (b._sortTs || 0);
-      if (diff !== 0) return diff;
-      return (roleOrder[a.role] || 0) - (roleOrder[b.role] || 0);
-    });
+    const finalMessages = sortMessagesByTimeline(history);
     stripTrailingUiThinkingPlaceholderAfterAssistantReply(
       finalMessages,
       t('chat.thinking'),
@@ -2149,7 +1270,7 @@ export function useV3Messages({
       }, 50);
     }
     setIsLoadingHistory(false);
-  }, [clearStallTimer, extractApprovalSlugFromHint, formatMessageContent, isApprovalHintText, resetStallTimer, scrollRef, sendRPC, t, touchAndPruneSessionCache, virtuosoRef]);
+  }, [clearStallTimer, resetStallTimer, scrollRef, sendRPC, t, touchAndPruneSessionCache, virtuosoRef]);
 
   /**
    * 发送消息：必要时创建会话并写入初始占位消息，然后向网关发起 chat.send。
@@ -2201,60 +1322,16 @@ export function useV3Messages({
     // 发送动作一开始就标记该会话“正在生成中”（即使尚未收到首个 delta）
     markSessionTyping(currentKey, true);
 
-    let finalContent = text;
-    if (attachedFiles && attachedFiles.length > 0) {
-      // 1. 处理提及实体 (Mentions)
-      const mentions = attachedFiles.filter(f => (f as any).type).map(f => {
-        if ((f as any).type === 'workspace_file') return `\n[File: ${f.path}]`;
-        if ((f as any).type === 'skill') return `\n[Skill: ${(f as any).entityId}]`;
-        return '';
-      }).join('');
-
-      // 2. 处理传统上传文件
-      const fileLinks = attachedFiles.filter(f => !(f as any).type).map(f => {
-        const isImage = f.ext.replace(/^\./, '').match(/^(jpg|jpeg|png|gif|webp|svg)$/i);
-        return isImage
-          ? `\n![${f.filename}](${f.thumbUrl || f.url})\n(File path: ${f.path})`
-          : `\n[${f.filename}](${f.url}) (File path: ${f.path})`;
-      }).join('');
-      
-      finalContent += mentions + fileLinks + `\n\n**System Note for Expert:** The user has provided context via files or skills. Please analyze the content and respond in Chinese.`;
-    }
+    const finalContent = buildSendMessageContent(text, attachedFiles);
 
     const now = Date.now();
-    const newUserMsg: Message = {
-      id: `msg-${now}`,
-      role: 'user',
-      content: finalContent,
-      timestamp: new Date(now).toLocaleTimeString(),
-      _sortTs: now
-    };
+    const newUserMsg = createUserMessage(finalContent, now);
 
-    const aiSortTs = now + 1;
     const assistantInitialMsg = text === '/stop' ? t('chat.terminated') : t('chat.thinking');
-    const aiPlaceholderMsg: Message = {
-      id: `msg-ai-${now}`,
-      role: 'assistant',
-      content: assistantInitialMsg,
-      timestamp: new Date(now).toLocaleTimeString(),
-      _sortTs: aiSortTs,
-      _thinkStartedAt: now,
-    };
+    const aiPlaceholderMsg = createAssistantPlaceholder(assistantInitialMsg, now);
 
     const prevCacheForSession = sessionCacheRef.current.get(currentKey);
-    const nextCache: SessionStreamCache = {
-      fullText: '',
-      isTyping: true,
-      startTime: Date.now(),
-      firstTokenTime: 0,
-      ttftRecorded: false,
-      tokenCount: 0,
-      tpsData: [],
-      lastUserMsg: newUserMsg,
-      lastTouched: Date.now(),
-      metadataByRunId: prevCacheForSession?.metadataByRunId || new Map(),
-      activeRuns: prevCacheForSession?.activeRuns || new Set<string>()
-    };
+    const nextCache = createTypingSessionCache(newUserMsg, prevCacheForSession);
     touchAndPruneSessionCache(currentKey, nextCache);
 
     setMessages(prev => {
@@ -2343,29 +1420,11 @@ export function useV3Messages({
     markSessionTyping(sessionKey, true);
 
     const baseSortTs = userMsg._sortTs || Date.now();
-    const aiPlaceholderMsg: Message = {
-      id: `msg-ai-${Date.now()}`,
-      role: 'assistant',
-      content: t('chat.thinking'),
-      timestamp: new Date().toLocaleTimeString(),
-      _sortTs: baseSortTs + 1,
-      _thinkStartedAt: Date.now(),
-    };
+    const placeholderNow = Date.now();
+    const aiPlaceholderMsg = createAssistantPlaceholder(t('chat.thinking'), placeholderNow, baseSortTs + 1);
 
     const prevCacheForSession = sessionCacheRef.current.get(sessionKey);
-    const nextCache: SessionStreamCache = {
-      fullText: '',
-      isTyping: true,
-      startTime: Date.now(),
-      firstTokenTime: 0,
-      ttftRecorded: false,
-      tokenCount: 0,
-      tpsData: [],
-      lastUserMsg: userMsg,
-      lastTouched: Date.now(),
-      metadataByRunId: prevCacheForSession?.metadataByRunId || new Map(),
-      activeRuns: prevCacheForSession?.activeRuns || new Set<string>()
-    };
+    const nextCache = createTypingSessionCache(userMsg, prevCacheForSession);
     touchAndPruneSessionCache(sessionKey, nextCache);
 
     setMessages(prev => {
@@ -2445,17 +1504,10 @@ export function useV3Messages({
       const label = t('chat.manuallyStopped', { defaultValue: '已手动停止' });
       const mainContent = (main.content === t('chat.thinking') || !main.content) ? label : main.content + ` (${label})`;
 
-      // 2) 同 runId 的 meta 气泡：把所有"执行中"封印为"已中断"
-      const sealPending = (raw: string) => raw
-        ? raw
-            .replace(/(?<=(?:^|\n)\s*(?:>\s*)?)🔧\s*(`[^`]+`)\s*执行中(?:…|\.\.\.)/g, '❌ $1 已中断')
-            .replace(/<!--\s*tool:[^>]*-->/g, '')
-        : raw;
-
       return prev.map((m, i) => {
         if (i === mainIdx) return { ...m, content: mainContent };
         if (m._uiMetaOnly && m.runId === main.runId) {
-          const sealed = sealPending(m.content || '');
+          const sealed = sealPendingToolMarkers(m.content || '');
           if (sealed === m.content) return m;
           return { ...m, content: sealed };
         }
@@ -2526,27 +1578,9 @@ export function useV3Messages({
       markSessionTyping(currentKey, true);
 
       const baseSortTs = updatedUser._sortTs || Date.now();
-      const aiPlaceholderMsg: Message = {
-        id: `msg-ai-${Date.now()}`,
-        role: 'assistant',
-        content: t('chat.thinking'),
-        timestamp: new Date().toLocaleTimeString(),
-        _sortTs: baseSortTs + 1
-      };
+      const aiPlaceholderMsg = createAssistantPlaceholder(t('chat.thinking'), Date.now(), baseSortTs + 1);
       const prevCacheForSession = sessionCacheRef.current.get(currentKey);
-      const nextCache: SessionStreamCache = {
-        fullText: '',
-        isTyping: true,
-        startTime: Date.now(),
-        firstTokenTime: 0,
-        ttftRecorded: false,
-        tokenCount: 0,
-        tpsData: [],
-        lastUserMsg: updatedUser,
-        lastTouched: Date.now(),
-        metadataByRunId: prevCacheForSession?.metadataByRunId || new Map(),
-        activeRuns: prevCacheForSession?.activeRuns || new Set<string>()
-      };
+      const nextCache = createTypingSessionCache(updatedUser, prevCacheForSession);
       touchAndPruneSessionCache(currentKey, nextCache);
       setMessages(prev => {
         const next = [...prev, aiPlaceholderMsg];
@@ -2677,13 +1711,7 @@ export function useV3Messages({
     });
     if (res.ok) {
       const rawTs = Date.now();
-      const injectedMsg: Message = {
-        id: res.payload?.messageId || `msg-inject-${rawTs}`,
-        role: 'assistant',
-        content: trimmed,
-        timestamp: new Date(rawTs).toLocaleTimeString(),
-        _sortTs: rawTs
-      };
+      const injectedMsg = createInjectedAssistantMessage(res.payload?.messageId, trimmed, rawTs);
       setMessages(prev => [...prev, injectedMsg]);
     } else {
       antdMessage.error(t('chat.injectFailed', { defaultValue: `注入失败: ${res.error?.message || res.error || '未知错误'}` }));

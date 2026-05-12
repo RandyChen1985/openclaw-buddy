@@ -10,7 +10,7 @@ import (
 )
 
 // resolveBearerPrincipal 把一个 Bearer token 解析为认证主体；
-// 优先匹配 BUDDY_TOKEN（superadmin），其次查 user_sessions。
+// 优先匹配 BUDDY_TOKEN（superadmin），其次会话 sess_*，最后用户长期访问令牌 buddyu_*。
 func resolveBearerPrincipal(rawToken, superToken string) *Principal {
 	rawToken = strings.TrimSpace(rawToken)
 	if rawToken == "" {
@@ -19,12 +19,15 @@ func resolveBearerPrincipal(rawToken, superToken string) *Principal {
 	if superToken != "" && rawToken == superToken {
 		return &Principal{IsSuperAdmin: true}
 	}
-	user, err := utils.LookupSession(rawToken)
-	if err != nil || user == nil {
-		return nil
+	if user, err := utils.LookupSession(rawToken); err == nil && user != nil {
+		perms, _ := utils.GetUserPermissionKeys(user.ID)
+		return &Principal{User: user, Permissions: perms}
 	}
-	perms, _ := utils.GetUserPermissionKeys(user.ID)
-	return &Principal{User: user, Permissions: perms}
+	if user, err := utils.GetUserByAPIToken(rawToken); err == nil && user != nil {
+		perms, _ := utils.GetUserPermissionKeys(user.ID)
+		return &Principal{User: user, Permissions: perms}
+	}
+	return nil
 }
 
 func AuthMiddleware(token string, tickets *TicketStore) gin.HandlerFunc {

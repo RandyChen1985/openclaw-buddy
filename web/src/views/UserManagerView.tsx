@@ -3,9 +3,10 @@ import {
   Card, Table, Button, Input, Tag, Space, Modal, Form, Select,
   Switch, message, Typography, Empty, Dropdown, Checkbox, Pagination, Divider, Tabs, Row, Col, Spin,
 } from 'antd';
-import { Plus, RefreshCw, KeyRound, Pencil, Search, ShieldCheck, MoreHorizontal, Trash2, Bot, Cpu, Image as ImageIcon } from 'lucide-react';
+import { Plus, RefreshCw, KeyRound, KeySquare, Pencil, Search, ShieldCheck, MoreHorizontal, Trash2, Bot, Cpu, Image as ImageIcon, Copy, Link2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import api from '../api';
+import { getBaseURL } from '../utils/url';
 import dayjs from 'dayjs';
 import Tooltip from '../components/common/AppTooltip';
 
@@ -20,6 +21,13 @@ interface UserItem {
   created_at: string;
   updated_at: string;
   role_keys: string[];
+  has_api_token?: boolean;
+}
+
+function buildUserTokenLoginUrl(token: string) {
+  const base = getBaseURL();
+  const originRoot = `${window.location.origin}${base || ''}`.replace(/\/+$/, '');
+  return `${originRoot}/?token=${encodeURIComponent(token)}`;
 }
 
 interface RoleItem {
@@ -77,6 +85,11 @@ const UserManagerView: React.FC<UserManagerViewProps> = ({ isDarkMode = false, c
 
   const [resetOpen, setResetOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<UserItem | null>(null);
+
+  const [tokenModalOpen, setTokenModalOpen] = useState(false);
+  const [tokenTarget, setTokenTarget] = useState<UserItem | null>(null);
+  const [tokenInfo, setTokenInfo] = useState<{ configured: boolean; token: string } | null>(null);
+  const [tokenLoading, setTokenLoading] = useState(false);
 
   const [form] = Form.useForm();
   const [resetForm] = Form.useForm();
@@ -325,6 +338,66 @@ const UserManagerView: React.FC<UserManagerViewProps> = ({ isDarkMode = false, c
     }
   };
 
+  const openApiTokenModal = async (row: UserItem) => {
+    setTokenTarget(row);
+    setTokenModalOpen(true);
+    setTokenInfo(null);
+    setTokenLoading(true);
+    try {
+      const res = await api.get(`/v1/system/users/${row.id}/api-token`);
+      setTokenInfo({
+        configured: !!res.data?.configured,
+        token: typeof res.data?.token === 'string' ? res.data.token : '',
+      });
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || err?.message || t('common.error'));
+      setTokenModalOpen(false);
+    } finally {
+      setTokenLoading(false);
+    }
+  };
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      message.success(t('users.apiTokenCopySuccess'));
+    } catch {
+      message.error(t('common.error'));
+    }
+  };
+
+  const generateApiToken = async () => {
+    if (!tokenTarget) return;
+    try {
+      setTokenLoading(true);
+      const res = await api.post(`/v1/system/users/${tokenTarget.id}/api-token/generate`);
+      const tok = res.data?.token as string;
+      setTokenInfo({ configured: true, token: tok || '' });
+      message.success(t('users.apiTokenGenerated'));
+      fetchUsers(keyword);
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || err?.message || t('common.error'));
+    } finally {
+      setTokenLoading(false);
+    }
+  };
+
+  const resetApiToken = async () => {
+    if (!tokenTarget) return;
+    try {
+      setTokenLoading(true);
+      const res = await api.post(`/v1/system/users/${tokenTarget.id}/api-token/reset`);
+      const tok = res.data?.token as string;
+      setTokenInfo({ configured: true, token: tok || '' });
+      message.success(t('users.apiTokenResetDone'));
+      fetchUsers(keyword);
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || err?.message || t('common.error'));
+    } finally {
+      setTokenLoading(false);
+    }
+  };
+
   const renderRoles = (keys: string[]) => {
     if (!keys || keys.length === 0) return <Tag>—</Tag>;
     return (
@@ -432,11 +505,17 @@ const UserManagerView: React.FC<UserManagerViewProps> = ({ isDarkMode = false, c
                             ? <Tag color="success">{t('users.active')}</Tag>
                             : <Tag color="default">{t('users.disabled')}</Tag>}
                         </span>
+                        <span style={{ marginLeft: 8 }}>
+                          {u.has_api_token
+                            ? <Tag color="processing">{t('users.apiTokenConfigured')}</Tag>
+                            : <Tag>{t('users.apiTokenUnset')}</Tag>}
+                        </span>
                       </div>
                     </div>
                     <Space size={2} wrap>
                       <Button size="small" type="text" icon={<Pencil size={18} />} onClick={() => openEdit(u)} />
                       <Button size="small" type="text" icon={<KeyRound size={18} />} onClick={() => openReset(u)} />
+                      <Button size="small" type="text" icon={<KeySquare size={18} />} onClick={() => openApiTokenModal(u)} />
                       {!u.role_keys?.includes('admin') && (
                         <Button size="small" type="text" icon={<ShieldCheck size={18} />} onClick={() => openUserPerm(u)} />
                       )}
@@ -506,8 +585,8 @@ const UserManagerView: React.FC<UserManagerViewProps> = ({ isDarkMode = false, c
             scroll={{ x: 'max-content' }}
             columns={[
               { title: t('users.username'), dataIndex: 'username', width: 140, ellipsis: true },
-              { title: t('users.realName'), dataIndex: 'real_name', width: 160, render: (v: string) => v || '—' },
-              { title: t('users.roles'), dataIndex: 'role_keys', width: 180, render: (v: string[]) => renderRoles(v) },
+              { title: t('users.realName'), dataIndex: 'real_name', width: 96, ellipsis: true, render: (v: string) => v || '—' },
+              { title: t('users.roles'), dataIndex: 'role_keys', width: 120, render: (v: string[]) => renderRoles(v) },
               {
                 title: t('users.status'),
                 dataIndex: 'status',
@@ -516,7 +595,15 @@ const UserManagerView: React.FC<UserManagerViewProps> = ({ isDarkMode = false, c
                   ? <Tag color="success">{t('users.active')}</Tag>
                   : <Tag color="default">{t('users.disabled')}</Tag>,
               },
-              { title: t('users.remark'), dataIndex: 'remark', width: 220, render: (v: string) => v || '—' },
+              {
+                title: t('users.apiToken'),
+                dataIndex: 'has_api_token',
+                width: 100,
+                render: (v: boolean) => v
+                  ? <Tag color="processing">{t('users.apiTokenConfigured')}</Tag>
+                  : <Tag>{t('users.apiTokenUnset')}</Tag>,
+              },
+              { title: t('users.remark'), dataIndex: 'remark', width: 200, render: (v: string) => v || '—' },
               {
                 title: t('users.createdAt'),
                 dataIndex: 'created_at',
@@ -530,7 +617,7 @@ const UserManagerView: React.FC<UserManagerViewProps> = ({ isDarkMode = false, c
               {
                 title: t('common.action'),
                 key: 'action',
-                width: 190,
+                width: 280,
                 render: (_: any, row: UserItem) => (
                   <Space size={2} wrap>
                     <Tooltip title={t('common.edit')}>
@@ -538,6 +625,9 @@ const UserManagerView: React.FC<UserManagerViewProps> = ({ isDarkMode = false, c
                     </Tooltip>
                     <Tooltip title={t('users.resetPassword')}>
                       <Button size="small" type="text" icon={<KeyRound size={16} />} onClick={() => openReset(row)} style={{ color: '#334155' }} />
+                    </Tooltip>
+                    <Tooltip title={t('users.apiTokenTitle')}>
+                      <Button size="small" type="text" icon={<KeySquare size={16} />} onClick={() => openApiTokenModal(row)} style={{ color: '#334155' }} />
                     </Tooltip>
                     {!row.role_keys?.includes('admin') && (
                       <Tooltip title={t('users.permissions')}>
@@ -674,6 +764,73 @@ const UserManagerView: React.FC<UserManagerViewProps> = ({ isDarkMode = false, c
             <Input.Password autoComplete="new-password" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title={`${t('users.apiTokenTitle')}${tokenTarget ? ` · ${tokenTarget.username}` : ''}`}
+        open={tokenModalOpen}
+        onCancel={() => {
+          setTokenModalOpen(false);
+          setTokenTarget(null);
+          setTokenInfo(null);
+        }}
+        footer={null}
+        destroyOnClose
+        width={560}
+      >
+        <Text type="secondary" style={{ display: 'block', marginBottom: 16, fontSize: 13, lineHeight: 1.6 }}>
+          {t('users.apiTokenHint')}
+        </Text>
+        {tokenLoading && !tokenInfo ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '28px 0' }}>
+            <Spin />
+          </div>
+        ) : tokenInfo ? (
+          <>
+            <div style={{ marginBottom: 12 }}>
+              <Tag color={tokenInfo.configured ? 'success' : 'default'}>
+                {tokenInfo.configured ? t('users.apiTokenConfigured') : t('users.apiTokenUnset')}
+              </Tag>
+            </div>
+            {tokenInfo.configured && tokenInfo.token ? (
+              <>
+                <Input.TextArea
+                  readOnly
+                  autoSize={{ minRows: 2, maxRows: 5 }}
+                  value={tokenInfo.token}
+                  style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, marginBottom: 12 }}
+                />
+                <Space wrap>
+                  <Button type="primary" icon={<Copy size={14} />} onClick={() => copyText(tokenInfo.token)}>
+                    {t('users.apiTokenCopy')}
+                  </Button>
+                  <Button icon={<Link2 size={14} />} onClick={() => copyText(buildUserTokenLoginUrl(tokenInfo.token))}>
+                    {t('users.apiTokenCopyLoginUrl')}
+                  </Button>
+                  <Button
+                    danger
+                    loading={tokenLoading}
+                    onClick={() => {
+                      Modal.confirm({
+                        title: t('users.apiTokenReset'),
+                        content: t('users.apiTokenResetConfirm'),
+                        okText: t('common.confirm'),
+                        cancelText: t('common.cancel'),
+                        onOk: () => resetApiToken(),
+                      });
+                    }}
+                  >
+                    {t('users.apiTokenReset')}
+                  </Button>
+                </Space>
+              </>
+            ) : (
+              <Button type="primary" loading={tokenLoading} onClick={generateApiToken}>
+                {t('users.apiTokenGenerate')}
+              </Button>
+            )}
+          </>
+        ) : null}
       </Modal>
 
       <Modal

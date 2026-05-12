@@ -1,6 +1,6 @@
 # 🦞 OpenClaw Buddy 全量 API 开发者参考方案
 
-本集成文档详细描述了 **OpenClaw (小龙虾)** 监控系统的所有对外 API 接口（共 40+ 个），旨在帮助开发者集成、监控以及自动化管理自己的 Agent 集群。
+本集成文档详细描述了 **OpenClaw (小龙虾)** 监控系统的对外 HTTP API（含认证、用户访问令牌、`/v1` 业务接口等），便于集成与自动化。
 
 ---
 
@@ -51,15 +51,32 @@
 | **微信生态 (WeChat)** | `GET /wechat/qrcode` | 特殊扫码托管及反注入探针 | **Logic**: 动态截取 CLI 输出文本中流暴露的图片地址 |
 | | `GET /wechat/config/status` | 查询通道授权挂载配置状况 | **File**: 获取 `channels` Key |
 | | `POST /wechat/install` | 零配置拉取微信全量通道 | **CLI**: `openclaw plugins install wechat` |
+| **认证与用户** | `POST /login` | 环境 `BUDDY_TOKEN`、用户长期令牌 `buddyu_*` 或用户名密码登录 | **配置** / **DB** `users` + `user_sessions` |
+| **认证与用户** | `POST /v1/getUserToken` | 凭 `adminToken` 查询指定用户名的 `api_token` 信息 | **DB**: `users.api_token` |
+| **认证与用户** | `GET/POST …/system/users/:id/api-token*` | 管理端生成/读取/重置某用户的长期访问令牌 | **DB**: `users.api_token` |
 
 ---
 
 ## 🔐 1. 基础规范 (Base Specification)
 
 ### 1.1 鉴权指南 (Authentication)
-除公开路径外，所有 API 请求均需通过 Bearer Token 进行验证。
+以下路径**不要求**先带用户 Bearer（自有请求体完成鉴权或无需鉴权）：
+
+- `GET /health`
+- `POST /login`
+- `POST /v1/getUserToken`（使用 body 中的 `adminToken` 校验管理员身份，见 §2.3）
+
+其余 **`/v1/**` 接口**（除上述 `POST /v1/getUserToken` 外）均需通过 Bearer Token、Cookie 或 Query 完成认证（与中间件实现一致）：
+
 - **Header**: `Authorization: Bearer <TOKEN>`
 - **Cookie (可选)**: `guardian_token=<TOKEN>`
+- **Query (可选)**: `?token=<TOKEN>`（与 Header 等价语义；仅依赖 Cookie 时写操作仍受 CSRF 策略限制）
+
+**`<TOKEN>` 可为：**
+
+1. 环境变量 **`BUDDY_TOKEN`**：超级管理员。
+2. **`sess_` 前缀**：密码登录后签发的会话令牌。
+3. **`buddyu_` 前缀**：在用户管理界面为某用户生成的**长期访问令牌**（存于 `users.api_token`），权限等同于该用户登录，可用于 `Authorization`、`?token=`、`/login` 的 `{"token":"..."}`。
 
 ### 1.2 响应约定 (Response Convention)
 除特殊透传接口（如 AI 聊天流、面板代理、WebSocket）外，所有业务接口统一返回以下 JSON 结构：
@@ -93,13 +110,96 @@
   ```
 
 ### 2.2 用户登录认证 (Login)
-提交令牌获取 Cookie 凭证。
-- **路径**: `/login`
+用于换取前端统一存储的 `guardian_token`（Cookie 与响应体中的 `token` 字段一致）。
+
+- **路径**: `/login`（位于 `WEB_ROOT` 下，与 `/v1` 同级）
 - **方法**: `POST`
-- **请求体**: `{"token": "string"}`
-- **响应示例**:
-  - 成功 (200): `{ "code": 200, "message": "success" }`
-  - 失败 (401): `{ "code": 401, "message": "Invalid token" }`
+- **Content-Type**: `application/json`
+
+**方式 A：仅令牌**
+
+```json
+{ "token": "<BUDDY_TOKEN 或 buddyu_ 用户长期令牌>" }
+```
+
+- 与 `BUDDY_TOKEN` 一致时：`data.login_type` 为 `token`。
+- 与用户 `api_token`（`buddyu_`）一致时：`data.login_type` 为 `api_token`，并返回 `username`、`real_name`。
+
+**方式 B：用户名密码**
+
+```json
+{ "username": "alice", "password": "******" }
+```
+
+- 成功时签发会话令牌，`data.login_type` 为 `password`。
+
+**成功响应 `data` 示例**
+
+```json
+{
+  "status": "success",
+  "token": "sess_… 或 buddyu_… 或与 BUDDY_TOKEN 相同",
+  "login_type": "token | api_token | password",
+  "username": "…",
+  "real_name": "…"
+}
+```
+
+- **失败 (401)**：`message` 为 `Invalid token` 或用户名密码错误说明。
+
+### 2.3 按管理员凭证查询用户访问令牌 (getUserToken)
+
+供外部系统（脚本、兄弟服务）在**不持有目标用户 Bearer** 的前提下，由**可信管理员**凭 `adminToken` 读取某用户的长期访问令牌配置。
+
+- **路径**: `/v1/getUserToken`（完整 URL 为 `{WEB_ROOT}/v1/getUserToken`）
+- **方法**: `POST`
+- **鉴权**: **不**走全局 `Authorization`；必须在 body 中提供 `adminToken`。
+- **`adminToken` 可为**：
+  1. 环境变量 **`BUDDY_TOKEN`**；或
+  2. 任意可解析为「数据库角色包含 `admin`」的 **`sess_` 会话令牌**或 **`buddyu_` 用户长期令牌**。
+
+若 `adminToken` 有效但主体不是上述两类之一，返回 **403**。
+
+**请求体**（`application/json` 或 `application/x-www-form-urlencoded`）
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `adminToken` | string | 是 | 管理员凭证（见上） |
+| `username` | string | 是 | 目标用户登录名 |
+
+**成功 `data`**
+
+```json
+{
+  "username": "alice",
+  "real_name": "艾丽丝",
+  "configured": true,
+  "token": "buddyu_…"
+}
+```
+
+- `configured` 为 `false` 时 `token` 为空字符串（尚未在用户管理中生成令牌）。
+
+**错误**
+
+| HTTP | 说明 |
+| :--- | :--- |
+| 400 | 缺少字段或 body 无法解析 |
+| 401 | `adminToken` 无效 |
+| 403 | 令牌有效但不是 BUDDY_TOKEN / 非 admin 角色 |
+| 404 | 用户名不存在 |
+
+### 2.4 系统管理—用户访问令牌（面板 / 集成用）
+
+以下路径均在 **`/v1/system/users/...`**，需先通过 §1.1 的 Bearer（或等价 `token`），且当前主体具备菜单权限 **`menu:system:user:manage`**。
+
+| 方法 | 路径 | 说明 |
+| :--- | :--- | :--- |
+| `GET` | `/v1/system/users/:id/api-token` | 返回 `configured` 与明文 `token`（供管理员复制） |
+| `POST` | `/v1/system/users/:id/api-token/generate` | 仅当该用户尚无令牌时创建；已存在则 400 |
+| `POST` | `/v1/system/users/:id/api-token/reset` | 重新生成令牌并返回新值 |
+
+**用户列表** `GET /v1/system/users` 的每条用户记录中含布尔字段 **`has_api_token`**（不直接暴露令牌）。
 
 ---
 
@@ -293,7 +393,15 @@ curl -X POST http://localhost:3000/v1/openclaw/bots/set-model \
 # }
 ```
 
-### 1.14 模型连通性直连测试 (TTFT)
+### 按管理员查询用户长期令牌 (getUserToken)
+
+```bash
+curl -s -X POST "http://localhost:3000/v1/getUserToken" \
+  -H "Content-Type: application/json" \
+  -d '{"adminToken":"<BUDDY_TOKEN 或 admin 的 sess_/buddyu_ 令牌>","username":"alice"}'
+```
+
+### 模型连通性直连测试 (TTFT)
 由于浏览器跨域限制，此测试由监控后端发起，直接调用提供商的 `baseUrl/chat/completions` 以测量真实网络延迟。
 
 - **URL**: `/v1/openclaw/models/test-direct`
@@ -317,4 +425,3 @@ curl -X POST http://localhost:3000/v1/openclaw/bots/set-model \
     }
   }
   ```
-```

@@ -153,6 +153,54 @@ type resetPasswordReq struct {
 	Password string `json:"password"`
 }
 
+// handleGetUserAPIToken 获取用户访问令牌（已配置时返回明文，供管理员复制；未配置时 token 为空）。
+func (s *Server) handleGetUserAPIToken(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		s.Error(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	tok, err := utils.GetUserAPIToken(id)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{
+		"configured": tok != "",
+		"token":      tok,
+	})
+}
+
+// handleEnsureUserAPIToken 仅在用户尚无访问令牌时生成一条并返回。
+func (s *Server) handleEnsureUserAPIToken(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		s.Error(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	tok, err := utils.EnsureUserAPIToken(id)
+	if err != nil {
+		s.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"token": tok})
+}
+
+// handleResetUserAPIToken 重置用户访问令牌并返回新令牌。
+func (s *Server) handleResetUserAPIToken(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		s.Error(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	tok, err := utils.ResetUserAPIToken(id)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Success(c, gin.H{"token": tok})
+}
+
 // handleResetUserPassword 重置指定用户的密码并撤销其所有会话
 func (s *Server) handleResetUserPassword(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)

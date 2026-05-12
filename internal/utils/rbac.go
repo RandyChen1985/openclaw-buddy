@@ -46,7 +46,8 @@ type Permission struct {
 // UserWithRoles 用户列表展示用结构
 type UserWithRoles struct {
 	User
-	RoleKeys []string `json:"role_keys"`
+	RoleKeys    []string `json:"role_keys"`
+	HasAPIToken bool     `json:"has_api_token"`
 }
 
 // 默认会话有效期（天）
@@ -71,6 +72,13 @@ func GenerateSessionToken() string {
 	b := make([]byte, 32)
 	_, _ = rand.Read(b)
 	return "sess_" + hex.EncodeToString(b)
+}
+
+// GenerateUserAPIToken 生成用户长期访问令牌（与 sess_、环境 BUDDY_TOKEN 区分前缀，避免误匹配）。
+func GenerateUserAPIToken() string {
+	b := make([]byte, 24)
+	_, _ = rand.Read(b)
+	return "buddyu_" + hex.EncodeToString(b)
 }
 
 func GetUserByUsername(username string) (*User, error) {
@@ -201,7 +209,8 @@ func ListUsers(keyword string) ([]UserWithRoles, error) {
 	}
 	var rows *sql.Rows
 	var err error
-	base := `SELECT id, username, real_name, remark, status, created_at, updated_at FROM users`
+	base := `SELECT id, username, real_name, remark, status, created_at, updated_at,
+		CASE WHEN IFNULL(api_token, '') <> '' THEN 1 ELSE 0 END AS has_api_token FROM users`
 	if strings.TrimSpace(keyword) != "" {
 		kw := "%" + keyword + "%"
 		rows, err = DB.Query(base+` WHERE username LIKE ? OR real_name LIKE ? OR remark LIKE ? ORDER BY id ASC`, kw, kw, kw)
@@ -216,14 +225,91 @@ func ListUsers(keyword string) ([]UserWithRoles, error) {
 	out := []UserWithRoles{}
 	for rows.Next() {
 		u := UserWithRoles{}
-		if err := rows.Scan(&u.ID, &u.Username, &u.RealName, &u.Remark, &u.Status, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		var hasTok int
+		if err := rows.Scan(&u.ID, &u.Username, &u.RealName, &u.Remark, &u.Status, &u.CreatedAt, &u.UpdatedAt, &hasTok); err != nil {
 			return nil, err
 		}
+		u.HasAPIToken = hasTok == 1
 		keys, _ := GetUserRoleKeys(u.ID)
 		u.RoleKeys = keys
 		out = append(out, u)
 	}
 	return out, nil
+}
+
+// GetUserAPIToken 返回用户当前访问令牌明文（空字符串表示未配置）；仅管理端使用。
+func GetUserAPIToken(userID int64) (string, error) {
+	if DB == nil {
+		return "", fmt.Errorf("database not initialized")
+	}
+	var tok sql.NullString
+	if err := DB.QueryRow(`SELECT api_token FROM users WHERE id = ?`, userID).Scan(&tok); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	if !tok.Valid {
+		return "", nil
+	}
+	return strings.TrimSpace(tok.String), nil
+}
+
+// SetUserAPIToken 覆盖写入用户访问令牌（传空字符串可清除）。
+func SetUserAPIToken(userID int64, token string) error {
+	if DB == nil {
+		return fmt.Errorf("database not initialized")
+	}
+	_, err := DB.Exec(`UPDATE users SET api_token = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, strings.TrimSpace(token), userID)
+	return err
+}
+
+// EnsureUserAPIToken 仅在当前无令牌时生成并保存；若已有令牌则返回错误。
+func EnsureUserAPIToken(userID int64) (string, error) {
+	existing, err := GetUserAPIToken(userID)
+	if err != nil {
+		return "", err
+	}
+	if existing != "" {
+		return "", fmt.Errorf("该用户已存在访问令牌，请使用复制或重置")
+	}
+	tok := GenerateUserAPIToken()
+	if err := SetUserAPIToken(userID, tok); err != nil {
+		return "", err
+	}
+	return tok, nil
+}
+
+// ResetUserAPIToken 重新生成用户访问令牌并返回新值。
+func ResetUserAPIToken(userID int64) (string, error) {
+	tok := GenerateUserAPIToken()
+	if err := SetUserAPIToken(userID, tok); err != nil {
+		return "", err
+	}
+	return tok, nil
+}
+
+// GetUserByAPIToken 按访问令牌解析启用中的用户。
+func GetUserByAPIToken(token string) (*User, error) {
+	token = strings.TrimSpace(token)
+	if DB == nil || token == "" {
+		return nil, nil
+	}
+	row := DB.QueryRow(
+		`SELECT id, username, real_name, remark, password_hash, status, created_at, updated_at FROM users WHERE api_token = ? AND IFNULL(api_token,'') <> ''`,
+		token,
+	)
+	u := &User{}
+	if err := row.Scan(&u.ID, &u.Username, &u.RealName, &u.Remark, &u.PasswordHash, &u.Status, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if u.Status == 0 {
+		return nil, nil
+	}
+	return u, nil
 }
 
 func GetUserRoleKeys(userID int64) ([]string, error) {
