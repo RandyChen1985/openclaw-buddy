@@ -1,18 +1,21 @@
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
-import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode, theme, Result } from 'antd';
+import { Layout, Button, message, Modal, ConfigProvider, Drawer, Badge, QRCode, theme, Result, Spin } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
-  Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
-  Puzzle, LayoutDashboard, Terminal, Zap, Boxes, ToyBrick, Smartphone, Rocket,
-  ShieldCheck, Clock, Activity, Sun, Moon, Users, Settings, Bot, AlertCircle
+  Menu as MenuIcon, Play, Square, RefreshCw, Smartphone,
+  Sun, Moon
 } from 'lucide-react';
 import api from './api';
 import axios from 'axios';
 import storage from './utils/storage';
+import { deriveGatewayState } from './app/gatewayState';
+import { createMenuItems, getActiveMenuLabel, hasMenuPermission } from './app/menu';
 
 // Components（登录与壳层同步加载；业务 Tab 按需懒加载以降低首包）
 import LoginView from './views/LoginView';
 import Sidebar from './components/layout/Sidebar';
+import NoBotPermissionOverlay from './components/layout/NoBotPermissionOverlay';
+import GlobalLoadingMask from './components/layout/GlobalLoadingMask';
 const DashboardOverview = lazy(() => import('./views/DashboardOverview'));
 const AuditDashboard = lazy(() => import('./views/AuditDashboard'));
 const BotsManager = lazy(() => import('./views/BotsManager'));
@@ -994,37 +997,21 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
     }
   };
 
-  const httpGatewayStatus = String((status as any)?.gateway?.status || '').toLowerCase();
-  const httpGatewayRunning = httpGatewayStatus === 'running';
-
-  /** 聊天/仪表盘需要实时网关 WS；其它页面暂停 WS 时用 HTTP gateway.status 兜底展示“运行中” */
-  const isRunning =
-    v3Status === 'authenticated' ||
-    (!gatewayWsDesired && httpGatewayRunning);
-
-  // 顶栏状态：连接中 / 等待授权 / HTTP 已运行但 WS 重连中，都不应误报“已停止”。
-  const isConnecting = ['connecting', 'handshaking', 'challenging', 'identifying'].includes((v3Status || '') as any);
-  const isAuthorizing = v3Status === 'authorizing';
-  const isWsRecovering = gatewayWsDesired && httpGatewayRunning && ['disconnected', 'error'].includes(v3Status || '');
-  const gatewayStateText = isRunning
-    ? t('dashboard.running')
-    : isAuthorizing
-      ? t('chat.gatewayAuthorizing', { defaultValue: '等待设备授权' })
-      : isConnecting
-        ? t('chat.gatewayConnecting')
-        : isWsRecovering
-          ? (v3Status === 'error'
-            ? t('chat.gatewayConnectionError', { defaultValue: '连接异常' })
-            : t('chat.gatewayReconnecting', { defaultValue: '网关重连中...' }))
-          : t('dashboard.stopped');
-  const gatewayBadgeStatus: 'success' | 'processing' | 'error' =
-    isRunning ? 'success' : ((isConnecting || isAuthorizing || isWsRecovering) ? 'processing' : 'error');
-  const gatewayLatency = v3Status === 'authenticated' && lastHealth?.latency !== undefined
-    ? lastHealth.latency
-    : undefined;
-  const gatewayHealthTime = lastHealth?.ts
-    ? new Date(lastHealth.ts < 1_000_000_000_000 ? lastHealth.ts * 1000 : lastHealth.ts).toLocaleTimeString()
-    : '';
+  const {
+    httpGatewayStatus,
+    httpGatewayRunning,
+    isRunning,
+    gatewayStateText,
+    gatewayBadgeStatus,
+    gatewayLatency,
+    gatewayHealthTime,
+  } = useMemo(() => deriveGatewayState({
+    status,
+    v3Status,
+    gatewayWsDesired,
+    lastHealth,
+    t,
+  }), [gatewayWsDesired, lastHealth, status, t, v3Status]);
 
   // [自动刷新] 连通性自愈：当 HTTP 轮询发现网关已启动，但 WebSocket 处于断开或错误状态时，主动拉起连接
   useEffect(() => {
@@ -1042,135 +1029,18 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
   // --- Menu Configuration ---
   const disabledFeatures = versionUpdate?.gui_disable_features?.split(',') || [];
 
-  const rawMenuItems = [
-    {
-      key: 'grp-monitor',
-      label: t('common.monitor'),
-      icon: <Activity size={16} />,
-      children: [
-        { key: 'dashboard', label: t('common.dashboard'), icon: <LayoutDashboard size={14} /> },
-        { key: 'audit', label: t('audit.title'), icon: <ShieldCheck size={14} /> },
-        {
-          key: 'logs',
-          label: (
-            <span>
-              {t('common.logs')}
-              {wsLogs.length > 0 && <Badge status="processing" size="small" style={{ marginLeft: 8 }} />}
-            </span>
-          ),
-          title: t('common.logs'),
-          icon: <Terminal size={14} />
-        },
-        {
-          key: 'tools',
-          label: (
-            <span>
-              {t('common.tools')}
-              {healEvents.length > 0 && (
-                <Badge 
-                  count={healEvents.length} 
-                  size="small" 
-                  style={{ marginLeft: 8, backgroundColor: '#3b82f6' }} 
-                />
-              )}
-            </span>
-          ),
-          title: t('common.tools'),
-          icon: <Zap size={14} />
-        },        { key: 'shell', label: t('common.shell'), icon: <Terminal size={14} /> },
-        { key: 'security', label: t('security.title'), icon: <ShieldCheck size={14} /> },
-        { key: 'cron', label: t('common.cron'), icon: <Clock size={14} /> },
-      ]
-    },
-    {
-      key: 'grp-assets',
-      label: t('common.assets'),
-      icon: <Boxes size={16} />,
-      children: [
-        { key: 'chat', label: t('common.chat'), icon: <MessageSquare size={14} /> },
-        { key: 'tui', label: t('common.tuiChat'), icon: <Terminal size={14} /> },
-        { key: 'bots-models', label: t('common.bots'), icon: <Boxes size={14} /> },
-        { key: 'skills', label: t('common.skills'), icon: <Puzzle size={14} /> },
-        { key: 'plugins', label: t('plugins.title'), icon: <Zap size={14} /> },
-        { key: 'experts', label: t('common.expertMarket'), icon: <Rocket size={14} /> },
-      ]
-    },
-    {
-      key: 'grp-binding',
-      label: t('common.binding'),
-      icon: <ToyBrick size={16} />,
-      children: [
-        { key: 'components', label: t('common.channels'), icon: <ToyBrick size={14} /> },
-        { key: 'devices', label: t('common.devices'), icon: <Smartphone size={14} /> },
-      ]
-    },
-    {
-      key: 'grp-system',
-      label: t('common.systemAdmin'),
-      icon: <Settings size={16} />,
-      children: [
-        { key: 'system.users', label: t('common.userManagement'), icon: <Users size={14} /> },
-      ]
-    },
-    {
-      key: 'grp-external',
-      label: t('common.external'),
-      icon: <ExternalLink size={16} />,
-      children: [
-        { key: 'lobster-panel', label: t('common.lobsterPanel'), icon: <ExternalLink size={14} /> },
-      ]
-    }
-  ];
-
-  // 菜单 key → 所需权限 key（仅对需要权限保护的页面登记；其余默认放行）
-  const menuPermissionMap: Record<string, string> = {
-    // 监控中心
-    'dashboard': 'menu:monitor:dashboard:view',
-    'audit': 'menu:monitor:audit:view',
-    'logs': 'menu:monitor:logs:view',
-    'tools': 'menu:monitor:self_healing:manage',
-    'shell': 'menu:monitor:shell:manage',
-    'security': 'menu:monitor:security:manage',
-    'cron': 'menu:monitor:cron:view',
-    // 资产管理
-    'chat': 'menu:assets:chat:view',
-    'tui': 'menu:assets:tui:view',
-    'bots-models': 'menu:assets:bots:manage',
-    'skills': 'menu:assets:skills:manage',
-    'plugins': 'menu:assets:plugins:manage',
-    'experts': 'menu:assets:experts:view',
-    // 绑定中心
-    'components': 'menu:binding:channels:manage',
-    'devices': 'menu:binding:devices:manage',
-    // 系统管理
-    'system.users': 'menu:system:user:manage',
-    // 外部工具
-    'lobster-panel': 'menu:external:lobster_panel:open',
-  };
   const hasMenuPerm = (key: string) => {
-    const need = menuPermissionMap[key];
-    if (!need) return true;
-    if (authMe.is_superadmin) return true;
-    return authMe.permissions.includes(need);
+    return hasMenuPermission(authMe, key);
   };
 
-  const menuItems = rawMenuItems
-    .filter(group => {
-      // 如果配置为不显示外部工具，则过滤掉 grp-external 组
-      if (group.key === 'grp-external' && !versionUpdate?.show_external_tools) {
-        return false;
-      }
-      return true;
-    })
-    .map(group => ({
-      ...group,
-      children: group.children?.filter(item => {
-        // 核心功能 'chat' (在线聊天 Web 版) 不允许被隐藏
-        if (item.key === 'chat') return true;
-        if (disabledFeatures.includes(item.key)) return false;
-        return hasMenuPerm(item.key);
-      })
-    })).filter(group => group.children && group.children.length > 0);
+  const menuItems = createMenuItems({
+    t,
+    wsLogCount: wsLogs.length,
+    healEventCount: healEvents.length,
+    disabledFeatures,
+    showExternalTools: versionUpdate?.show_external_tools,
+    authMe,
+  });
   const visibleMenuKeys = menuItems.flatMap(group => (group.children || []).map(item => item.key));
   const visibleMenuKeySignature = visibleMenuKeys.join('|');
 
@@ -1183,17 +1053,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
 
   // Helper to find label for breadcrumb
   const getActiveLabel = (key: string) => {
-    for (const group of menuItems) {
-      const item = group.children?.find(i => i.key === key);
-      if (item) {
-        if (typeof item.label === 'string') return item.label;
-        // Handle complex labels like Logs with badges
-        if (item.key === 'logs') return t('common.logs');
-        if (item.key === 'tools') return t('common.tools');
-        return key;
-      }
-    }
-    return '';
+    return getActiveMenuLabel(menuItems, key, t);
   };
 
   const renderContent = () => {
@@ -1383,160 +1243,25 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
   /** 受控用户 bot_ids 为空时：仅盖住主内容区（侧栏不挡，可换页）；置于 Content 内 absolute */
   const showNoBotChatOverlay =
     activeTab === 'chat' && Array.isArray(authMe?.bot_ids) && authMe.bot_ids.length === 0;
-  const noBotChatOverlay = showNoBotChatOverlay ? (
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        zIndex: 100,
-        background: isDarkMode ? 'rgba(15, 23, 42, 0.94)' : 'rgba(248, 250, 252, 0.97)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 20,
-        pointerEvents: 'auto',
-      }}
-      aria-live="polite"
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 440,
-          padding: isMobile ? '28px 22px' : '36px 40px',
-          borderRadius: 20,
-          background: isDarkMode ? '#1e293b' : '#fff',
-          border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
-          boxShadow: isDarkMode
-            ? '0 25px 50px -12px rgba(0, 0, 0, 0.55)'
-            : '0 25px 50px -12px rgba(15, 23, 42, 0.15)',
-          textAlign: 'center',
-        }}
-      >
-        <div
-          style={{
-            width: 56,
-            height: 56,
-            margin: '0 auto 16px',
-            borderRadius: 14,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: isDarkMode ? '#0f172a' : '#fef3c7',
-            border: `1px solid ${isDarkMode ? '#334155' : '#fde68a'}`,
-          }}
-        >
-          <Bot size={28} color={isDarkMode ? '#93c5fd' : '#d97706'} strokeWidth={2} />
-        </div>
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            marginBottom: 12,
-            fontWeight: 800,
-            fontSize: 17,
-            color: isDarkMode ? '#f1f5f9' : '#0f172a',
-          }}
-        >
-          <AlertCircle size={20} color="#f59e0b" strokeWidth={2.5} />
-          {t('users.noBotPermissionTitle', { defaultValue: '暂无 Bot 使用权限' })}
-        </div>
-        <p
-          style={{
-            margin: 0,
-            fontSize: 14,
-            lineHeight: 1.65,
-            color: isDarkMode ? '#94a3b8' : '#64748b',
-          }}
-        >
-          {t('users.noBotPermission', {
-            defaultValue: '当前账号未分配任何 Bot 权限，请联系管理员分配后再使用。',
-          })}
-        </p>
-      </div>
-    </div>
-  ) : null;
+  const noBotChatOverlay = showNoBotChatOverlay
+    ? <NoBotPermissionOverlay isDarkMode={isDarkMode} isMobile={isMobile} t={t} />
+    : null;
 
   const globalLoadingMask = (globalLoadingMessage || dashboardProcessing) && (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: isDarkMode ? 'rgba(15, 23, 42, 0.8)' : 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(2px)',
-      zIndex: 9999, display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', padding: 20,
-      animation: 'fadeIn 0.3s ease-out'
-    }}>
-      <div style={{
-        padding: isMobile ? '24px 20px' : '32px 40px', 
-        background: isDarkMode ? '#1e293b' : '#fff', borderRadius: 24,
-        boxShadow: isDarkMode ? '0 25px 50px -12px rgba(0, 0, 0, 0.5)' : '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20,
-        width: isMobile ? '100%' : 'auto', maxWidth: 340, minWidth: isMobile ? 0 : 320
-      }}>
-        <Spin size="large" />
-        <div style={{ textAlign: 'center' }}>
-          {isTransitioning ? (
-            <>
-              <div style={{ fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#1e293b', fontSize: 16 }}>
-                {targetStatus && t(`chat.status.${targetStatus}`)}
-                {!targetStatus && t('chat.status.syncing')}
-              </div>
-              <div style={{ color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 13, marginTop: 6 }}>
-                {targetStatus && t(`chat.status.${targetStatus}_desc`)}
-                {!targetStatus && t('common.waitingGateway')}
-              </div>
-              <div style={{
-                marginTop: 16, padding: '6px 16px', background: isDarkMode ? '#1e293b' : '#eff6ff',
-                borderRadius: 20, fontSize: 13, color: '#2563eb',
-                fontWeight: 700, display: 'inline-block', border: `1px solid ${isDarkMode ? '#334155' : '#dbeafe'}`
-              }}>
-                {t('common.secondsElapsed', { seconds: transitionSeconds })}
-              </div>
-            </>
-          ) : globalLoadingMessage ? (
-            <>
-              <div style={{ fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#1e293b', fontSize: 16 }}>{globalLoadingMessage}</div>
-              <div style={{ color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 13, marginTop: 6 }}>{t('common.waiting')}</div>
-              <div style={{
-                marginTop: 16, padding: '6px 16px', background: isDarkMode ? '#1e293b' : '#eff6ff',
-                borderRadius: 20, fontSize: 13, color: '#2563eb',
-                fontWeight: 700, display: 'inline-block', border: `1px solid ${isDarkMode ? '#334155' : '#dbeafe'}`
-              }}>
-                {globalLoadingCountdown > 0 ? t('common.loadingCountdown', { seconds: globalLoadingCountdown }) : t('common.syncing')}
-              </div>
-            </>
-          ) : dashboardProcessing ? (
-            <>
-              <div style={{ fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#1e293b', fontSize: 18, marginBottom: 4 }}>
-                {t('common.lobsterPanel')}
-              </div>
-              <div style={{ color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 13, lineHeight: 1.6 }}>
-                正在提取安全管理地址...<br />
-                这可能需要几秒钟时间
-              </div>
-              <Button 
-                danger 
-                style={{ marginTop: 24, borderRadius: 12, height: 40 }}
-                onClick={() => {
-                  dashboardAbortCtrl?.abort();
-                  setDashboardProcessing(false);
-                }}
-              >
-                {t('common.cancel')}
-              </Button>
-            </>
-          ) : null}
-        </div>
-        {/* 在 isTransitioning 超过 60 秒时才显示手动关闭/刷新的按钮 */}
-        {isTransitioning && transitionSeconds > 60 && (
-          <div style={{ marginTop: 8, display: 'flex', gap: 12, width: '100%', paddingTop: 20, borderTop: '1px solid #f1f5f9' }}>
-            <Button block onClick={() => setIsTransitioning(false)}>{t('common.close')}</Button>
-            <Button block type="primary" icon={<RefreshCw size={14} />} onClick={() => window.location.reload()}>{t('common.refresh')}</Button>
-          </div>
-        )}
-      </div>
-    </div>
+    <GlobalLoadingMask
+      isDarkMode={isDarkMode}
+      isMobile={isMobile}
+      t={t}
+      isTransitioning={isTransitioning}
+      targetStatus={targetStatus}
+      transitionSeconds={transitionSeconds}
+      globalLoadingMessage={globalLoadingMessage}
+      globalLoadingCountdown={globalLoadingCountdown}
+      dashboardProcessing={dashboardProcessing}
+      dashboardAbortCtrl={dashboardAbortCtrl}
+      onCloseTransition={() => setIsTransitioning(false)}
+      onCancelDashboard={() => setDashboardProcessing(false)}
+    />
   );
 
 
