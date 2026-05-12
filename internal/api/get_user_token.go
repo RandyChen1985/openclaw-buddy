@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"openclaw-buddy/internal/process"
 	"openclaw-buddy/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -63,6 +64,74 @@ func (s *Server) authorizeAdminTokenBody(c *gin.Context, adminTok string) bool {
 	return true
 }
 
+type createUserTokenReq struct {
+	AdminToken    string `json:"adminToken" form:"adminToken"`
+	Username      string `json:"username" form:"username"`
+	Realname      string `json:"realname" form:"realname"`
+	RealNameSnake string `json:"real_name" form:"real_name"`
+	BotID         string `json:"botId" form:"botId"`
+	BotIDLower    string `json:"botid" form:"botid"`
+}
+
+func parseCreateUserTokenReq(c *gin.Context) (createUserTokenReq, bool) {
+	var req createUserTokenReq
+	if err := c.ShouldBind(&req); err != nil {
+		return req, false
+	}
+	return req, true
+}
+
+func effectiveDisplayRealname(req createUserTokenReq, username string) string {
+	r := strings.TrimSpace(req.Realname)
+	if r == "" {
+		r = strings.TrimSpace(req.RealNameSnake)
+	}
+	if r == "" {
+		return username
+	}
+	return r
+}
+
+func effectiveBotIDParam(req createUserTokenReq) string {
+	b := strings.TrimSpace(req.BotID)
+	if b != "" {
+		return b
+	}
+	return strings.TrimSpace(req.BotIDLower)
+}
+
+// mergeOpenclawBotForUser：若 botID 在当前 OpenClaw 机器人列表中存在，且用户尚未拥有该 bot，则写入 user_bots；否则无操作（未知 bot、列表拉取失败、已授权均忽略）。
+func mergeOpenclawBotForUser(configDir string, userID int64, botID string) error {
+	botID = strings.TrimSpace(botID)
+	if botID == "" {
+		return nil
+	}
+	res, err := process.GetOpenClawBotsModels(configDir)
+	if err != nil || res == nil {
+		return nil
+	}
+	found := false
+	for _, b := range res.Bots {
+		if strings.TrimSpace(b.ID) == botID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil
+	}
+	ids, err := utils.GetUserBotIDs(userID)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if strings.TrimSpace(id) == botID {
+			return nil
+		}
+	}
+	return utils.SetUserBots(userID, append(ids, botID))
+}
+
 // handleGetUserToken 对外接口（POST /v1/getUserToken）：凭 adminToken 查询指定用户名的访问令牌（api_token）信息。
 // adminToken 须为 BUDDY_TOKEN，或任意能解析为「admin 角色用户」的会话令牌 / 用户 api_token（buddyu_*）。
 // 请求体支持 JSON 或 application/x-www-form-urlencoded，字段：adminToken、username。
@@ -105,12 +174,15 @@ func (s *Server) handleGetUserToken(c *gin.Context) {
 
 // handleCreateUserToken 对外接口（POST /v1/createUserToken）：与 getUserToken 相同 adminToken 规则；
 // 若用户名已存在则返回该用户及当前 api_token；若不存在则创建 role=user 的用户、自动生成 api_token 并返回。
+// 可选：realname / real_name（未传则用 username 作为真实姓名）；botId / botid（若存在于 OpenClaw 机器人列表且用户尚未授权则补齐 user_bots）。
 func (s *Server) handleCreateUserToken(c *gin.Context) {
-	adminTok, username, ok := parseAdminUsernameForm(c)
+	body, ok := parseCreateUserTokenReq(c)
 	if !ok {
 		s.Error(c, http.StatusBadRequest, "Invalid request")
 		return
 	}
+	adminTok := strings.TrimSpace(body.AdminToken)
+	username := strings.TrimSpace(body.Username)
 	if adminTok == "" || username == "" {
 		s.Error(c, http.StatusBadRequest, "adminToken and username are required")
 		return
@@ -122,6 +194,8 @@ func (s *Server) handleCreateUserToken(c *gin.Context) {
 		s.Error(c, http.StatusBadRequest, "用户名须为 2~32 位字母、数字或下划线")
 		return
 	}
+	displayName := effectiveDisplayRealname(body, username)
+	botWant := effectiveBotIDParam(body)
 
 	u, err := utils.GetUserByUsername(username)
 	if err != nil {
@@ -129,6 +203,10 @@ func (s *Server) handleCreateUserToken(c *gin.Context) {
 		return
 	}
 	if u != nil {
+		if err := mergeOpenclawBotForUser(s.cfg.OpenClawConfigDir, u.ID, botWant); err != nil {
+			s.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
 		tok, err := utils.GetUserAPIToken(u.ID)
 		if err != nil {
 			s.Error(c, http.StatusInternalServerError, err.Error())
@@ -153,13 +231,17 @@ func (s *Server) handleCreateUserToken(c *gin.Context) {
 	}
 	plain := "auto_" + hex.EncodeToString(pw)
 
-	uw, err := utils.CreateUser(username, "", "", plain, []string{"user"})
+	uw, err := utils.CreateUser(username, displayName, "", plain, []string{"user"})
 	if err != nil {
 		s.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	tok, err := utils.EnsureUserAPIToken(uw.ID)
 	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := mergeOpenclawBotForUser(s.cfg.OpenClawConfigDir, uw.ID, botWant); err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}

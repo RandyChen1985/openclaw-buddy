@@ -53,7 +53,7 @@
 | | `POST /wechat/install` | 零配置拉取微信全量通道 | **CLI**: `openclaw plugins install wechat` |
 | **认证与用户** | `POST /login` | 环境 `BUDDY_TOKEN`、用户长期令牌 `buddyu_*` 或用户名密码登录 | **配置** / **DB** `users` + `user_sessions` |
 | **认证与用户** | `POST /v1/getUserToken` | 凭 `adminToken` 查询指定用户名的 `api_token` 信息 | **DB**: `users.api_token` |
-| **认证与用户** | `POST /v1/createUserToken` | 凭 `adminToken` 获取或创建用户并返回 `api_token`（新用户 role=`user`） | **DB**: `users` |
+| **认证与用户** | `POST /v1/createUserToken` | 凭 `adminToken` 获取或创建用户、`api_token`，可选 `realname`/`botId` 写姓名与 Bot 可见授权 | **DB** + **OpenClaw** agents 列表 |
 | **认证与用户** | `GET/POST …/system/users/:id/api-token*` | 管理端生成/读取/重置某用户的长期访问令牌 | **DB**: `users.api_token` |
 
 ---
@@ -193,18 +193,25 @@
 
 ### 2.4 按管理员凭证获取或创建用户及令牌 (createUserToken)
 
-与 **§2.3** 相同的 `adminToken` 规则与请求体字段（`adminToken`、`username`）。
+与 **§2.3** 相同的 `adminToken` 规则；必填字段仍为 `adminToken`、`username`。另支持可选字段见下表。
 
 - **路径**: `/v1/createUserToken`（`{WEB_ROOT}/v1/createUserToken`）
 - **方法**: `POST`
 - **用户名规则**: 与面板一致，`2~32` 位，仅字母、数字、下划线；不符合则 **400**。
 
+**可选请求字段**（`application/json` 或 `application/x-www-form-urlencoded`）
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `realname` | string | 否 | 真实姓名；也可传 `real_name`（蛇形）。**仅新建用户时**写入库：有值则用该值，否则用 `username` 作为 `real_name`。**已存在用户**不修改姓名，响应仍为库中当前值 |
+| `botId` / `botid` | string | 否 | 目标 Bot 的 `id`。服务端调用 `openclaw agents list` 等价逻辑拉取当前机器人列表：若列表中**无**该 id 则**忽略**（不报错）；若用户 `user_bots` 中**已有**该 id 则**忽略**；否则**追加**一条可见 Bot 授权 |
+
 **行为**
 
 | 情况 | 动作 |
 | :--- | :--- |
-| 用户名**已存在** | 不修改数据库用户；返回该用户的 `id`、`status`、`username`、`real_name`、`configured`、`token`（同 getUserToken 语义），`created`: **false** |
-| 用户名**不存在** | 新建用户：角色仅为 **`user`**，真实姓名/备注为空；密码为服务端随机串（**不返回**）；并自动生成 **`buddyu_` 访问令牌**；`created`: **true** |
+| 用户名**已存在** | 不修改用户基本信息；按需合并 `botId` 至 `user_bots`；返回 `id`、`status`、`username`、`real_name`、`configured`、`token`，`created`: **false** |
+| 用户名**不存在** | 新建用户：角色仅为 **`user`**，`real_name` 按上表规则；备注为空；密码为服务端随机串（**不返回**）；自动生成 **`buddyu_` 访问令牌**；再按需合并 `botId`；`created`: **true** |
 
 **成功 `data` 示例（新建）**
 
@@ -212,7 +219,7 @@
 {
   "id": 12,
   "username": "alice",
-  "real_name": "",
+  "real_name": "艾丽丝",
   "status": 1,
   "configured": true,
   "token": "buddyu_…",
@@ -446,7 +453,7 @@ curl -s -X POST "http://localhost:3000/v1/getUserToken" \
 ```bash
 curl -s -X POST "http://localhost:3000/v1/createUserToken" \
   -H "Content-Type: application/json" \
-  -d '{"adminToken":"<BUDDY_TOKEN 或 admin 的 sess_/buddyu_ 令牌>","username":"newuser"}'
+  -d '{"adminToken":"<BUDDY_TOKEN 或 admin 的 sess_/buddyu_ 令牌>","username":"newuser","realname":"新用户","botId":"main"}'
 ```
 
 ### 模型连通性直连测试 (TTFT)
