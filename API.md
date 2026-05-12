@@ -53,6 +53,7 @@
 | | `POST /wechat/install` | 零配置拉取微信全量通道 | **CLI**: `openclaw plugins install wechat` |
 | **认证与用户** | `POST /login` | 环境 `BUDDY_TOKEN`、用户长期令牌 `buddyu_*` 或用户名密码登录 | **配置** / **DB** `users` + `user_sessions` |
 | **认证与用户** | `POST /v1/getUserToken` | 凭 `adminToken` 查询指定用户名的 `api_token` 信息 | **DB**: `users.api_token` |
+| **认证与用户** | `POST /v1/createUserToken` | 凭 `adminToken` 获取或创建用户并返回 `api_token`（新用户 role=`user`） | **DB**: `users` |
 | **认证与用户** | `GET/POST …/system/users/:id/api-token*` | 管理端生成/读取/重置某用户的长期访问令牌 | **DB**: `users.api_token` |
 
 ---
@@ -65,8 +66,9 @@
 - `GET /health`
 - `POST /login`
 - `POST /v1/getUserToken`（使用 body 中的 `adminToken` 校验管理员身份，见 §2.3）
+- `POST /v1/createUserToken`（同上，见 §2.4）
 
-其余 **`/v1/**` 接口**（除上述 `POST /v1/getUserToken` 外）均需通过 Bearer Token、Cookie 或 Query 完成认证（与中间件实现一致）：
+其余 **`/v1/**` 接口**（除上述 `POST /v1/getUserToken`、`POST /v1/createUserToken` 外）均需通过 Bearer Token、Cookie 或 Query 完成认证（与中间件实现一致）：
 
 - **Header**: `Authorization: Bearer <TOKEN>`
 - **Cookie (可选)**: `guardian_token=<TOKEN>`
@@ -189,7 +191,45 @@
 | 403 | 令牌有效但不是 BUDDY_TOKEN / 非 admin 角色 |
 | 404 | 用户名不存在 |
 
-### 2.4 系统管理—用户访问令牌（面板 / 集成用）
+### 2.4 按管理员凭证获取或创建用户及令牌 (createUserToken)
+
+与 **§2.3** 相同的 `adminToken` 规则与请求体字段（`adminToken`、`username`）。
+
+- **路径**: `/v1/createUserToken`（`{WEB_ROOT}/v1/createUserToken`）
+- **方法**: `POST`
+- **用户名规则**: 与面板一致，`2~32` 位，仅字母、数字、下划线；不符合则 **400**。
+
+**行为**
+
+| 情况 | 动作 |
+| :--- | :--- |
+| 用户名**已存在** | 不修改数据库用户；返回该用户的 `id`、`status`、`username`、`real_name`、`configured`、`token`（同 getUserToken 语义），`created`: **false** |
+| 用户名**不存在** | 新建用户：角色仅为 **`user`**，真实姓名/备注为空；密码为服务端随机串（**不返回**）；并自动生成 **`buddyu_` 访问令牌**；`created`: **true** |
+
+**成功 `data` 示例（新建）**
+
+```json
+{
+  "id": 12,
+  "username": "alice",
+  "real_name": "",
+  "status": 1,
+  "configured": true,
+  "token": "buddyu_…",
+  "created": true
+}
+```
+
+**成功 `data` 示例（已存在）**：字段同上，`created` 为 `false`；若从未生成过访问令牌则 `configured` 为 `false` 且 `token` 为空字符串。
+
+**错误**
+
+| HTTP | 说明 |
+| :--- | :--- |
+| 400 | 缺少字段、用户名格式非法、或创建用户失败（如并发下用户名冲突） |
+| 401 / 403 | 与 §2.3 相同 |
+
+### 2.5 系统管理—用户访问令牌（面板 / 集成用）
 
 以下路径均在 **`/v1/system/users/...`**，需先通过 §1.1 的 Bearer（或等价 `token`），且当前主体具备菜单权限 **`menu:system:user:manage`**。
 
@@ -399,6 +439,14 @@ curl -X POST http://localhost:3000/v1/openclaw/bots/set-model \
 curl -s -X POST "http://localhost:3000/v1/getUserToken" \
   -H "Content-Type: application/json" \
   -d '{"adminToken":"<BUDDY_TOKEN 或 admin 的 sess_/buddyu_ 令牌>","username":"alice"}'
+```
+
+### 按管理员获取或创建用户及长期令牌 (createUserToken)
+
+```bash
+curl -s -X POST "http://localhost:3000/v1/createUserToken" \
+  -H "Content-Type: application/json" \
+  -d '{"adminToken":"<BUDDY_TOKEN 或 admin 的 sess_/buddyu_ 令牌>","username":"newuser"}'
 ```
 
 ### 模型连通性直连测试 (TTFT)

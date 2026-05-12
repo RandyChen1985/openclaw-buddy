@@ -183,6 +183,7 @@ func (s *Server) setupRoutes() {
 	// V1 API Group：公开子路由（不经过 AuthMiddleware）须在鉴权子组之前注册
 	v1Root := root.Group("/v1")
 	v1Root.POST("/getUserToken", s.handleGetUserToken)
+	v1Root.POST("/createUserToken", s.handleCreateUserToken)
 
 	v1 := v1Root.Group("")
 	v1.Use(AuthMiddleware(s.cfg.Token, s.tickets))
