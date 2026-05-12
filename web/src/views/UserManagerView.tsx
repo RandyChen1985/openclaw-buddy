@@ -585,8 +585,8 @@ const UserManagerView: React.FC<UserManagerViewProps> = ({ isDarkMode = false, c
             scroll={{ x: 'max-content' }}
             columns={[
               { title: t('users.username'), dataIndex: 'username', width: 140, ellipsis: true },
-              { title: t('users.realName'), dataIndex: 'real_name', width: 160, render: (v: string) => v || '—' },
-              { title: t('users.roles'), dataIndex: 'role_keys', width: 180, render: (v: string[]) => renderRoles(v) },
+              { title: t('users.realName'), dataIndex: 'real_name', width: 96, ellipsis: true, render: (v: string) => v || '—' },
+              { title: t('users.roles'), dataIndex: 'role_keys', width: 120, render: (v: string[]) => renderRoles(v) },
               {
                 title: t('users.status'),
                 dataIndex: 'status',
@@ -617,7 +617,7 @@ const UserManagerView: React.FC<UserManagerViewProps> = ({ isDarkMode = false, c
               {
                 title: t('common.action'),
                 key: 'action',
-                width: 230,
+                width: 280,
                 render: (_: any, row: UserItem) => (
                   <Space size={2} wrap>
                     <Tooltip title={t('common.edit')}>

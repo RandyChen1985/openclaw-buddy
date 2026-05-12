@@ -240,6 +240,10 @@
     "advancedHelpTitle": "Advanced Configuration Notes",
     "advancedHelpContent": "• **Core File**: `exec-approvals.json` is the core configuration file of the OpenClaw permission system and holds the highest decision-making priority.\n\n• **JSON Editing**: By directly editing the JSON, you can manually configure more complex permission rules, such as authorizing specific IPs, nodes, or system calls.\n\n• **Risk Warning**: Incorrect JSON syntax may cause permission verification to fail or prevent the Agent from executing any commands. Please check the structure carefully before saving."
   },
+  "embed": {
+    "accessDeniedTitle": "Access denied",
+    "accessDeniedDesc": "The token in this link is invalid or expired. Ask your administrator for a valid embed link."
+  },
   "login": {
     "title": "OpenClaw Buddy",
     "subtitle": "Your Private LLM Ops Companion",

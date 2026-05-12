@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
-import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode, theme } from 'antd';
+import { Layout, Button, message, Spin, Modal, ConfigProvider, Drawer, Badge, QRCode, theme, Result } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
   Menu as MenuIcon, Play, Square, RefreshCw, ExternalLink, MessageSquare,
@@ -1920,6 +1920,8 @@ export default function App() {
   // 只从持久化存储获取初始 Token (不再信任 URL 传来的未经验证的 Token)
   const [token, setToken] = useState<string | null>(storage.getItem('guardian_token'));
   const [isValidating, setIsValidating] = useState(false);
+  /** embed 模式下 URL ?token= 校验失败时，不进入登录页，改为全屏无权限遮罩 */
+  const [embedUrlTokenDenied, setEmbedUrlTokenDenied] = useState(false);
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia('(max-width: 1023px)').matches : false
   );
@@ -1979,6 +1981,9 @@ export default function App() {
 
     const validateUrlToken = async (uToken: string, uTag?: string) => {
       setIsValidating(true);
+      if (isEmbed) {
+        setEmbedUrlTokenDenied(false);
+      }
       try {
         // 必须通过 /login 接口验证 Token 合法性，逻辑与 LoginView 保持一致
         const res = await api.post('/login', { token: uToken });
@@ -1994,10 +1999,17 @@ export default function App() {
           }
           setToken(uToken);
           if (!isEmbed) message.success(t('common.autoLogin'));
+        } else if (isEmbed) {
+          setEmbedUrlTokenDenied(true);
         }
       } catch (err: any) {
-        // 验证失败，不更新 Token 状态，停留在 LoginView
-        message.error(err.response?.data?.error || t('login.invalidCredentials'));
+        if (isEmbed) {
+          setEmbedUrlTokenDenied(true);
+        } else {
+          message.error(
+            err.response?.data?.message || err.response?.data?.error || t('login.invalidCredentials')
+          );
+        }
       } finally {
         setIsValidating(false);
         // 清理 URL 保持整洁
@@ -2060,6 +2072,26 @@ export default function App() {
           <V3GatewayProvider>
             <Dashboard isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
           </V3GatewayProvider>
+        ) : embedUrlTokenDenied && isEmbed ? (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 10000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 24,
+              background: isDarkMode ? 'rgba(15, 23, 42, 0.94)' : 'rgba(248, 250, 252, 0.97)',
+              backdropFilter: 'blur(8px)',
+            }}
+          >
+            <Result
+              status="403"
+              title={t('embed.accessDeniedTitle')}
+              subTitle={t('embed.accessDeniedDesc')}
+            />
+          </div>
         ) : (
           <LoginView onLoginSuccess={setToken} isDarkMode={isDarkMode} />
         )}
