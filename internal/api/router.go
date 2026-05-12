@@ -184,6 +184,7 @@ func (s *Server) setupRoutes() {
 	v1Root := root.Group("/v1")
 	v1Root.POST("/getUserToken", s.handleGetUserToken)
 	v1Root.POST("/createUserToken", s.handleCreateUserToken)
+	v1Root.POST("/assignUserBot", s.handleAssignUserBot)
 
 	v1 := v1Root.Group("")
 	v1.Use(AuthMiddleware(s.cfg.Token, s.tickets))

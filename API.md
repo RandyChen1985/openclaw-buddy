@@ -52,8 +52,9 @@
 | | `GET /wechat/config/status` | 查询通道授权挂载配置状况 | **File**: 获取 `channels` Key |
 | | `POST /wechat/install` | 零配置拉取微信全量通道 | **CLI**: `openclaw plugins install wechat` |
 | **认证与用户** | `POST /login` | 环境 `BUDDY_TOKEN`、用户长期令牌 `buddyu_*` 或用户名密码登录 | **配置** / **DB** `users` + `user_sessions` |
-| **认证与用户** | `POST /v1/getUserToken` | 凭 `adminToken` 查询指定用户名的 `api_token` 信息 | **DB**: `users.api_token` |
-| **认证与用户** | `POST /v1/createUserToken` | 凭 `adminToken` 获取或创建用户、`api_token`，可选 `realname`/`botId` 写姓名与 Bot 可见授权 | **DB** + **OpenClaw** agents 列表 |
+| **认证与用户** | `POST /v1/getUserToken` | 凭 `adminToken` 查询用户 `api_token` 及 **`user_bots` 中的 `bot_ids`** | **DB** |
+| **认证与用户** | `POST /v1/createUserToken` | 凭 `adminToken` 获取或创建用户、`api_token`，可选 `realname` | **DB** `users` |
+| **认证与用户** | `POST /v1/assignUserBot` | 凭 `adminToken` 为用户追加 `user_bots` 授权（对照缓存 `bots_models`） | **DB** |
 | **认证与用户** | `GET/POST …/system/users/:id/api-token*` | 管理端生成/读取/重置某用户的长期访问令牌 | **DB**: `users.api_token` |
 
 ---
@@ -67,8 +68,9 @@
 - `POST /login`
 - `POST /v1/getUserToken`（使用 body 中的 `adminToken` 校验管理员身份，见 §2.3）
 - `POST /v1/createUserToken`（同上，见 §2.4）
+- `POST /v1/assignUserBot`（同上，见 §2.5）
 
-其余 **`/v1/**` 接口**（除上述 `POST /v1/getUserToken`、`POST /v1/createUserToken` 外）均需通过 Bearer Token、Cookie 或 Query 完成认证（与中间件实现一致）：
+其余 **`/v1/**` 接口**（除上述 `POST /v1/getUserToken`、`POST /v1/createUserToken`、`POST /v1/assignUserBot` 外）均需通过 Bearer Token、Cookie 或 Query 完成认证（与中间件实现一致）：
 
 - **Header**: `Authorization: Bearer <TOKEN>`
 - **Cookie (可选)**: `guardian_token=<TOKEN>`
@@ -176,11 +178,13 @@
   "username": "alice",
   "real_name": "艾丽丝",
   "configured": true,
-  "token": "buddyu_…"
+  "token": "buddyu_…",
+  "bot_ids": ["main", "sidekick"]
 }
 ```
 
 - `configured` 为 `false` 时 `token` 为空字符串（尚未在用户管理中生成令牌）。
+- **`bot_ids`**：来自表 **`user_bots`** 的可见 Bot id 列表（与面板「用户权限 → Bot 权限」一致）；无记录时为 `[]`。**`admin` 角色**用户在前端通常不按该表限流，其 `bot_ids` 也可能为空数组，表示未显式绑定（集成方若需「全部 Bot」需结合角色自行判断）。
 
 **错误**
 
@@ -204,14 +208,15 @@
 | 字段 | 类型 | 必填 | 说明 |
 | :--- | :--- | :--- | :--- |
 | `realname` | string | 否 | 真实姓名；也可传 `real_name`（蛇形）。**仅新建用户时**写入库：有值则用该值，否则用 `username` 作为 `real_name`。**已存在用户**不修改姓名，响应仍为库中当前值 |
-| `botId` / `botid` | string | 否 | 目标 Bot 的 `id`。服务端调用 `openclaw agents list` 等价逻辑拉取当前机器人列表：若列表中**无**该 id 则**忽略**（不报错）；若用户 `user_bots` 中**已有**该 id 则**忽略**；否则**追加**一条可见 Bot 授权 |
 
 **行为**
 
 | 情况 | 动作 |
 | :--- | :--- |
-| 用户名**已存在** | 不修改用户基本信息；按需合并 `botId` 至 `user_bots`；返回 `id`、`status`、`username`、`real_name`、`configured`、`token`，`created`: **false** |
-| 用户名**不存在** | 新建用户：角色仅为 **`user`**，`real_name` 按上表规则；备注为空；密码为服务端随机串（**不返回**）；自动生成 **`buddyu_` 访问令牌**；再按需合并 `botId`；`created`: **true** |
+| 用户名**已存在** | 不修改用户基本信息；返回 `id`、`status`、`username`、`real_name`、`configured`、`token`，`created`: **false** |
+| 用户名**不存在** | 新建用户：角色仅为 **`user`**，`real_name` 按上表规则；备注为空；密码为服务端随机串（**不返回**）；自动生成 **`buddyu_` 访问令牌**；`created`: **true** |
+
+Bot 可见范围请另调 **§2.5 `POST /v1/assignUserBot`**。
 
 **成功 `data` 示例（新建）**
 
@@ -236,7 +241,43 @@
 | 400 | 缺少字段、用户名格式非法、或创建用户失败（如并发下用户名冲突） |
 | 401 / 403 | 与 §2.3 相同 |
 
-### 2.5 系统管理—用户访问令牌（面板 / 集成用）
+### 2.5 按管理员为用户追加 Bot 授权 (assignUserBot)
+
+与 **§2.3** 相同的 `adminToken` 规则。在 **`user_bots`** 中为指定用户追加一条 Bot id（与面板「用户权限 → Bot 权限」一致）。
+
+- **路径**: `/v1/assignUserBot`（`{WEB_ROOT}/v1/assignUserBot`）
+- **方法**: `POST`
+
+**请求体**
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `adminToken` | string | 是 | 同 §2.3 |
+| `username` | string | 是 | 目标用户登录名 |
+| `botId` / `botid` | string | 是 | 要授权的 Bot `id`（二选一字段名即可） |
+
+**逻辑**：`botId` 须出现在 SQLite **`data_caches.bots_models`** 缓存中，否则**不写库**，`data.assigned` 为 `false`；若该用户**已有**该 Bot，同样不写库，`assigned` 为 `false`；否则追加一行并 `assigned` 为 `true`。HTTP 仍为 **200**（除非用户不存在 **404** 或参数缺失 **400**）。
+
+**成功 `data` 示例**
+
+```json
+{
+  "username": "alice",
+  "bot_id": "main",
+  "assigned": true,
+  "bot_ids": ["main", "sidekick"]
+}
+```
+
+**错误**
+
+| HTTP | 说明 |
+| :--- | :--- |
+| 400 | 缺少 `adminToken` / `username` / `botId` 或 body 无法解析 |
+| 401 / 403 | 与 §2.3 相同 |
+| 404 | 用户名不存在 |
+
+### 2.6 系统管理—用户访问令牌（面板 / 集成用）
 
 以下路径均在 **`/v1/system/users/...`**，需先通过 §1.1 的 Bearer（或等价 `token`），且当前主体具备菜单权限 **`menu:system:user:manage`**。
 
@@ -453,7 +494,15 @@ curl -s -X POST "http://localhost:3000/v1/getUserToken" \
 ```bash
 curl -s -X POST "http://localhost:3000/v1/createUserToken" \
   -H "Content-Type: application/json" \
-  -d '{"adminToken":"<BUDDY_TOKEN 或 admin 的 sess_/buddyu_ 令牌>","username":"newuser","realname":"新用户","botId":"main"}'
+  -d '{"adminToken":"<BUDDY_TOKEN 或 admin 的 sess_/buddyu_ 令牌>","username":"newuser","realname":"新用户"}'
+```
+
+### 按管理员为用户追加 Bot 授权 (assignUserBot)
+
+```bash
+curl -s -X POST "http://localhost:3000/v1/assignUserBot" \
+  -H "Content-Type: application/json" \
+  -d '{"adminToken":"<BUDDY_TOKEN 或 admin 的 sess_/buddyu_ 令牌>","username":"alice","botId":"main"}'
 ```
 
 ### 模型连通性直连测试 (TTFT)

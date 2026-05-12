@@ -69,8 +69,6 @@ type createUserTokenReq struct {
 	Username      string `json:"username" form:"username"`
 	Realname      string `json:"realname" form:"realname"`
 	RealNameSnake string `json:"real_name" form:"real_name"`
-	BotID         string `json:"botId" form:"botId"`
-	BotIDLower    string `json:"botid" form:"botid"`
 }
 
 func parseCreateUserTokenReq(c *gin.Context) (createUserTokenReq, bool) {
@@ -92,7 +90,22 @@ func effectiveDisplayRealname(req createUserTokenReq, username string) string {
 	return r
 }
 
-func effectiveBotIDParam(req createUserTokenReq) string {
+type assignUserBotReq struct {
+	AdminToken string `json:"adminToken" form:"adminToken"`
+	Username   string `json:"username" form:"username"`
+	BotID      string `json:"botId" form:"botId"`
+	BotIDLower string `json:"botid" form:"botid"`
+}
+
+func parseAssignUserBotReq(c *gin.Context) (assignUserBotReq, bool) {
+	var req assignUserBotReq
+	if err := c.ShouldBind(&req); err != nil {
+		return req, false
+	}
+	return req, true
+}
+
+func effectiveAssignBotID(req assignUserBotReq) string {
 	b := strings.TrimSpace(req.BotID)
 	if b != "" {
 		return b
@@ -100,36 +113,29 @@ func effectiveBotIDParam(req createUserTokenReq) string {
 	return strings.TrimSpace(req.BotIDLower)
 }
 
-// mergeOpenclawBotForUser：若 botID 在当前 OpenClaw 机器人列表中存在，且用户尚未拥有该 bot，则写入 user_bots；否则无操作（未知 bot、列表拉取失败、已授权均忽略）。
-func mergeOpenclawBotForUser(configDir string, userID int64, botID string) error {
+// mergeOpenclawBotForUser：根据 data_caches.bots_models 判断 bot 是否存在；存在且 user_bots 未含则追加。
+// 不调用 openclaw CLI；缓存无该 id 或已授权时返回 added=false。
+func mergeOpenclawBotForUser(userID int64, botID string) (added bool, err error) {
 	botID = strings.TrimSpace(botID)
 	if botID == "" {
-		return nil
+		return false, nil
 	}
-	res, err := process.GetOpenClawBotsModels(configDir)
-	if err != nil || res == nil {
-		return nil
-	}
-	found := false
-	for _, b := range res.Bots {
-		if strings.TrimSpace(b.ID) == botID {
-			found = true
-			break
-		}
-	}
-	if !found {
-		return nil
+	if !process.BotIDExistsInCachedBotsModels(botID) {
+		return false, nil
 	}
 	ids, err := utils.GetUserBotIDs(userID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	for _, id := range ids {
 		if strings.TrimSpace(id) == botID {
-			return nil
+			return false, nil
 		}
 	}
-	return utils.SetUserBots(userID, append(ids, botID))
+	if err := utils.SetUserBots(userID, append(ids, botID)); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // handleGetUserToken 对外接口（POST /v1/getUserToken）：凭 adminToken 查询指定用户名的访问令牌（api_token）信息。
@@ -164,17 +170,22 @@ func (s *Server) handleGetUserToken(c *gin.Context) {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+	botIDs, _ := utils.GetUserBotIDs(u.ID)
+	if botIDs == nil {
+		botIDs = []string{}
+	}
 	s.Success(c, gin.H{
 		"username":   u.Username,
 		"real_name":  u.RealName,
 		"configured": tok != "",
 		"token":      tok,
+		"bot_ids":    botIDs,
 	})
 }
 
 // handleCreateUserToken 对外接口（POST /v1/createUserToken）：与 getUserToken 相同 adminToken 规则；
 // 若用户名已存在则返回该用户及当前 api_token；若不存在则创建 role=user 的用户、自动生成 api_token 并返回。
-// 可选：realname / real_name（未传则用 username 作为真实姓名）；botId / botid（若存在于 OpenClaw 机器人列表且用户尚未授权则补齐 user_bots）。
+// 可选：realname / real_name（未传则用 username 作为真实姓名）。Bot 授权请使用 POST /v1/assignUserBot。
 func (s *Server) handleCreateUserToken(c *gin.Context) {
 	body, ok := parseCreateUserTokenReq(c)
 	if !ok {
@@ -195,7 +206,6 @@ func (s *Server) handleCreateUserToken(c *gin.Context) {
 		return
 	}
 	displayName := effectiveDisplayRealname(body, username)
-	botWant := effectiveBotIDParam(body)
 
 	u, err := utils.GetUserByUsername(username)
 	if err != nil {
@@ -203,10 +213,6 @@ func (s *Server) handleCreateUserToken(c *gin.Context) {
 		return
 	}
 	if u != nil {
-		if err := mergeOpenclawBotForUser(s.cfg.OpenClawConfigDir, u.ID, botWant); err != nil {
-			s.Error(c, http.StatusInternalServerError, err.Error())
-			return
-		}
 		tok, err := utils.GetUserAPIToken(u.ID)
 		if err != nil {
 			s.Error(c, http.StatusInternalServerError, err.Error())
@@ -241,10 +247,6 @@ func (s *Server) handleCreateUserToken(c *gin.Context) {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := mergeOpenclawBotForUser(s.cfg.OpenClawConfigDir, uw.ID, botWant); err != nil {
-		s.Error(c, http.StatusInternalServerError, err.Error())
-		return
-	}
 	s.Success(c, gin.H{
 		"id":         uw.ID,
 		"username":   uw.Username,
@@ -253,5 +255,51 @@ func (s *Server) handleCreateUserToken(c *gin.Context) {
 		"configured": true,
 		"token":      tok,
 		"created":    true,
+	})
+}
+
+// handleAssignUserBot 对外接口（POST /v1/assignUserBot）：凭 adminToken 为指定用户追加一条 Bot 可见授权（user_bots）。
+// bot 须出现在 data_caches.bots_models 缓存中；已授权或缓存无此 id 时不改库，返回 assigned=false。
+func (s *Server) handleAssignUserBot(c *gin.Context) {
+	body, ok := parseAssignUserBotReq(c)
+	if !ok {
+		s.Error(c, http.StatusBadRequest, "Invalid request")
+		return
+	}
+	adminTok := strings.TrimSpace(body.AdminToken)
+	username := strings.TrimSpace(body.Username)
+	botID := effectiveAssignBotID(body)
+	if adminTok == "" || username == "" || botID == "" {
+		s.Error(c, http.StatusBadRequest, "adminToken, username and botId are required")
+		return
+	}
+	if !s.authorizeAdminTokenBody(c, adminTok) {
+		return
+	}
+
+	u, err := utils.GetUserByUsername(username)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if u == nil {
+		s.Error(c, http.StatusNotFound, "user not found")
+		return
+	}
+
+	added, err := mergeOpenclawBotForUser(u.ID, botID)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	botIDs, _ := utils.GetUserBotIDs(u.ID)
+	if botIDs == nil {
+		botIDs = []string{}
+	}
+	s.Success(c, gin.H{
+		"username": u.Username,
+		"bot_id":   botID,
+		"assigned": added,
+		"bot_ids":  botIDs,
 	})
 }
