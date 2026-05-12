@@ -84,27 +84,36 @@ const CollapsibleMeta = ({
   icon: Icon,
   children,
   defaultExpanded = false,
+  expandedState,
+  onExpandedChange,
   copyText,
   onCopy,
   copyLabel,
 }: any) => {
-  const [isExpanded, setIsExpanded] = React.useState(defaultExpanded);
+  const isControlled = typeof expandedState === 'boolean';
+  const [localExpanded, setLocalExpanded] = React.useState(defaultExpanded);
+  const isExpanded = isControlled ? expandedState : localExpanded;
 
   React.useEffect(() => {
-    setIsExpanded(defaultExpanded);
-  }, [defaultExpanded]);
+    if (!isControlled) setLocalExpanded(defaultExpanded);
+  }, [defaultExpanded, isControlled]);
+
+  const setExpanded = (next: boolean) => {
+    if (!isControlled) setLocalExpanded(next);
+    onExpandedChange?.(next);
+  };
 
   return (
     <div className={`v3-meta-collapsible ${isExpanded ? 'expanded' : 'collapsed'}`}>
       <div 
         className="v3-meta-header" 
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => setExpanded(!isExpanded)}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            setIsExpanded(!isExpanded);
+            setExpanded(!isExpanded);
           }
         }}
       >
@@ -278,6 +287,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   });
   // 防止审批按钮重复点击：记录每个 approvalId 是否已点击过“通过”
   const [approvalClicked, setApprovalClicked] = useState<Record<string, boolean>>({});
+  const [metaBlockExpandedByKey, setMetaBlockExpandedByKey] = useState<Record<string, boolean>>({});
 
   /** 编辑框草稿：Virtuoso 下列项重渲染时若反复用父级 editContent 覆盖受控 value，会打断中文 IME */
   const [editDraft, setEditDraft] = useState('');
@@ -509,6 +519,21 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   if (!processedContent && !isUser && !(isTyping && isLast && !isUser) && !hasApproval && !hasEmbeddedMeta) return null;
 
   // ReactMarkdown 的 components 配置，抽出来是为了在主气泡和嵌入式 meta 折叠区里复用同一套渲染器。
+  const metaBlockBaseKey = String((msg as any).id || msg.runId || index);
+  const metaBlockExpansionProps = (blockKey: string, defaultExpanded: boolean) => {
+    const key = `${metaBlockBaseKey}:${blockKey}`;
+    return {
+      expandedState: Object.prototype.hasOwnProperty.call(metaBlockExpandedByKey, key)
+        ? metaBlockExpandedByKey[key]
+        : defaultExpanded,
+      onExpandedChange: (next: boolean) => {
+        setMetaBlockExpandedByKey((prev) => (
+          prev[key] === next ? prev : { ...prev, [key]: next }
+        ));
+      },
+    };
+  };
+
   const markdownComponents = {
     p: ({children}: any) => <p style={{margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere'}}>{children}</p>,
     img: ({ node, ...props }: any) => (
@@ -554,13 +579,40 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       const cleanChildren = filterMarkers(children);
 
       if (fullText.includes(':::thinking')) {
-        return <CollapsibleMeta title={t('chat.thinkingProcess', { defaultValue: '思考过程' })} icon={Cpu} defaultExpanded={false}>{cleanChildren}</CollapsibleMeta>;
+        return (
+          <CollapsibleMeta
+            title={t('chat.thinkingProcess', { defaultValue: '思考过程' })}
+            icon={Cpu}
+            defaultExpanded={false}
+            {...metaBlockExpansionProps('thinking', false)}
+          >
+            {cleanChildren}
+          </CollapsibleMeta>
+        );
       }
       if (fullText.includes(':::plan')) {
-        return <CollapsibleMeta title={t('chat.executionPlan', { defaultValue: '执行计划' })} icon={ListTodo} defaultExpanded={false}>{cleanChildren}</CollapsibleMeta>;
+        return (
+          <CollapsibleMeta
+            title={t('chat.executionPlan', { defaultValue: '执行计划' })}
+            icon={ListTodo}
+            defaultExpanded={false}
+            {...metaBlockExpansionProps('plan', false)}
+          >
+            {cleanChildren}
+          </CollapsibleMeta>
+        );
       }
       if (fullText.includes(':::toolCall')) {
-        return <CollapsibleMeta title={t('chat.systemTool', { defaultValue: '系统工具' })} icon={Terminal} defaultExpanded={false}>{cleanChildren}</CollapsibleMeta>;
+        return (
+          <CollapsibleMeta
+            title={t('chat.systemTool', { defaultValue: '系统工具' })}
+            icon={Terminal}
+            defaultExpanded={false}
+            {...metaBlockExpansionProps('toolCall', false)}
+          >
+            {cleanChildren}
+          </CollapsibleMeta>
+        );
       }
       if (fullText.includes(':::toolResult')) {
         const toolName = extractToolResultName(fullText);
@@ -572,7 +624,12 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
           : t('chat.toolResult', { defaultValue: '工具结果' });
 
         return (
-          <CollapsibleMeta title={headerTitle} icon={Terminal} defaultExpanded={false}>
+          <CollapsibleMeta
+            title={headerTitle}
+            icon={Terminal}
+            defaultExpanded={false}
+            {...metaBlockExpansionProps(`toolResult:${toolName || 'default'}`, false)}
+          >
             {maybePretty ? (
               <CodeBlock
                 language="json"
@@ -594,6 +651,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
             title={t('chat.analysisProcess', { defaultValue: '分析过程' })}
             icon={Search}
             defaultExpanded={true}
+            {...metaBlockExpansionProps('analysis', true)}
             copyText={analysisCopyText}
             onCopy={(txt: string) => copyToClipboard(txt)}
             copyLabel={t('chat.copy', { defaultValue: '复制' })}
@@ -607,7 +665,12 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         const subtitle = titleMatch ? titleMatch[1].trim() : '';
         const headerTitle = subtitle ? `Command Output · ${subtitle}` : 'Command Output';
         return (
-          <CollapsibleMeta title={headerTitle} icon={Terminal} defaultExpanded={false}>
+          <CollapsibleMeta
+            title={headerTitle}
+            icon={Terminal}
+            defaultExpanded={false}
+            {...metaBlockExpansionProps(`commandOutput:${subtitle || 'default'}`, false)}
+          >
             <div
               className="v3-command-output-shell"
               style={{
