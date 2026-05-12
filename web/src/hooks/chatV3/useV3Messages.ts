@@ -1295,7 +1295,7 @@ export function useV3Messages({
       // 不传 label，保持空标题，便于后续「无标题时自动总结」逻辑触发
       const res = await sendRPC('sessions.create', { agentId, key });
       if (res.ok) {
-        currentKey = res.payload.key;
+        currentKey = (res.payload?.key as string | undefined) || key;
         setSessionKey(currentKey);
         // 兼容：部分网关版本只认 key 字段
         sendRPC('sessions.messages.subscribe', { key: currentKey }).catch(() => {});

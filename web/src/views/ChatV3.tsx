@@ -270,8 +270,12 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
     if (quickChatBot) {
       window.sessionStorage.removeItem('v3_quick_chat_bot');
       const botId = quickChatBot.replace('openclaw:', '');
+      const exists = botsModels.data.bots.some((b: any) => b.id === botId);
+      if (!exists) {
+        window.sessionStorage.removeItem(V3_QUICK_CHAT_PENDING_KEY);
+        return;
+      }
       window.sessionStorage.setItem(V3_QUICK_CHAT_PENDING_KEY, botId);
-      setSessionKey(null);
       setSelectedBot(quickChatBot);
       if (status === 'authenticated') {
         pendingQuickChatAgentRef.current = null;
@@ -428,6 +432,16 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
   }, [editingMsgIndex, quotedMsg, startNewSession]);
 
   const handleWrappedSend = React.useCallback((text: string, files?: any[]) => {
+    if (status !== 'authenticated') {
+      message.warning(t('chat.v3Connecting'));
+      return;
+    }
+    if (isTyping) {
+      message.info(t('chat.refreshWaitReply', { defaultValue: '请等待当前回复结束后再发送' }));
+      return;
+    }
+    if (isCreatingNewSession) return;
+
     let finalContent = text;
     if (quotedMsg) {
       const quotedStr = quotedMsg.split('\n').map(line => `> ${line}`).join('\n');
@@ -435,7 +449,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
       setQuotedMsg(null);
     }
     handleSend(finalContent, files);
-  }, [handleSend, quotedMsg]);
+  }, [handleSend, isCreatingNewSession, isTyping, quotedMsg, status, t]);
 
   const handleSendReasoningCommand = useCallback(
     (text: string) => {

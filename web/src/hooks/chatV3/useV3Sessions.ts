@@ -337,18 +337,10 @@ export function useV3Sessions({
 
         creatingNewSessionRef.current = true;
         setIsCreatingNewSession(true);
-        messageOpsRef.current.resetTypingState?.('');
-        if (sessionKey) {
-          sendRPC('sessions.messages.unsubscribe', { key: sessionKey }).catch(() => {});
-        }
-        messageOpsRef.current.setMessages?.([]);
-        setSessionLabel(null);
-        messageOpsRef.current.setHasNewMessages?.(false);
 
         const key = buildBuddyDirectSessionKey(agentId, usernameForSessionKey);
         const res = await sendRPC('sessions.create', { agentId, key });
         if (!res.ok) {
-          setSessionKey(null);
           if (typeof window !== 'undefined') {
             window.sessionStorage.removeItem(V3_QUICK_CHAT_PENDING_KEY);
           }
@@ -359,6 +351,15 @@ export function useV3Sessions({
           window.sessionStorage.removeItem(V3_QUICK_CHAT_PENDING_KEY);
         }
         const currentKey = (res.payload?.key as string) || key;
+        const previousKey = sessionKey;
+
+        messageOpsRef.current.resetTypingState?.('');
+        if (previousKey) {
+          sendRPC('sessions.messages.unsubscribe', { key: previousKey }).catch(() => {});
+        }
+        messageOpsRef.current.setMessages?.([]);
+        setSessionLabel(null);
+        messageOpsRef.current.setHasNewMessages?.(false);
         setSessionKey(currentKey);
         sendRPC('sessions.messages.subscribe', { key: currentKey }).catch(() => {});
         void sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel }).catch(() => {});
@@ -533,14 +534,18 @@ export function useV3Sessions({
    * 切换模型（会话维度）。
    */
   const handleModelChange = useCallback(async (newModel: string) => {
+    const previousModel = sessionModel;
     setSessionModel(newModel);
     if (!sessionKey) return;
     const res = await sendRPC('sessions.patch', { key: sessionKey, model: newModel || null });
     if (res.ok) {
       antdMessage.success(t('chat.modelSwitchSuccess'));
       fetchSessions();
+    } else {
+      setSessionModel(previousModel);
+      antdMessage.error(t('chat.modelSwitchFailed', { defaultValue: `模型切换失败: ${res.error?.message || res.error || '未知错误'}` }));
     }
-  }, [fetchSessions, sendRPC, sessionKey, setSessionModel, t]);
+  }, [fetchSessions, sendRPC, sessionKey, sessionModel, setSessionModel, t]);
 
   /**
    * 压缩会话上下文：当对话过长导致上下文溢出时，调用 sessions.compact 来截断历史。
@@ -561,13 +566,17 @@ export function useV3Sessions({
    * 切换思考等级（会话维度）。
    */
   const handleThinkingLevelChange = useCallback(async (newLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh') => {
+    const previousLevel = thinkingLevel;
     setThinkingLevel(newLevel);
     if (!sessionKey) return;
     const res = await sendRPC('sessions.patch', { key: sessionKey, thinkingLevel: newLevel });
     if (res.ok) {
       antdMessage.success(t('chat.thinkingLevelUpdated', { defaultValue: '思考等级已更新' }));
+    } else {
+      setThinkingLevel(previousLevel);
+      antdMessage.error(t('chat.thinkingLevelUpdateFailed', { defaultValue: `思考等级更新失败: ${res.error?.message || res.error || '未知错误'}` }));
     }
-  }, [sendRPC, sessionKey, setThinkingLevel, t]);
+  }, [sendRPC, sessionKey, setThinkingLevel, t, thinkingLevel]);
 
   /**
    * 当连接状态为 authenticated 时，订阅会话、恢复消息流并拉取列表。

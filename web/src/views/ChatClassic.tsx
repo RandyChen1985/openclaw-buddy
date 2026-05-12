@@ -983,7 +983,7 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                 value={selectedBot}
                 onChange={setSelectedBot}
                 loading={loadingBots}
-                disabled={isEmbedMode}
+                disabled={isEmbedMode || isTyping}
                 variant="borderless"
                 dropdownStyle={{ borderRadius: 8, minWidth: 280 }}
                 listHeight={400}
@@ -1673,7 +1673,7 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                   Authorization: `Bearer ${storage.getItem('guardian_token')}`
                 }}
                 showUploadList={false}
-                disabled={isUploading || isTyping}
+                disabled={isUploading || isTyping || !selectedBot}
                 onChange={(info) => {
                   if (info.file.status === 'uploading') {
                     setIsUploading(true);
@@ -1695,13 +1695,13 @@ const ChatClassic: React.FC<ChatClassicProps> = ({
                   <Button 
                     type="text" 
                     icon={<Paperclip size={20} />} 
-                    disabled={isUploading || isTyping}
+                    disabled={isUploading || isTyping || !selectedBot}
                     style={{ 
-                      color: (isUploading || isTyping) ? c.dot : c.subtle, 
+                      color: (isUploading || isTyping || !selectedBot) ? c.dot : c.subtle, 
                       borderRadius: 10, 
                       height: 40, width: 40, 
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      opacity: (isUploading || isTyping) ? 0.5 : 1
+                      opacity: (isUploading || isTyping || !selectedBot) ? 0.5 : 1
                     }} 
                   />
               </Upload>
