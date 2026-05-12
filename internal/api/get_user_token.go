@@ -32,7 +32,7 @@ func principalIsBuddyTokenOrAdminRole(p *Principal) bool {
 	return false
 }
 
-// handleGetUserToken 对外接口：凭 adminToken 查询指定用户名的访问令牌（api_token）信息。
+// handleGetUserToken 对外接口（POST /v1/getUserToken）：凭 adminToken 查询指定用户名的访问令牌（api_token）信息。
 // adminToken 须为 BUDDY_TOKEN，或任意能解析为「admin 角色用户」的会话令牌 / 用户 api_token（buddyu_*）。
 // 请求体支持 JSON 或 application/x-www-form-urlencoded，字段：adminToken、username。
 func (s *Server) handleGetUserToken(c *gin.Context) {

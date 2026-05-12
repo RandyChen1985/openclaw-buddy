@@ -180,11 +180,11 @@ func (s *Server) setupRoutes() {
 		})
 	})
 
-	// 对外：凭 adminToken（BUDDY_TOKEN 或 admin 角色的 sess_/buddyu_ 令牌）按用户名查询目标用户的 api_token 信息
-	root.POST("/getUserToken", s.handleGetUserToken)
+	// V1 API Group：公开子路由（不经过 AuthMiddleware）须在鉴权子组之前注册
+	v1Root := root.Group("/v1")
+	v1Root.POST("/getUserToken", s.handleGetUserToken)
 
-	// V1 API Group
-	v1 := root.Group("/v1")
+	v1 := v1Root.Group("")
 	v1.Use(AuthMiddleware(s.cfg.Token, s.tickets))
 	{
 		// Auth related
