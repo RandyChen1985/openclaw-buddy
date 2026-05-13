@@ -246,8 +246,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
       api: m.api || 'openai-completions',
       reasoning: !!m.reasoning,
       input: modelInput,
-      maxTokens: m.maxTokens || 2000000,
-      contextWindow: m.contextWindow || 2000000,
+      maxTokens: m.maxTokens || 128000,
+      contextWindow: m.contextWindow || 128000,
     });
     setIsModelModalOpen(true);
   };
@@ -267,8 +267,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
           api: values.api,
           reasoning: !!values.reasoning,
           input: values.input || ['text'],
-          maxTokens: parseInt(values.maxTokens) || 2000000,
-          contextWindow: parseInt(values.contextWindow) || 2000000,
+          maxTokens: parseInt(values.maxTokens) || 128000,
+          contextWindow: parseInt(values.contextWindow) || 128000,
         }
       };
 
@@ -1444,8 +1444,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 reasoning: false, 
                 api: 'openai-completions',
                 input: ['text'],
-                maxTokens: 2000000,
-                contextWindow: 2000000
+                maxTokens: 128000,
+                contextWindow: 128000
               }}
             >
               <Row gutter={16}>
@@ -1493,12 +1493,12 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                 </Col>
                 <Col span={12}>
                   <Form.Item label={t('bots.contextWindow')} name="contextWindow" rules={[{ required: true, message: t('bots.modelIdRequired') }]}>
-                    <Input type="number" placeholder="2000000" />
+                    <Input type="number" placeholder="128000" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
                   <Form.Item label={t('bots.maxTokens')} name="maxTokens" rules={[{ required: true, message: t('bots.modelIdRequired') }]}>
-                    <Input type="number" placeholder="2000000" />
+                    <Input type="number" placeholder="128000" />
                   </Form.Item>
                 </Col>
                 <Col span={24}>
