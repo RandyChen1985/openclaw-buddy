@@ -1017,6 +1017,8 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
     gatewayBadgeStatus,
     gatewayLatency,
     gatewayHealthTime,
+    gatewayTargetHost,
+    gatewayTargetPort,
   } = useMemo(() => deriveGatewayState({
     status: effectiveStatus,
     v3Status,
@@ -1339,14 +1341,42 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
 
   const headerEl = (onMenuClick?: () => void) => {
     const breadcrumbTitle = `${t('common.console')} / ${getActiveLabel(activeTab)}`;
-    const gatewayTitle = [
-      'Gateway',
-      gatewayStateText,
-      `HTTP: ${httpGatewayStatus || 'unknown'}`,
-      `WS: ${v3Status || 'unknown'}`,
-      gatewayLatency !== undefined ? `${gatewayLatency}ms` : '',
-      gatewayHealthTime ? `Last: ${gatewayHealthTime}` : '',
-    ].filter(Boolean).join(' · ');
+    
+    const gatewayTitle = (
+      <div style={{ padding: '2px 0', lineHeight: 1.6 }}>
+        <div style={{ fontWeight: 800, marginBottom: 4, borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'}`, paddingBottom: 4 }}>
+          Gateway · {gatewayStateText}
+        </div>
+        <div style={{ fontSize: 11, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+            <span style={{ opacity: 0.7 }}>HTTP</span>
+            <span style={{ fontWeight: 600 }}>{httpGatewayStatus || 'unknown'}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+            <span style={{ opacity: 0.7 }}>WS</span>
+            <span style={{ fontWeight: 600 }}>{v3Status || 'unknown'}</span>
+          </div>
+          {gatewayTargetHost && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <span style={{ opacity: 0.7 }}>Target</span>
+              <span style={{ fontWeight: 600, fontFamily: 'ui-monospace, monospace' }}>{gatewayTargetHost}:{gatewayTargetPort}</span>
+            </div>
+          )}
+          {gatewayLatency !== undefined && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <span style={{ opacity: 0.7 }}>Latency</span>
+              <span style={{ fontWeight: 600, color: '#10b981' }}>{gatewayLatency}ms</span>
+            </div>
+          )}
+          {gatewayHealthTime && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <span style={{ opacity: 0.7 }}>Last Pulse</span>
+              <span style={{ fontWeight: 600 }}>{gatewayHealthTime}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
 
     const gatewayBadgeText = (
       <span

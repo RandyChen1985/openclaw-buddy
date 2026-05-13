@@ -8,9 +8,12 @@ import (
 )
 
 type OpenClawGatewayConfig struct {
-	Port int    `json:"port"`
-	Mode string `json:"mode"`
-	Auth struct {
+	Host           string `json:"host"` // 允许用户在 openclaw.json 中直接写 host（简单模式）
+	Bind           string `json:"bind"`
+	CustomBindHost string `json:"customBindHost"`
+	Port           int    `json:"port"`
+	Mode           string `json:"mode"`
+	Auth           struct {
 		Token string `json:"token"`
 	} `json:"auth"`
 	HTTP struct {

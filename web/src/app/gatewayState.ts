@@ -11,6 +11,8 @@ export type DerivedGatewayState = {
   gatewayBadgeStatus: GatewayBadgeStatus;
   gatewayLatency?: number;
   gatewayHealthTime: string;
+  gatewayTargetHost?: string;
+  gatewayTargetPort?: number;
 };
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
@@ -25,7 +27,7 @@ export function deriveGatewayState(params: {
   status: unknown;
   v3Status?: string;
   gatewayWsDesired: boolean;
-  lastHealth?: { latency?: number; ts?: number } | null;
+  lastHealth?: { latency?: number; ts?: number; target?: string; port?: number } | null;
   t: TranslateFn;
 }): DerivedGatewayState {
   const { status, v3Status, gatewayWsDesired, lastHealth, t } = params;
@@ -66,6 +68,9 @@ export function deriveGatewayState(params: {
     ? new Date(lastHealth.ts < 1_000_000_000_000 ? lastHealth.ts * 1000 : lastHealth.ts).toLocaleTimeString()
     : '';
 
+  const gatewayTargetHost = lastHealth?.target;
+  const gatewayTargetPort = lastHealth?.port;
+
   return {
     httpGatewayStatus,
     httpGatewayRunning,
@@ -77,5 +82,7 @@ export function deriveGatewayState(params: {
     gatewayBadgeStatus,
     gatewayLatency,
     gatewayHealthTime,
+    gatewayTargetHost,
+    gatewayTargetPort,
   };
 }

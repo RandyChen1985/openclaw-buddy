@@ -33,59 +33,69 @@ func (s *Server) chatProxy(c *gin.Context) {
 		return
 	}
 
-	// 2. 准备请求到本地网关
-	url := fmt.Sprintf("http://127.0.0.1:%d/v1/chat/completions", gw.Port)
+	// 4. 执行请求 (增加 6 分钟显式超时保护)
+	startTime := time.Now()
+	
+	targets := s.getGatewayHosts(gw)
+	var resp *http.Response
+	var finalURL string
+	var lastErr error
 
-	// 读取原始请求体
+	// 读取原始请求体 (提前读取，避免在循环中重复读取消耗 Body)
 	var body map[string]interface{}
 	if err := c.BindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求体"})
 		return
 	}
-	// body["user"] = "lobster" // 固定写这个用户
-
 	jsonBody, _ := json.Marshal(body)
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建请求失败"})
-		return
+
+	for _, target := range targets {
+		targetURL := fmt.Sprintf("http://%s:%d/v1/chat/completions", target, gw.Port)
+		req, err := http.NewRequest("POST", targetURL, bytes.NewBuffer(jsonBody))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		// 设置头部
+		req.Header.Set("Authorization", "Bearer "+gw.Auth.Token)
+		req.Header.Set("Content-Type", "application/json")
+		if stream, ok := body["stream"].(bool); ok && stream {
+			req.Header.Set("Accept", "text/event-stream")
+		}
+
+		// 设置带超时的上下文
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 6*time.Minute)
+		client := &http.Client{}
+		r, err := client.Do(req.WithContext(ctx))
+		cancel()
+
+		if err != nil {
+			lastErr = err
+			log.Printf("⚠️ [Chat-Proxy] 尝试连接网关失败 (%s): %v", targetURL, err)
+			continue
+		}
+		resp = r
+		finalURL = targetURL
+		break
 	}
 
-	// 3. 设置头部
-	req.Header.Set("Authorization", "Bearer "+gw.Auth.Token)
-	req.Header.Set("Content-Type", "application/json")
-	if stream, ok := body["stream"].(bool); ok && stream {
-		req.Header.Set("Accept", "text/event-stream")
-	}
-
-	// 4. 执行请求 (增加 6 分钟显式超时保护)
-	startTime := time.Now()
-
-	// 设置带超时的上下文，防止后端网关长时间挂起占用资源
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 6*time.Minute)
-	defer cancel()
-
-	req = req.WithContext(ctx)
-	client := &http.Client{}
-	resp, err := client.Do(req)
 	duration := time.Since(startTime).Milliseconds()
-
-	// 准备日志基础数据
 	model, _ := body["model"].(string)
 	msgs, _ := body["messages"].([]interface{})
 	msgCount := len(msgs)
 	isStream, _ := body["stream"].(bool)
 	nowStr := time.Now().Format("2006/01/02 15:04:05")
 
-	if err != nil {
-		fmt.Printf("%s ❌ [Chat] Error: Model=%s, Duration=%dms, Error=%v\n", nowStr, model, duration, err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": "无法连接到 OpenClaw 网关: " + err.Error()})
+	if resp == nil {
+		fmt.Printf("%s ❌ [Chat] Error: Model=%s, Duration=%dms, Error=%v\n", nowStr, model, duration, lastErr)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "无法连接到 OpenClaw 网关: " + lastErr.Error()})
 		return
 	}
 	defer resp.Body.Close()
 
-	fmt.Printf("%s ✅ [Chat] Request: Model=%s, Msgs=%d, Stream=%v, Latency=%dms, Status=%d\n",
-		nowStr, model, msgCount, isStream, duration, resp.StatusCode)
+	fmt.Printf("%s ✅ [Chat] Request: Model=%s, URL=%s, Msgs=%d, Stream=%v, Latency=%dms, Status=%d\n",
+		nowStr, model, finalURL, msgCount, isStream, duration, resp.StatusCode)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		for k, vv := range resp.Header {

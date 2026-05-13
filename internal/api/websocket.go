@@ -201,6 +201,25 @@ func (s *Server) streamLogs(c *gin.Context) {
 	}
 }
 
+func (s *Server) getGatewayHosts(gw *process.OpenClawGatewayConfig) []string {
+	// 尝试连接的目标地址列表：优先 127.0.0.1
+	hosts := []string{"127.0.0.1"}
+
+	// 1. 如果配置了自定义 host (Buddy 扩展字段)
+	if gw.Host != "" && gw.Host != "127.0.0.1" && gw.Host != "localhost" {
+		hosts = append(hosts, gw.Host)
+	}
+
+	// 2. 如果配置了 OpenClaw 标准的 customBindHost
+	if (gw.Bind == "custom" || gw.Bind == "") && gw.CustomBindHost != "" {
+		if gw.CustomBindHost != "127.0.0.1" && gw.CustomBindHost != "0.0.0.0" && gw.CustomBindHost != gw.Host {
+			hosts = append(hosts, gw.CustomBindHost)
+		}
+	}
+
+	return hosts
+}
+
 // handleGatewayProxy 作为一个透明的 WebSocket 代理，将前端请求转发给本地 OpenClaw 网关，
 // 并集成了"静默授权"逻辑，自动批准来自 Buddy 控制台的设备连接。
 func (s *Server) handleGatewayProxy(c *gin.Context) {
@@ -218,19 +237,35 @@ func (s *Server) handleGatewayProxy(c *gin.Context) {
 		return
 	}
 
-	gatewayURL := fmt.Sprintf("ws://127.0.0.1:%d/v1/gateway", gw.Port)
-	dialer := websocket.DefaultDialer
-	header := http.Header{}
-	header.Add("Origin", fmt.Sprintf("http://127.0.0.1:%d", gw.Port))
+	targets := s.getGatewayHosts(gw)
+	var gatewayConn *websocket.Conn
+	var lastErr error
+	var finalTarget string
 
-	gatewayConn, _, err := dialer.Dial(gatewayURL, header)
-	if err != nil {
-		log.Printf("❌ [WS-Proxy] 无法连接到 OpenClaw 网关 (%s): %v", gatewayURL, err)
+	for _, target := range targets {
+		gatewayURL := fmt.Sprintf("ws://%s:%d/v1/gateway", target, gw.Port)
+		dialer := websocket.DefaultDialer
+		header := http.Header{}
+		header.Add("Origin", fmt.Sprintf("http://%s:%d", target, gw.Port))
+
+		conn, _, err := dialer.Dial(gatewayURL, header)
+		if err != nil {
+			lastErr = err
+			log.Printf("⚠️ [WS-Proxy] 尝试连接网关失败 (%s): %v", gatewayURL, err)
+			continue
+		}
+		gatewayConn = conn
+		finalTarget = target
+		break
+	}
+
+	if gatewayConn == nil {
+		log.Printf("❌ [WS-Proxy] 所有尝试均无法连接到 OpenClaw 网关: %v", lastErr)
 		return
 	}
 	defer gatewayConn.Close()
 
-	log.Printf("📡 [WS-Proxy] 已建立隧道: 浏览器 <-> Buddy <-> Gateway (%d)", gw.Port)
+	log.Printf("📡 [WS-Proxy] 已建立隧道: 浏览器 <-> Buddy <-> Gateway (%s:%d)", finalTarget, gw.Port)
 
 	const writeTimeout = 10 * time.Second
 	const pongWait = 60 * time.Second
@@ -364,6 +399,23 @@ func (s *Server) handleGatewayProxy(c *gin.Context) {
 
 			trimmed := bytes.TrimLeft(message, " \t\n\r")
 			if bytes.HasPrefix(trimmed, []byte(`{"type":"event"`)) {
+				// 注入连接目标信息到 health 事件，方便前端展示
+				var event struct {
+					Type    string                 `json:"type"`
+					Event   string                 `json:"event"`
+					Payload map[string]interface{} `json:"payload"`
+				}
+				if json.Unmarshal(message, &event) == nil && event.Event == "health" {
+					if event.Payload == nil {
+						event.Payload = make(map[string]interface{})
+					}
+					event.Payload["target"] = finalTarget
+					event.Payload["port"] = gw.Port
+					if patched, err := json.Marshal(event); err == nil {
+						message = patched
+					}
+				}
+
 				_ = clientConn.SetWriteDeadline(time.Now().Add(writeTimeout))
 				if err := clientConn.WriteMessage(mt, message); err != nil {
 					return

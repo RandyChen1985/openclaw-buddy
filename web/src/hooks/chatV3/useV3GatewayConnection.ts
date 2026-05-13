@@ -109,7 +109,7 @@ export function useV3GatewayConnection({
   const gatewayTokenFetchRef = useRef<Promise<string> | null>(null);
 
   const [status, dispatch] = useReducer(wsStatusReducer, 'disconnected' as V3WsStatus);
-  const [lastHealth, setLastHealth] = useState<{ ok: boolean; latency: number; ts: number } | null>(null);
+  const [lastHealth, setLastHealth] = useState<{ ok: boolean; latency: number; ts: number; target?: string; port?: number } | null>(null);
   const [latencyHistory, setLatencyHistory] = useState<number[]>([]);
   const [pulse, setPulse] = useState(0);
 
@@ -342,8 +342,8 @@ export function useV3GatewayConnection({
 
       if (data.type === 'event') {
         if (data.event === 'health') {
-          const { ok, durationMs, ts } = data.payload || {};
-          setLastHealth({ ok, latency: durationMs || 0, ts });
+          const { ok, durationMs, ts, target, port } = data.payload || {};
+          setLastHealth({ ok, latency: durationMs || 0, ts, target, port });
           setLatencyHistory(prev => [...prev.slice(-29), durationMs || 0]);
           setPulse(p => p + 1);
           // 依然触发 onEvent，让上层 Context 捕获完整数据
