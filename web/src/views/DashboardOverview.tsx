@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Row, Col, Card, Tag, Progress, Button, Timeline, Badge, Spin, Empty, message, notification, Tabs, Radio } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Server, Activity, Play, Square, RefreshCw, Trophy, Zap, Monitor, Mail, Loader2, Layers } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import dayjs from 'dayjs';
 import api from '../api';
+import { deriveGatewayState } from '../app/gatewayState';
 import { APP_VERSION } from '../version';
 import { hasNewVersion } from '../utils/version';
 import Tooltip from '../components/common/AppTooltip';
@@ -71,8 +72,13 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   // 环境检测中锁定：1. OpenClaw 安装状态未知 2. 系统基本信息尚未对账完成
   const isEnvChecking = ocInstalled === null || !systemInfo;
 
-  // 连接中状态：WebSocket 正在握手
-  const isConnecting = ['connecting', 'handshaking', 'authorizing', 'identifying'].includes(v3Status || '');
+  const gatewayState = useMemo(() => deriveGatewayState({
+    status,
+    v3Status,
+    gatewayWsDesired: true,
+    t,
+  }), [status, t, v3Status]);
+  const isGatewayWsBusy = gatewayState.isConnecting || gatewayState.isAuthorizing || gatewayState.isWsRecovering;
 
   const fetchData = async () => {
     try {
@@ -449,26 +455,26 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <Card styles={{ body: { padding: 24 } }} style={{ borderRadius: 12, border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, background: isDarkMode ? '#1e293b' : '#fff' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 13, fontWeight: 500 }}>
-                  <Activity size={15} color={isRunning ? '#22c55e' : (isConnecting ? '#94a3b8' : '#ef4444')} />
+                  <Activity size={15} color={isRunning ? '#22c55e' : (isGatewayWsBusy ? '#94a3b8' : '#ef4444')} />
                   {t('dashboard.coreStatus')}
                 </div>
                 <Tag
                   icon={
-                    isConnecting ? (
+                    isGatewayWsBusy ? (
                       <Loader2 size={12} className="animate-spin" style={{ color: isDarkMode ? '#94a3b8' : '#64748b' }} aria-hidden />
                     ) : undefined
                   }
-                  color={isRunning ? 'success' : (isConnecting ? 'default' : 'error')}
+                  color={isRunning ? 'success' : (isGatewayWsBusy ? 'default' : 'error')}
                   style={{
                     borderRadius: 20,
                     border: 'none',
                     margin: 0,
                     fontWeight: 600,
                     padding: '0 10px',
-                    ...(isConnecting ? { display: 'inline-flex', alignItems: 'center', gap: 6 } : {}),
+                    ...(isGatewayWsBusy ? { display: 'inline-flex', alignItems: 'center', gap: 6 } : {}),
                   }}
                 >
-                  {isRunning ? t('dashboard.running') : (isConnecting ? t('chat.gatewayConnecting') : t('dashboard.stopped'))}
+                  {gatewayState.gatewayStateText}
                 </Tag>
               </div>
               <div style={{ marginBottom: 24 }}>
@@ -677,7 +683,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   size="large"
                   icon={<Play size={14} />}
                   onClick={() => onControl('start')}
-                  disabled={isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking || isConnecting}
+                  disabled={isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking || isGatewayWsBusy}
                   loading={(isGatewayProcessing && !isRunning) || (isEnvChecking && ocInstalled === null)}
                   style={{ 
                     borderRadius: 10, 
@@ -694,7 +700,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   size="large"
                   icon={<Square size={14} />}
                   onClick={() => onControl('stop')}
-                  disabled={!isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking || isConnecting}
+                  disabled={!isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking || isGatewayWsBusy}
                   loading={isGatewayProcessing && isRunning}
                   style={{ borderRadius: 10, width: '100%' }}
                 >
@@ -704,7 +710,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   size="large"
                   icon={<RefreshCw size={14} />}
                   onClick={() => onControl('restart')}
-                  disabled={!isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking || isConnecting}
+                  disabled={!isRunning || ocInstalled === false || isGatewayProcessing || isEnvChecking || isGatewayWsBusy}
                   loading={isGatewayProcessing}
                   style={{ borderRadius: 10, border: `1.5px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, width: '100%', color: isDarkMode ? '#cbd5e1' : 'inherit', background: isDarkMode ? '#0f172a' : 'transparent' }}
                 >

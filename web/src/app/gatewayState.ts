@@ -33,11 +33,14 @@ export function deriveGatewayState(params: {
   const httpGatewayRunning = httpGatewayStatus === 'running';
 
   const isRunning =
-    v3Status === 'authenticated' ||
-    (!gatewayWsDesired && httpGatewayRunning);
+    httpGatewayRunning &&
+    (v3Status === 'authenticated' || !gatewayWsDesired);
 
-  const isConnecting = ['connecting', 'handshaking', 'challenging', 'identifying'].includes((v3Status || '') as any);
-  const isAuthorizing = v3Status === 'authorizing';
+  // HTTP 端口未监听时视为网关已停：不展示 WS 握手/重连类「连接中」，也不驱动自动重连（由 App 暂停 WS）
+  const isConnecting =
+    httpGatewayRunning &&
+    (['connecting', 'handshaking', 'challenging', 'identifying'] as string[]).includes(v3Status || '');
+  const isAuthorizing = httpGatewayRunning && v3Status === 'authorizing';
   const isWsRecovering = gatewayWsDesired && httpGatewayRunning && ['disconnected', 'error'].includes(v3Status || '');
 
   const gatewayStateText = isRunning
