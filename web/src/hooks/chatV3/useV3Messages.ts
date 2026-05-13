@@ -153,6 +153,12 @@ export function useV3Messages({
   const hadTypingSinceSendRef = useRef(false);
 
   const sessionCacheRef = useRef<Map<string, SessionStreamCache>>(new Map());
+  /**
+   * session.message 在「typing 锁」期间默认被挡住；若长时间无流式事件但主气泡仍是思考占位，
+   * 只应允许 transcript 穿透合并，不能把底部输入区误判为已空闲（否则与思考气泡不同步）。
+   */
+  const streamStaleSessionMessageBypassRef = useRef<Set<string>>(new Set());
+
   // 流结束后的冷却窗口：防止 session.message 事件在流刚结束时追加重复消息
   const streamEndGraceRef = useRef<{ key: string; until: number } | null>(null);
   /** 按 sessionKey 记录 final 后的延时释放任务，避免多会话并发时产生清理冲突 */
@@ -302,6 +308,7 @@ export function useV3Messages({
     if (current) cancelPendingFinalUiRelease(current);
     abortRequestedRef.current = null;
     clearStallTimer();
+    streamStaleSessionMessageBypassRef.current.clear();
 
     // 如果目标会话已经在生成中（侧边栏有笔），则无缝平滑过渡 isTyping 状态，避免输入框闪烁释放
     const targetIsTyping = nextKey ? typingSessionsRef.current.has(nextKey) : false;
@@ -331,13 +338,14 @@ export function useV3Messages({
         return;
       }
 
-      // v3 增强：从网关全局视野判断，哪怕局部 run 结束，若 session 状态仍为 running 则不解锁
+      // v3 增强：从网关全局视野判断，哪怕局部 run 结束，若 session 仍处于 running/pending 等则不解锁
       const globalStatus = sessionStatusMapRef.current.get(key);
-      if (globalStatus === 'running') {
+      if (isSessionRunningStatus(globalStatus)) {
         return;
       }
 
       markSessionTyping(key, false);
+      streamStaleSessionMessageBypassRef.current.delete(key);
       if (key === sessionKeyRef.current) {
         setIsTyping(false);
         streamingAssistantIndexRef.current = null;
@@ -357,6 +365,7 @@ export function useV3Messages({
   const handleChatDelta = useCallback((payload: any) => {
     const pSessionKey = payload.sessionKey || sessionKeyRef.current;
     if (!pSessionKey) return;
+    streamStaleSessionMessageBypassRef.current.delete(pSessionKey);
     const cache = getOrCreateSessionCache(pSessionKey);
     chatEventSeenSinceSendRef.current = true;
     lastStreamEventAtRef.current = Date.now();
@@ -783,19 +792,35 @@ export function useV3Messages({
 
     const bypassSessionMessageGuards = shouldBypassSessionMessageTypingGuard(messagesRef.current || [], msg);
 
-    if (typingSessionsRef.current.has(evtKey) && !bypassSessionMessageGuards) {
+    if (
+      typingSessionsRef.current.has(evtKey) &&
+      !bypassSessionMessageGuards &&
+      !streamStaleSessionMessageBypassRef.current.has(evtKey)
+    ) {
       // 兜底：若 typing 卡住且一段时间没有任何流式事件，则允许 session.message 落 UI
       const lastStreamAt = lastStreamEventAtRef.current;
       const staleMs = 4500;
       if (!lastStreamAt || Date.now() - lastStreamAt < staleMs) return;
 
-      // typing 可能因事件丢失而卡住：此处主动解除，避免用户只能靠刷新看见内容
-      typingSessionsRef.current.delete(evtKey);
-      setTypingSessionKeys(Array.from(typingSessionsRef.current));
-      if (evtKey === sessionKeyRef.current) {
-        setIsTyping(false);
-        clearStallTimer();
-        streamingAssistantIndexRef.current = null;
+      const think = t('chat.thinking');
+      const deep = t('chat.deepThinking', { defaultValue: '深度思考中...' });
+      const mainIdx = findLastMainAssistantIndex(messagesRef.current || []);
+      const main = mainIdx !== -1 ? messagesRef.current[mainIdx] : null;
+      const mainBody = (main?.content || '').trim();
+      const awaitingFirstToken =
+        !mainBody || isAssistantUiThinkingPlaceholder(main?.content || '', think, deep);
+
+      // typing 可能因事件丢失而卡住：允许 transcript 穿透；但若主气泡仍是「思考中」占位，不得解锁输入区
+      if (awaitingFirstToken) {
+        streamStaleSessionMessageBypassRef.current.add(evtKey);
+      } else {
+        typingSessionsRef.current.delete(evtKey);
+        setTypingSessionKeys(Array.from(typingSessionsRef.current));
+        if (evtKey === sessionKeyRef.current) {
+          setIsTyping(false);
+          clearStallTimer();
+          streamingAssistantIndexRef.current = null;
+        }
       }
     }
 
@@ -920,6 +945,7 @@ export function useV3Messages({
     const { sessionKey: evtKey, data: toolData } = payload;
     if (!evtKey || evtKey !== sessionKeyRef.current) return;
     if (!toolData) return;
+    streamStaleSessionMessageBypassRef.current.delete(evtKey);
 
     const phase = (toolData.phase as string) || '';
     const toolName = toolData.toolName || toolData.name || toolData.tool || 'tool';
@@ -1051,6 +1077,7 @@ export function useV3Messages({
     if (evt === 'agent') {
       const { stream, data: agentData, sessionKey: agentSessionKey } = data.payload || {};
       const effectiveKey = agentSessionKey || sessionKeyRef.current;
+      if (effectiveKey) streamStaleSessionMessageBypassRef.current.delete(effectiveKey);
 
       if (stream === 'item' && agentData?.status === 'blocked') {
         lastStreamEventAtRef.current = Date.now();
@@ -1206,6 +1233,7 @@ export function useV3Messages({
     latestHistoryRequestRef.current = requestId;
     setIsLoadingHistory(true);
     streamingAssistantIndexRef.current = null;
+    streamStaleSessionMessageBypassRef.current.delete(key);
 
     const res = await sendRPC('chat.history', { sessionKey: key, limit: CHAT_HISTORY_PANEL_LIMIT });
     const isActiveRequest = () =>
@@ -1242,7 +1270,7 @@ export function useV3Messages({
     );
 
     // v3 增强：切回会话时，除了看本地 1s 延时锁，也要看网关推来的全局 status 是否仍为 running
-    if (!shouldKeepTyping && (typingSessionsRef.current.has(key) || sessionStatusMapRef.current.get(key) === 'running')) {
+    if (!shouldKeepTyping && (typingSessionsRef.current.has(key) || isSessionRunningStatus(sessionStatusMapRef.current.get(key)))) {
       shouldKeepTyping = true;
     }
 
@@ -1321,6 +1349,7 @@ export function useV3Messages({
 
     // 发送动作一开始就标记该会话“正在生成中”（即使尚未收到首个 delta）
     markSessionTyping(currentKey, true);
+    streamStaleSessionMessageBypassRef.current.delete(currentKey);
 
     const finalContent = buildSendMessageContent(text, attachedFiles);
 
@@ -1490,6 +1519,7 @@ export function useV3Messages({
 
     cancelPendingFinalUiRelease();
     abortRequestedRef.current = { key: sessionKey, ts: Date.now() };
+    streamStaleSessionMessageBypassRef.current.delete(sessionKey);
     setIsTyping(false);
     clearStallTimer();
     streamingAssistantIndexRef.current = null;
