@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"log"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
+
 	"openclaw-buddy/internal/utils"
 )
 
@@ -134,4 +136,36 @@ func GetCachedData(key string) (any, string, error) {
 	}
 
 	return data, updatedAt, nil
+}
+
+// BotIDExistsInCachedBotsModels 判断 agent id 是否出现在 SQLite `data_caches` 键 `bots_models` 的缓存中
+//（与面板「虾兵蟹将」同源缓存，由 SyncAll / SyncKeySingle 等写入）。不调用 openclaw CLI。
+// 缓存缺失或结构异常时返回 false。
+func BotIDExistsInCachedBotsModels(botID string) bool {
+	botID = strings.TrimSpace(botID)
+	if botID == "" {
+		return false
+	}
+	cached, _, err := GetCachedData("bots_models")
+	if err != nil || cached == nil {
+		return false
+	}
+	m, ok := cached.(map[string]interface{})
+	if !ok {
+		return false
+	}
+	bots, ok := m["bots"].([]interface{})
+	if !ok {
+		return false
+	}
+	for _, b := range bots {
+		bm, ok := b.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(jsonStringish(bm["id"])) == botID {
+			return true
+		}
+	}
+	return false
 }
