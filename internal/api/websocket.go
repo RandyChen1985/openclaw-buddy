@@ -227,11 +227,17 @@ func (s *Server) handleGatewayProxy(c *gin.Context) {
 	var lastErr error
 	var finalTarget string
 
+	port := gw.Port
+	if port <= 0 {
+		port = s.cfg.HealthPort
+		log.Printf("⚠️ [WS-Proxy] 网关配置中端口为 0，尝试使用 Buddy env 中的 HEALTH_PORT (%d) 作为兜底", port)
+	}
+
 	for _, target := range targets {
-		gatewayURL := fmt.Sprintf("ws://%s:%d/v1/gateway", target, gw.Port)
+		gatewayURL := fmt.Sprintf("ws://%s:%d/v1/gateway", target, port)
 		dialer := websocket.DefaultDialer
 		header := http.Header{}
-		header.Add("Origin", fmt.Sprintf("http://%s:%d", target, gw.Port))
+		header.Add("Origin", fmt.Sprintf("http://%s:%d", target, port))
 
 		conn, _, err := dialer.Dial(gatewayURL, header)
 		if err != nil {
@@ -397,7 +403,7 @@ func (s *Server) handleGatewayProxy(c *gin.Context) {
 						event.Payload = make(map[string]interface{})
 					}
 					event.Payload["target"] = finalTarget
-					event.Payload["port"] = gw.Port
+					event.Payload["port"] = port
 					if patched, err := json.Marshal(event); err == nil {
 						message = patched
 					}
