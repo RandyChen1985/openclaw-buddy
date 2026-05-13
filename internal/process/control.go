@@ -33,7 +33,7 @@ func (c *DefaultGatewayController) Restart(port int) error {
 	success := false
 	for i := 0; i < 10; i++ {
 		time.Sleep(1 * time.Second)
-		if IsPortListening(port) {
+		if IsPortListening("", port) {
 			success = true
 			break
 		}
@@ -61,7 +61,7 @@ func (c *DefaultGatewayController) Stop(port int) error {
 	time.Sleep(1500 * time.Millisecond)
 
 	// 3. 检查端口是否还在。如果在，强制 kill
-	if IsPortListening(port) {
+	if IsPortListening("", port) {
 		pid, err := GetPIDByPort(port)
 		if err == nil && pid > 0 {
 			// 安全防护：检查是否是 Buddy 进程自身

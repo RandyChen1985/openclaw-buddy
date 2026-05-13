@@ -202,22 +202,7 @@ func (s *Server) streamLogs(c *gin.Context) {
 }
 
 func (s *Server) getGatewayHosts(gw *process.OpenClawGatewayConfig) []string {
-	// 尝试连接的目标地址列表：优先 127.0.0.1
-	hosts := []string{"127.0.0.1"}
-
-	// 1. 如果配置了自定义 host (Buddy 扩展字段)
-	if gw.Host != "" && gw.Host != "127.0.0.1" && gw.Host != "localhost" {
-		hosts = append(hosts, gw.Host)
-	}
-
-	// 2. 如果配置了 OpenClaw 标准的 customBindHost
-	if (gw.Bind == "custom" || gw.Bind == "") && gw.CustomBindHost != "" {
-		if gw.CustomBindHost != "127.0.0.1" && gw.CustomBindHost != "0.0.0.0" && gw.CustomBindHost != gw.Host {
-			hosts = append(hosts, gw.CustomBindHost)
-		}
-	}
-
-	return hosts
+	return gw.GetGatewayHosts()
 }
 
 // handleGatewayProxy 作为一个透明的 WebSocket 代理，将前端请求转发给本地 OpenClaw 网关，
@@ -398,8 +383,10 @@ func (s *Server) handleGatewayProxy(c *gin.Context) {
 			}
 
 			trimmed := bytes.TrimLeft(message, " \t\n\r")
-			if bytes.HasPrefix(trimmed, []byte(`{"type":"event"`)) {
-				// 注入连接目标信息到 health 事件，方便前端展示
+			// 性能优化：仅当消息极短且包含 "health" 关键字时才尝试解析注入。
+			// 这样可以避免在 AI 大规模流式输出（event: chat）时对每一条消息进行昂贵的 JSON 反序列化。
+			if bytes.HasPrefix(trimmed, []byte(`{"type":"event"`)) && len(message) < 1024 && bytes.Contains(message, []byte(`"health"`)) {
+				// 进一步精确校验
 				var event struct {
 					Type    string                 `json:"type"`
 					Event   string                 `json:"event"`
@@ -415,13 +402,13 @@ func (s *Server) handleGatewayProxy(c *gin.Context) {
 						message = patched
 					}
 				}
-
-				_ = clientConn.SetWriteDeadline(time.Now().Add(writeTimeout))
-				if err := clientConn.WriteMessage(mt, message); err != nil {
-					return
-				}
-				continue
 			}
+
+			_ = clientConn.SetWriteDeadline(time.Now().Add(writeTimeout))
+			if err := clientConn.WriteMessage(mt, message); err != nil {
+				return
+			}
+			continue
 
 			if bytes.HasPrefix(trimmed, []byte(`{"type":"res"`)) {
 				var resp struct {
