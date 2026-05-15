@@ -264,7 +264,7 @@ export function useV3Sessions({
         setInitialSessionListFetched(true);
       }
     }
-  }, [sendRPC, setSessionKey, setSessionLabel, setSessionModel, setSelectedBot, messageOpsRef]);
+  }, [sendRPC, setSessionKey, setSessionLabel, setSessionModel, setSelectedBot, messageOpsRef, usernameForSessionKey, filterSessionListByUsername]);
 
   const fetchSessionsRef = useRef(fetchSessions);
   fetchSessionsRef.current = fetchSessions;
