@@ -79,7 +79,14 @@ func (g *Guardian) Run(ctx context.Context) {
 
 	// 启动时检查：健康端口在监听即视为服务可用（不调用 openclaw health），按开关决定是否备份
 	isSelfHealingEnabled := utils.GetSetting("self_healing_enabled", "false") == "true"
-	if process.IsPortListening(g.config.HealthPort) {
+	
+	// 尝试从配置获取所有可能的 host
+	hosts := []string{"127.0.0.1"}
+	if gw, err := process.GetOpenClawGatewayConfig(g.config.OpenClawConfigDir); err == nil {
+		hosts = gw.GetGatewayHosts()
+	}
+
+	if process.IsAnyPortListening(hosts, g.config.HealthPort) {
 		if isSelfHealingEnabled {
 			log.Printf("📦 Gateway port %d is listening on startup. Performing initial backup...", g.config.HealthPort)
 			g.backupConfig()
@@ -121,9 +128,15 @@ func (g *Guardian) check() {
 
 	for i := 1; i <= g.config.MaxRetries; i++ {
 		// 1. Port Check
-		if !process.IsPortListening(g.config.HealthPort) {
+		// 尝试从配置获取所有可能的 host
+		hosts := []string{"127.0.0.1"}
+		if gw, err := process.GetOpenClawGatewayConfig(g.config.OpenClawConfigDir); err == nil {
+			hosts = gw.GetGatewayHosts()
+		}
+
+		if !process.IsAnyPortListening(hosts, g.config.HealthPort) {
 			reason = "Port Down"
-			lastErr = fmt.Errorf("port %d is not listening", g.config.HealthPort)
+			lastErr = fmt.Errorf("port %d is not listening on any candidate hosts", g.config.HealthPort)
 		} else {
 			// 端口在监听即视为健康，不再执行 openclaw health（避免 CLI 退出码与网关实际可用不一致）
 			responseTimeMs := 0
@@ -341,7 +354,7 @@ func (g *Guardian) heal(reason string) {
 		time.Sleep(d)
 		verifyAttempts = i + 1
 		// 仅验收端口是否在监听
-		if !process.IsPortListening(g.config.HealthPort) {
+		if !process.IsPortListening("", g.config.HealthPort) {
 			lastHealthErr = fmt.Errorf("port %d is not listening", g.config.HealthPort)
 			log.Printf("⏳ [HEAL] 网关端口仍未监听，继续等待... (%d/%d)", i+1, len(backoffs))
 			continue

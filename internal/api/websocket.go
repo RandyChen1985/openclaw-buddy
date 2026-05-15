@@ -201,6 +201,10 @@ func (s *Server) streamLogs(c *gin.Context) {
 	}
 }
 
+func (s *Server) getGatewayHosts(gw *process.OpenClawGatewayConfig) []string {
+	return gw.GetGatewayHosts()
+}
+
 // handleGatewayProxy 作为一个透明的 WebSocket 代理，将前端请求转发给本地 OpenClaw 网关，
 // 并集成了"静默授权"逻辑，自动批准来自 Buddy 控制台的设备连接。
 func (s *Server) handleGatewayProxy(c *gin.Context) {
@@ -218,19 +222,41 @@ func (s *Server) handleGatewayProxy(c *gin.Context) {
 		return
 	}
 
-	gatewayURL := fmt.Sprintf("ws://127.0.0.1:%d/v1/gateway", gw.Port)
-	dialer := websocket.DefaultDialer
-	header := http.Header{}
-	header.Add("Origin", fmt.Sprintf("http://127.0.0.1:%d", gw.Port))
+	targets := s.getGatewayHosts(gw)
+	var gatewayConn *websocket.Conn
+	var lastErr error
+	var finalTarget string
 
-	gatewayConn, _, err := dialer.Dial(gatewayURL, header)
-	if err != nil {
-		log.Printf("❌ [WS-Proxy] 无法连接到 OpenClaw 网关 (%s): %v", gatewayURL, err)
+	port := gw.Port
+	if port <= 0 {
+		port = s.cfg.HealthPort
+		log.Printf("⚠️ [WS-Proxy] 网关配置中端口为 0，尝试使用 Buddy env 中的 HEALTH_PORT (%d) 作为兜底", port)
+	}
+
+	for _, target := range targets {
+		gatewayURL := fmt.Sprintf("ws://%s:%d/v1/gateway", target, port)
+		dialer := websocket.DefaultDialer
+		header := http.Header{}
+		header.Add("Origin", fmt.Sprintf("http://%s:%d", target, port))
+
+		conn, _, err := dialer.Dial(gatewayURL, header)
+		if err != nil {
+			lastErr = err
+			log.Printf("⚠️ [WS-Proxy] 尝试连接网关失败 (%s): %v", gatewayURL, err)
+			continue
+		}
+		gatewayConn = conn
+		finalTarget = target
+		break
+	}
+
+	if gatewayConn == nil {
+		log.Printf("❌ [WS-Proxy] 所有尝试均无法连接到 OpenClaw 网关: %v", lastErr)
 		return
 	}
 	defer gatewayConn.Close()
 
-	log.Printf("📡 [WS-Proxy] 已建立隧道: 浏览器 <-> Buddy <-> Gateway (%d)", gw.Port)
+	log.Printf("📡 [WS-Proxy] 已建立隧道: 浏览器 <-> Buddy <-> Gateway (%s:%d)", finalTarget, gw.Port)
 
 	const writeTimeout = 10 * time.Second
 	const pongWait = 60 * time.Second
@@ -363,13 +389,32 @@ func (s *Server) handleGatewayProxy(c *gin.Context) {
 			}
 
 			trimmed := bytes.TrimLeft(message, " \t\n\r")
-			if bytes.HasPrefix(trimmed, []byte(`{"type":"event"`)) {
-				_ = clientConn.SetWriteDeadline(time.Now().Add(writeTimeout))
-				if err := clientConn.WriteMessage(mt, message); err != nil {
-					return
+			// 性能优化：仅当消息极短且包含 "health" 关键字时才尝试解析注入。
+			// 这样可以避免在 AI 大规模流式输出（event: chat）时对每一条消息进行昂贵的 JSON 反序列化。
+			if bytes.HasPrefix(trimmed, []byte(`{"type":"event"`)) && len(message) < 1024 && bytes.Contains(message, []byte(`"health"`)) {
+				// 进一步精确校验
+				var event struct {
+					Type    string                 `json:"type"`
+					Event   string                 `json:"event"`
+					Payload map[string]interface{} `json:"payload"`
 				}
-				continue
+				if json.Unmarshal(message, &event) == nil && event.Event == "health" {
+					if event.Payload == nil {
+						event.Payload = make(map[string]interface{})
+					}
+					event.Payload["target"] = finalTarget
+					event.Payload["port"] = port
+					if patched, err := json.Marshal(event); err == nil {
+						message = patched
+					}
+				}
 			}
+
+			_ = clientConn.SetWriteDeadline(time.Now().Add(writeTimeout))
+			if err := clientConn.WriteMessage(mt, message); err != nil {
+				return
+			}
+			continue
 
 			if bytes.HasPrefix(trimmed, []byte(`{"type":"res"`)) {
 				var resp struct {

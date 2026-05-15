@@ -10,7 +10,7 @@ import (
 )
 
 func (s *Server) getOpenClawStatus(c *gin.Context) {
-	status, err := process.GetStructuredStatus(s.cfg.HealthPort)
+	status, err := process.GetStructuredStatus(s.cfg.OpenClawConfigDir, s.cfg.HealthPort)
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return

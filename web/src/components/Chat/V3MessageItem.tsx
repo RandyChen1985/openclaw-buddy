@@ -149,7 +149,7 @@ const CollapsibleMeta = ({
         )}
       </div>
       {isExpanded && (
-        <div className="v3-meta-content" style={{ animation: 'v3-fade-in 0.3s' }}>
+        <div className="v3-meta-content">
           {children}
         </div>
       )}
@@ -650,8 +650,8 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
           <CollapsibleMeta
             title={t('chat.analysisProcess', { defaultValue: '分析过程' })}
             icon={Search}
-            defaultExpanded={true}
-            {...metaBlockExpansionProps('analysis', true)}
+            defaultExpanded={false}
+            {...metaBlockExpansionProps('analysis', false)}
             copyText={analysisCopyText}
             onCopy={(txt: string) => copyToClipboard(txt)}
             copyLabel={t('chat.copy', { defaultValue: '复制' })}

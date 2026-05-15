@@ -24,8 +24,10 @@ export const useStatusPolling = (
       }
       lastStatusRef.current = currentGatewayStatus;
       setStatus(newStatus);
+      return newStatus;
     } catch (err) {
       console.error('Fetch status error', err);
+      return null;
     } finally {
       setFetching(false);
     }
@@ -51,7 +53,8 @@ export const useStatusPolling = (
   useEffect(() => {
     let timer: any;
     
-    // 频率计算：过渡态 2s，Dashboard 30s (与后端指标缓存 TTL 同步)，其他页面 60s
+    // 频率计算：过渡态仍保持 30s，避免启停期间放大状态接口压力；
+    // 若已认证的 WebSocket 突然断开，由 App 立即触发一次 fetchStatus 做端口状态校准。
     const getStatusInterval = () => {
       if (isTransitioning) return 30000;
       return activeTab === 'dashboard' ? 30000 : 60000;

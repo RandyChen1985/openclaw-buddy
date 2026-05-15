@@ -182,23 +182,35 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
   );
 
   const { status: v3Status, lastHealth, connect: v3Connect, setConnectionPaused } = useV3Gateway();
+  const [gatewayWsStoppedHint, setGatewayWsStoppedHint] = useState(false);
+  const gatewayWsStoppedHintRef = useRef(false);
+  const gatewayWsStoppedStatusRef = useRef<any>(null);
+  const gatewayWsStoppedVerifySeqRef = useRef(0);
+  const prevV3StatusRef = useRef(v3Status);
 
   const gatewayWsDesired = useMemo(
     () => activeTab === 'chat' || activeTab === 'dashboard',
     [activeTab]
   );
 
-  useEffect(() => {
-    setConnectionPaused(!gatewayWsDesired);
-  }, [gatewayWsDesired, setConnectionPaused]);
+  const effectiveStatus = useMemo(() => {
+    if (!status || !gatewayWsStoppedHint) return status;
+    return {
+      ...status,
+      gateway: {
+        ...(status.gateway || {}),
+        status: 'stopped',
+      },
+    };
+  }, [gatewayWsStoppedHint, status]);
 
   // 核心：合并状态机。
   // WS health payload 不含 cpu/memory（验证过），所以 metrics 仍由 HTTP 提供。
-  // gateway.status 不再使用（isRunning 基于 v3Status），此处仅保留结构完整性。
+  // 网关是否在跑以 HTTP `gateway.status`（端口监听）为准；WS 仅在该前提下建连。
   const mergedStatus = useMemo(() => {
-    if (!status) return null;
-    return status;
-  }, [status]);
+    if (!effectiveStatus) return null;
+    return effectiveStatus;
+  }, [effectiveStatus]);
 
 
   const processedTaskIds = useRef<Set<string>>(new Set());
@@ -1005,17 +1017,78 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
     gatewayBadgeStatus,
     gatewayLatency,
     gatewayHealthTime,
+    gatewayTargetHost,
+    gatewayTargetPort,
   } = useMemo(() => deriveGatewayState({
-    status,
+    status: effectiveStatus,
     v3Status,
     gatewayWsDesired,
     lastHealth,
     t,
-  }), [gatewayWsDesired, lastHealth, status, t, v3Status]);
+  }), [effectiveStatus, gatewayWsDesired, lastHealth, t, v3Status]);
+
+  /**
+   * 如果 WS 已经认证成功后突然断开，前端可以先把它视作“端口已停止”的候选状态，
+   * 立即刷新 HTTP 做校准，避免等 30s 轮询期间还显示重连中/连接中。
+   */
+  useEffect(() => {
+    const prev = prevV3StatusRef.current;
+    prevV3StatusRef.current = v3Status;
+
+    if (v3Status === 'authenticated') {
+      gatewayWsStoppedHintRef.current = false;
+      gatewayWsStoppedStatusRef.current = null;
+      setGatewayWsStoppedHint(false);
+      return;
+    }
+
+    const lostAuthenticatedWs =
+      prev === 'authenticated' && (v3Status === 'disconnected' || v3Status === 'error');
+    if (!gatewayWsDesired || !lostAuthenticatedWs) return;
+
+    gatewayWsStoppedStatusRef.current = status;
+    gatewayWsStoppedHintRef.current = true;
+    setGatewayWsStoppedHint(true);
+
+    const seq = ++gatewayWsStoppedVerifySeqRef.current;
+    void fetchData().then((freshStatus: any) => {
+      if (seq !== gatewayWsStoppedVerifySeqRef.current) return;
+      const freshRunning = String(freshStatus?.gateway?.status || '').toLowerCase() === 'running';
+      gatewayWsStoppedHintRef.current = !freshRunning;
+      setGatewayWsStoppedHint(!freshRunning);
+      if (freshRunning && gatewayWsDesired) {
+        v3Connect();
+      }
+    });
+  }, [fetchData, gatewayWsDesired, status, v3Connect, v3Status]);
+
+  /**
+   * 后续任意一次 HTTP 状态刷新若已推进，也要清理 WS 停止候选：
+   * - HTTP 仍 running：恢复正常重连；
+   * - HTTP 已 stopped：真实 HTTP 状态已经足够表达停止，不再需要覆盖层。
+   */
+  useEffect(() => {
+    if (!gatewayWsStoppedHint) return;
+    if (!status || status === gatewayWsStoppedStatusRef.current) return;
+
+    gatewayWsStoppedStatusRef.current = null;
+    const rawHttpRunning = String(status?.gateway?.status || '').toLowerCase() === 'running';
+    gatewayWsStoppedHintRef.current = false;
+    setGatewayWsStoppedHint(false);
+    if (rawHttpRunning && gatewayWsDesired) {
+      v3Connect();
+    }
+  }, [gatewayWsDesired, gatewayWsStoppedHint, status, v3Connect]);
+
+  /** HTTP 端口未监听时暂停网关 WS，避免服务端已停仍无限重试、顶栏/卡片长期「连接中」 */
+  useEffect(() => {
+    setConnectionPaused(!gatewayWsDesired || !httpGatewayRunning);
+  }, [gatewayWsDesired, httpGatewayRunning, setConnectionPaused]);
 
   // [自动刷新] 连通性自愈：当 HTTP 轮询发现网关已启动，但 WebSocket 处于断开或错误状态时，主动拉起连接
   useEffect(() => {
     if (!gatewayWsDesired) return;
+    if (gatewayWsStoppedHint || gatewayWsStoppedHintRef.current) return;
     // 仅在非过渡态且 HTTP 状态明确为 running 时触发
     if (!isTransitioning && httpGatewayRunning) {
       if (v3Status === 'disconnected' || v3Status === 'error') {
@@ -1023,7 +1096,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
         v3Connect();
       }
     }
-  }, [gatewayWsDesired, httpGatewayRunning, v3Status, v3Connect, isTransitioning]);
+  }, [gatewayWsDesired, gatewayWsStoppedHint, httpGatewayRunning, v3Status, v3Connect, isTransitioning]);
 
 
   // --- Menu Configuration ---
@@ -1268,14 +1341,42 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
 
   const headerEl = (onMenuClick?: () => void) => {
     const breadcrumbTitle = `${t('common.console')} / ${getActiveLabel(activeTab)}`;
-    const gatewayTitle = [
-      'Gateway',
-      gatewayStateText,
-      `HTTP: ${httpGatewayStatus || 'unknown'}`,
-      `WS: ${v3Status || 'unknown'}`,
-      gatewayLatency !== undefined ? `${gatewayLatency}ms` : '',
-      gatewayHealthTime ? `Last: ${gatewayHealthTime}` : '',
-    ].filter(Boolean).join(' · ');
+    
+    const gatewayTitle = (
+      <div style={{ padding: '2px 0', lineHeight: 1.6 }}>
+        <div style={{ fontWeight: 800, marginBottom: 4, borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'}`, paddingBottom: 4 }}>
+          Gateway · {gatewayStateText}
+        </div>
+        <div style={{ fontSize: 11, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+            <span style={{ opacity: 0.7 }}>HTTP</span>
+            <span style={{ fontWeight: 600 }}>{httpGatewayStatus || 'unknown'}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+            <span style={{ opacity: 0.7 }}>WS</span>
+            <span style={{ fontWeight: 600 }}>{v3Status || 'unknown'}</span>
+          </div>
+          {gatewayTargetHost && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <span style={{ opacity: 0.7 }}>Target</span>
+              <span style={{ fontWeight: 600, fontFamily: 'ui-monospace, monospace' }}>{gatewayTargetHost}:{gatewayTargetPort}</span>
+            </div>
+          )}
+          {gatewayLatency !== undefined && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <span style={{ opacity: 0.7 }}>Latency</span>
+              <span style={{ fontWeight: 600, color: '#10b981' }}>{gatewayLatency}ms</span>
+            </div>
+          )}
+          {gatewayHealthTime && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <span style={{ opacity: 0.7 }}>Last Pulse</span>
+              <span style={{ fontWeight: 600 }}>{gatewayHealthTime}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
 
     const gatewayBadgeText = (
       <span

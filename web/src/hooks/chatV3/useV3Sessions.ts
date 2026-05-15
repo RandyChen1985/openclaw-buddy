@@ -108,7 +108,20 @@ export function useV3Sessions({
   /**
    * 拉取会话列表。可在静默模式下避免 loading。
    */
-  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>(() => {
+    if (typeof window !== 'undefined') {
+      const cached = storage.getItem('v3_sessions_cache');
+      if (cached) {
+        try {
+          return JSON.parse(cached);
+        } catch {
+          return [];
+        }
+      }
+    }
+    return [];
+  });
+
   /** 显式刷新（非静默）时的按钮 loading，与首屏列表无关 */
   const [loadingSessions, setLoadingSessions] = useState(false);
   /** 是否已完成至少一次「非 append」的列表拉取（用于首屏空列表时展示加载态） */
@@ -119,7 +132,13 @@ export function useV3Sessions({
   const [hasMoreSessions, setHasMoreSessions] = useState(true);
 
   const sessionsRef = useRef<any[]>(sessions);
-  useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
+  useEffect(() => {
+    sessionsRef.current = sessions;
+    // 持久化到本地，供下次开屏秒开
+    if (sessions.length > 0) {
+      storage.setItem('v3_sessions_cache', JSON.stringify(sessions.slice(0, V3_SESSION_LIST_PAGE_SIZE)));
+    }
+  }, [sessions]);
 
   /** 避免 fetchSessions 依赖 loadingSessions/sessionLimit 导致引用抖动，进而反复触发认证后的 bootstrap effect（重复 sessions.list） */
   const loadingSessionsRef = useRef(false);

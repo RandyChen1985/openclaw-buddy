@@ -76,7 +76,7 @@ type ServiceStatus struct {
 	Details string `json:"details,omitempty"`
 }
 
-func GetStructuredStatus(port int) (OpenClawStatus, error) {
+func GetStructuredStatus(configDir string, port int) (OpenClawStatus, error) {
 	status := OpenClawStatus{
 		Plugins:  []ServiceStatus{},
 		Channels: []ServiceStatus{},
@@ -104,7 +104,13 @@ func GetStructuredStatus(port int) (OpenClawStatus, error) {
 	status.Metrics = GetSystemMetrics()
 
 	// 1. 解析网关状态
-	if IsPortListening(port) {
+	// 尝试从配置获取所有可能的 host
+	hosts := []string{"127.0.0.1"}
+	if gw, err := GetOpenClawGatewayConfig(configDir); err == nil {
+		hosts = gw.GetGatewayHosts()
+	}
+
+	if IsAnyPortListening(hosts, port) {
 		status.Gateway.Status = "running"
 		pid, _ := GetPIDByPort(port)
 		status.Gateway.PID = pid

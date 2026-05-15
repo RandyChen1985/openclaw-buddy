@@ -83,8 +83,8 @@ func main() {
 
 	fmt.Println("🔑 发起 V3 握手认证 (ClientID: openclaw-control-ui, Role: operator)...")
 	sendRequest(conn, "auth", "connect", map[string]interface{}{
-		"minProtocol": 3,
-		"maxProtocol": 3,
+		"minProtocol": 4,
+		"maxProtocol": 4,
 		"role": role,
 		"scopes": strings.Split(scopes, ","),
 		"auth": map[string]interface{}{

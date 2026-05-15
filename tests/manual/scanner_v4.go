@@ -52,7 +52,7 @@ func main() {
 	conn.WriteJSON(map[string]interface{}{
 		"type": "req", "id": "auth-1", "method": "connect",
 		"params": map[string]interface{}{
-			"minProtocol": 3, "maxProtocol": 3, "role": "operator", "scopes": strings.Split(scopes, ","),
+			"minProtocol": 4, "maxProtocol": 4, "role": "operator", "scopes": strings.Split(scopes, ","),
 			"auth": map[string]interface{}{"token": token},
 			"device": map[string]interface{}{
 				"id": deviceId, "publicKey": base64URLNoPadding(pubKey),

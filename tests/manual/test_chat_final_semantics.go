@@ -157,16 +157,16 @@ func main() {
 	clientID := "openclaw-control-ui"
 	scopes := "operator.admin,operator.read,operator.write"
 	payloadStr := fmt.Sprintf("v3|%s|%s|cli|operator|%s|%d|%s|%s|macos|",
-		deviceID, clientID, scopes, signedAt, token, challengeNonce)
+		deviceId, clientId, scopes, signedAt, token, challengeNonce)
 	signature := ed25519.Sign(privKey, []byte(payloadStr))
 
-	connectReq := map[string]interface{}{
-		"type":   "req",
-		"id":     "auth-1",
+	conn.WriteJSON(map[string]interface{}{
+		"type": "req",
+		"id":   "auth-1",
 		"method": "connect",
 		"params": map[string]interface{}{
-			"minProtocol": 3,
-			"maxProtocol": 3,
+			"minProtocol": 4,
+			"maxProtocol": 4,
 			"client": map[string]interface{}{
 				"id":       clientID,
 				"version":  "2026.4.2",

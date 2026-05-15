@@ -1,0 +1,15 @@
+# 🦞 Gemini CLI Ignore List
+.git/
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+release/
+temp-dev-test/
+backups/
+data/
+logs/
+reports/
+scratch/
+weixin/
+.DS_Store

@@ -65,16 +65,15 @@ func main() {
 	scopes := "operator.admin,operator.read"
 	payloadStr := fmt.Sprintf("v3|%s|%s|cli|operator|%s|%d|%s|%s|macos|",
 		deviceId, clientId, scopes, signedAt, token, challengeNonce)
-	
 	signature := ed25519.Sign(privKey, []byte(payloadStr))
 
-	connectReq := map[string]interface{}{
+	conn.WriteJSON(map[string]interface{}{
 		"type": "req",
 		"id":   "auth-1",
 		"method": "connect",
 		"params": map[string]interface{}{
-			"minProtocol": 3,
-			"maxProtocol": 3,
+			"minProtocol": 4,
+			"maxProtocol": 4,
 			"client": map[string]interface{}{
 				"id":      clientId,
 				"version": "1.0.0",

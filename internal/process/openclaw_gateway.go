@@ -8,9 +8,12 @@ import (
 )
 
 type OpenClawGatewayConfig struct {
-	Port int    `json:"port"`
-	Mode string `json:"mode"`
-	Auth struct {
+	Host           string `json:"host"` // 允许用户在 openclaw.json 中直接写 host（简单模式）
+	Bind           string `json:"bind"`
+	CustomBindHost string `json:"customBindHost"`
+	Port           int    `json:"port"`
+	Mode           string `json:"mode"`
+	Auth           struct {
 		Token string `json:"token"`
 	} `json:"auth"`
 	HTTP struct {
@@ -22,6 +25,24 @@ type OpenClawGatewayConfig struct {
 	} `json:"http"`
 }
 
+func (cfg *OpenClawGatewayConfig) GetGatewayHosts() []string {
+	// 尝试连接的目标地址列表：优先 127.0.0.1
+	hosts := []string{"127.0.0.1"}
+
+	// 1. 如果配置了自定义 host (Buddy 扩展字段)
+	if cfg.Host != "" && cfg.Host != "127.0.0.1" && cfg.Host != "localhost" {
+		hosts = append(hosts, cfg.Host)
+	}
+
+	// 2. 如果配置了 OpenClaw 标准的 customBindHost
+	if (cfg.Bind == "custom" || cfg.Bind == "") && cfg.CustomBindHost != "" {
+		if cfg.CustomBindHost != "127.0.0.1" && cfg.CustomBindHost != "0.0.0.0" && cfg.CustomBindHost != cfg.Host {
+			hosts = append(hosts, cfg.CustomBindHost)
+		}
+	}
+
+	return hosts
+}
 func GetOpenClawGatewayConfig(configDir string) (*OpenClawGatewayConfig, error) {
 	configPath := filepath.Join(configDir, "openclaw.json")
 	data, err := os.ReadFile(configPath)

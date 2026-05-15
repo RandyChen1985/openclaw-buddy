@@ -62,14 +62,29 @@ func GetGatewayStatus() string {
 	return strings.TrimSpace(string(out))
 }
 
-func IsPortListening(port int) bool {
+func IsPortListening(host string, port int) bool {
+	if host == "" {
+		host = "127.0.0.1"
+	}
 	timeout := 2 * time.Second
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), timeout)
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, port), timeout)
 	if err != nil {
 		return false
 	}
 	conn.Close()
 	return true
+}
+
+func IsAnyPortListening(hosts []string, port int) bool {
+	if len(hosts) == 0 {
+		return IsPortListening("127.0.0.1", port)
+	}
+	for _, host := range hosts {
+		if IsPortListening(host, port) {
+			return true
+		}
+	}
+	return false
 }
 
 func CheckHealth() (time.Duration, error) {

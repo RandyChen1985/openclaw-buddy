@@ -17,7 +17,7 @@ export interface V3ChatHeaderProps {
 
   // connection
   status: 'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error';
-  lastHealth: { ok: boolean; latency: number; ts: number } | null;
+  lastHealth: { ok: boolean; latency: number; ts: number; target?: string; port?: number } | null;
   latencyHistory: number[];
   pulse: number;
   onReconnect: () => void;
@@ -598,7 +598,29 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 2 : 6, flexShrink: 0 }}>
         {/* WebSocket Health Indicator (Only in Fullscreen) */}
         {isFullscreen && status === 'authenticated' && lastHealth && (
-          <Tooltip title={`${t('chat.v3Status', { defaultValue: 'WebSocket V3' })} | Latency: ${lastHealth.latency}ms | TS: ${new Date(lastHealth.ts).toLocaleTimeString()}`}>
+          <Tooltip title={
+            <div style={{ padding: '2px 0', lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 800, marginBottom: 4, borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: 4 }}>
+                {t('chat.v3Status', { defaultValue: 'WebSocket V3' })}
+              </div>
+              <div style={{ fontSize: 11, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 140 }}>
+                {lastHealth.target && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                    <span style={{ opacity: 0.7 }}>Target</span>
+                    <span style={{ fontWeight: 600, fontFamily: 'ui-monospace, monospace' }}>{lastHealth.target}:{lastHealth.port}</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <span style={{ opacity: 0.7 }}>Latency</span>
+                  <span style={{ fontWeight: 600, color: '#4ade80' }}>{lastHealth.latency}ms</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <span style={{ opacity: 0.7 }}>Last Pulse</span>
+                  <span style={{ fontWeight: 600 }}>{new Date(lastHealth.ts).toLocaleTimeString()}</span>
+                </div>
+              </div>
+            </div>
+          }>
             <div style={{
               display: 'flex',
               alignItems: 'center',

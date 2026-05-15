@@ -1,6 +1,6 @@
-# OpenClaw WebSocket 协议全量参考手册 (V3)
+# OpenClaw WebSocket 协议全量参考手册 (V4/V3)
 
-本文档基于 OpenClaw Gateway 源码（`src/gateway/`）逐文件提取，作为 Buddy 前端/代理开发的权威协议参考。
+本文档基于 OpenClaw Gateway 源码（`src/gateway/`）逐文件提取，作为 Buddy 前端/代理开发的权威协议参考。Buddy 目前支持 **V4/V3 自动协商**：会优先尝试 V4 握手，若网关返回协议不匹配错误，则自动降级至 V3。
 
 > **最后对齐源码时间**: 2026-04-16
 
@@ -26,9 +26,9 @@
 
 ---
 
-## 2. 认证与连接 (Auth V3)
+## 2. 认证与连接 (Auth V4)
 
-连接握手采用 **Challenge-Response** 机制。客户端连接后，网关推送 `connect.challenge` 事件携带 `nonce`，客户端需使用 Ed25519 私钥签名后发送 `connect` 请求。
+连接握手采用 **Challenge-Response** 机制。客户端连接后，网关推送 `connect.challenge` 事件携带 `nonce`，客户端需使用 Ed25519 私钥签名后发送 `connect` 请求。目前 Buddy 支持协议 **V4**，但签名载体字符串（Handshake String）仍沿用 **V3** 格式（服务端底层校验器目前最高支持 V3 载体）。
 
 ### 2.1 握手签名字符串
 11 段管道符拼接：
@@ -55,8 +55,8 @@ v3|{deviceId}|{clientId}|{clientMode}|{role}|{scopes}|{signedAtMs}|{token}|{nonc
   "id": "auth-1",
   "method": "connect",
   "params": {
-    "minProtocol": 3,
-    "maxProtocol": 3,
+    "minProtocol": 4,
+    "maxProtocol": 4,
     "role": "operator",
     "scopes": ["operator.admin", "operator.read", "operator.write"],
     "auth": { "token": "GATEWAY_TOKEN" },

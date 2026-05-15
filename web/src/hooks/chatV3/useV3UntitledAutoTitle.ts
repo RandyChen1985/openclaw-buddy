@@ -9,7 +9,7 @@ export interface UseV3UntitledAutoTitleParams {
   handleAutoSummarize: (messages: Message[], silent: boolean, targetKey: string, force: boolean) => Promise<void> | void;
 
   /**
-   * 每次列表变化后的去抖时间（ms），默认 600ms。
+   * 每次列表变化后的去抖时间（ms），默认 10000ms (10s)。
    */
   debounceMs?: number;
   /**
@@ -33,7 +33,7 @@ export function useV3UntitledAutoTitle({
   sessions,
   sendRPC,
   handleAutoSummarize,
-  debounceMs = 3000,
+  debounceMs = 10000,
   concurrency = 1,
   historyLimit = 10
 }: UseV3UntitledAutoTitleParams) {
@@ -47,7 +47,7 @@ export function useV3UntitledAutoTitle({
 
     const untitled = sessions
       .filter((s: any) => s?.key && s.key !== 'agent:main:main' && isUntitledSessionLabel(s.label))
-      .slice(0, 5); // 保护：一次最多处理 5 个
+      .slice(0, 3); // 保护：一次最多处理 3 个 (原为 5)
 
     if (untitled.length === 0) return;
 
