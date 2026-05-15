@@ -410,12 +410,13 @@ func (s *Server) handleGatewayProxy(c *gin.Context) {
 				}
 			}
 
+			// 统一发送消息给客户端
 			_ = clientConn.SetWriteDeadline(time.Now().Add(writeTimeout))
 			if err := clientConn.WriteMessage(mt, message); err != nil {
 				return
 			}
-			continue
 
+			// 处理静默授权逻辑 (NOT_PAIRED)
 			if bytes.HasPrefix(trimmed, []byte(`{"type":"res"`)) {
 				var resp struct {
 					Type  string      `json:"type"`
@@ -444,11 +445,6 @@ func (s *Server) handleGatewayProxy(c *gin.Context) {
 						}(did)
 					}
 				}
-			}
-
-			_ = clientConn.SetWriteDeadline(time.Now().Add(writeTimeout))
-			if err := clientConn.WriteMessage(mt, message); err != nil {
-				return
 			}
 		}
 	}()

@@ -309,16 +309,20 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
 
   // 首次进入/刷新：若已恢复 sessionKey，则强制将 bot 下拉与会话 key 对齐，避免“默认选中第一个 bot”造成错配
   useEffect(() => {
+    // 虾兵蟹将「立即聊天」中，由 startNewSession 自行同步，此处避让
     if (typeof window !== 'undefined' && window.sessionStorage?.getItem(V3_QUICK_CHAT_PENDING_KEY)) return;
-    if (!sessionKey) return;
+    
+    if (!sessionKey || !botsModels?.data?.bots) return;
+
     const { botId } = parseSessionKey(sessionKey);
     const desired = `openclaw:${botId}`;
-    const bots = botsModels?.data?.bots;
-    if (Array.isArray(bots) && bots.length > 0) {
-      const allowed = new Set(bots.map((b: any) => b.id));
-      if (!allowed.has(botId)) return;
-    }
-    if (desired && desired !== selectedBot) {
+    
+    // 验证 botId 是否在当前可用列表中
+    const bots = botsModels.data.bots;
+    const isAllowed = bots.some((b: any) => b.id === botId);
+    if (!isAllowed) return;
+
+    if (desired !== selectedBot) {
       setSelectedBot(desired);
     }
   }, [sessionKey, selectedBot, botsModels]);
