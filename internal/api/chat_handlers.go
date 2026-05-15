@@ -416,8 +416,21 @@ func (s *Server) summarizeSession(c *gin.Context) {
 
 	title := "未命名会话"
 	if len(chatRes.Choices) > 0 {
-		title = strings.TrimSpace(chatRes.Choices[0].Message.Content)
-		title = strings.Trim(title, "\"'\"") // 去掉引号
+		content := strings.TrimSpace(chatRes.Choices[0].Message.Content)
+		// 移除常见的前缀和包裹符号
+		content = strings.Trim(content, "\"'「」")
+		prefixes := []string{"标题：", "标题:", "总结：", "总结:", "Title:", "Summary:", "会话标题：", "Session Title:"}
+		for _, p := range prefixes {
+			if strings.HasPrefix(content, p) {
+				content = strings.TrimSpace(strings.TrimPrefix(content, p))
+				break
+			}
+		}
+		// 再次去除引号，防止前缀内部也带有引号
+		content = strings.Trim(content, "\"'「」")
+		if content != "" {
+			title = content
+		}
 	}
 
 	s.Success(c, gin.H{"title": title})
