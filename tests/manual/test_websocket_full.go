@@ -73,8 +73,8 @@ func main() {
 		"id":   "auth-1",
 		"method": "connect",
 		"params": map[string]interface{}{
-			"minProtocol": 3,
-			"maxProtocol": 3,
+			"minProtocol": 4,
+			"maxProtocol": 4,
 			"client": map[string]interface{}{
 				"id":      clientId,
 				"version": "2026.4.2",

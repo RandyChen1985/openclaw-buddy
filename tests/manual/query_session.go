@@ -361,16 +361,16 @@ func main() {
 	signedAt := time.Now().UnixMilli()
 	scopes := "operator.admin,operator.read,operator.write"
 	payloadStr := fmt.Sprintf("v3|%s|%s|cli|operator|%s|%d|%s|%s|macos|",
-		deviceId, clientID, scopes, signedAt, gatewayToken, challengeNonce)
+		deviceId, clientId, scopes, signedAt, token, challengeNonce)
 	signature := ed25519.Sign(privKey, []byte(payloadStr))
 
-	authResp := sendAndWait(conn, map[string]interface{}{
-		"type":   "req",
-		"id":     "auth-1",
+	conn.WriteJSON(map[string]interface{}{
+		"type": "req",
+		"id":   "auth-1",
 		"method": "connect",
 		"params": map[string]interface{}{
-			"minProtocol": 3,
-			"maxProtocol": 3,
+			"minProtocol": 4,
+			"maxProtocol": 4,
 			"client":      map[string]interface{}{"id": clientID, "version": "1.0.0", "platform": "macos", "mode": "cli"},
 			"role":        "operator",
 			"scopes":      strings.Split(scopes, ","),

@@ -107,6 +107,7 @@ export function useV3GatewayConnection({
   const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gatewayTokenCacheRef = useRef<{ token: string; at: number } | null>(null);
   const gatewayTokenFetchRef = useRef<Promise<string> | null>(null);
+  const protocolVersionRef = useRef(4); // 默认先试 V4，失败后会根据网关返回自动切换
 
   const [status, dispatch] = useReducer(wsStatusReducer, 'disconnected' as V3WsStatus);
   const [lastHealth, setLastHealth] = useState<{ ok: boolean; latency: number; ts: number; target?: string; port?: number } | null>(null);
@@ -220,8 +221,9 @@ export function useV3GatewayConnection({
     const platform = navigator.platform.toLowerCase().includes('mac') ? 'macos' : 'windows';
 
     const authId = `connect-${Date.now()}`;
+    const protocolVersion = protocolVersionRef.current;
 
-    // 与既有网关协议对齐：签名握手串（服务端会校验字段完整性，如 minProtocol/maxProtocol）
+    // 签名始终使用 v3 格式，服务端 `resolveDeviceSignaturePayloadVersion` 目前只支持 v2/v3 解析
     const handshakeStr = `v3|${deviceId}|${clientId}|${clientMode}|${role}|${scopes}|${signedAt}|${gatewayToken}|${nonce}|${platform}|`;
     const signatureBytes = nacl.sign.detached(new TextEncoder().encode(handshakeStr), keyPair.secretKey);
 
@@ -230,8 +232,8 @@ export function useV3GatewayConnection({
       id: authId,
       method: 'connect',
       params: {
-        minProtocol: 3,
-        maxProtocol: 3,
+        minProtocol: protocolVersion,
+        maxProtocol: protocolVersion,
         role,
         scopes: scopes.split(','),
         auth: { token: gatewayToken },
@@ -264,7 +266,23 @@ export function useV3GatewayConnection({
       if (res.ok) {
         dispatch({ type: 'AUTH_OK' });
       } else {
+        const error = res.error || {};
+        const code = error.code || '';
         const errMsg = typeof res.error === 'object' ? JSON.stringify(res.error) : String(res.error);
+
+        // 自动兼容：如果提示协议不匹配，且建议了不同的版本，则更新并重试
+        if (code === 'INVALID_REQUEST' && (errMsg.includes('protocol mismatch') || errMsg.includes('version mismatch'))) {
+          const expected = error.details?.expectedProtocol || error.details?.minimumProbeProtocol;
+          if (expected && expected !== protocolVersionRef.current) {
+            // eslint-disable-next-line no-console
+            console.warn(`⚠️ [V3] 网关协议不匹配 (当前: ${protocolVersionRef.current}), 自动切换至 V${expected} 并重试...`);
+            protocolVersionRef.current = expected;
+            reconnectCountRef.current = 0; // 重置计数以立即重连
+            try { ws.close(); } catch {}
+            return;
+          }
+        }
+
         if (errMsg.includes('NOT_PAIRED') || errMsg.includes('NOT_AUTHORIZED')) {
           dispatch({ type: 'AUTH_NEEDS_PAIRING' });
         } else {
