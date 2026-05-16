@@ -40,6 +40,8 @@ func (s *Server) chatProxy(c *gin.Context) {
 	var resp *http.Response
 	var finalURL string
 	var lastErr error
+	// 保留成功请求的 cancel，在 body 读取完毕后再调用，防止提前取消导致流式 body 被截断
+	var successCancel context.CancelFunc
 
 	// 读取原始请求体 (提前读取，避免在循环中重复读取消耗 Body)
 	var body map[string]interface{}
@@ -49,8 +51,14 @@ func (s *Server) chatProxy(c *gin.Context) {
 	}
 	jsonBody, _ := json.Marshal(body)
 
+	port := gw.Port
+	if port <= 0 {
+		port = s.cfg.HealthPort
+		log.Printf("⚠️ [Chat-Proxy] 网关配置中端口为 0，使用 HEALTH_PORT (%d) 兜底", port)
+	}
+
 	for _, target := range targets {
-		targetURL := fmt.Sprintf("http://%s:%d/v1/chat/completions", target, gw.Port)
+		targetURL := fmt.Sprintf("http://%s:%d/v1/chat/completions", target, port)
 		req, err := http.NewRequest("POST", targetURL, bytes.NewBuffer(jsonBody))
 		if err != nil {
 			lastErr = err
@@ -65,19 +73,24 @@ func (s *Server) chatProxy(c *gin.Context) {
 		}
 
 		// 设置带超时的上下文
+		// 注意：不能在 client.Do() 后立即 cancel()，否则流式 body 会被立刻关闭；
+		// 失败时立即 cancel 释放资源，成功时推迟到 body 读取完毕后再 cancel。
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 6*time.Minute)
 		client := &http.Client{}
 		r, err := client.Do(req.WithContext(ctx))
-		cancel()
-
 		if err != nil {
+			cancel() // 请求失败，立即释放
 			lastErr = err
 			log.Printf("⚠️ [Chat-Proxy] 尝试连接网关失败 (%s): %v", targetURL, err)
 			continue
 		}
 		resp = r
 		finalURL = targetURL
+		successCancel = cancel
 		break
+	}
+	if successCancel != nil {
+		defer successCancel() // body 读取完毕（函数返回）后再释放上下文
 	}
 
 	duration := time.Since(startTime).Milliseconds()
@@ -111,30 +124,26 @@ func (s *Server) chatProxy(c *gin.Context) {
 	// 5. 处理流式响应 (WAF 穿透增强)
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") || isStream {
 		c.Header("Content-Type", "text/event-stream")
-		c.Header("Cache-Control", "no-cache, no-transform") // 核心：禁止中间缓存和压缩
+		c.Header("Cache-Control", "no-cache, no-transform")
 		c.Header("Connection", "keep-alive")
-		c.Header("X-Accel-Buffering", "no") // 核心：专门针对 Nginx/WAF 的非缓冲指令
+		c.Header("X-Accel-Buffering", "no") // 专门针对 Nginx/WAF 的非缓冲指令
 
-		c.Stream(func(w io.Writer) bool {
-			// 使用带 Flush 功能的 Writer 确保实时性
-			reader := resp.Body
-			buffer := make([]byte, 1024)
-			for {
-				n, err := reader.Read(buffer)
-				if n > 0 {
-					_, writeErr := w.Write(buffer[:n])
-					if writeErr != nil {
-						return false // 客户端断开，退出流
-					}
-					// Gin 的 c.Stream 会在每次循环后自动调用 Flush，
-					// 但为了极端情况下的平滑度，手动 Read 确保了更细粒度的控制。
-					return true
+		flusher, canFlush := c.Writer.(http.Flusher)
+		buf := make([]byte, 4096)
+		for {
+			n, readErr := resp.Body.Read(buf)
+			if n > 0 {
+				if _, writeErr := c.Writer.Write(buf[:n]); writeErr != nil {
+					break // 客户端已断开
 				}
-				if err != nil {
-					return false // 读取结束或出错
+				if canFlush {
+					flusher.Flush()
 				}
 			}
-		})
+			if readErr != nil {
+				break // EOF 或上游错误，正常结束
+			}
+		}
 		return
 	}
 
