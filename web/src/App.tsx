@@ -8,6 +8,7 @@ import {
 import api from './api';
 import axios from 'axios';
 import storage from './utils/storage';
+import { canBypassV3SessionBotAccess } from './utils/v3SessionAccess';
 import { deriveGatewayState } from './app/gatewayState';
 import { createMenuItems, getActiveMenuLabel, hasMenuPermission } from './app/menu';
 
@@ -1237,6 +1238,10 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
           (authMe?.login_type || '') !== 'token' &&
           !(authMe?.role_keys || []).includes('admin')
         }
+        canDeleteV3OrphanSessions={canBypassV3SessionBotAccess({
+          isSuperAdmin: authMe?.is_superadmin,
+          allowedBotIDs: authMe?.bot_ids,
+        })}
         onNavigateToDashboard={() => {
           setActiveTab('dashboard');
           window.location.hash = 'actions';

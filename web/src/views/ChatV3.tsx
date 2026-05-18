@@ -77,12 +77,22 @@ interface ChatV3Props {
   usernameForSessionKey?: string | null;
   /** 普通用户：只加载 key 中包含 username 的会话 */
   filterV3SessionsByUsername?: boolean;
+  /** 管理员：Bot 已从配置移除的会话仍可删除 */
+  canDeleteV3OrphanSessions?: boolean;
 }
 
 
 // --- Utils ---
 
-const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDarkMode = false, usernameForSessionKey, filterV3SessionsByUsername }) => {
+const ChatV3: React.FC<ChatV3Props> = ({
+  botsModels,
+  loadingBots,
+  isMobile,
+  isDarkMode = false,
+  usernameForSessionKey,
+  filterV3SessionsByUsername,
+  canDeleteV3OrphanSessions = false,
+}) => {
 
   const { t } = useTranslation();
   const v3Theme = useV3Theme();
@@ -626,6 +636,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
             <V3SessionList
               sessions={sessions}
               botsModels={botsModels}
+              canDeleteV3OrphanSessions={canDeleteV3OrphanSessions}
               sessionKey={sessionKey}
               typingSessionKeys={typingSessionKeys}
               loadingSessions={loadingSessions}
