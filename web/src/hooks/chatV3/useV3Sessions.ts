@@ -81,6 +81,11 @@ export function useV3Sessions({
 }: UseV3SessionsParams) {
   const [isUpdatingLabel, setIsUpdatingLabel] = useState(false);
   const didAutoSelectMainRef = useRef(false);
+  /**
+   * 网关 sessions.delete 偶发仍把会话留在 sessions.list 索引中（尤其已下线 Bot），
+   * 用户侧在 RPC 成功后将 key 记入墓碑，列表拉取时暂时隐藏，直至服务端不再返回该 key。
+   */
+  const tombstoneSessionKeysRef = useRef<Set<string>>(new Set());
 
   const sessionKeyRef = useRef<string | null>(null);
   useEffect(() => { sessionKeyRef.current = sessionKey; }, [sessionKey]);
@@ -190,7 +195,11 @@ export function useV3Sessions({
       const res = await sendRPC('sessions.list', { limit: nextLimit });
 
       if (res.ok) {
-        const list = res.payload?.items || res.payload?.sessions || (Array.isArray(res.payload) ? res.payload : []);
+        const rawPayload = res.payload ?? res.result;
+        const list =
+          rawPayload?.items ||
+          rawPayload?.sessions ||
+          (Array.isArray(rawPayload) ? rawPayload : []);
 
         // 如果返回的数量小于请求的数量，说明到底了
         if (list.length < nextLimit) {
@@ -219,7 +228,15 @@ export function useV3Sessions({
           ? patchedList.filter((s: any) => String(s?.key || '').includes(normalizedUsername))
           : patchedList;
 
-        setSessions(nextList);
+        const serverKeys = new Set(patchedList.map((s: any) => String(s?.key || '')));
+        for (const k of [...tombstoneSessionKeysRef.current]) {
+          if (!serverKeys.has(k)) {
+            tombstoneSessionKeysRef.current.delete(k);
+          }
+        }
+        const visibleList = nextList.filter((s: any) => !tombstoneSessionKeysRef.current.has(s.key));
+
+        setSessions(visibleList);
         sessionLimitRef.current = nextLimit;
         setSessionLimit(nextLimit);
 
@@ -449,9 +466,13 @@ export function useV3Sessions({
       onOk: async () => {
         try {
           antdMessage.loading({ content: t('common.processing', { defaultValue: '正在处理...' }), key: 'deletingSession' });
-          const res = await sendRPC('sessions.delete', { key });
+          const res = await sendRPC('sessions.delete', {
+            key,
+            deleteTranscript: true,
+          });
 
           if (res.ok) {
+            tombstoneSessionKeysRef.current.add(key);
             antdMessage.success({ content: t('common.success'), key: 'deletingSession' });
             sendRPC('sessions.messages.unsubscribe', { key }).catch(() => {});
             if (sessionKey === key) {
@@ -461,7 +482,7 @@ export function useV3Sessions({
               setSessionModel('');
               messageOpsRef.current.setHasNewMessages?.(false);
             }
-            fetchSessions();
+            await fetchSessions(true);
           } else {
             const errMsgRaw = res.error?.message || res.error || 'Gateway Timeout or Unknown Error';
             let errMsg = typeof errMsgRaw === 'string' ? errMsgRaw : JSON.stringify(errMsgRaw);
