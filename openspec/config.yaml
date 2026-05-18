@@ -1,20 +1,55 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  项目：OpenClaw Buddy — 面向 OpenClaw（小龙虾 AI Agent）的带外管理 (OOB) 与自愈伴侣系统。
+  职责：网关监控、配置回滚、微信/渠道登录、Bot 与模型管理、审计大屏、安全策略、V3 对话实验室等；不替代 OpenClaw 本体，通过 CLI/进程与 openclaw.json 交互。
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  技术栈：
+  - 后端：Go（go.mod 当前 1.25+）、Gin、Gorilla WebSocket、SQLite；入口 cmd/monitor/
+  - 后端模块：internal/api（REST）、internal/guardian（哨兵自愈）、internal/process（openclaw CLI 封装）、internal/config、internal/analyzer、internal/scheduler、internal/utils
+  - 前端：web/ — React 18、Vite、TypeScript、Ant Design 5、Lucide、ECharts、i18next；V3 对话主入口 web/src/views/ChatV3.tsx，组件 web/src/components/Chat/*
+  - 构建：./dev.sh 隔离开发；./build_linux.sh / Makefile 发布；静态资源由 Go embed 分发
+
+  目录约定：
+  - openspec/specs/<capability>/spec.md — 已归档的主规格（修改能力前先查此目录）
+  - openspec/changes/<name>/ — 进行中的变更（proposal、design、tasks、delta specs）
+  - openspec/changes/archive/ — 已完成变更
+  - API.md — REST /v1/* 接口；Embedding.md — 对话嵌入集成
+  - tests/ — 集成测试与 CHECKLIST.md
+
+  已有能力 spec（kebab-case，proposal 的 Modified Capabilities 须从此列表选取）：
+  audit-dashboard, audit-log-collector, exec-approval-interface, real-time-task-notification,
+  security-policy-management, session-source-visualization, task-concurrency-control,
+  task-persistence, task-tray-ui, v3-chat-mentions, windows-desktop-gui
+
+  认证：HTTP Header Authorization: Bearer <BUDDY_TOKEN>（env 中 BUDDY_TOKEN）。
+
+  Git：Conventional Commits，首行 type + 可选 scope + 中文描述，常用 scope 如 v3、web、api；实现完成后提交说明须中文。
+
+  术语：OpenClaw / 小龙虾 / 网关；Buddy / 伴侣 / 哨兵；虾兵蟹将 = Bots；V3 = 新版在线对话 UI；任务托盘 = TaskTray。
+
+rules:
+  proposal:
+    - "保持 1–2 页，聚焦 why；how 留给 design.md"
+    - "Capabilities 必须对照 openspec/specs/：New 用新 kebab-case 名；Modified 仅当需求级行为变化，且使用已有 spec 目录名"
+    - "Impact 写明受影响路径（如 internal/api/*、web/src/views/*）及是否 Breaking"
+    - "非目标（明确不做的事）建议单独一小节，避免范围蔓延"
+
+  specs:
+    - "每个能力一个 specs/<capability>/spec.md；结构含 Purpose 与 Requirements 两节"
+    - "规范性需求句必须含 SHALL 或 MUST（openspec validate 硬性要求）；描述性文字可用中文"
+    - "每条需求用三级标题 Requirement，至少一个四级标题 Scenario，WHEN/THEN 列表格式"
+    - "修改已有能力时写 delta（ADDED / MODIFIED / REMOVED / RENAMED）；MODIFIED 须粘贴完整需求块再改"
+    - "场景标题必须用四级标题，勿用三级标题或纯 bullet，否则校验静默失败"
+
+  design:
+    - "说明前后端落点：Go handler 路径、React 组件或 hook 路径、是否新增 API（对照 API.md）"
+    - "涉及 OpenClaw CLI 时写明命令形态（参考 internal/process/ 现有封装）"
+    - "数据与状态：SQLite 表或文件路径、WebSocket 事件、异步任务 taskId 模式需交代"
+    - "安全与回滚：鉴权、exec-approvals、配置 backups 自愈链路若相关须提及"
+
+  tasks:
+    - "按可验收步骤编号（如 1.1、1.2），单步宜在半天内可完成"
+    - "每条任务关联 capability 或文件路径，便于 /opsx:apply 对照实现"
+    - "含前端时注明是否需 i18n（web/src/locales/zh.json、en.json）"
+    - "最后一条建议执行 openspec validate --specs 与必要的手动测试项"
