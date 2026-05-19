@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Avatar, Button, Drawer, Input, Select, message as antdMessage } from 'antd';
 import { Bot, Copy, Cpu, Loader2, MessageCircle, Send, Trash2, User, X, Zap } from 'lucide-react';
 import Tooltip from '../../components/common/AppTooltip';
@@ -57,8 +57,57 @@ export function V3ModelChatDrawer({
   const [messages, setMessages] = useState<ModelChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
+
+  const focusInput = useCallback(() => {
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+    });
+  }, []);
+
+  const canSend = useMemo(
+    () => status === 'authenticated' && !!selectedModel && !!input.trim() && !isSending,
+    [status, selectedModel, input, isSending],
+  );
+
+  const sendButtonStyle = useMemo(() => {
+    if (!canSend) {
+      return {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        background: isDarkMode ? '#334155' : '#e2e8f0',
+        border: 'none',
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: isDarkMode ? '#64748b' : '#94a3b8',
+        transition: 'all 0.2s',
+      } as const;
+    }
+    return {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      background: '#2563eb',
+      border: 'none',
+      flexShrink: 0,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      boxShadow: '0 4px 12px rgba(37,99,235,0.25)',
+      transition: 'all 0.2s',
+      color: '#fff',
+    } as const;
+  }, [canSend, isDarkMode]);
 
   const shell = useMemo(
     () =>
@@ -92,6 +141,27 @@ export function V3ModelChatDrawer({
     [isDarkMode],
   );
 
+  const inputContainerStyle = useMemo(
+    () => ({
+      display: 'flex',
+      background: isDarkMode ? shell.surface : 'var(--v3-surface, #fff)',
+      borderRadius: 16,
+      boxShadow: isInputFocused
+        ? isDarkMode
+          ? '0 20px 40px -10px rgba(99, 102, 241, 0.22), 0 0 0 4px rgba(165, 180, 252, 0.28)'
+          : '0 20px 40px -10px rgba(99, 102, 241, 0.25), 0 0 0 4px rgba(99, 102, 241, 0.3)'
+        : isDarkMode
+          ? '0 10px 28px -6px rgba(0, 0, 0, 0.45), 0 0 0 2px rgba(99, 102, 241, 0.14)'
+          : '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 0 0 2px rgba(99, 102, 241, 0.1)',
+      border: 'none',
+      overflow: 'visible',
+      transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+      width: '100%',
+      boxSizing: 'border-box' as const,
+    }),
+    [isInputFocused, isDarkMode, shell.surface],
+  );
+
   const modelGroups = useMemo(
     () => groupModels(botsModels?.data?.models || []),
     [botsModels],
@@ -123,9 +193,17 @@ export function V3ModelChatDrawer({
     streamAbortRef.current = null;
   }, [open]);
 
+  const handleDrawerAfterOpen = useCallback(
+    (visible: boolean) => {
+      if (visible) focusInput();
+    },
+    [focusInput],
+  );
+
   const handleClearCurrent = useCallback(() => {
     setMessages([]);
-  }, []);
+    focusInput();
+  }, [focusInput]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -214,8 +292,11 @@ export function V3ModelChatDrawer({
         streamAbortRef.current = null;
       }
       setIsSending(false);
+      if (!abortController.signal.aborted) {
+        focusInput();
+      }
     }
-  }, [input, isSending, isThinkingContent, messages, selectedModel, status, t, thinkingLabel]);
+  }, [focusInput, input, isSending, isThinkingContent, messages, selectedModel, status, t, thinkingLabel]);
 
   const handleClose = useCallback(() => {
     streamAbortRef.current?.abort();
@@ -242,6 +323,7 @@ export function V3ModelChatDrawer({
       width={420}
       open={open}
       onClose={handleClose}
+      afterOpenChange={handleDrawerAfterOpen}
       destroyOnClose={false}
       styles={{
         body: { padding: 0, display: 'flex', flexDirection: 'column', height: '100%', background: shell.body },
@@ -263,11 +345,13 @@ export function V3ModelChatDrawer({
       >
         {t('chat.modelChatHint', { defaultValue: '用于测试模型以及简单问答用途' })}
       </div>
-      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${shell.border}`, background: shell.surface }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: shell.subtitle, marginBottom: 6 }}>
-          {t('chat.modelChatSelectModel', { defaultValue: '选择模型' })}
-        </div>
-        <Select
+      <div style={{ padding: '10px 16px', borderBottom: `1px solid ${shell.border}`, background: shell.surface }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: shell.subtitle, marginBottom: 4 }}>
+              {t('chat.modelChatSelectModel', { defaultValue: '选择模型' })}
+            </div>
+            <Select
           showSearch
           style={{ width: '100%' }}
           placeholder={t('chat.sessionModelPlaceholder', { defaultValue: '选择模型' })}
@@ -292,16 +376,22 @@ export function V3ModelChatDrawer({
               </Select.OptGroup>
             ))}
         </Select>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-          <Button
-            size="small"
-            type="text"
-            icon={<Trash2 size={14} />}
-            onClick={handleClearCurrent}
-            disabled={messages.length === 0 || isSending}
-          >
-            {t('chat.modelChatClear', { defaultValue: '清空对话' })}
-          </Button>
+          </div>
+          <Tooltip title={t('chat.modelChatClear', { defaultValue: '清空对话' })}>
+            <Button
+              type="text"
+              icon={<Trash2 size={16} />}
+              onClick={handleClearCurrent}
+              disabled={messages.length === 0 || isSending}
+              aria-label={t('chat.modelChatClear', { defaultValue: '清空对话' })}
+              style={{
+                flexShrink: 0,
+                height: 32,
+                width: 32,
+                color: messages.length === 0 || isSending ? undefined : shell.muted,
+              }}
+            />
+          </Tooltip>
         </div>
       </div>
 
@@ -478,36 +568,65 @@ export function V3ModelChatDrawer({
 
       <div
         style={{
-          padding: '12px 16px',
+          padding: '14px 16px',
           borderTop: `1px solid ${shell.border}`,
           background: shell.surface,
-          display: 'flex',
-          gap: 8,
-          alignItems: 'flex-end',
         }}
       >
-        <Input.TextArea
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          placeholder={t('chat.modelChatInputPlaceholder', { defaultValue: '输入消息，Enter 发送，Shift+Enter 换行' })}
-          autoSize={{ minRows: 1, maxRows: 4 }}
-          disabled={!selectedModel || isSending || status !== 'authenticated'}
-          onPressEnter={e => {
-            if (!e.shiftKey) {
-              e.preventDefault();
-              void handleSend();
-            }
-          }}
-          style={{ flex: 1, borderRadius: 10, background: shell.inputBg }}
-        />
-        <Button
-          type="primary"
-          icon={<Send size={16} />}
-          onClick={() => void handleSend()}
-          loading={isSending}
-          disabled={!selectedModel || !input.trim() || status !== 'authenticated'}
-          style={{ flexShrink: 0, height: 40, borderRadius: 10 }}
-        />
+        <div style={inputContainerStyle} className="input-container-v3">
+          <div
+            className={`v3-input-wrapper ${isInputFocused ? 'focused' : ''} ${isDarkMode ? 'v3-input-wrapper--dark' : ''}`}
+            style={{ width: '100%' }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-end',
+                gap: 8,
+                padding: '8px 12px 10px',
+                boxSizing: 'border-box',
+              }}
+            >
+              <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+                <Input.TextArea
+                  ref={inputRef}
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  placeholder={t('chat.modelChatInputPlaceholder', {
+                    defaultValue: '输入消息，Enter 发送，Shift+Enter 换行',
+                  })}
+                  autoSize={{ minRows: 3, maxRows: 8 }}
+                  variant="borderless"
+                  disabled={!selectedModel || isSending || status !== 'authenticated'}
+                  onFocus={() => setIsInputFocused(true)}
+                  onBlur={() => setIsInputFocused(false)}
+                  onPressEnter={e => {
+                    if (!e.shiftKey) {
+                      e.preventDefault();
+                      void handleSend();
+                    }
+                  }}
+                  style={{
+                    padding: '4px 0',
+                    fontSize: 13,
+                    lineHeight: 1.55,
+                    minHeight: 32,
+                    color: isDarkMode ? '#e2e8f0' : undefined,
+                    background: 'transparent',
+                  }}
+                />
+              </div>
+              <Button
+                type="primary"
+                icon={<Send size={17} />}
+                onClick={() => void handleSend()}
+                loading={isSending}
+                disabled={!canSend}
+                style={sendButtonStyle as CSSProperties}
+              />
+            </div>
+          </div>
+        </div>
       </div>
     </Drawer>
   );

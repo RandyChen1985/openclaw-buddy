@@ -1030,7 +1030,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
 
   /**
    * 如果 WS 已经认证成功后突然断开，前端可以先把它视作“端口已停止”的候选状态，
-   * 立即刷新 HTTP 做校准，避免等 30s 轮询期间还显示重连中/连接中。
+   * 立即刷新 HTTP 做校准，避免等状态轮询期间还显示重连中/连接中。
    */
   useEffect(() => {
     const prev = prevV3StatusRef.current;
