@@ -689,6 +689,31 @@ button.v3-settings-reasoning-btn--dark:active {
 .markdown-body-v3 th { background: #f8fafc; font-weight: 700; }
 .markdown-body-v3 blockquote:not([class]) { border-left: 4px solid #cbd5e1; padding-left: 12px; color: #64748b; margin: 10px 0; font-style: italic; }
 
+/* 模型试聊抽屉 Markdown（Drawer 不在 .chat-v3-root 内，需局部覆盖） */
+.v3-model-chat-md--user.markdown-body-v3 strong {
+  color: inherit;
+}
+.v3-model-chat-md--user.markdown-body-v3 a {
+  color: #e0e7ff;
+}
+.v3-model-chat-md--dark.markdown-body-v3 strong {
+  color: #f1f5f9;
+}
+.v3-model-chat-md--dark.markdown-body-v3 th,
+.v3-model-chat-md--dark.markdown-body-v3 td {
+  border-color: #334155;
+}
+.v3-model-chat-md--dark.markdown-body-v3 th {
+  background: #1e293b;
+}
+.v3-model-chat-md--dark.markdown-body-v3 hr {
+  background: #334155;
+}
+.v3-model-chat-md--dark.markdown-body-v3 blockquote:not([class]) {
+  border-left-color: #475569;
+  color: #94a3b8;
+}
+
 /* Soul 编辑器 Drawer：Tabs 占满剩余高度，tab 内可滚动 */
 .v3-soul-tabs.ant-tabs {
   flex: 1;

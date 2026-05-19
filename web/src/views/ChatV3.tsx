@@ -15,6 +15,7 @@ import { V3QuickCommands } from './chatV3/V3QuickCommands';
 import { V3ChatHeader } from './chatV3/V3ChatHeader';
 import { V3FloatingButtons } from './chatV3/V3FloatingButtons';
 import { V3MessagePane } from './chatV3/V3MessagePane';
+import { V3ModelChatDrawer } from './chatV3/V3ModelChatDrawer';
 import { V3ComposerBar } from './chatV3/V3ComposerBar';
 import { V3TerminalModal } from '../components/Chat/V3TerminalModal';
 import { V3DebugPane } from './chatV3/V3DebugPane';
@@ -252,6 +253,7 @@ const ChatV3: React.FC<ChatV3Props> = ({
   const [editContent, setEditContent] = useState('');
   const [sessionSearch, setSessionSearch] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [modelChatOpen, setModelChatOpen] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [explorerPath, setExplorerPath] = useState('');
   const [explorerTitle, setExplorerTitle] = useState('');
@@ -838,6 +840,7 @@ const ChatV3: React.FC<ChatV3Props> = ({
           onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
           onExportSession={handleExportCurrentSession}
           exportSessionDisabled={!sessionKey || isLoadingHistory}
+          onOpenModelChat={() => setModelChatOpen(true)}
           onOpenWorkspace={handleOpenWorkspace}
           showTerminal={showTerminal}
           setShowTerminal={(val) => {
@@ -963,7 +966,6 @@ const ChatV3: React.FC<ChatV3Props> = ({
             />
 
           </div>
-        </div>
         {showDebug && !isMobile && (
           <V3DebugPane 
             t={t} 
@@ -1070,13 +1072,14 @@ const ChatV3: React.FC<ChatV3Props> = ({
             />
           </>
         )}
-        <ChatV3Auth 
-          status={status} 
-          isMobile={!!isMobile} 
-          onConnect={connect} 
+        <ChatV3Auth
+          status={status}
+          isMobile={!!isMobile}
+          onConnect={connect}
           t={t}
           isDarkMode={isDarkMode}
         />
+      </div>
       </div>
 
       <FileExplorer
@@ -1099,6 +1102,16 @@ const ChatV3: React.FC<ChatV3Props> = ({
         cwd={terminalCwd}
         title={terminalTitle}
         showSider={showSider}
+      />
+
+      <V3ModelChatDrawer
+        t={t}
+        isDarkMode={isDarkMode}
+        botsModels={botsModels}
+        status={status}
+        open={modelChatOpen}
+        onClose={() => setModelChatOpen(false)}
+        copyToClipboard={copyToClipboard}
       />
     </>
   );

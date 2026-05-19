@@ -101,6 +101,164 @@ export const getTicket = async (): Promise<string | null> => {
 /**
  * 自动总结会话标题
  */
+export type ChatCompletionMessage = { role: 'user' | 'assistant' | 'system'; content: string };
+
+function parseModelChatSseLine(line: string): string | null {
+  if (!line.startsWith('data:')) return null;
+  const dataStr = line.slice(5).trim();
+  if (!dataStr || dataStr === '[DONE]') return null;
+  const data = JSON.parse(dataStr);
+  if (data?.error) {
+    const errRaw = data.error?.message ?? data.error;
+    throw new Error(typeof errRaw === 'string' ? errRaw : JSON.stringify(errRaw));
+  }
+  const piece = data?.choices?.[0]?.delta?.content ?? data?.choices?.[0]?.message?.content ?? '';
+  return typeof piece === 'string' && piece.length > 0 ? piece : null;
+}
+
+async function readModelChatSseStream(
+  response: Response,
+  onDelta: (chunk: string) => void,
+): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('Stream not supported');
+
+  const decoder = new TextDecoder();
+  let pendingLine = '';
+  let full = '';
+
+  const consumeLine = (line: string) => {
+    const delta = parseModelChatSseLine(line);
+    if (!delta) return;
+    full += delta;
+    onDelta(delta);
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      pendingLine += decoder.decode();
+      if (pendingLine.trim()) {
+        for (const line of pendingLine.split(/\r?\n/)) {
+          if (line.trim()) consumeLine(line);
+        }
+      }
+      break;
+    }
+    pendingLine += decoder.decode(value, { stream: true });
+    const lines = pendingLine.split(/\r?\n/);
+    pendingLine = lines.pop() || '';
+    for (const line of lines) {
+      if (line.trim()) consumeLine(line);
+    }
+  }
+
+  return full;
+}
+
+export type StreamModelChatOptions = {
+  onDelta: (chunk: string) => void;
+  signal?: AbortSignal;
+};
+
+/**
+ * 模型试聊流式对话：直连提供商 SSE（与 summarize 同路由，stream: true）。
+ */
+export async function streamModelChatCompletions(
+  modelID: string,
+  messages: ChatCompletionMessage[],
+  options: StreamModelChatOptions,
+): Promise<string> {
+  const token = storage.getItem('guardian_token');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const body = JSON.stringify({ modelID, messages, stream: true });
+
+  const postStream = (url: string) =>
+    fetch(url, { method: 'POST', headers, body, signal: options.signal });
+
+  let response = await postStream(getFullUrl('/v1/openclaw/chat/complete'));
+
+  if (response.status === 404 && typeof window !== 'undefined') {
+    const base = getBaseURL();
+    const normalizedBase = base === '/' ? '' : base;
+    const fallbackUrl = `${window.location.origin}${normalizedBase}/v1/openclaw/chat/complete`;
+    response = await postStream(fallbackUrl);
+  }
+
+  if (!response.ok) {
+    let errMsg = `HTTP ${response.status}`;
+    try {
+      const errJson = await response.json();
+      errMsg = errJson?.message || errJson?.error?.message || errJson?.error || errMsg;
+    } catch {
+      try {
+        errMsg = await response.text();
+      } catch {
+        /* ignore */
+      }
+    }
+    throw new Error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('text/event-stream')) {
+    return readModelChatSseStream(response, options.onDelta);
+  }
+
+  const json = await response.json();
+  const content =
+    (typeof json?.data?.content === 'string' ? json.data.content : '') ||
+    (typeof json?.content === 'string' ? json.content : '');
+  if (content) options.onDelta(content);
+  return content;
+}
+
+/** 非流式（保留兼容）；模型试聊默认用 streamModelChatCompletions */
+export const chatCompletions = async (
+  modelID: string,
+  messages: ChatCompletionMessage[],
+): Promise<string> => {
+  const postComplete = async (url: string) => {
+    const token = storage.getItem('guardian_token');
+    return axios.post(
+      url,
+      { modelID, messages, stream: false },
+      token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+    );
+  };
+
+  try {
+    const response = await api.post('/v1/openclaw/chat/complete', { modelID, messages, stream: false });
+    const content = response.data?.content;
+    if (typeof content === 'string') return content;
+    return '';
+  } catch (err) {
+    const anyErr = err as any;
+    const status = anyErr?.response?.status;
+    const url = anyErr?.config?.url;
+
+    if (status === 404 && typeof window !== 'undefined') {
+      try {
+        const base = getBaseURL();
+        const normalizedBase = base === '/' ? '' : base;
+        const fullUrl = `${window.location.origin}${normalizedBase}/v1/openclaw/chat/complete`;
+        const retryRes = await postComplete(fullUrl);
+        const content = retryRes.data?.data?.content ?? retryRes.data?.content;
+        if (typeof content === 'string') return content;
+        return '';
+      } catch (retryErr) {
+        console.error('Failed to chat complete (retry root /v1):', retryErr, { originalUrl: url });
+        throw retryErr;
+      }
+    }
+
+    console.error('Failed to chat complete:', err, { url });
+    throw err;
+  }
+};
+
 export const summarizeSession = async (messages: any[], modelID?: string): Promise<string | null> => {
   try {
     const response = await api.post('/v1/openclaw/chat/summarize', { messages, modelID });
