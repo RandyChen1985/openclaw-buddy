@@ -4,6 +4,10 @@ import { Virtuoso } from 'react-virtuoso';
 import type { VirtuosoHandle } from 'react-virtuoso';
 import { Plus } from 'lucide-react';
 import type { Message } from '../../hooks/useChatV3WebSocket';
+import {
+  buildMetaContentByRunId,
+  filterVisibleV3Messages,
+} from '../../hooks/chatV3/v3DisplayMessages';
 import V3MessageItem from '../../components/Chat/V3MessageItem';
 
 export interface V3MessagePaneProps {
@@ -92,89 +96,14 @@ export function V3MessagePane({
   // _uiMetaOnly 气泡不再作为独立消息渲染，改为嵌入到同 runId 主气泡的底部。
   // 同时过滤掉系统自动生成的哨兵提示词、心跳提示词以及对应的 HEARTBEAT_OK 回复。
   const visibleMessages = useMemo(
-    () => messages.filter(m => {
-      // 1. 过滤内部 meta 消息
-      if ((m as any)._uiMetaOnly) return false;
-
-      const content = (m.content || '').trim();
-
-      // 1.1 toolResult 属于“工具结果回执”，跟随 showThinking 开关显示/隐藏
-      // 说明：历史记录里 toolResult 可能是独立 role（由服务端持久化），不是普通 assistant 文本。
-      if ((m as any).role === 'toolResult') {
-        return !!showThinking;
-      }
-      
-      // 2. 过滤系统注入的提示词 (role: user)
-      if (m.role === 'user') {
-        const sl = (m.senderLabel || '').toLowerCase();
-        // 💡 关键修复：放行所有正常的物理渠道消息，仅拦截明确的系统背景提示词
-        if (sl === 'system' || sl === 'heartbeat') return false;
-        
-        // 如果是空的 label，且内容符合系统注入特征（如 System: 或者是心跳检测），则隐藏
-        if (!sl) {
-          if (/^System\s*(\(.*\))?:/.test(content)) return false;
-          if (content.includes('Read HEARTBEAT.md if it exists')) return false;
-        }
-      }
-
-      // 3. 过滤系统心跳确认与纯工具回执 (role: assistant)
-      if (m.role === 'assistant') {
-        if (content === 'HEARTBEAT_OK') return false;
-        
-        // 如果开启了“显示思考/工具”，则保留所有助手消息
-        // 如果关闭了，则过滤掉那些“只有工具回执、没有正文”的骨架消息
-        // 💡 优化：如果是当前正在吐字的最后一条消息，无论开关如何都必须放行，
-        // 否则在思考阶段用户会看到一片空白，没有反馈。
-        const isLastAndTyping = isTyping && m.id === messages[messages.length - 1]?.id;
-        if (!showThinking && isAssistantSkeletonContent(content) && !isLastAndTyping) {
-          return false;
-        }
-      }
-
-      return true;
-    }),
+    () => filterVisibleV3Messages(messages, { showThinking, isTyping }),
     [messages, showThinking, isTyping],
   );
 
-  /** 识别那些只有元数据（思考、工具、计划）而没有实际正文回复的消息 */
-  function isAssistantSkeletonContent(content: string): boolean {
-    const t = (content || '').trim();
-    if (!t) return false;
-    
-    // 如果内容看起来像是一个或多个元数据块的叠加
-    const hasMetadata = t.includes(':::thinking') || t.includes(':::plan') || t.includes(':::commandOutput') || t.includes(':::toolCall') || t.includes(':::toolResult') || t.includes('🔧') || t.includes('✅') || t.includes('❌');
-    if (!hasMetadata) return false;
-    
-    // 移除所有元数据块后看是否还有剩余正文
-    const rest = t
-      .replace(/> :::thinking[\s\S]*?:::\s*/g, '')
-      .replace(/> :::plan[\s\S]*?:::\s*/g, '')
-      .replace(/> :::commandOutput[\s\S]*?:::\n*/g, '')
-      .replace(/> :::toolCall[\s\S]*?:::\n*/g, '')
-      .replace(/(?:^|\n)\s*(?:>\s*)?:::toolResult[\s\S]*?(?:^|\n)\s*(?:>\s*)?:::\s*/g, '\n')
-      .replace(/<(anti-hallucination-guardrails|ephemeral_message|available_skills|relevant[-_]memories|thought|think|thought_process|reasoning|system_instruction)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
-      .replace(/\[(search|coding)-mode|Bootstrap truncation warning|Queued user message that arrived while the previous turn was still active\][\s\S]*?(?=\n\n|\n\s*\[|\n\s*<|$)/gi, '')
-      .replace(/^(?:System \(untrusted\):|System:).*?(?:\n|$)/gm, '')
-      .replace(/(?:^|\n)\s*\[(?:[A-Z][a-z]{2} )?\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})? GMT[+-]\d+\]\s*/g, '\n')
-      .replace(/>\s*[🔧✅❌⚠️]\s*`[^`]+`\s*(?:执行中(?:…|\.{3})|完成|失败|错误)(?:\s*<!--[\s\S]*?-->)?/g, '')
-      .replace(/<!--\s*tool:[^>]*-->/g, '')
-      .replace(/[.\s…]+$/g, '') // 移除末尾的点和空白
-      .trim();
-      
-    return rest.length === 0;
-  }
-
-  // 按 runId 聚合 meta 气泡 content（showThinking 关闭时不传，实现整体隐藏）
-  const metaContentByRunId = useMemo(() => {
-    const map = new Map<string, string>();
-    if (!showThinking) return map;
-    for (const m of messages) {
-      if (!(m as any)._uiMetaOnly) continue;
-      if (!m.runId || !m.content) continue;
-      map.set(m.runId, m.content);
-    }
-    return map;
-  }, [messages, showThinking]);
+  const metaContentByRunId = useMemo(
+    () => buildMetaContentByRunId(messages, showThinking),
+    [messages, showThinking],
+  );
 
   // 主气泡"已开始吐字正文"的 runId 集合：meta 折叠区据此自动折叠。
   // 判定：同 runId 的主气泡 content 非空、非思考占位、非纯手动停止标签。

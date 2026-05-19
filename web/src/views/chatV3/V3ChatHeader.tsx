@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Badge, Button, Dropdown, Input, Modal, Radio, Select, Switch } from 'antd';
-import { PanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2, Maximize2, Minimize2, Folder, Loader2 } from 'lucide-react';
+import { PanelLeft, Palette, RefreshCw, Save, Settings, Shield, Wand2, Maximize2, Minimize2, Folder, Loader2, Download } from 'lucide-react';
 import Tooltip from '../../components/common/AppTooltip';
 
 import type { V3ThemeMode, V3ThemePresetId, V3ThemeTokens } from '../../hooks/chatV3/useV3Theme';
@@ -78,6 +78,9 @@ export interface V3ChatHeaderProps {
   };
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
+  /** 导出当前会话为 Markdown（与聊天区可见内容一致） */
+  onExportSession?: () => void;
+  exportSessionDisabled?: boolean;
   onOpenWorkspace?: () => void;
 }
 
@@ -119,6 +122,8 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     v3Theme,
     isFullscreen,
     onToggleFullscreen,
+    onExportSession,
+    exportSessionDisabled = false,
     onOpenWorkspace,
     showTerminal,
     setShowTerminal,
@@ -664,6 +669,19 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
           onClick={onToggleFullscreen}
           style={isDarkMode ? { color: '#cbd5e1' } : undefined}
         />
+
+        {onExportSession && (
+          <Tooltip title={t('chat.exportSessionMarkdown', { defaultValue: '导出为 Markdown' })}>
+            <Button
+              size="small"
+              type="text"
+              icon={<Download size={14} />}
+              onClick={onExportSession}
+              disabled={exportSessionDisabled}
+              style={isDarkMode ? { color: '#cbd5e1' } : undefined}
+            />
+          </Tooltip>
+        )}
 
         <Button 
           size="small" 
