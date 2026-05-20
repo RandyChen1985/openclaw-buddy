@@ -350,12 +350,19 @@ func (g *Guardian) heal(reason string) {
 	backoffs := []time.Duration{1 * time.Second, 2 * time.Second, 3 * time.Second, 5 * time.Second, 8 * time.Second}
 	verifyStart := time.Now()
 	verifyAttempts := 0
+
+	// 动态获取 hosts，与巡检 check() 保持完全一致
+	hosts := []string{"127.0.0.1"}
+	if gw, err := process.GetOpenClawGatewayConfig(g.config.OpenClawConfigDir); err == nil {
+		hosts = gw.GetGatewayHosts()
+	}
+
 	for i, d := range backoffs {
 		time.Sleep(d)
 		verifyAttempts = i + 1
 		// 仅验收端口是否在监听
-		if !process.IsPortListening("", g.config.HealthPort) {
-			lastHealthErr = fmt.Errorf("port %d is not listening", g.config.HealthPort)
+		if !process.IsAnyPortListening(hosts, g.config.HealthPort) {
+			lastHealthErr = fmt.Errorf("port %d is not listening on any candidate hosts", g.config.HealthPort)
 			log.Printf("⏳ [HEAL] 网关端口仍未监听，继续等待... (%d/%d)", i+1, len(backoffs))
 			continue
 		}
