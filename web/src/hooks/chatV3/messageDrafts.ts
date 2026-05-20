@@ -1,17 +1,23 @@
 import type { FileInfo, Message } from '../useChatV3WebSocket';
 import type { SessionStreamCache } from './sessionCacheTypes';
 
+function isWorkspaceDirectory(f: FileInfo): boolean {
+  return f.type === 'workspace_file' && (f.ext === 'dir' || f.ext === '.dir');
+}
+
 export function buildSendMessageContent(text: string, attachedFiles?: FileInfo[]): string {
   let finalContent = text;
   if (!attachedFiles || attachedFiles.length === 0) return finalContent;
 
-  const mentions = attachedFiles.filter(f => (f as any).type).map(f => {
-    if ((f as any).type === 'workspace_file') return `\n[File: ${f.path}]`;
-    if ((f as any).type === 'skill') return `\n[Skill: ${(f as any).entityId}]`;
+  const mentions = attachedFiles.filter(f => f.type).map(f => {
+    if (f.type === 'workspace_file') {
+      return isWorkspaceDirectory(f) ? `\n[Dir: ${f.path}]` : `\n[File: ${f.path}]`;
+    }
+    if (f.type === 'skill') return `\n[Skill: ${f.entityId ?? f.path}]`;
     return '';
   }).join('');
 
-  const fileLinks = attachedFiles.filter(f => !(f as any).type).map(f => {
+  const fileLinks = attachedFiles.filter(f => !f.type).map(f => {
     const isImage = f.ext.replace(/^\./, '').match(/^(jpg|jpeg|png|gif|webp|svg)$/i);
     return isImage
       ? `\n![${f.filename}](${f.thumbUrl || f.url})\n(File path: ${f.path})`

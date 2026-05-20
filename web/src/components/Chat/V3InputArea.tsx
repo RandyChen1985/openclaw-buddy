@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useImperativeHandle, forwardRef, useRef } from 'react';
+import React, { useState, useMemo, useImperativeHandle, forwardRef, useRef, useCallback } from 'react';
+import {
+  isWorkspaceFileDragEvent,
+  parseWorkspaceDragItems,
+  type WorkspaceDragItem,
+} from '../../utils/workspaceDrag';
+import { isDockPanelDragEvent } from '../../views/chatV3/v3RightDockLayout';
 import { Input, Button, Upload, message, Dropdown } from 'antd';
 import { Send, Square, X, FileText, Loader2, Plus, AtSign, Zap, Image } from 'lucide-react';
 import storage from '../../utils/storage';
@@ -45,7 +51,9 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
 
   // 提及功能相关状态
   const [showMentionSelector, setShowMentionSelector] = useState(false);
-  const [mentionSelectorTab, setMentionSelectorTab] = useState<'files' | 'skills'>('files');
+  const [mentionSelectorTab, setMentionSelectorTab] = useState<'files' | 'dirs' | 'skills'>('files');
+  const [workspacePathDropActive, setWorkspacePathDropActive] = useState(false);
+  const workspacePathDropCounterRef = useRef(0);
 
   /**
    * 统一上传入口：拖拽上传与点击上传都走该方法，避免两套上传逻辑长期漂移。
@@ -107,38 +115,123 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const workspaceItemToFileInfo = useCallback((item: WorkspaceDragItem): FileInfo => {
+    const ext = item.is_dir ? 'dir' : (item.name.split('.').pop() || 'file');
+    const isImage = !item.is_dir && Boolean(ext.match(/^(jpg|jpeg|png|gif|webp|svg)$/i));
+    return {
+      url:
+        isImage
+          ? `${getBaseURL()}/v1/openclaw/files/download?path=${encodeURIComponent(item.path)}&authorization=${encodeURIComponent(`Bearer ${storage.getItem('guardian_token')}`)}`
+          : '',
+      path: item.path,
+      filename: item.name,
+      size: item.size ?? 0,
+      ext,
+      type: isImage ? undefined : 'workspace_file',
+      entityId: item.path,
+    };
+  }, []);
+
+  const attachWorkspaceItems = useCallback(
+    (items: WorkspaceDragItem[]) => {
+      if (items.length === 0) return;
+
+      setFiles(prev => {
+        const next = [...prev];
+        let added = 0;
+        for (const item of items) {
+          const info = workspaceItemToFileInfo(item);
+          if (next.some(f => f.entityId === info.entityId || f.path === info.path)) continue;
+          next.push(info);
+          added += 1;
+        }
+        if (added > 0) {
+          message.success(
+            t('chat.mentionInserted', {
+              defaultValue: added > 1 ? `已添加 ${added} 个附件` : '已添加附件',
+            }),
+          );
+        } else if (items.length > 0) {
+          message.warning(t('chat.mentionAlreadyAdded', { defaultValue: '已添加该项' }));
+        }
+        return next;
+      });
+
+      setTimeout(() => textAreaRef.current?.focus(), 50);
+    },
+    [t, workspaceItemToFileInfo],
+  );
+
+  const handleWorkspacePathDragEnter = useCallback((e: React.DragEvent) => {
+    if (!isWorkspaceFileDragEvent(e) || isDockPanelDragEvent(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    workspacePathDropCounterRef.current += 1;
+    setWorkspacePathDropActive(true);
+  }, []);
+
+  const handleWorkspacePathDragLeave = useCallback((e: React.DragEvent) => {
+    if (!isWorkspaceFileDragEvent(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    workspacePathDropCounterRef.current -= 1;
+    if (workspacePathDropCounterRef.current <= 0) {
+      workspacePathDropCounterRef.current = 0;
+      setWorkspacePathDropActive(false);
+    }
+  }, []);
+
+  const handleWorkspacePathDragOver = useCallback((e: React.DragEvent) => {
+    if (!isWorkspaceFileDragEvent(e) || isDockPanelDragEvent(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  const handleWorkspacePathDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (!isWorkspaceFileDragEvent(e) || isDockPanelDragEvent(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      workspacePathDropCounterRef.current = 0;
+      setWorkspacePathDropActive(false);
+      const items = parseWorkspaceDragItems(e.dataTransfer);
+      if (items) attachWorkspaceItems(items);
+    },
+    [attachWorkspaceItems],
+  );
+
   const handleSelectMention = (entity: MentionEntity) => {
-    // 检查是否已存在
-    if (files.some(f => f.type === entity.type && f.entityId === entity.id)) {
+    if (files.some(f => f.entityId === entity.id || f.path === entity.id)) {
       message.warning(t('chat.mentionAlreadyAdded', { defaultValue: '已添加该项' }));
       setShowMentionSelector(false);
       return;
     }
 
-    const ext = entity.type === 'skill' ? 'skill' : (entity.label.split('.').pop() || 'file');
-    const isImage = ext.match(/^(jpg|jpeg|png|gif|webp|svg)$/i);
+    const isDir = Boolean(entity.is_dir);
+    const ext = entity.type === 'skill' ? 'skill' : isDir ? 'dir' : (entity.label.split('.').pop() || 'file');
+    const isImage = !isDir && Boolean(ext.match(/^(jpg|jpeg|png|gif|webp|svg)$/i));
 
     const newFile: FileInfo = {
-      url: isImage && entity.type === 'workspace_file' 
-        ? `${getBaseURL()}/v1/openclaw/files/download?path=${encodeURIComponent(entity.id)}&authorization=${encodeURIComponent(`Bearer ${storage.getItem('guardian_token')}`)}` 
-        : '',
+      url:
+        isImage && entity.type === 'workspace_file'
+          ? `${getBaseURL()}/v1/openclaw/files/download?path=${encodeURIComponent(entity.id)}&authorization=${encodeURIComponent(`Bearer ${storage.getItem('guardian_token')}`)}`
+          : '',
       path: entity.id,
       filename: entity.label,
       size: 0,
-      ext: ext,
-      type: isImage && entity.type === 'workspace_file' ? undefined : entity.type,
-      entityId: entity.id
+      ext,
+      type: isImage ? undefined : entity.type,
+      entityId: entity.id,
     };
 
     setFiles(prev => [...prev, newFile]);
-    setShowMentionSelector(false);
-    
-    // 如果是通过输入 @ 触发的，尝试清理输入框中的 @
+
     if (text.endsWith('@')) {
       setText(prev => prev.slice(0, -1));
     }
-    
-    // 聚焦回输入框
+
+    setShowMentionSelector(false);
     setTimeout(() => textAreaRef.current?.focus(), 50);
   };
 
@@ -178,7 +271,14 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
   }, [isTyping, text, status, isMobile, files, uploading, sessionComposeBlocked, canSend, isDarkMode]);
 
   return (
-    <div className={`v3-input-wrapper ${isFocused ? 'focused' : ''} ${isDarkMode ? 'v3-input-wrapper--dark' : ''}`} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 0, position: 'relative', overflow: 'visible' }}>
+    <div
+      className={`v3-input-wrapper ${isFocused ? 'focused' : ''} ${isDarkMode ? 'v3-input-wrapper--dark' : ''}${workspacePathDropActive ? ' v3-input-wrapper--path-drop' : ''}`}
+      style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 0, position: 'relative', overflow: 'visible' }}
+      onDragEnter={handleWorkspacePathDragEnter}
+      onDragLeave={handleWorkspacePathDragLeave}
+      onDragOver={handleWorkspacePathDragOver}
+      onDrop={handleWorkspacePathDrop}
+    >
       
       {/* 提及选择器弹出层 */}
       {showMentionSelector && (

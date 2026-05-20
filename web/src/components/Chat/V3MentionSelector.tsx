@@ -10,8 +10,12 @@ export interface MentionEntity {
   type: 'workspace_file' | 'skill';
   id: string; // 路径或技能名称
   label: string;
+  /** 工作区目录附件 */
+  is_dir?: boolean;
   icon?: React.ReactNode;
 }
+
+export type MentionSelectorTab = 'files' | 'dirs' | 'skills';
 
 const getFileIcon = (name: string, isDir: boolean, size: number = 16) => {
   if (isDir) return <Folder size={size} color="#0ea5e9" />;
@@ -48,11 +52,11 @@ interface V3MentionSelectorProps {
   selectedBot: string;
   botsModels: any;
   t: any;
-  initialTab?: 'files' | 'skills';
+  initialTab?: MentionSelectorTab;
 }
 
 const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose, selectedBot, botsModels, t, initialTab = 'files' }) => {
-  const [activeTab, setActiveTab] = useState<'files' | 'skills'>(initialTab);
+  const [activeTab, setActiveTab] = useState<MentionSelectorTab>(initialTab);
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<any[]>([]);
@@ -108,8 +112,8 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
     const fetchData = async () => {
       setLoading(true);
       try {
-        if (activeTab === 'files') {
-          let allItems = [];
+        if (activeTab === 'files' || activeTab === 'dirs') {
+          let allItems: any[] = [];
           if (debouncedSearchText.trim()) {
             const res = await api.get(`/v1/openclaw/files/search?path=${encodeURIComponent(currentPath)}&query=${encodeURIComponent(debouncedSearchText)}`);
             allItems = res.data.files || [];
@@ -117,34 +121,36 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
             const res = await api.get(`/v1/openclaw/files/list?path=${encodeURIComponent(currentPath)}`);
             allItems = res.data.files || [];
           }
-          
-          // 先按目录/文件分类，再按名称排序
-          allItems.sort((a: any, b: any) => {
-            if (a.is_dir === b.is_dir) {
-              return a.name.localeCompare(b.name);
-            }
-            return a.is_dir ? -1 : 1;
-          });
-          
-          const mappedItems = allItems.map((f: any) => ({
+
+          const scoped = allItems.filter((f: any) =>
+            activeTab === 'dirs' ? f.is_dir : !f.is_dir,
+          );
+
+          scoped.sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+          const mappedItems = scoped.map((f: any) => ({
             id: f.path,
             label: f.name,
             type: f.is_dir ? 'directory' : 'workspace_file',
-            is_dir: f.is_dir,
-            desc: f.is_dir ? t('common.folder', { defaultValue: '文件夹' }) : (f.path.length > 40 ? '...' + f.path.slice(-37) : f.path)
+            is_dir: Boolean(f.is_dir),
+            desc: f.is_dir
+              ? t('common.folder', { defaultValue: '文件夹' })
+              : f.path.length > 40
+                ? '...' + f.path.slice(-37)
+                : f.path,
           }));
-          
+
           if (!debouncedSearchText.trim() && currentPath !== defaultWorkspace) {
-             const parentParts = currentPath.split(/[/\\]/);
-             parentParts.pop();
-             const parentPath = parentParts.join('/') || defaultWorkspace;
-             mappedItems.unshift({
-                id: parentPath,
-                label: '..',
-                type: 'directory',
-                is_dir: true,
-                desc: t('common.goUp', { defaultValue: '返回上一级' })
-             });
+            const parentParts = currentPath.split(/[/\\]/);
+            parentParts.pop();
+            const parentPath = parentParts.join('/') || defaultWorkspace;
+            mappedItems.unshift({
+              id: parentPath,
+              label: '..',
+              type: 'directory',
+              is_dir: true,
+              desc: t('common.goUp', { defaultValue: '返回上一级' }),
+            });
           }
           setItems(mappedItems);
         } else {
@@ -175,19 +181,39 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
   }, [activeTab, currentPath, defaultWorkspace, debouncedSearchText, t]);
 
   const filteredItems = items.filter(item => {
-    if (activeTab === 'files') return true; // Files are already filtered by backend search
+    if (activeTab === 'files' || activeTab === 'dirs') return true;
     return item.label.toLowerCase().includes(searchText.toLowerCase()) ||
            (item.desc && item.desc.toLowerCase().includes(searchText.toLowerCase()));
   });
 
   const handleItemAction = (item: any) => {
-    if (item.is_dir) {
+    if (item.label === '..') {
       setCurrentPath(item.id);
       setSearchText('');
       setActiveIndex(0);
-    } else {
-      onSelect(item);
+      return;
     }
+    if (activeTab === 'files' && item.is_dir) {
+      setCurrentPath(item.id);
+      setSearchText('');
+      setActiveIndex(0);
+      return;
+    }
+    if (activeTab === 'dirs' && item.is_dir) {
+      onSelect({
+        type: 'workspace_file',
+        id: item.id,
+        label: item.label,
+        is_dir: true,
+      });
+      return;
+    }
+    onSelect({
+      type: item.type === 'skill' ? 'skill' : 'workspace_file',
+      id: item.id,
+      label: item.label,
+      is_dir: false,
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -206,7 +232,11 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
       onClose();
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      setActiveTab(prev => prev === 'files' ? 'skills' : 'files');
+      setActiveTab(prev => {
+        if (prev === 'files') return 'dirs';
+        if (prev === 'dirs') return 'skills';
+        return 'files';
+      });
       setActiveIndex(0);
     }
   };
@@ -220,7 +250,13 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
             ref={searchInputRef}
             className="v3-mention-search"
             style={{ paddingLeft: 32, paddingRight: loading && items.length > 0 ? 32 : 12 }}
-            placeholder={activeTab === 'files' ? t('chat.searchFiles', { defaultValue: '搜索文件或目录...' }) : t('chat.searchSkills', { defaultValue: '搜索技能...' })}
+            placeholder={
+              activeTab === 'skills'
+                ? t('chat.searchSkills', { defaultValue: '搜索技能...' })
+                : activeTab === 'dirs'
+                  ? t('chat.searchDirs', { defaultValue: '搜索目录...' })
+                  : t('chat.searchFiles', { defaultValue: '搜索文件...' })
+            }
             value={searchText}
             onChange={e => {
               setSearchText(e.target.value);
@@ -243,9 +279,21 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
         >
           {t('chat.filesTab', { defaultValue: '文件' })}
         </div>
-        <div 
+        <div
+          className={`v3-mention-tab ${activeTab === 'dirs' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('dirs');
+            setActiveIndex(0);
+          }}
+        >
+          {t('chat.dirsTab', { defaultValue: '目录' })}
+        </div>
+        <div
           className={`v3-mention-tab ${activeTab === 'skills' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('skills'); setActiveIndex(0); }}
+          onClick={() => {
+            setActiveTab('skills');
+            setActiveIndex(0);
+          }}
         >
           {t('chat.skillsTab', { defaultValue: '技能' })}
         </div>

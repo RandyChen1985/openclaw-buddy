@@ -9,6 +9,8 @@ import {
   filterVisibleV3Messages,
 } from '../../hooks/chatV3/v3DisplayMessages';
 import V3MessageItem from '../../components/Chat/V3MessageItem';
+import { isDockPanelDragEvent } from './v3RightDockLayout';
+import { isWorkspaceFileDragEvent } from '../../utils/workspaceDrag';
 
 export interface V3MessagePaneProps {
   t: any;
@@ -142,6 +144,14 @@ export function V3MessagePane({
    * 处理拖拽进入：显示遮罩并计数，避免子元素触发 leave 造成闪烁。
    */
   const handleDragEnter = (e: React.DragEvent) => {
+    if (isDockPanelDragEvent(e)) {
+      e.dataTransfer.dropEffect = 'none';
+      return;
+    }
+    if (isWorkspaceFileDragEvent(e)) {
+      e.dataTransfer.dropEffect = 'copy';
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     dragCounterRef.current++;
@@ -154,6 +164,7 @@ export function V3MessagePane({
    * 处理拖拽离开：计数归零时关闭遮罩。
    */
   const handleDragLeave = (e: React.DragEvent) => {
+    if (isDockPanelDragEvent(e) || isWorkspaceFileDragEvent(e)) return;
     e.preventDefault();
     e.stopPropagation();
     dragCounterRef.current--;
@@ -166,6 +177,16 @@ export function V3MessagePane({
    * 处理拖拽悬停：允许 drop。
    */
   const handleDragOver = (e: React.DragEvent) => {
+    if (isDockPanelDragEvent(e)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'none';
+      return;
+    }
+    if (isWorkspaceFileDragEvent(e)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
   };
@@ -174,6 +195,14 @@ export function V3MessagePane({
    * 处理 drop：上传文件并关闭遮罩。
    */
   const handleDrop = async (e: React.DragEvent) => {
+    if (isDockPanelDragEvent(e)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'none';
+      return;
+    }
+    if (isWorkspaceFileDragEvent(e)) {
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);

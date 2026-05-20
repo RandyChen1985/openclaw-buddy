@@ -1,7 +1,8 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { message } from 'antd';
+import { Sparkles } from 'lucide-react';
 import api from '../../api';
 import storage from '../../utils/storage';
 import { getWsUrl } from '../../utils/url';
@@ -23,21 +24,52 @@ export interface V3TerminalSessionProps {
   width: number;
   isActive: boolean;
   restartKey: number;
+  /** 选中文本后填入 V3 聊天输入框 */
+  onSendSelectionToChat?: (text: string) => void;
   /** 弹窗内略大字号；侧栏默认 12 */
   fontSize?: number;
   cursorStyle?: 'block' | 'bar' | 'underline';
   screenReaderMode?: boolean;
 }
 
+interface SelectionSendHint {
+  text: string;
+  x: number;
+  y: number;
+}
+
+const MIN_SELECTION_LEN = 2;
+
 export const V3TerminalSession = forwardRef<V3TerminalSessionHandle, V3TerminalSessionProps>(
   function V3TerminalSession(
-    { t, cwd, width, isActive, restartKey, fontSize = 12, cursorStyle = 'block', screenReaderMode = false },
+    {
+      t,
+      cwd,
+      width: _width,
+      isActive,
+      restartKey,
+      onSendSelectionToChat,
+      fontSize = 12,
+      cursorStyle = 'block',
+      screenReaderMode = false,
+    },
     ref
   ) {
     const [terminalEl, setTerminalEl] = React.useState<HTMLDivElement | null>(null);
+    const [sendHint, setSendHint] = useState<SelectionSendHint | null>(null);
     const xtermRef = useRef<Terminal | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
     const socketRef = useRef<WebSocket | null>(null);
+    const sendHintRef = useRef<SelectionSendHint | null>(null);
+    sendHintRef.current = sendHint;
+
+    const handleSendToChat = useCallback(() => {
+      const hint = sendHintRef.current;
+      if (!hint || !onSendSelectionToChat) return;
+      onSendSelectionToChat(hint.text);
+      xtermRef.current?.clearSelection();
+      setSendHint(null);
+    }, [onSendSelectionToChat]);
 
     useImperativeHandle(
       ref,
@@ -143,57 +175,80 @@ export const V3TerminalSession = forwardRef<V3TerminalSessionHandle, V3TerminalS
         term.onResize(() => {
           sendResize();
         });
+
       };
+
+      const onMouseUp = onSendSelectionToChat
+        ? (ev: MouseEvent) => {
+            requestAnimationFrame(() => {
+              if (!xtermRef.current?.hasSelection()) return;
+              const raw = xtermRef.current.getSelection() ?? '';
+              const trimmed = raw.trim();
+              if (trimmed.length < MIN_SELECTION_LEN) return;
+
+              void navigator.clipboard.writeText(raw).catch(() => {});
+
+              const rect = terminalEl.getBoundingClientRect();
+              const btnW = 132;
+              const btnH = 32;
+              let x = ev.clientX - rect.left - btnW / 2;
+              let y = ev.clientY - rect.top - btnH - 8;
+              x = Math.max(8, Math.min(x, rect.width - btnW - 8));
+              y = Math.max(8, Math.min(y, rect.height - btnH - 8));
+              setSendHint({ text: raw, x, y });
+            });
+          }
+        : null;
+
+      if (onMouseUp) {
+        term.onSelectionChange(() => {
+          if (!term.hasSelection()) {
+            setSendHint(null);
+          }
+        });
+        terminalEl.addEventListener('mouseup', onMouseUp);
+      }
 
       connect();
 
-      const initialFit = setTimeout(() => {
-        if (fitAddonRef.current && xtermRef.current) {
-          fitAddonRef.current.fit();
-          xtermRef.current.focus();
-          sendResize();
-        }
-      }, 400);
-
-      const handleResize = () => {
-        if (fitAddonRef.current) {
-          fitAddonRef.current.fit();
-          sendResize();
-        }
+      const fitTerminal = () => {
+        if (!fitAddonRef.current || !xtermRef.current) return;
+        fitAddonRef.current.fit();
+        sendResize();
       };
+
+      const ro = typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            requestAnimationFrame(fitTerminal);
+          })
+        : null;
+      ro?.observe(terminalEl);
+
+      const handleResize = () => requestAnimationFrame(fitTerminal);
       window.addEventListener('resize', handleResize);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          fitTerminal();
+          xtermRef.current?.focus();
+        });
+      });
 
       return () => {
+        ro?.disconnect();
         window.removeEventListener('resize', handleResize);
-        clearTimeout(initialFit);
+        if (onMouseUp) terminalEl.removeEventListener('mouseup', onMouseUp);
         if (socket) socket.close();
         term.dispose();
         xtermRef.current = null;
         socketRef.current = null;
+        setSendHint(null);
       };
-    }, [terminalEl, restartKey, cwd, t, fontSize, cursorStyle, screenReaderMode]);
+    }, [terminalEl, restartKey, cwd, t, fontSize, cursorStyle, screenReaderMode, onSendSelectionToChat]);
 
-    useEffect(() => {
-      const timer = setTimeout(() => {
-        if (fitAddonRef.current) {
-          fitAddonRef.current.fit();
-          if (socketRef.current?.readyState === WebSocket.OPEN) {
-            socketRef.current.send(
-              JSON.stringify({
-                type: 'resize',
-                cols: xtermRef.current?.cols,
-                rows: xtermRef.current?.rows,
-              })
-            );
-          }
-        }
-      }, 250);
-      return () => clearTimeout(timer);
-    }, [width]);
 
     useEffect(() => {
       if (!isActive) return;
-      const timer = setTimeout(() => {
+      const id = requestAnimationFrame(() => {
         if (fitAddonRef.current && xtermRef.current) {
           fitAddonRef.current.fit();
           xtermRef.current.focus();
@@ -207,16 +262,30 @@ export const V3TerminalSession = forwardRef<V3TerminalSessionHandle, V3TerminalS
             );
           }
         }
-      }, 60);
-      return () => clearTimeout(timer);
-    }, [isActive, width]);
+      });
+      return () => cancelAnimationFrame(id);
+    }, [isActive]);
 
     return (
-      <div
-        ref={setTerminalEl}
-        style={{ height: '100%', width: '100%', minHeight: 0 }}
-        onClick={() => xtermRef.current?.focus()}
-      />
+      <div className="v3-terminal-session-wrap" style={{ position: 'relative', height: '100%', width: '100%', minHeight: 0 }}>
+        <div
+          ref={setTerminalEl}
+          style={{ height: '100%', width: '100%', minHeight: 0 }}
+          onClick={() => xtermRef.current?.focus()}
+        />
+        {sendHint && onSendSelectionToChat && (
+          <button
+            type="button"
+            className="v3-terminal-selection-send"
+            style={{ left: sendHint.x, top: sendHint.y }}
+            onMouseDown={e => e.preventDefault()}
+            onClick={handleSendToChat}
+          >
+            <Sparkles size={14} />
+            <span>{t('chat.terminalSendToAi', { defaultValue: '发送到 AI 分析' })}</span>
+          </button>
+        )}
+      </div>
     );
   }
 );
