@@ -288,7 +288,10 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
           t={t}
           initialTab={mentionSelectorTab}
           onSelect={handleSelectMention}
-          onClose={() => setShowMentionSelector(false)}
+          onClose={() => {
+            setShowMentionSelector(false);
+            setTimeout(() => textAreaRef.current?.focus(), 50);
+          }}
         />
       )}
 
@@ -491,9 +494,15 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
                 e.preventDefault();
                 handleInnerSend();
               } else if (e.key === '@' && !isComposing) {
-                // 敲击 @ 呼出面板
-                setMentionSelectorTab('files');
-                setShowMentionSelector(true);
+                // 仅当输入点位于首位，或前驱字符为空格时，方可呼出提及面板（规避邮箱等输入误触发）
+                const selectionStart = e.currentTarget.selectionStart;
+                const val = e.currentTarget.value;
+                const isStart = selectionStart === 0;
+                const isAfterSpace = selectionStart > 0 && val.charAt(selectionStart - 1) === ' ';
+                if (isStart || isAfterSpace) {
+                  setMentionSelectorTab('files');
+                  setShowMentionSelector(true);
+                }
               }
             }}
             onPaste={async (e) => {
