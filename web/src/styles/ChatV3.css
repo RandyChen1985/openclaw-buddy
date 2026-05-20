@@ -689,6 +689,31 @@ button.v3-settings-reasoning-btn--dark:active {
 .markdown-body-v3 th { background: #f8fafc; font-weight: 700; }
 .markdown-body-v3 blockquote:not([class]) { border-left: 4px solid #cbd5e1; padding-left: 12px; color: #64748b; margin: 10px 0; font-style: italic; }
 
+/* 模型试聊抽屉 Markdown（Drawer 不在 .chat-v3-root 内，需局部覆盖） */
+.v3-model-chat-md--user.markdown-body-v3 strong {
+  color: inherit;
+}
+.v3-model-chat-md--user.markdown-body-v3 a {
+  color: #e0e7ff;
+}
+.v3-model-chat-md--dark.markdown-body-v3 strong {
+  color: #f1f5f9;
+}
+.v3-model-chat-md--dark.markdown-body-v3 th,
+.v3-model-chat-md--dark.markdown-body-v3 td {
+  border-color: #334155;
+}
+.v3-model-chat-md--dark.markdown-body-v3 th {
+  background: #1e293b;
+}
+.v3-model-chat-md--dark.markdown-body-v3 hr {
+  background: #334155;
+}
+.v3-model-chat-md--dark.markdown-body-v3 blockquote:not([class]) {
+  border-left-color: #475569;
+  color: #94a3b8;
+}
+
 /* Soul 编辑器 Drawer：Tabs 占满剩余高度，tab 内可滚动 */
 .v3-soul-tabs.ant-tabs {
   flex: 1;
@@ -844,17 +869,65 @@ button.v3-settings-reasoning-btn--dark:active {
   background: #0f172a !important;
 }
 
-/* 用户消息中的 Markdown 颜色适配 (基于 row-reverse 判定) */
+/* 用户消息中的 Markdown：统一走主题变量，避免全局 #1e293b / #f8fafc 与气泡字色冲突 */
+.v3-message-user .markdown-body-v3 {
+  color: var(--v3-user-text);
+}
+.v3-message-user .markdown-body-v3 p,
+.v3-message-user .markdown-body-v3 li,
+.v3-message-user .markdown-body-v3 ul,
+.v3-message-user .markdown-body-v3 ol {
+  color: inherit;
+}
 .v3-message-user .markdown-body-v3 strong,
+.v3-message-user .markdown-body-v3 b,
 .v3-message-user .markdown-body-v3 h1,
 .v3-message-user .markdown-body-v3 h2,
-.v3-message-user .markdown-body-v3 h3 { color: var(--v3-user-text); }
-.v3-message-user .markdown-body-v3 a { color: var(--v3-link-user); text-decoration: underline; text-underline-offset: 2px; }
-.v3-message-user .markdown-body-v3 a:hover { color: rgba(219, 234, 254, 0.95); }
-.v3-message-user .markdown-body-v3 hr { background: rgba(255,255,255,0.22); }
-.v3-message-user .markdown-body-v3 th, 
-.v3-message-user .markdown-body-v3 td { border-color: rgba(255,255,255,0.22); }
-.v3-message-user .markdown-body-v3 th { background: rgba(255,255,255,0.10); }
+.v3-message-user .markdown-body-v3 h3 {
+  color: var(--v3-user-text);
+}
+.v3-message-user .markdown-body-v3 h1 {
+  border-bottom-color: var(--v3-user-border);
+}
+.v3-message-user .markdown-body-v3 a {
+  color: var(--v3-link-user);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.v3-message-user .markdown-body-v3 a:hover {
+  color: var(--v3-link-user);
+  opacity: 0.88;
+}
+.v3-message-user .markdown-body-v3 hr {
+  background: var(--v3-user-border);
+}
+.v3-message-user .markdown-body-v3 blockquote:not([class]) {
+  color: var(--v3-user-text-muted);
+  border-left-color: var(--v3-user-border);
+  background: var(--v3-user-surface);
+}
+.v3-message-user .markdown-body-v3 pre {
+  background: var(--v3-user-surface) !important;
+  color: var(--v3-user-text) !important;
+  border: 1px solid var(--v3-user-border);
+}
+.v3-message-user .markdown-body-v3 :not(pre) > code {
+  background: var(--v3-user-surface) !important;
+  color: var(--v3-user-text) !important;
+}
+.v3-message-user .markdown-body-v3 th,
+.v3-message-user .markdown-body-v3 td {
+  border-color: var(--v3-user-border);
+  color: var(--v3-user-text);
+}
+.v3-message-user .markdown-body-v3 th {
+  background: var(--v3-user-surface);
+}
+/* 浅灰气泡主题：链接悬停勿用浅色 */
+.chat-v3-root[data-v3-theme="paleGray"] .v3-message-user .markdown-body-v3 a:hover {
+  opacity: 1;
+  text-decoration-thickness: 2px;
+}
 
 /* --- 5. 鉴权动画 (Auth Overlay) --- */
 @keyframes v3-pulse-ring {

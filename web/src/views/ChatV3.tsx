@@ -15,6 +15,7 @@ import { V3QuickCommands } from './chatV3/V3QuickCommands';
 import { V3ChatHeader } from './chatV3/V3ChatHeader';
 import { V3FloatingButtons } from './chatV3/V3FloatingButtons';
 import { V3MessagePane } from './chatV3/V3MessagePane';
+import { V3ModelChatDrawer } from './chatV3/V3ModelChatDrawer';
 import { V3ComposerBar } from './chatV3/V3ComposerBar';
 import { V3TerminalModal } from '../components/Chat/V3TerminalModal';
 import { V3DebugPane } from './chatV3/V3DebugPane';
@@ -23,6 +24,13 @@ import { V3ExplorerPane } from './chatV3/V3ExplorerPane';
 import FileExplorer from '../components/FileExplorer';
 import { useV3Theme } from '../hooks/chatV3/useV3Theme';
 import { V3_QUICK_CHAT_PENDING_KEY } from '../hooks/chatV3/useV3Sessions';
+import {
+  buildSessionMarkdownExport,
+  buildVisibleMessagesForExport,
+  downloadTextFile,
+  suggestSessionExportFilename,
+  V3_PANEL_HISTORY_LIMIT,
+} from '../utils/v3SessionMarkdownExport';
 import '../styles/ChatV3.css';
 
 // --- Utils & Config ---
@@ -77,12 +85,22 @@ interface ChatV3Props {
   usernameForSessionKey?: string | null;
   /** 普通用户：只加载 key 中包含 username 的会话 */
   filterV3SessionsByUsername?: boolean;
+  /** 管理员：Bot 已从配置移除的会话仍可删除 */
+  canDeleteV3OrphanSessions?: boolean;
 }
 
 
 // --- Utils ---
 
-const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDarkMode = false, usernameForSessionKey, filterV3SessionsByUsername }) => {
+const ChatV3: React.FC<ChatV3Props> = ({
+  botsModels,
+  loadingBots,
+  isMobile,
+  isDarkMode = false,
+  usernameForSessionKey,
+  filterV3SessionsByUsername,
+  canDeleteV3OrphanSessions = false,
+}) => {
 
   const { t } = useTranslation();
   const v3Theme = useV3Theme();
@@ -235,6 +253,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
   const [editContent, setEditContent] = useState('');
   const [sessionSearch, setSessionSearch] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [modelChatOpen, setModelChatOpen] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [explorerPath, setExplorerPath] = useState('');
   const [explorerTitle, setExplorerTitle] = useState('');
@@ -580,6 +599,76 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
     });
   }, [setMessages]);
 
+  /** 导出当前已打开会话：内容与聊天区可见消息一致（含 showThinking、本地删除） */
+  const handleExportCurrentSession = useCallback(() => {
+    if (!sessionKey) return;
+    if (status !== 'authenticated') {
+      message.warning(t('chat.gatewayConnecting', { defaultValue: '网关连接中，请稍候' }));
+      return;
+    }
+    const toastKey = `export-session-${sessionKey}`;
+    message.loading({
+      content: t('chat.exportingSession', { defaultValue: '正在导出会话…' }),
+      key: toastKey,
+    });
+    try {
+      const exportMessages = buildVisibleMessagesForExport({
+        sessionKey,
+        label: '',
+        panelMessages: messages,
+        showThinking,
+        isTyping,
+      });
+      if (exportMessages.length === 0) {
+        message.warning({
+          content: t('chat.exportSessionEmpty', { defaultValue: '该会话暂无消息可导出' }),
+          key: toastKey,
+        });
+        return;
+      }
+      const label =
+        (sessionLabel || '').trim() ||
+        (sessionKey === 'agent:main:main'
+          ? t('chat.mainSession', { defaultValue: '主会话' })
+          : t('chat.noLabel', { defaultValue: '未命名会话' }));
+      const truncated = messages.length >= V3_PANEL_HISTORY_LIMIT;
+      const truncatedNote = truncated
+        ? t('chat.exportSessionTruncated', {
+            defaultValue: '注：聊天面板仅加载最近约 200 条消息，更早记录未包含在本文件中。',
+          })
+        : undefined;
+      const markdown = buildSessionMarkdownExport({
+        sessionKey,
+        label,
+        messages: exportMessages,
+        truncated,
+        truncatedNote,
+        roleLabels: {
+          user: t('chat.roleUser', { defaultValue: '用户' }),
+          assistant: t('chat.roleAssistant', { defaultValue: '助手' }),
+          system: t('chat.roleSystem', { defaultValue: '系统' }),
+        },
+      });
+      downloadTextFile(suggestSessionExportFilename(label, sessionKey), markdown);
+      message.success({
+        content: truncated
+          ? t('chat.exportSessionSuccessTruncated', {
+              defaultValue: '已导出 Markdown（与当前面板可见范围一致）',
+            })
+          : t('chat.exportSessionSuccess', { defaultValue: '已导出 Markdown 文件' }),
+        key: toastKey,
+        duration: truncated ? 5 : 3,
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[ChatV3] export failed:', err);
+      message.error({
+        content: t('chat.exportSessionFailed', { defaultValue: '导出失败' }),
+        key: toastKey,
+      });
+    }
+  }, [isTyping, messages, sessionKey, sessionLabel, showThinking, status, t]);
+
   return (
     <>
       <div
@@ -626,6 +715,7 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
             <V3SessionList
               sessions={sessions}
               botsModels={botsModels}
+              canDeleteV3OrphanSessions={canDeleteV3OrphanSessions}
               sessionKey={sessionKey}
               typingSessionKeys={typingSessionKeys}
               loadingSessions={loadingSessions}
@@ -748,6 +838,9 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
           }}
           isFullscreen={isFullscreen}
           onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+          onExportSession={handleExportCurrentSession}
+          exportSessionDisabled={!sessionKey || isLoadingHistory}
+          onOpenModelChat={() => setModelChatOpen(true)}
           onOpenWorkspace={handleOpenWorkspace}
           showTerminal={showTerminal}
           setShowTerminal={(val) => {
@@ -873,7 +966,6 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
             />
 
           </div>
-        </div>
         {showDebug && !isMobile && (
           <V3DebugPane 
             t={t} 
@@ -980,13 +1072,14 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
             />
           </>
         )}
-        <ChatV3Auth 
-          status={status} 
-          isMobile={!!isMobile} 
-          onConnect={connect} 
+        <ChatV3Auth
+          status={status}
+          isMobile={!!isMobile}
+          onConnect={connect}
           t={t}
           isDarkMode={isDarkMode}
         />
+      </div>
       </div>
 
       <FileExplorer
@@ -1009,6 +1102,16 @@ const ChatV3: React.FC<ChatV3Props> = ({ botsModels, loadingBots, isMobile, isDa
         cwd={terminalCwd}
         title={terminalTitle}
         showSider={showSider}
+      />
+
+      <V3ModelChatDrawer
+        t={t}
+        isDarkMode={isDarkMode}
+        botsModels={botsModels}
+        status={status}
+        open={modelChatOpen}
+        onClose={() => setModelChatOpen(false)}
+        copyToClipboard={copyToClipboard}
       />
     </>
   );

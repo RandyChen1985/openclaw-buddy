@@ -543,7 +543,28 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         onClick={() => window.open(props.title || props.src, '_blank')}
       />
     ),
-    pre: ({children}: any) => <pre style={{ overflowX: 'auto', maxWidth: '100%', margin: '8px 0', padding: '10px', background: isDarkMode ? '#0f172a' : '#f8fafc', borderRadius: 8, color: isDarkMode ? '#e2e8f0' : undefined }}>{children}</pre>,
+    pre: ({children}: any) => (
+      <pre
+        style={{
+          overflowX: 'auto',
+          maxWidth: '100%',
+          margin: '8px 0',
+          padding: '10px',
+          borderRadius: 8,
+          background: isUser
+            ? 'var(--v3-user-surface, rgba(255,255,255,0.12))'
+            : (isDarkMode ? '#0f172a' : '#f8fafc'),
+          color: isUser
+            ? 'var(--v3-user-text, #fff)'
+            : (isDarkMode ? '#e2e8f0' : '#1e293b'),
+          border: isUser
+            ? '1px solid var(--v3-user-border, rgba(255,255,255,0.22))'
+            : (isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0'),
+        }}
+      >
+        {children}
+      </pre>
+    ),
     blockquote: ({ children }: any) => {
       const extractText = (node: any): string => {
         if (typeof node === 'string') return node;
@@ -733,7 +754,22 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       if (!inline && language === 'mermaid') return <Mermaid chart={String(children).replace(/\n$/, '')} />;
       if (!inline && isEchartsCodeFenceLanguage(language)) return <ECharts optionStr={String(children).replace(/\n$/, '')} isTyping={isLast && isTyping} />;
       if (!inline && language) return <CodeBlock language={language} value={String(children).replace(/\n$/, '')} isMobile={isMobile} {...props} />;
-      return <code {...props} style={{ padding: '0.2em 0.4em', backgroundColor: isUser ? 'rgba(255,255,255,0.1)' : (isDarkMode ? 'rgba(148, 163, 184, 0.18)' : 'rgba(175, 184, 193, 0.2)'), borderRadius: '6px', fontSize: '85%' }}>{children}</code>;
+      return (
+        <code
+          {...props}
+          style={{
+            padding: '0.2em 0.4em',
+            backgroundColor: isUser
+              ? 'var(--v3-user-surface, rgba(255,255,255,0.12))'
+              : (isDarkMode ? 'rgba(148, 163, 184, 0.18)' : 'rgba(175, 184, 193, 0.2)'),
+            color: isUser ? 'var(--v3-user-text, #fff)' : (isDarkMode ? '#e2e8f0' : '#1e293b'),
+            borderRadius: '6px',
+            fontSize: '85%',
+          }}
+        >
+          {children}
+        </code>
+      );
     },
     a: ({ node, href, children, ...props }: any) => {
         const isQuick = href?.startsWith('quick:') || href?.includes('quick:');

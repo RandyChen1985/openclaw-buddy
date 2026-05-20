@@ -116,14 +116,16 @@ func syncFile(filePath string) error {
 
 	for {
 		line, err := reader.ReadString('\n')
+		if len(line) > 0 {
+			currentOffset += int64(len(line))
+			parseAndSaveLine(filePath, line)
+		}
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			return err
 		}
-		currentOffset += int64(len(line))
-		parseAndSaveLine(filePath, line)
 	}
 
 	_, err = utils.DB.Exec("INSERT OR REPLACE INTO audit_log_offsets (file_path, last_offset, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", filePath, currentOffset)

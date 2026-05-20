@@ -245,6 +245,7 @@ func (s *Server) setupRoutes() {
 			oc.DELETE("/models/provider/:provider/model/:id", RequirePermission(permBots), s.deleteOpenClawModelFromProvider)
 			oc.DELETE("/models/provider/model", RequirePermission(permBots), s.deleteOpenClawModelFromProvider)
 			oc.POST("/chat/completions", s.chatProxy)
+			oc.POST("/chat/complete", s.completeModelChat)
 			oc.POST("/chat/summarize", s.summarizeSession)
 			oc.GET("/chat/status", s.getChatStatus)
 			oc.POST("/chat/enable", s.enableChat)

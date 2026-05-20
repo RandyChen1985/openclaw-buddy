@@ -445,6 +445,206 @@ func (s *Server) summarizeSession(c *gin.Context) {
 	s.Success(c, gin.H{"title": title})
 }
 
+// completeModelChat 使用模型军团配置的 provider/model 直连提供商（与 summarize 相同），供模型试聊等场景。
+// 不走 OpenClaw 网关 chat/completions（网关 model 仅支持 openclaw 或 openclaw/<agentId>）。
+func (s *Server) completeModelChat(c *gin.Context) {
+	var req struct {
+		Messages []map[string]interface{} `json:"messages" binding:"required"`
+		ModelID  string                   `json:"modelID" binding:"required"`
+		Stream   bool                     `json:"stream"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.Error(c, http.StatusBadRequest, "参数错误: "+err.Error())
+		return
+	}
+
+	modelID := strings.TrimSpace(req.ModelID)
+	if modelID == "" {
+		s.Error(c, http.StatusBadRequest, "modelID 不能为空")
+		return
+	}
+
+	providers, err := process.GetOpenClawModelsConfig(s.cfg.OpenClawConfigDir)
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "无法加载模型配置: "+err.Error())
+		return
+	}
+
+	providerName := ""
+	actualModelID := modelID
+	if strings.Contains(modelID, "/") {
+		parts := strings.SplitN(modelID, "/", 2)
+		providerName = parts[0]
+		actualModelID = parts[1]
+	} else {
+		for name, p := range providers {
+			if pm, ok := p.(map[string]interface{}); ok {
+				if models, ok := pm["models"].([]interface{}); ok {
+					for _, m := range models {
+						if mo, ok := m.(map[string]interface{}); ok {
+							if id, _ := mo["id"].(string); id == modelID {
+								providerName = name
+								break
+							}
+						}
+					}
+				}
+			}
+			if providerName != "" {
+				break
+			}
+		}
+	}
+
+	var rawProv map[string]interface{}
+	var found bool
+	if p, ok := providers[providerName].(map[string]interface{}); ok {
+		rawProv = p
+		found = true
+	} else {
+		for name, p := range providers {
+			if strings.EqualFold(name, providerName) {
+				if dp, ok := p.(map[string]interface{}); ok {
+					rawProv = dp
+					found = true
+					providerName = name
+					break
+				}
+			}
+		}
+	}
+	if !found {
+		s.Error(c, http.StatusNotFound, "找不到对应提供商配置: "+providerName)
+		return
+	}
+
+	baseUrl, _ := rawProv["baseUrl"].(string)
+	apiKey, _ := rawProv["apiKey"].(string)
+	if strings.TrimSpace(baseUrl) == "" {
+		s.Error(c, http.StatusInternalServerError, "提供商 baseUrl 未配置")
+		return
+	}
+
+	chatMessages := make([]map[string]string, 0, len(req.Messages))
+	for _, m := range req.Messages {
+		role, _ := m["role"].(string)
+		role = strings.TrimSpace(role)
+		if role != "user" && role != "assistant" && role != "system" {
+			continue
+		}
+		content := ""
+		switch v := m["content"].(type) {
+		case string:
+			content = strings.TrimSpace(v)
+		default:
+			if b, err := json.Marshal(v); err == nil {
+				content = strings.TrimSpace(string(b))
+			}
+		}
+		if content == "" {
+			continue
+		}
+		chatMessages = append(chatMessages, map[string]string{"role": role, "content": content})
+	}
+	if len(chatMessages) == 0 {
+		s.Error(c, http.StatusBadRequest, "无有效消息")
+		return
+	}
+
+	stream := req.Stream
+	chatReqBody := map[string]interface{}{
+		"model":    actualModelID,
+		"messages": chatMessages,
+		"stream":   stream,
+	}
+	jsonBody, _ := json.Marshal(chatReqBody)
+	targetUrl := strings.TrimSuffix(baseUrl, "/") + "/chat/completions"
+	log.Printf("🤖 [ModelChat] Requesting AI Provider: %s (Model: %s, Stream: %v)", targetUrl, modelID, stream)
+
+	httpReq, err := http.NewRequest("POST", targetUrl, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		s.Error(c, http.StatusInternalServerError, "创建请求失败: "+err.Error())
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if stream {
+		httpReq.Header.Set("Accept", "text/event-stream")
+	}
+	if apiKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+
+	client := &http.Client{Timeout: 6 * time.Minute}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		s.Error(c, http.StatusBadGateway, "请求 AI 提供商失败: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("❌ [ModelChat] AI Provider Error (%d): %s", resp.StatusCode, string(body))
+		s.Error(c, resp.StatusCode, "AI提供商响应异常: "+string(body))
+		return
+	}
+
+	if stream {
+		for k, vv := range resp.Header {
+			if k == "Content-Length" {
+				continue
+			}
+			for _, v := range vv {
+				c.Header(k, v)
+			}
+		}
+		if c.Writer.Header().Get("Content-Type") == "" {
+			c.Header("Content-Type", "text/event-stream")
+		}
+		c.Header("Cache-Control", "no-cache, no-transform")
+		c.Header("Connection", "keep-alive")
+		c.Header("X-Accel-Buffering", "no")
+		c.Status(http.StatusOK)
+
+		flusher, canFlush := c.Writer.(http.Flusher)
+		buf := make([]byte, 4096)
+		for {
+			n, readErr := resp.Body.Read(buf)
+			if n > 0 {
+				if _, writeErr := c.Writer.Write(buf[:n]); writeErr != nil {
+					break
+				}
+				if canFlush {
+					flusher.Flush()
+				}
+			}
+			if readErr != nil {
+				break
+			}
+		}
+		return
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var chatRes struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(body, &chatRes); err != nil {
+		s.Error(c, http.StatusInternalServerError, "解析 AI 响应失败: "+err.Error())
+		return
+	}
+
+	content := ""
+	if len(chatRes.Choices) > 0 {
+		content = strings.TrimSpace(chatRes.Choices[0].Message.Content)
+	}
+	s.Success(c, gin.H{"content": content})
+}
+
 func (s *Server) handleChatUpload(c *gin.Context) {
 	// 0. 安全限制：50MB 大小限制
 	const maxFileSize = 50 * 1024 * 1024

@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import api from '../api';
 
+/** 网关状态 / 健康度 HTTP 轮询间隔（毫秒） */
+const POLL_INTERVAL_MS = 20_000;
+
 export const useStatusPolling = (
   isTransitioning: boolean, 
   targetStatus: string | null, 
@@ -53,14 +56,8 @@ export const useStatusPolling = (
   useEffect(() => {
     let timer: any;
     
-    // 频率计算：过渡态仍保持 30s，避免启停期间放大状态接口压力；
     // 若已认证的 WebSocket 突然断开，由 App 立即触发一次 fetchStatus 做端口状态校准。
-    const getStatusInterval = () => {
-      if (isTransitioning) return 30000;
-      return activeTab === 'dashboard' ? 30000 : 60000;
-    };
-
-    const interval = getStatusInterval();
+    const interval = POLL_INTERVAL_MS;
     
     if (isTransitioning) {
       timer = setInterval(fetchStatus, interval);
@@ -83,12 +80,9 @@ export const useStatusPolling = (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTransitioning, targetStatus, activeTab]);
 
-  // 健康度轮询逻辑 (Health Polling - 低频)
+  // 健康度轮询逻辑 (Health Polling)
   useEffect(() => {
-    // 频率计算：Dashboard 10s，其他页面 30s，过渡态保持 Dashboard 频率
-    const healthInterval = activeTab === 'dashboard' || isTransitioning ? 10000 : 30000;
-    
-    const timer = setInterval(fetchHealth, healthInterval);
+    const timer = setInterval(fetchHealth, POLL_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [activeTab, isTransitioning]);
 

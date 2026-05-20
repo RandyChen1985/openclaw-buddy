@@ -27,6 +27,8 @@ export interface V3SessionListProps {
   t: any;
   /** 与 App 全局暗色同步（侧栏表面、分组条等） */
   isDarkMode?: boolean;
+  /** 管理员：会话 Bot 已不在 bots-models 中时仍显示删除（仅清理历史，不可打开） */
+  canDeleteV3OrphanSessions?: boolean;
 }
 
 // --- Utils & Config ---
@@ -108,6 +110,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
   typingSessionKeys = [],
   newSessionBusy = false,
   isDarkMode = false,
+  canDeleteV3OrphanSessions = false,
 }) => {
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
@@ -173,6 +176,19 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
     },
     [allowedBotIdSet]
   );
+
+  const canDeleteSession = React.useCallback(
+    (sessionKeyStr: string) => {
+      if (sessionKeyStr === 'agent:main:main') return false;
+      if (!isSessionForbidden(sessionKeyStr)) return true;
+      return canDeleteV3OrphanSessions;
+    },
+    [canDeleteV3OrphanSessions, isSessionForbidden]
+  );
+
+  const orphanDeleteTitle = t('chat.sessionOrphanDeleteHint', {
+    defaultValue: '该 Bot 已下线或不可访问，管理员可清理此会话',
+  });
 
   const sourcesInSessions = React.useMemo(() => {
     const sources = new Set<string>();
@@ -657,8 +673,10 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                           </div>
                           <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>
                               <Button size="small" type="text" icon={<Copy size={12} />} onClick={(e) => { e.stopPropagation(); copyToClipboard(s.key); }} />
-                              {s.key !== 'agent:main:main' && !forbidden && (
-                                <Button size="small" type="text" icon={<Trash2 size={12} />} onClick={(e) => onDeleteSession(e, s.key)} />
+                              {canDeleteSession(s.key) && (
+                                <Tooltip title={forbidden && canDeleteV3OrphanSessions ? orphanDeleteTitle : undefined}>
+                                  <Button size="small" type="text" icon={<Trash2 size={12} />} onClick={(e) => onDeleteSession(e, s.key)} />
+                                </Tooltip>
                               )}
                           </div>
                       </div>

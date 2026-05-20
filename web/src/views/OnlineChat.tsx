@@ -22,6 +22,8 @@ interface OnlineChatProps {
   usernameForSessionId?: string | null;
   /** 普通用户：只加载 key 中包含 username 的会话 */
   filterV3SessionsByUsername?: boolean;
+  /** 管理员：会话 Bot 已从 bots-models 移除时仍允许删除该会话 */
+  canDeleteV3OrphanSessions?: boolean;
 }
 
 const chatBlockedPlaceholder = <div style={{ flex: 1, minHeight: 0 }} aria-hidden />;

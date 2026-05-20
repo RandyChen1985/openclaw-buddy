@@ -284,16 +284,28 @@ func GetPIDByPort(port int) (int, error) {
 // IsProcessRunning checks if a process with the given name is currently running.
 func IsProcessRunning(name string) bool {
 	if runtime.GOOS == "windows" {
-		cmd := exec.Command("cmd", "/c", "tasklist /FI \"IMAGENAME eq "+name+"\" /NH")
+		cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("IMAGENAME eq %s", name), "/NH")
 		out, _ := cmd.Output()
 		return strings.Contains(string(out), name)
 	}
 
-	// Linux/Mac: ps -ef | grep [name] (avoiding grep itself)
-	// We use a simple pgrep if available, or ps with grep
-	cmd := exec.Command("sh", "-c", "ps -ef | grep \""+name+"\" | grep -v grep")
-	err := cmd.Run()
-	return err == nil
+	// Linux/Mac: Avoid command injection by executing pgrep directly without sh -c
+	cmd := exec.Command("pgrep", "-f", name)
+	if err := cmd.Run(); err == nil {
+		return true
+	}
+
+	// Fallback to reading unix command lines and matching in Go, entirely shell-free
+	lines, err := readUnixProcessCommandLines()
+	if err != nil {
+		return false
+	}
+	for _, line := range lines {
+		if strings.Contains(line, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // looksLikeOpenclawPackageInstallCommand detects package-manager installs of the openclaw npm package

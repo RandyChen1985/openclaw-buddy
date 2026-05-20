@@ -191,5 +191,6 @@ type ansiStrippingWriter struct {
 
 func (asw *ansiStrippingWriter) Write(p []byte) (n int, err error) {
 	stripped := StripANSI(string(p))
-	return asw.w.Write([]byte(stripped))
+	_, err = asw.w.Write([]byte(stripped))
+	return len(p), err
 }

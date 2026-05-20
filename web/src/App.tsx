@@ -8,6 +8,7 @@ import {
 import api from './api';
 import axios from 'axios';
 import storage from './utils/storage';
+import { canBypassV3SessionBotAccess } from './utils/v3SessionAccess';
 import { deriveGatewayState } from './app/gatewayState';
 import { createMenuItems, getActiveMenuLabel, hasMenuPermission } from './app/menu';
 
@@ -1029,7 +1030,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
 
   /**
    * 如果 WS 已经认证成功后突然断开，前端可以先把它视作“端口已停止”的候选状态，
-   * 立即刷新 HTTP 做校准，避免等 30s 轮询期间还显示重连中/连接中。
+   * 立即刷新 HTTP 做校准，避免等状态轮询期间还显示重连中/连接中。
    */
   useEffect(() => {
     const prev = prevV3StatusRef.current;
@@ -1237,6 +1238,10 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
           (authMe?.login_type || '') !== 'token' &&
           !(authMe?.role_keys || []).includes('admin')
         }
+        canDeleteV3OrphanSessions={canBypassV3SessionBotAccess({
+          isSuperAdmin: authMe?.is_superadmin,
+          allowedBotIDs: authMe?.bot_ids,
+        })}
         onNavigateToDashboard={() => {
           setActiveTab('dashboard');
           window.location.hash = 'actions';
