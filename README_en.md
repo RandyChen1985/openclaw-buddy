@@ -27,31 +27,19 @@ Facing risks of "disconnection" caused by configuration errors or plugin conflic
 
 ---
 
-## ✨ Core Highlights
+## ✨ Core Features
 
-- **🛡️ Independent Sentinel (OOB)**: Runs as an independent process. Even if the OpenClaw gateway crashes, Buddy can remotely restart, rollback, and save the system.
-- **⚡ Lightning-Fast Login**: Deep integration with WeChat plugins to capture login QR codes in real-time. Complete authorization in seconds.
-- **🧪 Premium Dialog Lab (Chat V3)**: Multi-session management, channel classification and filtering, auto-summarized session titles, deep integration with Bot Workspaces and no-CD O/M terminals, supporting clean standalone embedding.
-- **🤖 Bot & Model Management**: Visually manage all bots and model mappings. Supports forced asset refreshing and real-time synchronization.
-- **🩺 Intelligent Self-Healing**: Built-in heartbeat probes and multi-stage self-healing mechanisms. Automatically executes config rollbacks and backup snapshots upon detecting anomalies.
-- **📊 O/M Dashboard**: Real-time tracking of CPU, memory load, API latency, and system logs. Monitor every heartbeat of your AI agent.
-- **🔔 Feishu/Lark Alerts**: Real-time push for failures, self-healing events, and interactive login cards.
-
-## ✨ Key Features
-
-- **🖥️ Modern Web Control Panel**: Developed with React + Ant Design + Lucide, featuring responsive layout and **WebSocket real-time log tracking**.
-- **🧪 Conversation Lab (Online Chat)**: Integrated streaming chat interface with one-click enabling/configuration, quick command management, and Markdown rendering.
-- **🛡️ Intelligent Self-Healing System**:
-  - **Multi-level Rollback**: Prioritizes recovery from known-healthy config snapshots in the `backups/` directory.
-  - **Full Persistence**: Inspection history and self-healing events are persisted in SQLite for auditing and trend analysis.
-- **📱 Device Center & Authorization**:
-  - **Dual-state Management**: Clearly distinguishes between "Pending Connection Requests" and "Paired Compliant Devices."
-  - **Online Approval**: Approve new device access requests directly via the Web interface.
-- **🤖 Bots & Models**: Automatically parses `openclaw.json`, visually presents robot architecture, and supports manual synchronization.
-- **📺 WeChat Plugin Management**: Automates plugin download and activation. Listens to `openclaw` output to capture login QR codes in real-time.
-- **📊 Metric Visualization**: View real-time trends for CPU, memory, disk load, and response latency.
-- **🔄 Async Task Management**: Critical operations (like restarts) use asynchronous task modes with task status tracking (Task ID).
-- **🔗 Native UI Passthrough**: Integrated Reverse Proxy supports safe public access to the native UI via `EXTERNAL_DASHBOARD_URL`.
+- **🛡️ Independent Sentinel (OOB)**: Buddy runs as its own process. If the OpenClaw gateway fails, you can still remotely restart, roll back, and recover the system.
+- **🖥️ Modern Web Control Panel**: React + Ant Design + Lucide, responsive layout, and **WebSocket real-time log streaming**.
+- **🧪 Premium Dialog Lab (Chat V3)**: Streaming online chat, multi-session and channel filtering, **LLM auto-generated session titles**; deep integration with per-bot **Workspace** and **no-`cd` O/M terminal**; quick commands and Markdown; **clean standalone embedding** with `?embed=true` (see the Premium section below).
+- **🤖 Bots & Models**: Parses `openclaw.json` for architecture visualization, manages model mappings, and supports forced asset refresh and live sync.
+- **📡 Multi-channel binding & visual setup**: **WeChat, Feishu/Lark, Telegram, QQ Bot**, and more—install/enable plugins, binding status, and options from the Web UI; for QR-based logins (e.g. WeChat), the console listens to gateway output and **streams the login QR code** for near-instant authorization.
+- **🩺 Intelligent Self-Healing**: Heartbeat probes and multi-stage recovery with automatic rollback and snapshots; prefers healthy configs from `backups/`; inspection and healing events **persisted in SQLite** for audit and trends.
+- **📱 Device Center & Authorization**: Separates pending connection requests from paired devices; approve new devices from the Web UI.
+- **📊 O/M Dashboard & Metrics**: CPU, memory, disk, API latency, and system/audit logs at a glance, with trend views where applicable.
+- **🔔 Feishu/Lark Alerts**: Push failures, healing outcomes, and interactive cards for login and other flows.
+- **🔄 Async Tasks**: Gateway restart and similar operations run asynchronously with **Task ID** status tracking.
+- **🔗 Native UI Passthrough**: Built-in reverse proxy; pair with `EXTERNAL_DASHBOARD_URL` for safe public access to the native OpenClaw UI.
 
 ## 🧪 Premium Online Chat & Dialog Laboratory (Chat V3)
 
