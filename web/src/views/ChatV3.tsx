@@ -286,6 +286,20 @@ const ChatV3: React.FC<ChatV3Props> = ({
     }
   }, [t]);
 
+  const handleTerminalSelectionToChat = useCallback(
+    (text: string) => {
+      if (!inputAreaRef.current || !text.trim()) return;
+      const block = `\`\`\`terminal\n${text.replace(/\r\n/g, '\n')}\n\`\`\``;
+      inputAreaRef.current.setValue((prev: string) => {
+        const cur = prev.trim();
+        return cur ? `${cur}\n\n${block}` : block;
+      });
+      inputAreaRef.current.focus();
+      message.success(t('chat.terminalSentToInput', { defaultValue: '终端内容已填入输入框' }));
+    },
+    [t],
+  );
+
   useEffect(() => {
     if (!botsModels?.data?.bots?.length) return;
     const quickChatBot = window.sessionStorage.getItem('v3_quick_chat_bot');
@@ -1037,6 +1051,7 @@ const ChatV3: React.FC<ChatV3Props> = ({
                   fillParent
                   dockExpanded={dockExpanded}
                   onToggleDockExpanded={toggleDockExpanded}
+                  onSendSelectionToChat={handleTerminalSelectionToChat}
                   transition={isDraggingRight ? 'none' : undefined}
                   onWidthChange={onWidthChange}
                   onClose={() => {

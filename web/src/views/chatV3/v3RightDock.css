@@ -1,18 +1,127 @@
+.v3-right-dock-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  align-self: stretch;
+}
+
+.v3-right-dock-wrap--expanded {
+  flex: 1.4 1 0;
+  min-width: min(480px, 58vw);
+  max-width: none;
+}
+
+.v3-dock-layout-toggle-bar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  background: rgba(248, 250, 252, 0.95);
+}
+
+.v3-dock-open-panels {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.v3-dock-open-panels-meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 500;
+  color: #64748b;
+  letter-spacing: 0.02em;
+}
+
+.v3-dock-open-panel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.v3-dock-open-panel-chip {
+  display: inline-block;
+  max-width: 6.5rem;
+  padding: 2px 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 500;
+  color: #334155;
+  background: #e2e8f0;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+}
+
+.chat-v3-root[data-app-dark='true'] .v3-dock-open-panels-meta {
+  color: #94a3b8;
+}
+
+.chat-v3-root[data-app-dark='true'] .v3-dock-open-panel-chip {
+  color: #e2e8f0;
+  background: #1e293b;
+  border-color: #475569;
+}
+
+.chat-v3-root[data-app-dark='true'] .v3-dock-layout-toggle-bar {
+  border-bottom-color: #334155;
+  background: rgba(15, 23, 42, 0.92);
+}
+
+.v3-dock-layout-toggle-btn {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.v3-dock-layout-toggle-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.chat-v3-root[data-app-dark='true'] .v3-dock-layout-toggle-btn {
+  background: #1e293b;
+  border-color: #475569;
+  color: #cbd5e1;
+}
+
+.chat-v3-root[data-app-dark='true'] .v3-dock-layout-toggle-btn:hover {
+  background: #334155;
+  border-color: #64748b;
+  color: #f1f5f9;
+}
+
 .v3-right-dock {
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  height: 100%;
   flex: 1 1 0;
+  min-height: 0;
   min-width: 0;
-  align-self: stretch;
-  /* 左侧分界见 ChatV3.css .v3-right-dock border-left */
-}
-
-.v3-right-dock--expanded {
-  flex: 1.4 1 0;
-  min-width: min(480px, 58vw);
-  max-width: none;
+  /* 左侧分界见 ChatV3.css .v3-right-dock-wrap */
 }
 
 .v3-right-dock--multi-col .v3-dock-column {

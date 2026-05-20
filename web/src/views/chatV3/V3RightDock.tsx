@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { GripVertical } from 'lucide-react';
+import { Columns2, GripVertical, Rows3 } from 'lucide-react';
 import {
   V3_DOCK_MIME,
+  V3_DOCK_PANEL_ORDER,
   type V3DockPanelId,
   getColumnWidth,
   isDockDragEvent,
@@ -44,11 +45,29 @@ export function V3RightDock({
   onResizeActiveChange,
   renderPanel,
 }: V3RightDockProps) {
-  const { layout, movePanel, resizeColumn } = useV3RightDock(visiblePanels);
+  const { layout, movePanel, resizeColumn, toggleStackedColumns, dockIsStackedMode } =
+    useV3RightDock(visiblePanels);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [isDockDragging, setIsDockDragging] = useState(false);
   const draggingPanelRef = useRef<V3DockPanelId | null>(null);
   const resizingColRef = useRef<{ columnId: string; startX: number; startW: number } | null>(null);
+  /** dragOver 极高频；合并到每帧最多一次 setState，避免整 Dock（终端/工作区）反复重绘卡顿 */
+  const dragOverRafRef = useRef<number | null>(null);
+  const pendingDragOverKeyRef = useRef<string | null | undefined>(undefined);
+
+  const flushDragOverKey = useCallback(() => {
+    dragOverRafRef.current = null;
+    const next = pendingDragOverKeyRef.current;
+    if (next === undefined) return;
+    pendingDragOverKeyRef.current = undefined;
+    setDragOverKey(prev => (prev === next ? prev : next));
+  }, []);
+
+  const scheduleDragOverKey = useCallback((next: string | null) => {
+    pendingDragOverKeyRef.current = next;
+    if (dragOverRafRef.current != null) return;
+    dragOverRafRef.current = requestAnimationFrame(flushDragOverKey);
+  }, [flushDragOverKey]);
 
   const allowDrop = useCallback((e: React.DragEvent) => {
     if (!isDockDragEvent(e, draggingPanelRef.current)) return;
@@ -62,6 +81,11 @@ export function V3RightDock({
   }, []);
 
   const endPanelDrag = useCallback(() => {
+    if (dragOverRafRef.current != null) {
+      cancelAnimationFrame(dragOverRafRef.current);
+      dragOverRafRef.current = null;
+    }
+    pendingDragOverKeyRef.current = undefined;
     draggingPanelRef.current = null;
     setIsDockDragging(false);
     setDragOverKey(null);
@@ -150,6 +174,13 @@ export function V3RightDock({
     };
   }, [isDockDragging, endPanelDrag]);
 
+  useEffect(
+    () => () => {
+      if (dragOverRafRef.current != null) cancelAnimationFrame(dragOverRafRef.current);
+    },
+    [],
+  );
+
   if (isMobile || visiblePanels.length === 0 || layout.columns.length === 0) {
     return null;
   }
@@ -164,9 +195,13 @@ export function V3RightDock({
         onDragEnter={allowDrop}
         onDragOver={e => {
           allowDrop(e);
-          setDragOverKey(key);
+          scheduleDragOverKey(key);
         }}
-        onDragLeave={() => setDragOverKey(k => (k === key ? null : k))}
+        onDragLeave={e => {
+          const rel = e.relatedTarget as Node | null;
+          if (rel && e.currentTarget.contains(rel)) return;
+          scheduleDragOverKey(null);
+        }}
         onDrop={e => handleDropNewColumn(e, columnIndex)}
         title={t('chat.dockNewColumn', { defaultValue: '拖到此处拆成独立列' })}
       >
@@ -189,14 +224,64 @@ export function V3RightDock({
     return { flex: '1 1 0', minWidth: 0, width: '100%' };
   };
 
+  const showLayoutToggle = visiblePanels.length > 1;
+  const openPanelsOrdered = V3_DOCK_PANEL_ORDER.filter(id => visiblePanels.includes(id));
+  const openPanelNamesJoin = openPanelsOrdered.map(id => panelDefaultTitle(t, id)).join('、');
+
   return (
     <div
-      className={`v3-right-dock${isDockDragging ? ' v3-right-dock--dragging' : ''}${dockExpanded ? ' v3-right-dock--expanded' : ''}${soloColumn ? ' v3-right-dock--solo-column' : ''}${multiCol ? ' v3-right-dock--multi-col' : ''}`}
+      className={`v3-right-dock-wrap${dockExpanded ? ' v3-right-dock-wrap--expanded' : ''}`}
       data-app-dark={isDarkMode ? 'true' : undefined}
-      onDragEnd={endPanelDrag}
-      onDragEnter={allowDrop}
-      onDragOver={allowDrop}
     >
+      {showLayoutToggle && (
+        <div className="v3-dock-layout-toggle-bar">
+          <div
+            className="v3-dock-open-panels"
+            aria-label={t('chat.dockOpenPanelsAria', {
+              count: visiblePanels.length,
+              names: openPanelNamesJoin,
+              defaultValue: `右侧 Dock 已打开 ${visiblePanels.length} 个面板：${openPanelNamesJoin}`,
+            })}
+          >
+            <span className="v3-dock-open-panels-meta">
+              {t('chat.dockOpenPanelsMeta', {
+                count: visiblePanels.length,
+                defaultValue: `已打开 ${visiblePanels.length} 个`,
+              })}
+            </span>
+            <div className="v3-dock-open-panel-chips" role="list">
+              {openPanelsOrdered.map(id => (
+                <span key={id} className="v3-dock-open-panel-chip" role="listitem">
+                  {panelDefaultTitle(t, id)}
+                </span>
+              ))}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="v3-dock-layout-toggle-btn"
+            onClick={toggleStackedColumns}
+            aria-label={
+              dockIsStackedMode
+                ? t('chat.dockLayoutSpreadColumns', { defaultValue: '多列并排' })
+                : t('chat.dockLayoutStackOneColumn', { defaultValue: '单列堆叠' })
+            }
+            title={
+              dockIsStackedMode
+                ? t('chat.dockLayoutSpreadColumns', { defaultValue: '多列并排' })
+                : t('chat.dockLayoutStackOneColumn', { defaultValue: '单列堆叠' })
+            }
+          >
+            {dockIsStackedMode ? <Columns2 size={16} strokeWidth={2} /> : <Rows3 size={16} strokeWidth={2} />}
+          </button>
+        </div>
+      )}
+      <div
+        className={`v3-right-dock${isDockDragging ? ' v3-right-dock--dragging' : ''}${soloColumn ? ' v3-right-dock--solo-column' : ''}${multiCol ? ' v3-right-dock--multi-col' : ''}`}
+        onDragEnd={endPanelDrag}
+        onDragEnter={allowDrop}
+        onDragOver={allowDrop}
+      >
       {isDockDragging && !soloColumn && renderNewColumnZone(0)}
 
       {layout.columns.map((col, colIndex) => {
@@ -209,7 +294,7 @@ export function V3RightDock({
                 onDragEnter={allowDrop}
                 onDragOver={e => {
                   allowDrop(e);
-                  setDragOverKey(`new-${colIndex}`);
+                  scheduleDragOverKey(`new-${colIndex}`);
                 }}
                 onDrop={e => handleDropNewColumn(e, colIndex)}
                 onMouseDown={e => startColumnResize(col.id, e)}
@@ -222,7 +307,7 @@ export function V3RightDock({
               onDragEnter={allowDrop}
               onDragOver={e => {
                 allowDrop(e);
-                setDragOverKey(`col-${col.id}`);
+                scheduleDragOverKey(`col-${col.id}`);
               }}
               onDrop={e => handleDropOnColumn(e, col.id)}
             >
@@ -237,12 +322,12 @@ export function V3RightDock({
                     onDragEnter={allowDrop}
                     onDragOver={e => {
                       allowDrop(e);
-                      setDragOverKey(slotKey);
+                      scheduleDragOverKey(slotKey);
                     }}
                     onDragLeave={e => {
                       const rel = e.relatedTarget as Node | null;
                       if (rel && e.currentTarget.contains(rel)) return;
-                      setDragOverKey(k => (k === slotKey ? null : k));
+                      scheduleDragOverKey(null);
                     }}
                     onDrop={e => {
                       const dragged = readDropPanel(e);
@@ -280,6 +365,7 @@ export function V3RightDock({
           </React.Fragment>
         );
       })}
+      </div>
     </div>
   );
 }

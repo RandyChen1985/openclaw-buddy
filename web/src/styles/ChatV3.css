@@ -1083,12 +1083,12 @@ button.v3-settings-reasoning-btn--dark:active {
   box-shadow: 6px 0 18px -8px rgba(0, 0, 0, 0.45);
 }
 
-.v3-right-dock {
+.v3-right-dock-wrap {
   border-left: 1px solid #cbd5e1;
   background: var(--v3-surface, #fff);
 }
 
-.chat-v3-root[data-app-dark='true'] .v3-right-dock {
+.chat-v3-root[data-app-dark='true'] .v3-right-dock-wrap {
   border-left-color: #475569;
   background: #0f172a;
 }

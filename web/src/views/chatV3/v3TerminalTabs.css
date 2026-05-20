@@ -1,3 +1,49 @@
+/* 终端选区：发送到 AI 浮标 */
+.v3-terminal-session-wrap {
+  overflow: hidden;
+}
+
+.v3-terminal-selection-send {
+  position: absolute;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  margin: 0;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.45);
+  white-space: nowrap;
+  animation: v3-terminal-send-in 0.15s ease-out;
+}
+
+.v3-terminal-selection-send:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.55);
+}
+
+.v3-terminal-selection-send:active {
+  transform: scale(0.98);
+}
+
+@keyframes v3-terminal-send-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* 运维终端多 Tab：撑满侧栏/弹窗剩余高度 */
 .v3-terminal-multi-tabs.ant-tabs {
   display: flex;

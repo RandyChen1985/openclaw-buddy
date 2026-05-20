@@ -16,6 +16,7 @@ interface V3TerminalPaneProps {
   fillParent?: boolean;
   dockExpanded?: boolean;
   onToggleDockExpanded?: () => void;
+  onSendSelectionToChat?: (text: string) => void;
 }
 
 export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({
@@ -28,6 +29,7 @@ export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({
   fillParent = false,
   dockExpanded = false,
   onToggleDockExpanded,
+  onSendSelectionToChat,
 }) => {
   const seedRef = useRef<string | null>(null);
   if (!seedRef.current) seedRef.current = genTerminalTabId();
@@ -94,6 +96,7 @@ export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({
           width={width}
           isActive={activeKey === id}
           restartKey={restartByTab[id] ?? 0}
+          onSendSelectionToChat={onSendSelectionToChat}
         />
       </div>
     ),

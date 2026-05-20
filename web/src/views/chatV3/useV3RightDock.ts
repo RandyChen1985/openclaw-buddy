@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { V3DockLayout, V3DockPanelId, V3DockDropTarget } from './v3RightDockLayout';
 import {
-  type V3DockLayout,
-  type V3DockPanelId,
-  type V3DockDropTarget,
+  V3_DOCK_PANEL_ORDER,
   loadDockLayout,
   saveDockLayout,
   syncDockLayoutWithVisible,
   moveDockPanel,
   setColumnWidth,
+  defaultDockLayout,
+  stackedSingleColumnLayout,
+  isRoughlyStackedLayout,
 } from './v3RightDockLayout';
 
 export function useV3RightDock(visiblePanels: V3DockPanelId[]) {
@@ -40,8 +42,28 @@ export function useV3RightDock(visiblePanels: V3DockPanelId[]) {
     setLayout(syncDockLayoutWithVisible(null, visiblePanels));
   }, [visiblePanels]);
 
+  const toggleStackedColumns = useCallback(() => {
+    setLayout(prev => {
+      if (visiblePanels.length <= 1) return prev;
+      const ordered = V3_DOCK_PANEL_ORDER.filter(id => visiblePanels.includes(id));
+      if (isRoughlyStackedLayout(prev, visiblePanels)) {
+        return defaultDockLayout(ordered);
+      }
+      return stackedSingleColumnLayout(visiblePanels);
+    });
+  }, [visiblePanels]);
+
+  const dockIsStackedMode = isRoughlyStackedLayout(layout, visiblePanels);
+
   return useMemo(
-    () => ({ layout, movePanel, resizeColumn, resetLayout }),
-    [layout, movePanel, resizeColumn, resetLayout],
+    () => ({
+      layout,
+      movePanel,
+      resizeColumn,
+      resetLayout,
+      toggleStackedColumns,
+      dockIsStackedMode,
+    }),
+    [layout, movePanel, resizeColumn, resetLayout, toggleStackedColumns, dockIsStackedMode],
   );
 }

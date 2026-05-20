@@ -57,6 +57,32 @@ export function defaultDockLayout(visible: V3DockPanelId[]): V3DockLayout {
   return { columns, columnWidths };
 }
 
+/** 单列纵向堆叠：一列内按固定顺序排列所有可见面板 */
+export function stackedSingleColumnLayout(visible: V3DockPanelId[]): V3DockLayout {
+  const orderedVisible = V3_DOCK_PANEL_ORDER.filter(id => visible.includes(id));
+  if (orderedVisible.length === 0) {
+    return { columns: [], columnWidths: {} };
+  }
+  const colId = genDockColumnId();
+  return {
+    columns: [{ id: colId, panelIds: [...orderedVisible] }],
+    columnWidths: { [colId]: DEFAULT_COL_WIDTH },
+  };
+}
+
+/**
+ * 是否为「单列且含全部可见面板」（与多列/分列区分）。
+ * 用于在单列堆叠 ↔ 多列并排之间切换。
+ */
+export function isRoughlyStackedLayout(layout: V3DockLayout, visible: V3DockPanelId[]): boolean {
+  if (visible.length <= 1) return false;
+  if (layout.columns.length !== 1) return false;
+  const pids = layout.columns[0].panelIds;
+  if (pids.length !== visible.length) return false;
+  const vset = new Set(visible);
+  return pids.every(id => vset.has(id));
+}
+
 function cloneLayout(layout: V3DockLayout): V3DockLayout {
   return {
     columns: layout.columns.map(c => ({ id: c.id, panelIds: [...c.panelIds] })),
