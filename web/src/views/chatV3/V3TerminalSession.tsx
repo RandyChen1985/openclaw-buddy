@@ -92,6 +92,8 @@ export const V3TerminalSession = forwardRef<V3TerminalSessionHandle, V3TerminalS
     useEffect(() => {
       if (!terminalEl) return;
 
+      let active = true;
+
       const term = new Terminal({
         cursorBlink: true,
         cursorStyle,
@@ -131,6 +133,7 @@ export const V3TerminalSession = forwardRef<V3TerminalSessionHandle, V3TerminalS
 
       const connect = async () => {
         const res = await api.post('/v1/auth/ticket').catch(() => null);
+        if (!active) return;
         const ticket = res?.data?.ticket;
 
         const queryParams = new URLSearchParams();
@@ -147,6 +150,10 @@ export const V3TerminalSession = forwardRef<V3TerminalSessionHandle, V3TerminalS
         socketRef.current = socket;
 
         socket.onopen = () => {
+          if (!active) {
+            socket?.close();
+            return;
+          }
           sendResize();
           if (cwd) {
             term.write(`\x1b[1;34m[Buddy] 自动切换到工作目录: ${cwd}\x1b[0m\r\n`);
@@ -186,7 +193,9 @@ export const V3TerminalSession = forwardRef<V3TerminalSessionHandle, V3TerminalS
               const trimmed = raw.trim();
               if (trimmed.length < MIN_SELECTION_LEN) return;
 
-              void navigator.clipboard.writeText(raw).catch(() => {});
+              if (navigator.clipboard) {
+                void navigator.clipboard.writeText(raw).catch(() => {});
+              }
 
               const rect = terminalEl.getBoundingClientRect();
               const btnW = 132;
@@ -234,6 +243,7 @@ export const V3TerminalSession = forwardRef<V3TerminalSessionHandle, V3TerminalS
       });
 
       return () => {
+        active = false;
         ro?.disconnect();
         window.removeEventListener('resize', handleResize);
         if (onMouseUp) terminalEl.removeEventListener('mouseup', onMouseUp);

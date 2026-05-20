@@ -134,12 +134,29 @@ export function V3RightDock({
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
 
-      const onMove = (ev: MouseEvent) => {
+      let lastClientX = e.clientX;
+      let rafId: number | null = null;
+
+      const updateWidth = () => {
+        rafId = null;
         if (!resizingColRef.current) return;
-        const delta = resizingColRef.current.startX - ev.clientX;
+        const delta = resizingColRef.current.startX - lastClientX;
         resizeColumn(resizingColRef.current.columnId, resizingColRef.current.startW + delta);
       };
+
+      const onMove = (ev: MouseEvent) => {
+        lastClientX = ev.clientX;
+        if (rafId === null) {
+          rafId = requestAnimationFrame(updateWidth);
+        }
+      };
       const onUp = () => {
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+        // 松开时补一次同步计算，避免取消 rAF 时尚未执行的那一帧丢失最终列宽
+        updateWidth();
         resizingColRef.current = null;
         onResizeActiveChange(false);
         document.body.style.cursor = '';
