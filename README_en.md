@@ -31,6 +31,7 @@ Facing risks of "disconnection" caused by configuration errors or plugin conflic
 
 - **🛡️ Independent Sentinel (OOB)**: Runs as an independent process. Even if the OpenClaw gateway crashes, Buddy can remotely restart, rollback, and save the system.
 - **⚡ Lightning-Fast Login**: Deep integration with WeChat plugins to capture login QR codes in real-time. Complete authorization in seconds.
+- **🧪 Premium Dialog Lab (Chat V3)**: Multi-session management, channel classification and filtering, auto-summarized session titles, deep integration with Bot Workspaces and no-CD O/M terminals, supporting clean standalone embedding.
 - **🤖 Bot & Model Management**: Visually manage all bots and model mappings. Supports forced asset refreshing and real-time synchronization.
 - **🩺 Intelligent Self-Healing**: Built-in heartbeat probes and multi-stage self-healing mechanisms. Automatically executes config rollbacks and backup snapshots upon detecting anomalies.
 - **📊 O/M Dashboard**: Real-time tracking of CPU, memory load, API latency, and system logs. Monitor every heartbeat of your AI agent.
@@ -51,6 +52,41 @@ Facing risks of "disconnection" caused by configuration errors or plugin conflic
 - **📊 Metric Visualization**: View real-time trends for CPU, memory, disk load, and response latency.
 - **🔄 Async Task Management**: Critical operations (like restarts) use asynchronous task modes with task status tracking (Task ID).
 - **🔗 Native UI Passthrough**: Integrated Reverse Proxy supports safe public access to the native UI via `EXTERNAL_DASHBOARD_URL`.
+
+## 🧪 Premium Online Chat & Dialog Laboratory (Chat V3)
+
+> 💡 **"More than just a chat debugger, it is a full-featured AI Agent productivity sandbox that seamlessly bridges chat, terminal, code editing, and Workspace."**
+
+![Chat V3 Premium Panel](docs/images/chat_v3_premium.png)
+
+The native OpenClaw chat interaction is relatively basic. **OpenClaw Buddy** addresses this pain point by pioneering an O/M testing, development, and file-isolated "Dialog Laboratory (Chat V3)" as an ultimate **productivity tool**, featuring developer aesthetics and delivering six powerhouse capabilities far beyond native:
+
+### 1. 📂 Deep Workspace Integration
+* **Bi-directional Flow**: The system automatically detects the workspace folder of the current active bot. An **online Workspace File Explorer** is seamlessly integrated into the right sidebar, supporting creation, renaming, and online editing/saving of files.
+* **Isolated File Uploads**: Uploaded files automatically land in the specific bot's `workspace/uploads/` physical folder. This keeps each bot's private files completely isolated, while allowing direct access to the physical path (`absPath`) by backend scripts.
+* **Rapid Action**: Effortlessly attach/send physical files to the chat box as rich-text or blockquotes with a single click, or right-click files/folders in the explorer to save current chat contents back to the Workspace.
+
+### 2. 📟 No-CD PTY Terminal Integration
+* An interactive **Remote PTY Terminal** based on WebSocket real-time persistent connections is embedded right inside the sidebar.
+* **Smart Path Awareness**: Clicking "Open Terminal" automatically locates the current active Bot's Workspace physical path and **instantly auto-CDs** to that directory. Developers can execute build scripts, test commands, or manage bot deployments while chatting, bringing "Chat Debugging + CLI O/M" together seamlessly.
+
+### 3. 💬 Channel & Session Management
+* **Intelligent Title Summary (Auto-summarize)**：Powered by LLM, the system dynamically analyzes the first few exchanges in a conversation to auto-generate a precise, contextual title under 10 words, putting an end to generic "Untitled Sessions."
+* **Full-Channel Streaming Capture**: Consolidates and clearly tags sessions routed from WeChat (`weixin`), Feishu/Lark (`feishu`), Telegram (`telegram`), System Dashboard (`dashboard`), API keys (`openai-user`), and sub-agents (`subagent`). Users can quickly classify, search, and filter sessions by channel icons and distinct colors.
+
+### 4. ⚡ Dual-Track Quick Commands
+* A visual quick-action command bar is located right above the input area.
+* Prefills system-level high-frequency prompts/commands, and allows users to dynamically add, edit, or delete custom Prompts, enabling one-click insertion and instant sending to drastically improve O/M efficiency.
+
+### 5. 🔌 Seamless Standalone Embedding Support
+* **Zero-Auth iframe Integration**: Perfect for integrating chat interfaces into dashboards, portals, or other systems. Simply append `?embed=true` to enable **Clean Mode**, hiding headers, sidebars, and all unnecessary controls.
+* **Automatic Auth & Locking**: Seamlessly log in and lock onto specific Bots by passing URL parameters (`token`, `bot`, `user`). A "Get Embed Code" button inside the chat interface allows one-click generation of fully pre-configured `<iframe>` integration snippets.
+
+### 6. 📊 Developer Aesthetics & Diagnostics
+* **Smooth Resize Interaction**: Sidebar panes support smooth mouse drag-and-resize with automatic width memory (between 300px and 800px).
+* **Streaming Formulas & WAF Penetration**: Built-in LaTeX/KaTeX formula rendering, code block syntax highlighting, and smooth Markdown formatting. The backend features **WAF penetration enhancement** (`X-Accel-Buffering no`), completely bypassing streaming buffers of intermediate proxies or Nginx gateways.
+* **Transparent Performance Diagnostics**: The debugging pane provides real-time tracking of WebSocket heartbeat latency, TPS (Tokens Per Second) live graphs, and HTTP payload logs for direct performance auditing.
+
 
 ---
 
@@ -226,6 +262,10 @@ EXTERNAL_DASHBOARD_URL="https://claw.yourdomain.com" # External URL prefix
 ## 🔌 Embedding Support
 
 **OpenClaw Buddy** supports flexible external integration. You can embed specific modules (like Online Chat) as **Standalone** components into your business systems or dashboards using iframes.
+
+> [!TIP]
+> **🌈 Advanced User & Session Isolation:**
+> For embedded environments, if you need to maintain separate conversation contexts for the same external user across different iframe views, you can combine the `user` parameter to achieve this. For example, use `?user=randy-session-001` to isolate a temporary session, or use `?user=randy` for standard persistent chat. This is exceptionally powerful for cross-system user mapping.
 
 ### Query Parameters
 

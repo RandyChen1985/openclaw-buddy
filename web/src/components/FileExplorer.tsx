@@ -243,12 +243,23 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
   // Drag and Drop Logic
   const handleDragStart = (e: React.DragEvent, item: FileEntry) => {
     e.stopPropagation();
-    let pathsToMove = [item.path];
+    let itemsToDrag: FileEntry[] = [item];
     if (selectedBulkKeys.includes(item.path)) {
-      pathsToMove = selectedBulkKeys;
+      itemsToDrag = files.filter(f => selectedBulkKeys.includes(f.path) && f.name !== '..');
     }
-    e.dataTransfer.setData('application/x-openclaw-files', JSON.stringify(pathsToMove));
-    e.dataTransfer.effectAllowed = 'move';
+    const pathsToMove = itemsToDrag.map(i => i.path);
+    const dragPayload = {
+      v: 2 as const,
+      items: itemsToDrag.map(i => ({
+        path: i.path,
+        name: i.name,
+        is_dir: i.is_dir,
+        size: i.size,
+      })),
+    };
+    e.dataTransfer.setData('application/x-openclaw-files', JSON.stringify(dragPayload));
+    e.dataTransfer.setData('text/plain', pathsToMove.join('\n'));
+    e.dataTransfer.effectAllowed = 'copyMove';
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -262,9 +273,16 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
     e.stopPropagation();
     const data = e.dataTransfer.getData('application/x-openclaw-files');
     if (!data) return;
-    
+
     try {
-      const pathsToMove: string[] = JSON.parse(data);
+      const parsed = JSON.parse(data) as unknown;
+      const pathsToMove: string[] = Array.isArray(parsed)
+        ? (parsed as string[])
+        : parsed &&
+            typeof parsed === 'object' &&
+            Array.isArray((parsed as { items?: { path: string }[] }).items)
+          ? (parsed as { items: { path: string }[] }).items.map(i => i.path)
+          : [];
       const validPaths = pathsToMove.filter(p => {
         const parentPath = p.substring(0, p.lastIndexOf(p.includes('/') ? '/' : '\\')) || rootPath;
         return parentPath !== targetFolderPath && p !== targetFolderPath && !targetFolderPath.startsWith(p + '/');

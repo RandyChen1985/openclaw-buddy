@@ -21,6 +21,8 @@ import { V3TerminalModal } from '../components/Chat/V3TerminalModal';
 import { V3DebugPane } from './chatV3/V3DebugPane';
 import { V3TerminalPane } from './chatV3/V3TerminalPane';
 import { V3ExplorerPane } from './chatV3/V3ExplorerPane';
+import { V3RightDock } from './chatV3/V3RightDock';
+import { isDockPanelDragEvent, type V3DockPanelId } from './chatV3/v3RightDockLayout';
 import FileExplorer from '../components/FileExplorer';
 import { useV3Theme } from '../hooks/chatV3/useV3Theme';
 import { V3_QUICK_CHAT_PENDING_KEY } from '../hooks/chatV3/useV3Sessions';
@@ -150,29 +152,21 @@ const ChatV3: React.FC<ChatV3Props> = ({
   // Sider Widths
   const [rightSiderWidth, setRightSiderWidth] = useState(() => Number(storage.getItem('v3_right_sider_width')) || 400);
   const [isDraggingRight, setIsDraggingRight] = useState(false);
-  const isResizingRight = useRef(false);
+  const [dockExpanded, setDockExpanded] = useState(false);
+  const dockVisiblePanels = React.useMemo((): V3DockPanelId[] => {
+    const ids: V3DockPanelId[] = [];
+    if (showDebug) ids.push('debug');
+    if (showTerminal) ids.push('terminal');
+    if (showExplorer) ids.push('explorer');
+    return ids;
+  }, [showDebug, showTerminal, showExplorer]);
 
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isResizingRight.current) {
-        const newWidth = Math.max(300, Math.min(800, window.innerWidth - e.clientX));
-        setRightSiderWidth(newWidth);
-        storage.setItem('v3_right_sider_width', String(newWidth));
-        window.dispatchEvent(new Event('resize'));
-      }
-    };
-    const handleMouseUp = () => {
-      isResizingRight.current = false;
-      setIsDraggingRight(false);
-      document.body.style.cursor = 'default';
-      document.body.style.userSelect = 'auto';
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
+  /** 禁止把右侧 Dock 面板拖进聊天列（仅允许在 Dock 内分列/堆叠） */
+  const rejectDockDragOnChat = useCallback((e: React.DragEvent) => {
+    if (!isDockPanelDragEvent(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'none';
   }, []);
 
   // Refs
@@ -247,6 +241,15 @@ const ChatV3: React.FC<ChatV3Props> = ({
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);
   const [showSider, setShowSider] = useState(!isMobile);
+
+  const toggleDockExpanded = useCallback(() => {
+    setDockExpanded(prev => {
+      const next = !prev;
+      if (next) setShowSider(false);
+      return next;
+    });
+  }, []);
+
   const [quickCommandsExpanded, setQuickCommandsExpanded] = useState<boolean>(() => localStorage.getItem('v3_show_quick_actions') !== 'false');
   const [quotedMsg, setQuotedMsg] = useState<string | null>(null);
   const [editingMsgIndex, setEditingMsgIndex] = useState<number | null>(null);
@@ -740,8 +743,33 @@ const ChatV3: React.FC<ChatV3Props> = ({
         </>
       )}
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: isDarkMode ? '#0f172a' : '#fafafa', position: 'relative', width: '100%', minWidth: 0, overflow: 'hidden' }}>
-        
+      <div
+        className="v3-chat-main-row"
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'stretch',
+          minWidth: 0,
+          height: '100%',
+          overflow: 'hidden',
+        }}
+      >
+      <div
+        className={`v3-chat-column${dockVisiblePanels.length > 0 ? ' v3-chat-column--with-dock' : ''}`}
+        style={{
+          flex: dockExpanded ? '0 0 clamp(280px, 36vw, 480px)' : '1 1 320px',
+          minWidth: 280,
+          display: 'flex',
+          flexDirection: 'column',
+          background: isDarkMode ? '#0f172a' : '#fafafa',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+        onDragEnter={rejectDockDragOnChat}
+        onDragOver={rejectDockDragOnChat}
+        onDrop={rejectDockDragOnChat}
+      >
         {/* 💡 注入局部样式强制锁死浮动按钮在各种状态下的颜色 */}
         <style>{`
           .v3-floating-btn-active {
@@ -846,17 +874,11 @@ const ChatV3: React.FC<ChatV3Props> = ({
           setShowTerminal={(val) => {
             setShowTerminal(val);
             storage.setItem('v3_show_terminal', val ? 'true' : 'false');
-            if (val && rightSiderWidth >= 800) {
-              setRightSiderWidth(450);
-            }
           }}
           showExplorer={showExplorer}
           setShowExplorer={(val) => {
             setShowExplorer(val);
             storage.setItem('v3_show_explorer', val ? 'true' : 'false');
-            if (val && rightSiderWidth >= 800) {
-              setRightSiderWidth(450);
-            }
           }}
         />
   
@@ -966,118 +988,83 @@ const ChatV3: React.FC<ChatV3Props> = ({
             />
 
           </div>
-        {showDebug && !isMobile && (
-          <V3DebugPane 
-            t={t} 
-            logs={wsLogs} 
-            onClear={() => setWsLogs([])} 
-            onClose={() => {
-              setShowDebug(false);
-              storage.setItem('v3_show_debug', 'false');
-              setWsLogs([]);
-            }} 
-          />
-        )}
-        {showTerminal && !isMobile && (
-          <>
-            {/* Resize Handle Right */}
-            <div 
-              style={{ 
-                width: 8, 
-                cursor: 'col-resize', 
-                background: isDraggingRight ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
-                transition: 'background 0.2s',
-                zIndex: 50,
-                marginLeft: -4,
-                marginRight: -4
-              }}
-              onMouseDown={() => {
-                isResizingRight.current = true;
-                setIsDraggingRight(true);
-                document.body.style.cursor = 'col-resize';
-                document.body.style.userSelect = 'none';
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = isDraggingRight ? 'rgba(59, 130, 246, 0.2)' : 'transparent')}
-            />
-            <V3TerminalPane 
-              t={t} 
-              cwd={terminalCwd}
-              width={rightSiderWidth}
-              transition={isDraggingRight ? 'none' : undefined}
-              onWidthChange={(newWidth) => {
-                setRightSiderWidth(newWidth);
-                storage.setItem('v3_right_sider_width', String(newWidth));
-                // 自动折叠左侧会话列表
-                if (newWidth >= 800) {
-                  setShowSider(false);
-                } else {
-                  setShowSider(true);
-                }
-                window.dispatchEvent(new Event('resize'));
-              }}
-              onClose={() => {
-                setShowTerminal(false);
-                storage.setItem('v3_show_terminal', 'false');
-              }} 
-            />
-          </>
-        )}
-        {showExplorer && !isMobile && (
-          <>
-            {/* Resize Handle Right */}
-            {!showTerminal && (
-              <div 
-                style={{ 
-                  width: 8, 
-                  cursor: 'col-resize', 
-                  background: isDraggingRight ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
-                  transition: 'background 0.2s',
-                  zIndex: 50,
-                  marginLeft: -4,
-                  marginRight: -4
-                }}
-                onMouseDown={() => {
-                  isResizingRight.current = true;
-                  setIsDraggingRight(true);
-                  document.body.style.cursor = 'col-resize';
-                  document.body.style.userSelect = 'none';
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = isDraggingRight ? 'rgba(59, 130, 246, 0.2)' : 'transparent')}
-              />
-            )}
-            <V3ExplorerPane 
-              t={t} 
-              rootPath={explorerPath}
-              isDarkMode={isDarkMode}
-              width={rightSiderWidth}
-              transition={isDraggingRight ? 'none' : undefined}
-              onWidthChange={(newWidth) => {
-                setRightSiderWidth(newWidth);
-                storage.setItem('v3_right_sider_width', String(newWidth));
-                // 自动折叠左侧会话列表
-                if (newWidth >= 800) {
-                  setShowSider(false);
-                } else {
-                  setShowSider(true);
-                }
-                window.dispatchEvent(new Event('resize'));
-              }}
-              onSendToChat={handleSendToChat}
-              onClose={() => {
-                setShowExplorer(false);
-                storage.setItem('v3_show_explorer', 'false');
-              }} 
-            />
-          </>
-        )}
         <ChatV3Auth
           status={status}
           isMobile={!!isMobile}
           onConnect={connect}
           t={t}
           isDarkMode={isDarkMode}
+        />
+      </div>
+      <V3RightDock
+          visiblePanels={dockVisiblePanels}
+          isMobile={!!isMobile}
+          isDarkMode={isDarkMode}
+          dockExpanded={dockExpanded}
+          t={t}
+          isDraggingResize={isDraggingRight}
+          onResizeActiveChange={setIsDraggingRight}
+          renderPanel={(panelId, columnWidth) => {
+            const onWidthChange = (newWidth: number) => {
+              if (dockExpanded) return;
+              setRightSiderWidth(newWidth);
+              storage.setItem('v3_right_sider_width', String(newWidth));
+              if (newWidth >= 720) setShowSider(false);
+              else setShowSider(true);
+              window.dispatchEvent(new Event('resize'));
+            };
+            if (panelId === 'debug') {
+              return (
+                <V3DebugPane
+                  t={t}
+                  logs={wsLogs}
+                  fillParent
+                  onClear={() => setWsLogs([])}
+                  onClose={() => {
+                    setShowDebug(false);
+                    storage.setItem('v3_show_debug', 'false');
+                    setWsLogs([]);
+                  }}
+                />
+              );
+            }
+            if (panelId === 'terminal') {
+              return (
+                <V3TerminalPane
+                  t={t}
+                  cwd={terminalCwd}
+                  width={columnWidth}
+                  fillParent
+                  dockExpanded={dockExpanded}
+                  onToggleDockExpanded={toggleDockExpanded}
+                  transition={isDraggingRight ? 'none' : undefined}
+                  onWidthChange={onWidthChange}
+                  onClose={() => {
+                    setShowTerminal(false);
+                    storage.setItem('v3_show_terminal', 'false');
+                  }}
+                />
+              );
+            }
+            return (
+              <V3ExplorerPane
+                t={t}
+                rootPath={explorerPath}
+                isDarkMode={isDarkMode}
+                width={columnWidth}
+                fillParent
+                dockExpanded={dockExpanded}
+                onToggleDockExpanded={toggleDockExpanded}
+                transition={isDraggingRight ? 'none' : undefined}
+                onWidthChange={onWidthChange}
+                onSendToChat={handleSendToChat}
+                onClose={() => {
+                  setShowExplorer(false);
+                  storage.setItem('v3_show_explorer', 'false');
+                }}
+              />
+            );
+          }}
         />
       </div>
       </div>

@@ -13,9 +13,24 @@ interface V3ExplorerPaneProps {
   onSendToChat?: (content: string, fileName: string, fileInfo?: any) => void;
   transition?: string;
   isDarkMode?: boolean;
+  fillParent?: boolean;
+  dockExpanded?: boolean;
+  onToggleDockExpanded?: () => void;
 }
 
-export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({ t, rootPath, width = 400, onWidthChange, onClose, onSendToChat, transition: customTransition, isDarkMode = false }) => {
+export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({
+  t,
+  rootPath,
+  width = 400,
+  onWidthChange,
+  onClose,
+  onSendToChat,
+  transition: customTransition,
+  isDarkMode = false,
+  fillParent = false,
+  dockExpanded = false,
+  onToggleDockExpanded,
+}) => {
   const [refreshKey, setRefreshKey] = React.useState(0);
   /** 与 V3TerminalPane 侧栏一致（slate） */
   const shell = isDarkMode
@@ -28,15 +43,15 @@ export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({ t, rootPath, wid
 
   return (
     <div className="v3-explorer-pane" style={{
-      width: width,
+      width: fillParent ? '100%' : width,
       height: '100%',
       background: shell.bg,
-      borderLeft: `1px solid ${shell.border}`,
+      borderLeft: fillParent ? undefined : `1px solid ${shell.border}`,
       display: 'flex',
       flexDirection: 'column',
-      boxShadow: isDarkMode ? '-4px 0 15px rgba(0,0,0,0.2)' : '-4px 0 15px rgba(0,0,0,0.1)',
-      zIndex: 20,
-      transition: customTransition !== undefined ? customTransition : 'width 0.2s ease-in-out'
+      boxShadow: fillParent ? undefined : (isDarkMode ? '-4px 0 15px rgba(0,0,0,0.2)' : '-4px 0 15px rgba(0,0,0,0.1)'),
+      zIndex: fillParent ? undefined : 20,
+      transition: fillParent ? undefined : (customTransition !== undefined ? customTransition : 'width 0.2s ease-in-out'),
     }}>
       <div style={{ 
         padding: '12px 16px', 
@@ -70,12 +85,22 @@ export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({ t, rootPath, wid
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <Tooltip title={width > 600 ? t('common.minimize', { defaultValue: '最小化' }) : t('common.maximize', { defaultValue: '最大化' })}>
-            <Button 
-              size="small" 
-              type="text" 
-              icon={width > 600 ? <Minimize2 size={14} /> : <Maximize2 size={14} />} 
+          <Tooltip
+            title={
+              dockExpanded
+                ? t('common.minimize', { defaultValue: '还原宽度' })
+                : t('common.maximize', { defaultValue: '最大化占满右侧' })
+            }
+          >
+            <Button
+              size="small"
+              type="text"
+              icon={dockExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
               onClick={() => {
+                if (onToggleDockExpanded) {
+                  onToggleDockExpanded();
+                  return;
+                }
                 const target = width > 600 ? 400 : 800;
                 onWidthChange?.(target);
               }}
@@ -105,15 +130,17 @@ export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({ t, rootPath, wid
           isDarkMode={isDarkMode}
         />
       </div>
-      <style>{`
-        .v3-explorer-pane {
-          animation: slideInRight 0.3s ease-out;
-        }
-        @keyframes slideInRight {
-          from { transform: translateX(100%); }
-          to { transform: translateX(0); }
-        }
-      `}</style>
+      {!fillParent && (
+        <style>{`
+          .v3-explorer-pane {
+            animation: slideInRight 0.3s ease-out;
+          }
+          @keyframes slideInRight {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+          }
+        `}</style>
+      )}
     </div>
   );
 };

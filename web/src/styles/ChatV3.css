@@ -1066,6 +1066,33 @@ button.v3-settings-reasoning-btn--dark:active {
   transform: scale(0.95); /* 点击时轻微缩放 */
 }
 
+/* 主行：聊天列 + 右侧 Dock，避免开关面板时 flex/width 过渡造成弹缩 */
+.v3-chat-main-row > * {
+  transition: none !important;
+}
+
+/* 聊天区与右侧 Dock 分界（略深描边 + 轻阴影，比顶栏横线更易辨认） */
+.v3-chat-column--with-dock {
+  border-right: 1px solid #cbd5e1;
+  box-shadow: 6px 0 14px -8px rgba(15, 23, 42, 0.12);
+  z-index: 1;
+}
+
+.chat-v3-root[data-app-dark='true'] .v3-chat-column--with-dock {
+  border-right-color: #475569;
+  box-shadow: 6px 0 18px -8px rgba(0, 0, 0, 0.45);
+}
+
+.v3-right-dock {
+  border-left: 1px solid #cbd5e1;
+  background: var(--v3-surface, #fff);
+}
+
+.chat-v3-root[data-app-dark='true'] .v3-right-dock {
+  border-left-color: #475569;
+  background: #0f172a;
+}
+
 /* --- 全屏模式 --- */
 .chat-v3-root.chat-v3-root-fullscreen {
   position: fixed !important;
@@ -1392,6 +1419,18 @@ button.v3-settings-reasoning-btn--dark:active {
 }
 
 /* V3 输入区：暗色下 TextArea / placeholder（Ant 5 内部类名） */
+.v3-input-wrapper--path-drop {
+  outline: 2px dashed #6366f1;
+  outline-offset: -2px;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.chat-v3-root[data-app-dark='true'] .v3-input-wrapper--path-drop {
+  outline-color: #818cf8;
+  background: rgba(99, 102, 241, 0.12);
+}
+
 .v3-input-wrapper--dark .ant-input,
 .v3-input-wrapper--dark textarea.ant-input {
   color: #e2e8f0 !important;

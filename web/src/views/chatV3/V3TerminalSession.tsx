@@ -31,7 +31,7 @@ export interface V3TerminalSessionProps {
 
 export const V3TerminalSession = forwardRef<V3TerminalSessionHandle, V3TerminalSessionProps>(
   function V3TerminalSession(
-    { t, cwd, width, isActive, restartKey, fontSize = 12, cursorStyle = 'block', screenReaderMode = false },
+    { t, cwd, width: _width, isActive, restartKey, fontSize = 12, cursorStyle = 'block', screenReaderMode = false },
     ref
   ) {
     const [terminalEl, setTerminalEl] = React.useState<HTMLDivElement | null>(null);
@@ -147,25 +147,31 @@ export const V3TerminalSession = forwardRef<V3TerminalSessionHandle, V3TerminalS
 
       connect();
 
-      const initialFit = setTimeout(() => {
-        if (fitAddonRef.current && xtermRef.current) {
-          fitAddonRef.current.fit();
-          xtermRef.current.focus();
-          sendResize();
-        }
-      }, 400);
-
-      const handleResize = () => {
-        if (fitAddonRef.current) {
-          fitAddonRef.current.fit();
-          sendResize();
-        }
+      const fitTerminal = () => {
+        if (!fitAddonRef.current || !xtermRef.current) return;
+        fitAddonRef.current.fit();
+        sendResize();
       };
+
+      const ro = typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            requestAnimationFrame(fitTerminal);
+          })
+        : null;
+      ro?.observe(terminalEl);
+
+      const handleResize = () => requestAnimationFrame(fitTerminal);
       window.addEventListener('resize', handleResize);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          fitTerminal();
+          xtermRef.current?.focus();
+        });
+      });
 
       return () => {
+        ro?.disconnect();
         window.removeEventListener('resize', handleResize);
-        clearTimeout(initialFit);
         if (socket) socket.close();
         term.dispose();
         xtermRef.current = null;
@@ -174,26 +180,8 @@ export const V3TerminalSession = forwardRef<V3TerminalSessionHandle, V3TerminalS
     }, [terminalEl, restartKey, cwd, t, fontSize, cursorStyle, screenReaderMode]);
 
     useEffect(() => {
-      const timer = setTimeout(() => {
-        if (fitAddonRef.current) {
-          fitAddonRef.current.fit();
-          if (socketRef.current?.readyState === WebSocket.OPEN) {
-            socketRef.current.send(
-              JSON.stringify({
-                type: 'resize',
-                cols: xtermRef.current?.cols,
-                rows: xtermRef.current?.rows,
-              })
-            );
-          }
-        }
-      }, 250);
-      return () => clearTimeout(timer);
-    }, [width]);
-
-    useEffect(() => {
       if (!isActive) return;
-      const timer = setTimeout(() => {
+      const id = requestAnimationFrame(() => {
         if (fitAddonRef.current && xtermRef.current) {
           fitAddonRef.current.fit();
           xtermRef.current.focus();
@@ -207,9 +195,9 @@ export const V3TerminalSession = forwardRef<V3TerminalSessionHandle, V3TerminalS
             );
           }
         }
-      }, 60);
-      return () => clearTimeout(timer);
-    }, [isActive, width]);
+      });
+      return () => cancelAnimationFrame(id);
+    }, [isActive]);
 
     return (
       <div

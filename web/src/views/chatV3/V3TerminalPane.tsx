@@ -12,6 +12,10 @@ interface V3TerminalPaneProps {
   onWidthChange?: (width: number) => void;
   onClose: () => void;
   transition?: string;
+  /** 嵌入右侧 Dock 时由父级控制宽高 */
+  fillParent?: boolean;
+  dockExpanded?: boolean;
+  onToggleDockExpanded?: () => void;
 }
 
 export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({
@@ -21,6 +25,9 @@ export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({
   onWidthChange,
   onClose,
   transition: customTransition,
+  fillParent = false,
+  dockExpanded = false,
+  onToggleDockExpanded,
 }) => {
   const seedRef = useRef<string | null>(null);
   if (!seedRef.current) seedRef.current = genTerminalTabId();
@@ -96,15 +103,15 @@ export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({
     <div
       className="v3-terminal-pane"
       style={{
-        width: width,
+        width: fillParent ? '100%' : width,
         height: '100%',
         background: '#0f172a',
-        borderLeft: '1px solid #334155',
+        borderLeft: fillParent ? undefined : '1px solid #334155',
         display: 'flex',
         flexDirection: 'column',
-        boxShadow: '-4px 0 15px rgba(0,0,0,0.2)',
-        zIndex: 20,
-        transition: customTransition !== undefined ? customTransition : 'width 0.2s ease-in-out',
+        boxShadow: fillParent ? undefined : '-4px 0 15px rgba(0,0,0,0.2)',
+        zIndex: fillParent ? undefined : 20,
+        transition: fillParent ? undefined : (customTransition !== undefined ? customTransition : 'width 0.2s ease-in-out'),
         minWidth: 0,
       }}
     >
@@ -142,12 +149,22 @@ export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({
               style={{ color: '#94a3b8' }}
             />
           </Tooltip>
-          <Tooltip title={width > 600 ? t('common.minimize', { defaultValue: '最小化' }) : t('common.maximize', { defaultValue: '最大化' })}>
+          <Tooltip
+            title={
+              dockExpanded
+                ? t('common.minimize', { defaultValue: '还原宽度' })
+                : t('common.maximize', { defaultValue: '最大化占满右侧' })
+            }
+          >
             <Button
               size="small"
               type="text"
-              icon={width > 600 ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              icon={dockExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
               onClick={() => {
+                if (onToggleDockExpanded) {
+                  onToggleDockExpanded();
+                  return;
+                }
                 const target = width > 600 ? 450 : 800;
                 onWidthChange?.(target);
               }}

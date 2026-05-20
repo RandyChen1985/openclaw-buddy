@@ -10,6 +10,7 @@ interface V3DebugPaneProps {
   logs: any[];
   onClear: () => void;
   onClose: () => void;
+  fillParent?: boolean;
 }
 
 const LogItem = ({ log }: { log: any }) => {
@@ -141,7 +142,7 @@ const LogItem = ({ log }: { log: any }) => {
   );
 };
 
-export const V3DebugPane: React.FC<V3DebugPaneProps> = ({ t, logs, onClear, onClose }) => {
+export const V3DebugPane: React.FC<V3DebugPaneProps> = ({ t, logs, onClear, onClose, fillParent = false }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [searchText, setSearchText] = useState('');
   const [direction, setDirection] = useState<'all' | 'in' | 'out'>('all');
@@ -170,15 +171,15 @@ export const V3DebugPane: React.FC<V3DebugPaneProps> = ({ t, logs, onClear, onCl
 
   return (
     <div className="v3-debug-pane" style={{
-      width: 380,
+      width: fillParent ? '100%' : 380,
       height: '100%',
       background: '#1e293b',
-      borderLeft: '1px solid #334155',
+      borderLeft: fillParent ? undefined : '1px solid #334155',
       display: 'flex',
       flexDirection: 'column',
       color: '#f1f5f9',
-      boxShadow: '-4px 0 15px rgba(0,0,0,0.2)',
-      zIndex: 20
+      boxShadow: fillParent ? undefined : '-4px 0 15px rgba(0,0,0,0.2)',
+      zIndex: fillParent ? undefined : 20,
     }}>
       <div style={{ 
         padding: '12px 16px', 
