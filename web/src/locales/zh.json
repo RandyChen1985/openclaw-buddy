@@ -484,6 +484,7 @@
     "searchSessions": "搜索会话...",
     "thinkingProcess": "思考过程",
     "debugLogs": "WS 推送日志",
+    "canvas": "实时画布",
     "noLogs": "暂无推送日志",
     "debugLogsHint": "提示：仅保留最新 100 条业务日志",
     "metaFoldExpand": "点击展开本次思考或工具调用",

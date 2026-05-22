@@ -3,8 +3,9 @@ import { Avatar, Button, Input, message } from 'antd';
 import { 
   User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, 
   FileText, ChevronRight, ChevronDown, ShieldAlert, ShieldCheck, ListTodo, Loader2, Layers, Search, GitBranch,
-  Save
+  Save, LayoutTemplate, Check, Download
 } from 'lucide-react';
+import { useArtifact } from '../../views/chatV3/V3ArtifactContext';
 import Tooltip from '../common/AppTooltip';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -32,7 +33,7 @@ const katexSanitizeSchema: typeof defaultSchema = {
     'mtable', 'mtr', 'mtd', 'annotation'
   ]
 };
-import { Mermaid, CodeBlock, ECharts, isEchartsCodeFenceLanguage } from '../ChatComponents';
+import { CodeBlock, ECharts, isEchartsCodeFenceLanguage } from '../ChatComponents';
 
 interface V3MessageItemProps {
   msg: any;
@@ -271,6 +272,109 @@ const getCleanQuoteContent = (content: string, role: string) => {
     .replace(/\n{3,}/g, '\n\n');
 
   return res.trim();
+};
+
+const ArtifactCard: React.FC<{
+  type: 'html' | 'mermaid' | 'svg';
+  code: string;
+  messageId: string;
+  isDarkMode: boolean;
+  isMobile: boolean;
+  t: any;
+}> = ({ type, code, messageId, isDarkMode }) => {
+  const { registerArtifact } = useArtifact();
+  const [copied, setCopied] = useState(false);
+
+  // 提取文件名
+  const filename = useMemo(() => {
+    let defaultName = `app_${messageId.slice(0, 5)}.${type === 'html' ? 'html' : type === 'mermaid' ? 'mermaid' : 'svg'}`;
+    const commentMatch = code.match(/(?:<!--|\/\*)\s*filename:\s*([a-zA-Z0-9_\-\.]+)\s*(?:-->|\*\/)/);
+    if (commentMatch && commentMatch[1]) {
+      return commentMatch[1];
+    }
+    return defaultName;
+  }, [code, messageId, type]);
+
+  // 大模型吐字时，如果是流式输出，我们将实时注册/更新右侧 Canvas
+  useEffect(() => {
+    if (code && code.trim().length > 10) {
+      registerArtifact({
+        id: `${messageId}-${filename}`,
+        title: filename,
+        type,
+        code,
+        messageId
+      });
+    }
+  }, [code, messageId, filename, type, registerArtifact]);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownload = () => {
+    const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div style={{
+      margin: '12px 0',
+      borderRadius: 12,
+      background: isDarkMode ? '#1e293b' : '#f8fafc',
+      border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+      overflow: 'hidden',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '10px 14px',
+        background: isDarkMode ? '#0f172a' : '#f1f5f9',
+        borderBottom: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 600 }}>
+          <LayoutTemplate size={14} color="#6366f1" />
+          <span style={{ color: isDarkMode ? '#f1f5f9' : '#1e293b' }}>{filename}</span>
+          <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>({(code.length / 1024).toFixed(1)} KB)</span>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 12, padding: '12px 14px', background: isDarkMode ? '#1e293b' : '#fff' }}>
+        <Button
+          type="primary"
+          size="small"
+          style={{ borderRadius: 6, fontSize: 11.5, background: '#6366f1' }}
+          onClick={() => registerArtifact({ id: `${messageId}-${filename}`, title: filename, type, code, messageId })}
+        >
+          👁️ 预览此应用
+        </Button>
+        <Button
+          size="small"
+          icon={copied ? <Check size={12} /> : <Copy size={12} />}
+          onClick={handleCopy}
+          style={{ borderRadius: 6, fontSize: 11.5 }}
+        >
+          {copied ? '已复制' : '复制代码'}
+        </Button>
+        <Button
+          size="small"
+          icon={<Download size={12} />}
+          onClick={handleDownload}
+          style={{ borderRadius: 6, fontSize: 11.5 }}
+        >
+          下载文件
+        </Button>
+      </div>
+    </div>
+  );
 };
 
 const V3MessageItem: React.FC<V3MessageItemProps> = ({ 
@@ -751,9 +855,47 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
     code: ({ inline, className, children, ...props }: any) => {
       const match = /language-(\w+)/.exec(className || '');
       const language = match ? match[1] : '';
-      if (!inline && language === 'mermaid') return <Mermaid chart={String(children).replace(/\n$/, '')} />;
-      if (!inline && isEchartsCodeFenceLanguage(language)) return <ECharts optionStr={String(children).replace(/\n$/, '')} isTyping={isLast && isTyping} />;
-      if (!inline && language) return <CodeBlock language={language} value={String(children).replace(/\n$/, '')} isMobile={isMobile} {...props} />;
+      const codeVal = String(children).replace(/\n$/, '');
+
+      if (!inline && language === 'html') {
+        return (
+          <ArtifactCard
+            type="html"
+            code={codeVal}
+            messageId={String(msg.id || msg.runId || index)}
+            isDarkMode={isDarkMode}
+            isMobile={isMobile}
+            t={t}
+          />
+        );
+      }
+      if (!inline && language === 'mermaid') {
+        return (
+          <ArtifactCard
+            type="mermaid"
+            code={codeVal}
+            messageId={String(msg.id || msg.runId || index)}
+            isDarkMode={isDarkMode}
+            isMobile={isMobile}
+            t={t}
+          />
+        );
+      }
+      if (!inline && (language === 'svg' || (language === 'xml' && codeVal.trim().startsWith('<svg')))) {
+        return (
+          <ArtifactCard
+            type="svg"
+            code={codeVal}
+            messageId={String(msg.id || msg.runId || index)}
+            isDarkMode={isDarkMode}
+            isMobile={isMobile}
+            t={t}
+          />
+        );
+      }
+
+      if (!inline && isEchartsCodeFenceLanguage(language)) return <ECharts optionStr={codeVal} isTyping={isLast && isTyping} />;
+      if (!inline && language) return <CodeBlock language={language} value={codeVal} isMobile={isMobile} {...props} />;
       return (
         <code
           {...props}

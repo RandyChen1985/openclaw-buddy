@@ -31,6 +31,8 @@ function panelDefaultTitle(t: V3RightDockProps['t'], panelId: V3DockPanelId): st
       return t('common.terminal', { defaultValue: '运维终端' });
     case 'explorer':
       return t('bots.workspace', { defaultValue: '工作区' });
+    case 'canvas':
+      return t('chat.canvas', { defaultValue: '实时画布' });
     default:
       return panelId;
   }

@@ -1,6 +1,6 @@
-export type V3DockPanelId = 'debug' | 'terminal' | 'explorer';
+export type V3DockPanelId = 'debug' | 'terminal' | 'explorer' | 'canvas';
 
-export const V3_DOCK_PANEL_ORDER: V3DockPanelId[] = ['debug', 'terminal', 'explorer'];
+export const V3_DOCK_PANEL_ORDER: V3DockPanelId[] = ['debug', 'terminal', 'explorer', 'canvas'];
 
 export const V3_DOCK_MIME = 'application/x-v3-dock-panel';
 
@@ -184,7 +184,7 @@ export function setColumnWidth(layout: V3DockLayout, columnId: string, width: nu
 }
 
 function parsePanelId(raw: string): V3DockPanelId | null {
-  if (raw === 'debug' || raw === 'terminal' || raw === 'explorer') return raw;
+  if (raw === 'debug' || raw === 'terminal' || raw === 'explorer' || raw === 'canvas') return raw;
   return null;
 }
 
@@ -234,6 +234,8 @@ export function panelTitleKey(panelId: V3DockPanelId): string {
       return 'common.terminal';
     case 'explorer':
       return 'bots.workspace';
+    case 'canvas':
+      return 'chat.canvas';
     default:
       return 'common.panel';
   }

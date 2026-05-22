@@ -18,6 +18,8 @@ import { V3MessagePane } from './chatV3/V3MessagePane';
 import { V3ModelChatDrawer } from './chatV3/V3ModelChatDrawer';
 import { V3SkillDraftDrawer } from './chatV3/V3SkillDraftDrawer';
 import { V3ComposerBar } from './chatV3/V3ComposerBar';
+import { ArtifactProvider, useArtifact } from './chatV3/V3ArtifactContext';
+import { V3CanvasPane } from './chatV3/V3CanvasPane';
 import { V3TerminalModal } from '../components/Chat/V3TerminalModal';
 import { V3DebugPane } from './chatV3/V3DebugPane';
 import { V3TerminalPane } from './chatV3/V3TerminalPane';
@@ -95,7 +97,7 @@ interface ChatV3Props {
 
 // --- Utils ---
 
-const ChatV3: React.FC<ChatV3Props> = ({
+const ChatV3Inner: React.FC<ChatV3Props> = ({
   botsModels,
   loadingBots,
   isMobile,
@@ -104,6 +106,7 @@ const ChatV3: React.FC<ChatV3Props> = ({
   filterV3SessionsByUsername,
   canDeleteV3OrphanSessions = false,
 }) => {
+  const { canvasVisible, setCanvasVisible } = useArtifact();
 
   const { t } = useTranslation();
   const v3Theme = useV3Theme();
@@ -159,19 +162,21 @@ const ChatV3: React.FC<ChatV3Props> = ({
     if (showDebug) ids.push('debug');
     if (showTerminal) ids.push('terminal');
     if (showExplorer) ids.push('explorer');
+    if (canvasVisible) ids.push('canvas');
     return ids;
-  }, [showDebug, showTerminal, showExplorer]);
+  }, [showDebug, showTerminal, showExplorer, canvasVisible]);
 
   const handleCloseAllDockPanels = useCallback(() => {
     setShowDebug(false);
     setShowTerminal(false);
     setShowExplorer(false);
+    setCanvasVisible(false);
     setDockExpanded(false);
     setWsLogs([]);
     storage.setItem('v3_show_debug', 'false');
     storage.setItem('v3_show_terminal', 'false');
     storage.setItem('v3_show_explorer', 'false');
-  }, []);
+  }, [setCanvasVisible]);
 
   /** 禁止把右侧 Dock 面板拖进聊天列（仅允许在 Dock 内分列/堆叠） */
   const rejectDockDragOnChat = useCallback((e: React.DragEvent) => {
@@ -717,7 +722,7 @@ const ChatV3: React.FC<ChatV3Props> = ({
 
   return (
     <>
-      <div
+        <div
         className={`chat-v3-root ${isFullscreen ? 'chat-v3-root-fullscreen' : ''}`}
         data-app-dark={isDarkMode ? 'true' : undefined}
         data-v3-theme={v3Theme.rootAttrs['data-v3-theme']}
@@ -1059,6 +1064,16 @@ const ChatV3: React.FC<ChatV3Props> = ({
               else setShowSider(true);
               window.dispatchEvent(new Event('resize'));
             };
+            if (panelId === 'canvas') {
+              return (
+                <V3CanvasPane
+                  isDarkMode={isDarkMode}
+                  onClose={() => {
+                    setCanvasVisible(false);
+                  }}
+                />
+              );
+            }
             if (panelId === 'debug') {
               return (
                 <V3DebugPane
@@ -1161,6 +1176,14 @@ const ChatV3: React.FC<ChatV3Props> = ({
         copyToClipboard={copyToClipboard}
       />
     </>
+  );
+};
+
+const ChatV3: React.FC<ChatV3Props> = (props) => {
+  return (
+    <ArtifactProvider>
+      <ChatV3Inner {...props} />
+    </ArtifactProvider>
   );
 };
 

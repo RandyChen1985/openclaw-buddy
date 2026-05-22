@@ -483,6 +483,7 @@
     "searchSessions": "Search sessions...",
     "thinkingProcess": "Thinking Process",
     "debugLogs": "WS Push Logs",
+    "canvas": "Interactive Canvas",
     "noLogs": "No push logs yet",
     "debugLogsHint": "Hint: Only the latest 100 business logs are kept",
     "metaFoldExpand": "Click to expand reasoning & tool activity",
