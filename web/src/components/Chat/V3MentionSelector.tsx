@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Spin, Empty } from 'antd';
+import { Spin, Empty, Popover } from 'antd';
 import { 
   FileText, Zap, Search, Folder, CornerUpLeft,
   FileJson, FileCode2, Image as ImageIcon, Monitor, Terminal, File
@@ -62,6 +62,43 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
   const [items, setItems] = useState<any[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [debouncedSearchText, setDebouncedSearchText] = useState('');
+  const [isMobile, setIsMobile] = useState(false);
+
+  const renderSkillPopover = (item: any) => {
+    const s = item.raw || {};
+    return (
+      <div className="v3-mention-skill-popover" style={{ width: '280px', padding: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', borderBottom: '1px solid var(--v3-border, #e2e8f0)', paddingBottom: '8px' }}>
+          <span style={{ fontSize: '18px' }}>{s.emoji || '🎮'}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--v3-text, #1e293b)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {s.name}
+            </div>
+            <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+              {s.is_global ? t('chat.globalSkill', { defaultValue: '系统全局技能' }) : t('chat.privateSkill', { defaultValue: '私有专属技能' }) + ` (${t('chat.belongBot', { defaultValue: '归属Bot' })}: ${s.bot_id || 'main'})`}
+            </div>
+          </div>
+        </div>
+        <div style={{ fontSize: '12px', color: 'var(--v3-text-muted, #64748b)', lineHeight: '1.6', marginBottom: '10px', wordBreak: 'break-all' }}>
+          {s.description || t('chat.noSkillDesc', { defaultValue: '暂无技能描述' })}
+        </div>
+        {s.path && (
+          <div style={{ background: '#f8fafc', padding: '6px 8px', borderRadius: '6px', border: '1px solid #f1f5f9', fontSize: '10px' }} className="v3-skill-popover-path">
+            <div style={{ color: '#94a3b8', fontWeight: 500, marginBottom: '2px' }}>{t('chat.absolutePath', { defaultValue: '绝对路径' })}</div>
+            <div style={{ color: '#475569', wordBreak: 'break-all', fontFamily: 'monospace' }}>{s.path}</div>
+          </div>
+        )}
+        {s.updated_at && (
+          <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', borderTop: '1px dashed var(--v3-border, #e2e8f0)', paddingTop: '6px' }}>
+            <span style={{ color: '#94a3b8', fontWeight: 500 }}>{t('skills.updatedAt', { defaultValue: '更新时间' })}:</span>
+            <span style={{ color: 'var(--v3-text-muted, #64748b)', fontFamily: 'monospace' }}>
+              {new Date(s.updated_at * 1000).toLocaleString('zh-CN', { hour12: false })}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
   
   const searchInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -71,6 +108,26 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
   const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
   const defaultWorkspace = bot?.workspace || './data/uploads';
   const [currentPath, setCurrentPath] = useState<string>(defaultWorkspace);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // 监听全局技能更新事件以自动同步重载并刷新 mention 列表数据
+  useEffect(() => {
+    const handleSkillsUpdate = () => {
+      setRefreshTrigger(prev => prev + 1);
+    };
+    window.addEventListener('openclaw:skills-updated', handleSkillsUpdate);
+    return () => window.removeEventListener('openclaw:skills-updated', handleSkillsUpdate);
+  }, []);
+
+  // 监听窗口尺寸判定移动端
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // 点击外部和 ESC 关闭
   useEffect(() => {
@@ -162,12 +219,30 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
           } else {
             skillsList = Array.isArray(rawData.skills) ? rawData.skills : (Array.isArray(rawData) ? rawData : []);
           }
-          setItems(skillsList.map((s: any) => ({
+
+          // 1. 只显示全局的技能和当前 bot 的私有技能（排除其他 bot 的私有技能），且要求是已就绪的并启用的
+          const filtered = skillsList.filter((s: any) => 
+            (s.is_global || s.bot_id === botId) && s.eligible && !s.disabled
+          );
+
+          // 2. 排序：私有技能优先，其次按首字母升序
+          filtered.sort((a: any, b: any) => {
+            const aGlobal = Boolean(a.is_global);
+            const bGlobal = Boolean(b.is_global);
+            if (aGlobal !== bGlobal) {
+              return aGlobal ? 1 : -1; // false (私有) 排在前面
+            }
+            return a.name.localeCompare(b.name);
+          });
+
+          setItems(filtered.map((s: any) => ({
             id: s.name,
             label: s.name,
             type: 'skill',
             is_dir: false,
-            desc: s.description || t('chat.noSkillDesc', { defaultValue: '暂无技能描述' })
+            desc: s.description || t('chat.noSkillDesc', { defaultValue: '暂无技能描述' }),
+            is_global: Boolean(s.is_global),
+            raw: s
           })));
         }
       } catch (err) {
@@ -178,7 +253,7 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
     };
 
     fetchData();
-  }, [activeTab, currentPath, defaultWorkspace, debouncedSearchText, t]);
+  }, [activeTab, currentPath, defaultWorkspace, debouncedSearchText, t, refreshTrigger]);
 
   const filteredItems = items.filter(item => {
     if (activeTab === 'files' || activeTab === 'dirs') return true;
@@ -307,25 +382,50 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('common.noContent')} />
         ) : (
           <div style={{ opacity: loading ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
-            {filteredItems.map((item, idx) => (
-              <div 
-                key={item.id} 
-                className={`v3-mention-item ${idx === activeIndex ? 'active' : ''}`}
-                onClick={() => handleItemAction(item)}
-                onMouseEnter={() => setActiveIndex(idx)}
-              >
-                <div className="v3-mention-item-icon">
-                  {item.label === '..' ? <CornerUpLeft size={16} color="#64748b" /> : 
-                   item.type === 'directory' ? <Folder size={16} color="#0ea5e9" /> : 
-                   item.type === 'workspace_file' ? getFileIcon(item.label, false, 16) : 
-                   <Zap size={16} color="#0d9488" />}
+            {filteredItems.map((item, idx) => {
+              const itemContent = (
+                <div 
+                  className={`v3-mention-item ${idx === activeIndex ? 'active' : ''}`}
+                  onClick={() => handleItemAction(item)}
+                  onMouseEnter={() => setActiveIndex(idx)}
+                >
+                  <div className="v3-mention-item-icon">
+                    {item.label === '..' ? <CornerUpLeft size={16} color="#64748b" /> : 
+                     item.type === 'directory' ? <Folder size={16} color="#0ea5e9" /> : 
+                     item.type === 'workspace_file' ? getFileIcon(item.label, false, 16) : 
+                     <Zap size={16} color="#0d9488" />}
+                  </div>
+                  <div className="v3-mention-item-info">
+                    <div className="v3-mention-item-name" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
+                      {item.type === 'skill' && (
+                        <span className={`v3-mention-skill-badge ${item.is_global ? 'global' : 'private'}`} style={{ flexShrink: 0 }}>
+                          {item.is_global ? '全局' : '私有'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="v3-mention-item-desc">{item.desc}</div>
+                  </div>
                 </div>
-                <div className="v3-mention-item-info">
-                  <div className="v3-mention-item-name">{item.label}</div>
-                  <div className="v3-mention-item-desc">{item.desc}</div>
-                </div>
-              </div>
-            ))}
+              );
+
+              if (item.type === 'skill' && !isMobile) {
+                return (
+                  <Popover
+                    key={item.id}
+                    content={renderSkillPopover(item)}
+                    placement="right"
+                    mouseEnterDelay={0.4}
+                    overlayClassName="v3-mention-skill-popover-overlay"
+                    getPopupContainer={() => document.querySelector('.chat-v3-root') || document.body}
+                  >
+                    {itemContent}
+                  </Popover>
+                );
+              }
+
+              return <React.Fragment key={item.id}>{itemContent}</React.Fragment>;
+            })}
           </div>
         )}
       </div>

@@ -1326,7 +1326,8 @@ export function useV3Messages({
         currentKey = (res.payload?.key as string | undefined) || key;
         setSessionKey(currentKey);
         // 兼容：部分网关版本只认 key 字段
-        sendRPC('sessions.messages.subscribe', { key: currentKey }).catch(() => {});
+        // 必须 await 保证网关订阅完全就绪，规避极速输出时的首 Token 丢失竞态
+        await sendRPC('sessions.messages.subscribe', { key: currentKey }).catch(() => {});
         // 不在此处 await patch：否则会拖住首条消息的 setMessages，会话区体感「卡住」。
         void sendRPC('sessions.patch', { key: currentKey, thinkingLevel, model: sessionModel }).catch(() => {});
         // 静默刷新列表，避免 setLoadingSessions(true) + 300ms 最短 loading 与首屏消息抢同一帧

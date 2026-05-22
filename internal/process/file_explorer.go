@@ -23,7 +23,7 @@ type ExplorerFileEntry struct {
 
 // GetAllowedExplorerPaths collects all valid root directories from openclaw.json and standard skill paths
 func GetAllowedExplorerPaths(configDir string) ([]string, error) {
-	bases := GetAllowedSkillBases()
+	bases := GetAllowedSkillBases(configDir)
 
 	// Add workspace paths from openclaw.json
 	configPath := filepath.Join(configDir, "openclaw.json")

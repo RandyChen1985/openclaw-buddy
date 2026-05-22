@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Columns2, GripVertical, Rows3 } from 'lucide-react';
+import { Columns2, GripVertical, Rows3, X } from 'lucide-react';
 import {
   V3_DOCK_MIME,
   V3_DOCK_PANEL_ORDER,
@@ -19,6 +19,7 @@ export interface V3RightDockProps {
   t: (key: string, opts?: Record<string, unknown>) => string;
   isDraggingResize: boolean;
   onResizeActiveChange: (active: boolean) => void;
+  onCloseAll: () => void;
   renderPanel: (panelId: V3DockPanelId, columnWidth: number) => React.ReactNode;
 }
 
@@ -30,6 +31,8 @@ function panelDefaultTitle(t: V3RightDockProps['t'], panelId: V3DockPanelId): st
       return t('common.terminal', { defaultValue: '运维终端' });
     case 'explorer':
       return t('bots.workspace', { defaultValue: '工作区' });
+    case 'canvas':
+      return t('chat.canvas', { defaultValue: '实时画布' });
     default:
       return panelId;
   }
@@ -43,6 +46,7 @@ export function V3RightDock({
   t,
   isDraggingResize,
   onResizeActiveChange,
+  onCloseAll,
   renderPanel,
 }: V3RightDockProps) {
   const { layout, movePanel, resizeColumn, toggleStackedColumns, dockIsStackedMode } =
@@ -134,12 +138,29 @@ export function V3RightDock({
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
 
-      const onMove = (ev: MouseEvent) => {
+      let lastClientX = e.clientX;
+      let rafId: number | null = null;
+
+      const updateWidth = () => {
+        rafId = null;
         if (!resizingColRef.current) return;
-        const delta = resizingColRef.current.startX - ev.clientX;
+        const delta = resizingColRef.current.startX - lastClientX;
         resizeColumn(resizingColRef.current.columnId, resizingColRef.current.startW + delta);
       };
+
+      const onMove = (ev: MouseEvent) => {
+        lastClientX = ev.clientX;
+        if (rafId === null) {
+          rafId = requestAnimationFrame(updateWidth);
+        }
+      };
       const onUp = () => {
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+        // 松开时补一次同步计算，避免取消 rAF 时尚未执行的那一帧丢失最终列宽
+        updateWidth();
         resizingColRef.current = null;
         onResizeActiveChange(false);
         document.body.style.cursor = '';
@@ -257,23 +278,35 @@ export function V3RightDock({
               ))}
             </div>
           </div>
-          <button
-            type="button"
-            className="v3-dock-layout-toggle-btn"
-            onClick={toggleStackedColumns}
-            aria-label={
-              dockIsStackedMode
-                ? t('chat.dockLayoutSpreadColumns', { defaultValue: '多列并排' })
-                : t('chat.dockLayoutStackOneColumn', { defaultValue: '单列堆叠' })
-            }
-            title={
-              dockIsStackedMode
-                ? t('chat.dockLayoutSpreadColumns', { defaultValue: '多列并排' })
-                : t('chat.dockLayoutStackOneColumn', { defaultValue: '单列堆叠' })
-            }
-          >
-            {dockIsStackedMode ? <Columns2 size={16} strokeWidth={2} /> : <Rows3 size={16} strokeWidth={2} />}
-          </button>
+          <div className="v3-dock-layout-actions">
+            <button
+              type="button"
+              className="v3-dock-layout-toggle-btn"
+              onClick={toggleStackedColumns}
+              aria-label={
+                dockIsStackedMode
+                  ? t('chat.dockLayoutSpreadColumns', { defaultValue: '多列并排' })
+                  : t('chat.dockLayoutStackOneColumn', { defaultValue: '单列堆叠' })
+              }
+              title={
+                dockIsStackedMode
+                  ? t('chat.dockLayoutSpreadColumns', { defaultValue: '多列并排' })
+                  : t('chat.dockLayoutStackOneColumn', { defaultValue: '单列堆叠' })
+              }
+            >
+              {dockIsStackedMode ? <Columns2 size={16} strokeWidth={2} /> : <Rows3 size={16} strokeWidth={2} />}
+            </button>
+            <button
+              type="button"
+              className="v3-dock-close-all-btn"
+              onClick={onCloseAll}
+              aria-label={t('chat.dockCloseAllPanels', { defaultValue: '关闭所有右侧面板' })}
+              title={t('chat.dockCloseAllPanels', { defaultValue: '关闭所有右侧面板' })}
+            >
+              <X size={13} strokeWidth={2.2} />
+              <span>{t('common.close', { defaultValue: '关闭' })}</span>
+            </button>
+          </div>
         </div>
       )}
       <div

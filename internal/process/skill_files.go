@@ -20,13 +20,12 @@ type FileEntry struct {
 }
 
 // GetAllowedSkillBases returns the list of allowed root directories for skills
-func GetAllowedSkillBases() []string {
-	bases := []string{
-		utils.ExpandPath("~/.openclaw/skills"),
-		utils.ExpandPath("~/.openclaw/workspace/skills"),
-		utils.ExpandPath("~/.agents/skills"),
-		utils.ExpandPath("~/.openclaw/lib/skills"),
+func GetAllowedSkillBases(configDir ...string) []string {
+	cfg := ""
+	if len(configDir) > 0 {
+		cfg = configDir[0]
 	}
+	bases := GetDynamicSkillDirs(cfg)
 
 	// Add bundled skills path if detected
 	if bundledPath := GetBundledSkillsPath(); bundledPath != "" {
@@ -113,7 +112,7 @@ func cleanSkillChildName(name string) (string, error) {
 
 // VerifySkillPath checks if the given path is within any of the allowed skill directories
 // and returns the absolute, expanded path.
-func VerifySkillPath(path string) (string, error) {
+func VerifySkillPath(path string, configDir ...string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("path is empty")
 	}
@@ -123,7 +122,7 @@ func VerifySkillPath(path string) (string, error) {
 		return "", fmt.Errorf("failed to get absolute path: %v", err)
 	}
 
-	allowedBases := GetAllowedSkillBases()
+	allowedBases := GetAllowedSkillBases(configDir...)
 	isAllowed := false
 	for _, base := range allowedBases {
 		absBase, err := evalSkillBase(base)
@@ -144,8 +143,8 @@ func VerifySkillPath(path string) (string, error) {
 }
 
 // ListSkillResources returns the contents of a directory within the skill boundaries
-func ListSkillResources(path string) ([]FileEntry, error) {
-	absPath, err := VerifySkillPath(path)
+func ListSkillResources(path string, configDir ...string) ([]FileEntry, error) {
+	absPath, err := VerifySkillPath(path, configDir...)
 	if err != nil {
 		return nil, err
 	}
@@ -176,8 +175,8 @@ func ListSkillResources(path string) ([]FileEntry, error) {
 }
 
 // ReadSkillResource returns the content of a file within the skill boundaries
-func ReadSkillResource(path string) (string, error) {
-	absPath, err := VerifySkillPath(path)
+func ReadSkillResource(path string, configDir ...string) (string, error) {
+	absPath, err := VerifySkillPath(path, configDir...)
 	if err != nil {
 		return "", err
 	}
@@ -204,8 +203,8 @@ func ReadSkillResource(path string) (string, error) {
 }
 
 // SaveSkillResource writes content to a file within the skill boundaries
-func SaveSkillResource(path, content string) error {
-	absPath, err := VerifySkillPath(path)
+func SaveSkillResource(path, content string, configDir ...string) error {
+	absPath, err := VerifySkillPath(path, configDir...)
 	if err != nil {
 		return err
 	}
@@ -216,15 +215,15 @@ func SaveSkillResource(path, content string) error {
 	}
 
 	// Double check the parent directory as well
-	if _, err := VerifySkillPath(filepath.Dir(absPath)); err != nil {
+	if _, err := VerifySkillPath(filepath.Dir(absPath), configDir...); err != nil {
 		return err
 	}
 
 	return os.WriteFile(absPath, []byte(content), 0644)
 }
 
-func CreateSkillResourceFile(dirPath, filename, content string) (string, error) {
-	absDir, err := VerifySkillPath(dirPath)
+func CreateSkillResourceFile(dirPath, filename, content string, configDir ...string) (string, error) {
+	absDir, err := VerifySkillPath(dirPath, configDir...)
 	if err != nil {
 		return "", err
 	}
@@ -233,7 +232,7 @@ func CreateSkillResourceFile(dirPath, filename, content string) (string, error) 
 		return "", err
 	}
 	destPath := filepath.Join(absDir, filename)
-	if _, err := VerifySkillPath(destPath); err != nil {
+	if _, err := VerifySkillPath(destPath, configDir...); err != nil {
 		return "", err
 	}
 	if _, err := os.Stat(destPath); err == nil {
@@ -245,8 +244,8 @@ func CreateSkillResourceFile(dirPath, filename, content string) (string, error) 
 	return destPath, nil
 }
 
-func CreateSkillResourceDir(dirPath, dirname string) (string, error) {
-	absDir, err := VerifySkillPath(dirPath)
+func CreateSkillResourceDir(dirPath, dirname string, configDir ...string) (string, error) {
+	absDir, err := VerifySkillPath(dirPath, configDir...)
 	if err != nil {
 		return "", err
 	}
@@ -255,7 +254,7 @@ func CreateSkillResourceDir(dirPath, dirname string) (string, error) {
 		return "", err
 	}
 	destPath := filepath.Join(absDir, dirname)
-	if _, err := VerifySkillPath(destPath); err != nil {
+	if _, err := VerifySkillPath(destPath, configDir...); err != nil {
 		return "", err
 	}
 	if _, err := os.Stat(destPath); err == nil {

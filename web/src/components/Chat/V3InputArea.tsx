@@ -89,7 +89,20 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
   // 暴露方法给外部
   useImperativeHandle(ref, () => ({
     addFiles: (newFiles: FileInfo[]) => {
-      setFiles(prev => [...prev, ...newFiles]);
+      setFiles(prev => {
+        const next = [...prev];
+        let addedCount = 0;
+        for (const nf of newFiles) {
+          if (!next.some(f => f.entityId === nf.entityId || f.path === nf.path)) {
+            next.push(nf);
+            addedCount++;
+          }
+        }
+        if (addedCount === 0 && newFiles.length > 0) {
+          message.warning(t('chat.mentionAlreadyAdded', { defaultValue: '已添加该项' }));
+        }
+        return next;
+      });
     },
     uploadFiles: async (rawFiles: File[]) => uploadRawFiles(rawFiles),
     focus: () => {
@@ -288,7 +301,10 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
           t={t}
           initialTab={mentionSelectorTab}
           onSelect={handleSelectMention}
-          onClose={() => setShowMentionSelector(false)}
+          onClose={() => {
+            setShowMentionSelector(false);
+            setTimeout(() => textAreaRef.current?.focus(), 50);
+          }}
         />
       )}
 
@@ -491,9 +507,15 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
                 e.preventDefault();
                 handleInnerSend();
               } else if (e.key === '@' && !isComposing) {
-                // 敲击 @ 呼出面板
-                setMentionSelectorTab('files');
-                setShowMentionSelector(true);
+                // 仅当输入点位于首位，或前驱字符为空格时，方可呼出提及面板（规避邮箱等输入误触发）
+                const selectionStart = e.currentTarget.selectionStart;
+                const val = e.currentTarget.value;
+                const isStart = selectionStart === 0;
+                const isAfterSpace = selectionStart > 0 && val.charAt(selectionStart - 1) === ' ';
+                if (isStart || isAfterSpace) {
+                  setMentionSelectorTab('files');
+                  setShowMentionSelector(true);
+                }
               }
             }}
             onPaste={async (e) => {

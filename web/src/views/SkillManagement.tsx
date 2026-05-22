@@ -22,6 +22,7 @@ interface Skill {
     os: string[];
   };
   path?: string;
+  is_global?: boolean;
 }
 
 interface SkillManagementProps {
@@ -46,6 +47,7 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
   const [updatedAt, setUpdatedAt] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | number>('ready');
   const [typeFilter, setTypeFilter] = useState<string | number>('all');
+  const [scopeFilter, setScopeFilter] = useState<string | number>('all');
   const [helpDrawerOpen, setHelpDrawerOpen] = useState(false);
   const [processingNames, setProcessingNames] = useState<Set<string>>(new Set());
   const processingRef = React.useRef(new Set<string>());
@@ -123,7 +125,8 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
                          skill.description.toLowerCase().includes(searchText.toLowerCase());
     const matchesStatus = statusFilter === 'all' || (statusFilter === 'ready' && skill.eligible);
     const matchesType = typeFilter === 'all' || (typeFilter === 'builtin' && skill.bundled) || (typeFilter === 'external' && !skill.bundled);
-    return matchesSearch && matchesStatus && matchesType;
+    const matchesScope = scopeFilter === 'all' || (scopeFilter === 'global' && skill.is_global) || (scopeFilter === 'private' && !skill.is_global);
+    return matchesSearch && matchesStatus && matchesType && matchesScope;
   });
 
   const handleUninstall = (name: string, e?: React.BaseSyntheticEvent) => {
@@ -255,6 +258,18 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
       width: 100,
       render: (record: Skill) => (
         <Tag style={{ borderRadius: 4 }}>{record.bundled ? t('skills.builtin') : t('skills.external')}</Tag>
+      )
+    },
+    {
+      title: t('skills.scope', { defaultValue: '属性' }),
+      key: 'is_global',
+      width: 100,
+      render: (record: Skill) => (
+        record.is_global ? (
+          <Tag color="blue" style={{ borderRadius: 4 }}>{t('skills.globalSkill', { defaultValue: '全局技能' })}</Tag>
+        ) : (
+          <Tag color="cyan" style={{ borderRadius: 4 }}>{t('skills.privateSkill', { defaultValue: '私有技能' })}</Tag>
+        )
       )
     },
     {
@@ -405,6 +420,17 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
             <Segmented
               className={isDarkMode ? 'skill-mgmt-seg' : undefined}
               options={[
+                { label: t('skills.scopeAll', { defaultValue: '全部属性' }), value: 'all' },
+                { label: t('skills.scopeGlobal', { defaultValue: '全局' }), value: 'global' },
+                { label: t('skills.scopePrivate', { defaultValue: '私有' }), value: 'private' }
+              ]}
+              value={scopeFilter}
+              onChange={(value) => setScopeFilter(value)}
+              style={{ background: isDarkMode ? '#0f172a' : '#f1f5f9', borderRadius: 8, padding: 2, border: isDarkMode ? '1px solid #334155' : undefined }}
+            />
+            <Segmented
+              className={isDarkMode ? 'skill-mgmt-seg' : undefined}
+              options={[
                 { label: t('skills.ready'), value: 'ready' },
                 { label: t('skills.all'), value: 'all' }
               ]}
@@ -434,9 +460,14 @@ const SkillManagement: React.FC<SkillManagementProps> = ({
                         display: 'flex', flexDirection: 'column', gap: 8 
                     }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                                 <span style={{ fontSize: 20 }}>{skill.emoji || '🧩'}</span>
                                 <span style={{ fontWeight: 600, color: pageHeading }}>{skill.name}</span>
+                                {skill.is_global ? (
+                                    <Tag color="blue" style={{ fontSize: 10, lineHeight: '16px', height: 18, padding: '0 4px', borderRadius: 4 }}>{t('skills.globalSkill', { defaultValue: '全局' })}</Tag>
+                                ) : (
+                                    <Tag color="cyan" style={{ fontSize: 10, lineHeight: '16px', height: 18, padding: '0 4px', borderRadius: 4 }}>{t('skills.privateSkill', { defaultValue: '私有' })}</Tag>
+                                )}
                             </div>
                             {!skill.bundled && (
                                 <Tooltip title={processingNames.has(skill.name) || hasActiveTask(skill.name, 'uninstall') ? t('common.processing') : ''}>

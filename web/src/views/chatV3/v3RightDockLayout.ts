@@ -1,6 +1,6 @@
-export type V3DockPanelId = 'debug' | 'terminal' | 'explorer';
+export type V3DockPanelId = 'debug' | 'terminal' | 'explorer' | 'canvas';
 
-export const V3_DOCK_PANEL_ORDER: V3DockPanelId[] = ['debug', 'terminal', 'explorer'];
+export const V3_DOCK_PANEL_ORDER: V3DockPanelId[] = ['debug', 'terminal', 'explorer', 'canvas'];
 
 export const V3_DOCK_MIME = 'application/x-v3-dock-panel';
 
@@ -184,7 +184,7 @@ export function setColumnWidth(layout: V3DockLayout, columnId: string, width: nu
 }
 
 function parsePanelId(raw: string): V3DockPanelId | null {
-  if (raw === 'debug' || raw === 'terminal' || raw === 'explorer') return raw;
+  if (raw === 'debug' || raw === 'terminal' || raw === 'explorer' || raw === 'canvas') return raw;
   return null;
 }
 
@@ -192,7 +192,7 @@ function parsePanelId(raw: string): V3DockPanelId | null {
 export function isDockDragEvent(e: { dataTransfer: DataTransfer }, draggingId?: V3DockPanelId | null): boolean {
   if (draggingId) return true;
   const types = Array.from(e.dataTransfer.types || []);
-  return types.includes(V3_DOCK_MIME) || types.includes('text/plain');
+  return types.includes(V3_DOCK_MIME);
 }
 
 /** 是否为右侧 Dock 面板拖放（非文件上传），用于聊天区等拒绝接收 */
@@ -201,10 +201,18 @@ export function isDockPanelDragEvent(e: { dataTransfer: DataTransfer }): boolean
   if (types.includes(V3_DOCK_MIME)) return true;
   if (types.includes('Files')) return false;
   if (!types.includes('text/plain')) return false;
-  const plain = e.dataTransfer.getData('text/plain');
-  if (plain && parsePanelId(plain)) return true;
+  
   // dragenter/dragover 阶段部分浏览器读不到 getData，Dock 拖动用 effectAllowed=move 且无 Files
-  return e.dataTransfer.effectAllowed === 'move';
+  if (e.dataTransfer.effectAllowed === 'move') return true;
+  
+  try {
+    const plain = e.dataTransfer.getData('text/plain');
+    if (plain && parsePanelId(plain)) return true;
+  } catch {
+    // 忽略安全沙箱下禁止读取 getData 抛出的异常
+  }
+  
+  return false;
 }
 
 export function readDraggedPanelId(
@@ -226,6 +234,8 @@ export function panelTitleKey(panelId: V3DockPanelId): string {
       return 'common.terminal';
     case 'explorer':
       return 'bots.workspace';
+    case 'canvas':
+      return 'chat.canvas';
     default:
       return 'common.panel';
   }
