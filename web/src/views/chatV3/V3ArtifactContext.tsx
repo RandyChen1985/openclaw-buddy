@@ -23,7 +23,7 @@ const ArtifactContext = createContext<ArtifactContextType | undefined>(undefined
 
 export const ArtifactProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
-  const [canvasVisible, setCanvasVisible] = useState(false);
+  const [canvasVisible, setCanvasVisibleState] = useState(false);
   const [artifactsHistory, setArtifactsHistory] = useState<Record<string, Artifact[]>>({});
 
   // 💡 使用 ref 实时映射最新的 artifactsHistory，规避 useCallback 里的引用闭包刷新和依赖渲染地狱
@@ -43,6 +43,11 @@ export const ArtifactProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     canvasVisibleRef.current = canvasVisible;
   }, [canvasVisible]);
+
+  const setCanvasVisible = useCallback((visible: boolean) => {
+    canvasVisibleRef.current = visible;
+    setCanvasVisibleState(visible);
+  }, []);
 
   const registerArtifact = useCallback((art: Omit<Artifact, 'version'>, autoOpen: boolean = false) => {
     console.log('[ArtifactDebug] registerArtifact called with:', art.title, 'autoOpen:', autoOpen);
@@ -99,14 +104,12 @@ export const ArtifactProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.log('[ArtifactDebug] Active artifact remains identical (Bailout avoided)');
     }
 
-    // 💡 只有当需要打开（autoOpen 为 true）且当前不可见时，才进行 setCanvasVisible(true)
-    if (autoOpen && !currentVisible) {
+    // autoOpen 必须无条件写入 true：关闭画布后 ref/React 状态可能存在同一帧时序差，条件判断会误跳过重开。
+    if (autoOpen) {
       console.log('[ArtifactDebug] Sync Canvas Visible Trigger: true');
       setCanvasVisible(true);
-    } else if (autoOpen && currentVisible) {
-      console.log('[ArtifactDebug] Canvas is already visible');
     }
-  }, []);
+  }, [setCanvasVisible]);
 
   const clearArtifacts = useCallback(() => {
     setActiveArtifact(null);

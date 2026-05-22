@@ -274,6 +274,54 @@ const getCleanQuoteContent = (content: string, role: string) => {
   return res.trim();
 };
 
+const writeTextToClipboard = async (text: string) => {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-9999px';
+  textArea.style.top = '0';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+
+  try {
+    const successful = document.execCommand('copy');
+    if (!successful) throw new Error('execCommand copy returned false');
+  } finally {
+    document.body.removeChild(textArea);
+  }
+};
+
+const artifactButtonBaseStyle: React.CSSProperties = {
+  height: 32,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  borderRadius: 8,
+  padding: '0 12px',
+  fontSize: 13,
+  fontWeight: 600,
+  lineHeight: 1,
+  cursor: 'pointer',
+  userSelect: 'none',
+  position: 'relative',
+  zIndex: 2,
+};
+
+const artifactSecondaryButtonStyle: React.CSSProperties = {
+  ...artifactButtonBaseStyle,
+  color: '#334155',
+  background: '#fff',
+  border: '1px solid #d1d5db',
+  boxShadow: '0 1px 2px rgba(15, 23, 42, 0.08)',
+};
+
 const ArtifactCard: React.FC<{
   type: 'html' | 'mermaid' | 'svg';
   code: string;
@@ -309,20 +357,39 @@ const ArtifactCard: React.FC<{
     }
   }, [code, messageId, filename, type, registerArtifact, isStreaming]);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handlePreview = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[ArtifactDebug] Preview button onClick fired! Filename:', filename, 'messageId:', messageId);
+    registerArtifact({ id: `${messageId}-${filename}`, title: filename, type, code, messageId }, true);
   };
 
-  const handleDownload = () => {
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await writeTextToClipboard(code);
+      setCopied(true);
+      message.success('已复制到剪贴板');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Artifact copy failed:', err);
+      message.error('复制失败，请手动复制');
+    }
+  };
+
+  const handleDownload = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = filename;
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   return (
@@ -348,34 +415,36 @@ const ArtifactCard: React.FC<{
           <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>({(code.length / 1024).toFixed(1)} KB)</span>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 12, padding: '12px 14px', background: isDarkMode ? '#1e293b' : '#fff' }}>
-        <Button
-          type="primary"
-          size="small"
-          style={{ borderRadius: 6, fontSize: 11.5, background: '#6366f1' }}
-          onClick={() => {
-            console.log('[ArtifactDebug] Preview button onClick fired! Filename:', filename, 'messageId:', messageId);
-            registerArtifact({ id: `${messageId}-${filename}`, title: filename, type, code, messageId }, true);
+      <div style={{ display: 'flex', gap: 12, padding: '12px 14px', background: isDarkMode ? '#1e293b' : '#fff', position: 'relative', zIndex: 1 }}>
+        <button
+          type="button"
+          style={{
+            ...artifactButtonBaseStyle,
+            color: '#fff',
+            background: '#6366f1',
+            border: '1px solid #6366f1',
+            boxShadow: '0 1px 2px rgba(79, 70, 229, 0.18)',
           }}
+          onMouseDown={handlePreview}
         >
           👁️ 预览此应用
-        </Button>
-        <Button
-          size="small"
-          icon={copied ? <Check size={12} /> : <Copy size={12} />}
-          onClick={handleCopy}
-          style={{ borderRadius: 6, fontSize: 11.5 }}
+        </button>
+        <button
+          type="button"
+          style={artifactSecondaryButtonStyle}
+          onMouseDown={handleCopy}
         >
+          {copied ? <Check size={15} /> : <Copy size={15} />}
           {copied ? '已复制' : '复制代码'}
-        </Button>
-        <Button
-          size="small"
-          icon={<Download size={12} />}
-          onClick={handleDownload}
-          style={{ borderRadius: 6, fontSize: 11.5 }}
+        </button>
+        <button
+          type="button"
+          style={artifactSecondaryButtonStyle}
+          onMouseDown={handleDownload}
         >
+          <Download size={15} />
           下载文件
-        </Button>
+        </button>
       </div>
     </div>
   );
@@ -651,28 +720,36 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         onClick={() => window.open(props.title || props.src, '_blank')}
       />
     ),
-    pre: ({children}: any) => (
-      <pre
-        style={{
-          overflowX: 'auto',
-          maxWidth: '100%',
-          margin: '8px 0',
-          padding: '10px',
-          borderRadius: 8,
-          background: isUser
-            ? 'var(--v3-user-surface, rgba(255,255,255,0.12))'
-            : (isDarkMode ? '#0f172a' : '#f8fafc'),
-          color: isUser
-            ? 'var(--v3-user-text, #fff)'
-            : (isDarkMode ? '#e2e8f0' : '#1e293b'),
-          border: isUser
-            ? '1px solid var(--v3-user-border, rgba(255,255,255,0.22))'
-            : (isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0'),
-        }}
-      >
-        {children}
-      </pre>
-    ),
+    pre: ({children}: any) => {
+      const childList = React.Children.toArray(children);
+      const onlyChild = childList.length === 1 ? childList[0] : null;
+      if (React.isValidElement(onlyChild) && onlyChild.type === ArtifactCard) {
+        return <>{onlyChild}</>;
+      }
+
+      return (
+        <pre
+          style={{
+            overflowX: 'auto',
+            maxWidth: '100%',
+            margin: '8px 0',
+            padding: '10px',
+            borderRadius: 8,
+            background: isUser
+              ? 'var(--v3-user-surface, rgba(255,255,255,0.12))'
+              : (isDarkMode ? '#0f172a' : '#f8fafc'),
+            color: isUser
+              ? 'var(--v3-user-text, #fff)'
+              : (isDarkMode ? '#e2e8f0' : '#1e293b'),
+            border: isUser
+              ? '1px solid var(--v3-user-border, rgba(255,255,255,0.22))'
+              : (isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0'),
+          }}
+        >
+          {children}
+        </pre>
+      );
+    },
     blockquote: ({ children }: any) => {
       const extractText = (node: any): string => {
         if (typeof node === 'string') return node;

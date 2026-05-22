@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useArtifact } from './V3ArtifactContext';
-import { Button, Select, Radio, Alert } from 'antd';
+import { Button, Select, Radio, Alert, message } from 'antd';
 import { X, Play, Code, ExternalLink } from 'lucide-react';
 import mermaid from 'mermaid';
 
@@ -89,20 +89,46 @@ export const V3CanvasPane: React.FC<{ isDarkMode: boolean; onClose?: () => void 
     }
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(activeArtifact.code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(activeArtifact.code);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = activeArtifact.code;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        textArea.style.top = '0';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        if (!successful) throw new Error('execCommand copy returned false');
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Canvas copy failed:', err);
+      message.error('复制失败，请手动复制');
+    }
   };
 
-  const handleDownload = () => {
+  const handleDownload = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     const blob = new Blob([activeArtifact.code], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = activeArtifact.title;
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   // 全屏打开 Blob URL
