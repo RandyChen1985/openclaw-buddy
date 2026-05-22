@@ -950,6 +950,7 @@
     "all": "All",
     "needsConfig": "Needs Config",
     "environmentNotMet": "Environment requirements not met",
+    "environmentMet": "Environment ready",
     "missingBins": "Missing Bins",
     "missingEnv": "Missing Vars",
     "missingConfig": "Missing Config",

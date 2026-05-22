@@ -946,6 +946,7 @@
     "all": "全部",
     "needsConfig": "需配置",
     "environmentNotMet": "环境不满足",
+    "environmentMet": "环境已就绪",
     "missingBins": "缺失二进制",
     "missingEnv": "缺失变量",
     "missingConfig": "缺失配置",

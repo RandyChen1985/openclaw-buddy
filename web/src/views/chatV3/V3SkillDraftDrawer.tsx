@@ -275,6 +275,13 @@ export function V3SkillDraftDrawer({
         });
       });
       antdMessage.success(t('chat.skillDraftSaved', { path: skillTargetPath, defaultValue: `已保存到 ${skillTargetPath}` }));
+      
+      // 强制让后端技能引擎重载以扫描并识别新保存的物理技能
+      await api.post('/v1/openclaw/skills/reload').catch((reloadErr: any) => {
+        console.error('Failed to trigger skills engine reload after saving:', reloadErr);
+      });
+      // 广播全局自定义事件，通知相关的展示组件（如技能抽屉、Mention下拉等）无缝局部同步刷新
+      window.dispatchEvent(new CustomEvent('openclaw:skills-updated'));
     } catch (err: any) {
       antdMessage.error(err?.response?.data?.error || err?.message || t('chat.skillDraftSaveFailed', { defaultValue: '技能保存失败' }));
     } finally {

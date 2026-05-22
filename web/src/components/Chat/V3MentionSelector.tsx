@@ -88,6 +88,14 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
             <div style={{ color: '#475569', wordBreak: 'break-all', fontFamily: 'monospace' }}>{s.path}</div>
           </div>
         )}
+        {s.updated_at && (
+          <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', borderTop: '1px dashed var(--v3-border, #e2e8f0)', paddingTop: '6px' }}>
+            <span style={{ color: '#94a3b8', fontWeight: 500 }}>{t('skills.updatedAt', { defaultValue: '更新时间' })}:</span>
+            <span style={{ color: 'var(--v3-text-muted, #64748b)', fontFamily: 'monospace' }}>
+              {new Date(s.updated_at * 1000).toLocaleString('zh-CN', { hour12: false })}
+            </span>
+          </div>
+        )}
       </div>
     );
   };
@@ -100,6 +108,16 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
   const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
   const defaultWorkspace = bot?.workspace || './data/uploads';
   const [currentPath, setCurrentPath] = useState<string>(defaultWorkspace);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // 监听全局技能更新事件以自动同步重载并刷新 mention 列表数据
+  useEffect(() => {
+    const handleSkillsUpdate = () => {
+      setRefreshTrigger(prev => prev + 1);
+    };
+    window.addEventListener('openclaw:skills-updated', handleSkillsUpdate);
+    return () => window.removeEventListener('openclaw:skills-updated', handleSkillsUpdate);
+  }, []);
 
   // 监听窗口尺寸判定移动端
   useEffect(() => {
@@ -235,7 +253,7 @@ const V3MentionSelector: React.FC<V3MentionSelectorProps> = ({ onSelect, onClose
     };
 
     fetchData();
-  }, [activeTab, currentPath, defaultWorkspace, debouncedSearchText, t]);
+  }, [activeTab, currentPath, defaultWorkspace, debouncedSearchText, t, refreshTrigger]);
 
   const filteredItems = items.filter(item => {
     if (activeTab === 'files' || activeTab === 'dirs') return true;

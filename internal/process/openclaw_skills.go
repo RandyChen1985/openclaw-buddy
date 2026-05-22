@@ -22,6 +22,7 @@ type OpenClawSkill struct {
 	Path        string `json:"path"`      // 绝对路径
 	IsGlobal    bool   `json:"is_global"` // 是否为全局技能 (true=全局, false=私有)
 	BotID       string `json:"bot_id,omitempty"` // 所属 Bot ID (仅私有技能有效)
+	UpdatedAt   int64  `json:"updated_at,omitempty"` // 目录更新时间 (Unix timestamp)
 	Missing     *struct {
 		Bins   []string `json:"bins"`
 		Env    []string `json:"env"`
@@ -236,6 +237,12 @@ func GetOpenClawSkills(configDir string) (any, error) {
 				skills[i].IsGlobal = src.IsGlobal
 				skills[i].BotID = src.BotID
 				break
+			}
+		}
+		// 如果物理路径存在，根据目录的更新时间来判断，如果不存在目录，则忽略这个时间
+		if skills[i].Path != "" {
+			if info, err := os.Stat(skills[i].Path); err == nil {
+				skills[i].UpdatedAt = info.ModTime().Unix()
 			}
 		}
 		// 如果最终未能匹配并获取到任何物理路径，则一律归属为“全局技能”，对所有 Bot 开放

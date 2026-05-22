@@ -89,7 +89,20 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
   // 暴露方法给外部
   useImperativeHandle(ref, () => ({
     addFiles: (newFiles: FileInfo[]) => {
-      setFiles(prev => [...prev, ...newFiles]);
+      setFiles(prev => {
+        const next = [...prev];
+        let addedCount = 0;
+        for (const nf of newFiles) {
+          if (!next.some(f => f.entityId === nf.entityId || f.path === nf.path)) {
+            next.push(nf);
+            addedCount++;
+          }
+        }
+        if (addedCount === 0 && newFiles.length > 0) {
+          message.warning(t('chat.mentionAlreadyAdded', { defaultValue: '已添加该项' }));
+        }
+        return next;
+      });
     },
     uploadFiles: async (rawFiles: File[]) => uploadRawFiles(rawFiles),
     focus: () => {

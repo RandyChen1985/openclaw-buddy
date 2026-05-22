@@ -4,6 +4,7 @@ import { Activity, Bot, Cpu, Image, Plus, Quote, RefreshCw, Terminal as Terminal
 import type { InputAreaHandle } from '../../components/Chat/V3InputArea';
 import V3InputArea from '../../components/Chat/V3InputArea';
 import { V3SoulEditorDrawer } from './V3SoulEditorDrawer';
+import { V3SkillsDrawer } from './V3SkillsDrawer';
 import Tooltip from '../../components/common/AppTooltip';
 
 export interface V3ComposerBarProps {
@@ -297,6 +298,18 @@ export function V3ComposerBar({
             selectedBot={selectedBot}
             botsModels={botsModels}
             status={status}
+          />
+        )}
+
+        {!isMobile && (
+          <V3SkillsDrawer
+            t={t}
+            isMobile={!!isMobile}
+            isDarkMode={isDarkMode}
+            selectedBot={selectedBot}
+            botsModels={botsModels}
+            status={status}
+            inputAreaRef={inputAreaRef}
           />
         )}
 
