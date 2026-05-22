@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Columns2, GripVertical, Rows3 } from 'lucide-react';
+import { Columns2, GripVertical, Rows3, X } from 'lucide-react';
 import {
   V3_DOCK_MIME,
   V3_DOCK_PANEL_ORDER,
@@ -19,6 +19,7 @@ export interface V3RightDockProps {
   t: (key: string, opts?: Record<string, unknown>) => string;
   isDraggingResize: boolean;
   onResizeActiveChange: (active: boolean) => void;
+  onCloseAll: () => void;
   renderPanel: (panelId: V3DockPanelId, columnWidth: number) => React.ReactNode;
 }
 
@@ -43,6 +44,7 @@ export function V3RightDock({
   t,
   isDraggingResize,
   onResizeActiveChange,
+  onCloseAll,
   renderPanel,
 }: V3RightDockProps) {
   const { layout, movePanel, resizeColumn, toggleStackedColumns, dockIsStackedMode } =
@@ -274,23 +276,35 @@ export function V3RightDock({
               ))}
             </div>
           </div>
-          <button
-            type="button"
-            className="v3-dock-layout-toggle-btn"
-            onClick={toggleStackedColumns}
-            aria-label={
-              dockIsStackedMode
-                ? t('chat.dockLayoutSpreadColumns', { defaultValue: '多列并排' })
-                : t('chat.dockLayoutStackOneColumn', { defaultValue: '单列堆叠' })
-            }
-            title={
-              dockIsStackedMode
-                ? t('chat.dockLayoutSpreadColumns', { defaultValue: '多列并排' })
-                : t('chat.dockLayoutStackOneColumn', { defaultValue: '单列堆叠' })
-            }
-          >
-            {dockIsStackedMode ? <Columns2 size={16} strokeWidth={2} /> : <Rows3 size={16} strokeWidth={2} />}
-          </button>
+          <div className="v3-dock-layout-actions">
+            <button
+              type="button"
+              className="v3-dock-layout-toggle-btn"
+              onClick={toggleStackedColumns}
+              aria-label={
+                dockIsStackedMode
+                  ? t('chat.dockLayoutSpreadColumns', { defaultValue: '多列并排' })
+                  : t('chat.dockLayoutStackOneColumn', { defaultValue: '单列堆叠' })
+              }
+              title={
+                dockIsStackedMode
+                  ? t('chat.dockLayoutSpreadColumns', { defaultValue: '多列并排' })
+                  : t('chat.dockLayoutStackOneColumn', { defaultValue: '单列堆叠' })
+              }
+            >
+              {dockIsStackedMode ? <Columns2 size={16} strokeWidth={2} /> : <Rows3 size={16} strokeWidth={2} />}
+            </button>
+            <button
+              type="button"
+              className="v3-dock-close-all-btn"
+              onClick={onCloseAll}
+              aria-label={t('chat.dockCloseAllPanels', { defaultValue: '关闭所有右侧面板' })}
+              title={t('chat.dockCloseAllPanels', { defaultValue: '关闭所有右侧面板' })}
+            >
+              <X size={13} strokeWidth={2.2} />
+              <span>{t('common.close', { defaultValue: '关闭' })}</span>
+            </button>
+          </div>
         </div>
       )}
       <div

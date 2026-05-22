@@ -161,6 +161,17 @@ const ChatV3: React.FC<ChatV3Props> = ({
     return ids;
   }, [showDebug, showTerminal, showExplorer]);
 
+  const handleCloseAllDockPanels = useCallback(() => {
+    setShowDebug(false);
+    setShowTerminal(false);
+    setShowExplorer(false);
+    setDockExpanded(false);
+    setWsLogs([]);
+    storage.setItem('v3_show_debug', 'false');
+    storage.setItem('v3_show_terminal', 'false');
+    storage.setItem('v3_show_explorer', 'false');
+  }, []);
+
   /** 禁止把右侧 Dock 面板拖进聊天列（仅允许在 Dock 内分列/堆叠） */
   const rejectDockDragOnChat = useCallback((e: React.DragEvent) => {
     if (!isDockPanelDragEvent(e)) return;
@@ -1018,6 +1029,7 @@ const ChatV3: React.FC<ChatV3Props> = ({
           t={t}
           isDraggingResize={isDraggingRight}
           onResizeActiveChange={setIsDraggingRight}
+          onCloseAll={handleCloseAllDockPanels}
           renderPanel={(panelId, columnWidth) => {
             const onWidthChange = (newWidth: number) => {
               if (dockExpanded) return;

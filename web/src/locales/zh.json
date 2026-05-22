@@ -411,6 +411,7 @@
     "dockStackBelow": "堆叠到下方",
     "dockLayoutStackOneColumn": "单列堆叠（纵向多段）",
     "dockLayoutSpreadColumns": "多列并排",
+    "dockCloseAllPanels": "关闭所有右侧面板",
     "dockOpenPanelsMeta": "已打开 {{count}} 个",
     "dockOpenPanelsAria": "右侧 Dock 已打开 {{count}} 个面板：{{names}}",
     "terminalSendToAi": "发送到 AI 分析",

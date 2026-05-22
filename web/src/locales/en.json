@@ -411,6 +411,7 @@
     "dockStackBelow": "Stack below",
     "dockLayoutStackOneColumn": "Single column (stacked)",
     "dockLayoutSpreadColumns": "Multiple columns",
+    "dockCloseAllPanels": "Close all right panels",
     "dockOpenPanelsMeta": "{{count}} open",
     "dockOpenPanelsAria": "Right dock: {{count}} panels — {{names}}",
     "terminalSendToAi": "Send to AI",
