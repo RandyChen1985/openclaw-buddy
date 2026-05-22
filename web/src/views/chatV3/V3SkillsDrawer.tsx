@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Drawer, Input, Spin, Button, message, Tooltip, Segmented, Empty, Popconfirm } from 'antd';
-import { Puzzle, RefreshCw, X, Copy, Search, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
+import { Puzzle, RefreshCw, X, Copy, Search, CheckCircle2, AlertCircle, Trash2, DownloadCloud, Check, Cpu, WifiOff } from 'lucide-react';
 import api from '../../api';
 
 export interface V3SkillsDrawerProps {
@@ -26,9 +26,14 @@ export function V3SkillsDrawer({
   const [skills, setSkills] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'global' | 'private'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'global' | 'private' | 'market'>('all');
   const [hoveredSkillName, setHoveredSkillName] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const [marketSkills, setMarketSkills] = useState<any[]>([]);
+  const [marketLoading, setMarketLoading] = useState(false);
+  const [networkStatus, setNetworkStatus] = useState<'online' | 'offline'>('online');
+  const [installingSkills, setInstallingSkills] = useState<Record<string, { status: 'idle' | 'validating' | 'downloading' | 'extracting' | 'reloading' | 'success'; progress: number; error?: string }>>({});
 
   const botId = useMemo(() => (selectedBot || '').replace('openclaw:', ''), [selectedBot]);
   const bot = useMemo(() => botsModels?.data?.bots?.find((b: any) => b.id === botId), [botId, botsModels]);
@@ -209,6 +214,317 @@ export function V3SkillsDrawer({
     }
   };
 
+  const fetchMarketSkills = async () => {
+    try {
+      setMarketLoading(true);
+      const res = await api.get('/v1/openclaw/skills/market');
+      const rawData = res.data;
+      
+      let networkStatusVal: 'online' | 'offline' = 'online';
+      let skillsList: any[] = [];
+      
+      if (rawData) {
+        if (rawData.code === 200 && rawData.data) {
+          // 未经 Axios 响应拦截器解包的情况
+          const innerData = rawData.data;
+          networkStatusVal = innerData.network_status || 'online';
+          skillsList = Array.isArray(innerData.data) ? innerData.data : (Array.isArray(innerData) ? innerData : []);
+        } else {
+          // 已经被 Axios 响应拦截器解包的情况
+          networkStatusVal = rawData.network_status || 'online';
+          skillsList = Array.isArray(rawData.data) ? rawData.data : (Array.isArray(rawData) ? rawData : []);
+        }
+      }
+      
+      setNetworkStatus(networkStatusVal);
+      setMarketSkills(skillsList);
+    } catch (err) {
+      console.error('Failed to load market skills:', err);
+      message.error(t('skills.marketFetchFailed', { defaultValue: '拉取商城技能失败' }));
+    } finally {
+      setMarketLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (filterType === 'market' && marketSkills.length === 0) {
+      fetchMarketSkills();
+    }
+  }, [filterType, marketSkills.length]);
+
+  const handleInstallSkill = async (skill: any) => {
+    const skillName = skill.name;
+    if (installingSkills[skillName] && ['validating', 'downloading', 'extracting', 'reloading', 'success'].includes(installingSkills[skillName].status)) {
+      return;
+    }
+
+    setInstallingSkills(prev => ({
+      ...prev,
+      [skillName]: { status: 'validating', progress: 10 }
+    }));
+
+    try {
+      let taskID = '';
+      if (networkStatus === 'online') {
+        const res = await api.post('/v1/openclaw/skills/install', {
+          name: skill.name,
+          tarball_url: skill.tarball_url,
+          scope: 'private',
+          bot_id: botId
+        });
+        const resData = res.data?.data || res.data;
+        taskID = resData?.taskID || resData?.taskId;
+        if (!taskID) {
+          throw new Error('未获取到异步任务ID');
+        }
+      } else {
+        setInstallingSkills(prev => ({
+          ...prev,
+          [skillName]: { status: 'downloading', progress: 15 }
+        }));
+
+        const downloadResponse = await fetch(skill.tarball_url);
+        if (!downloadResponse.ok) {
+          throw new Error(t('skills.bridgeDownloadFailed', { defaultValue: '浏览器直连下载失败，请检查本机网络' }));
+        }
+
+        const contentLength = +(downloadResponse.headers.get('Content-Length') ?? '0');
+        let receivedLength = 0;
+        const chunks: Uint8Array[] = [];
+        const reader = downloadResponse.body?.getReader();
+
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            receivedLength += value.length;
+            if (contentLength > 0) {
+              const percent = Math.round((receivedLength / contentLength) * 100);
+              const progressVal = Math.round(15 + (percent * 0.45));
+              setInstallingSkills(prev => ({
+                ...prev,
+                [skillName]: { status: 'downloading', progress: progressVal }
+              }));
+            }
+          }
+        } else {
+          const blobData = await downloadResponse.blob();
+          chunks.push(new Uint8Array(await blobData.arrayBuffer()));
+        }
+
+        const fileBlob = new Blob(chunks, { type: 'application/x-gzip' });
+
+        setInstallingSkills(prev => ({
+          ...prev,
+          [skillName]: { status: 'extracting', progress: 70 }
+        }));
+
+        const formData = new FormData();
+        formData.append('name', skill.name);
+        formData.append('scope', 'private');
+        formData.append('bot_id', botId);
+        const filename = skill.tarball_url.split('/').pop() || `${skill.name}.tar.gz`;
+        formData.append('file', fileBlob, filename);
+
+        const uploadRes = await api.post('/v1/openclaw/skills/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        const uploadResData = uploadRes.data?.data || uploadRes.data;
+        taskID = uploadResData?.taskID || uploadResData?.taskId;
+        if (!taskID) {
+          throw new Error('上传完毕后未获得异步任务ID');
+        }
+      }
+
+      let pollCount = 0;
+      const maxPoll = 30;
+      const pollInterval = setInterval(async () => {
+        pollCount++;
+        try {
+          const taskRes = await api.get('/v1/tasks/status');
+          const tasksList = Array.isArray(taskRes.data?.data) ? taskRes.data.data : (Array.isArray(taskRes.data) ? taskRes.data : []);
+          const targetTask = tasksList.find((tk: any) => tk.id === taskID);
+
+          if (targetTask) {
+            const progress = targetTask.progress || 0;
+            const status = targetTask.status;
+
+            if (status === 'Completed') {
+              clearInterval(pollInterval);
+              setInstallingSkills(prev => ({
+                ...prev,
+                [skillName]: { status: 'success', progress: 100 }
+              }));
+              message.success(t('skills.installSuccess', { name: skill.name, defaultValue: `技能 ${skill.name} 已成功装配` }));
+              window.dispatchEvent(new CustomEvent('openclaw:skills-updated'));
+              setTimeout(() => {
+                setInstallingSkills(prev => {
+                  const copy = { ...prev };
+                  delete copy[skillName];
+                  return copy;
+                });
+              }, 4000);
+            } else if (['Failed', 'Timeout', 'Interrupted'].includes(status)) {
+              clearInterval(pollInterval);
+              setInstallingSkills(prev => ({
+                ...prev,
+                [skillName]: { status: 'idle', progress: 0, error: targetTask.error }
+              }));
+              message.error(targetTask.error || t('skills.installFailed', { defaultValue: '技能装配失败' }));
+            } else {
+              let state: 'validating' | 'downloading' | 'extracting' | 'reloading' = 'validating';
+              if (progress > 10 && progress <= 60) {
+                state = 'downloading';
+              } else if (progress > 60 && progress <= 80) {
+                state = 'extracting';
+              } else if (progress > 80) {
+                state = 'reloading';
+              }
+              setInstallingSkills(prev => ({
+                ...prev,
+                [skillName]: { status: state, progress }
+              }));
+            }
+          } else {
+            clearInterval(pollInterval);
+            setInstallingSkills(prev => ({
+              ...prev,
+              [skillName]: { status: 'success', progress: 100 }
+            }));
+            window.dispatchEvent(new CustomEvent('openclaw:skills-updated'));
+            setTimeout(() => {
+              setInstallingSkills(prev => {
+                const copy = { ...prev };
+                delete copy[skillName];
+                return copy;
+              });
+            }, 4000);
+          }
+        } catch (pollErr) {
+          console.error('Failed to poll task status:', pollErr);
+        }
+
+        if (pollCount >= maxPoll) {
+          clearInterval(pollInterval);
+          setInstallingSkills(prev => ({
+            ...prev,
+            [skillName]: { status: 'idle', progress: 0 }
+          }));
+          message.error(t('skills.installTimeout', { defaultValue: '技能装配超时，请刷新重试' }));
+        }
+      }, 1500);
+
+    } catch (err: any) {
+      console.error('Install skill failed:', err);
+      const errMsg = err.response?.data?.error || err.message || t('skills.installFailed', { defaultValue: '技能装配失败' });
+      setInstallingSkills(prev => ({
+        ...prev,
+        [skillName]: { status: 'idle', progress: 0, error: errMsg }
+      }));
+      message.error(errMsg);
+    }
+  };
+
+  const renderWOWInstallButton = (skill: any, installState: { status: 'idle' | 'validating' | 'downloading' | 'extracting' | 'reloading' | 'success'; progress: number; error?: string }, isInstalled: boolean) => {
+    const { status, progress } = installState;
+
+    let btnText = t('skills.oneClickInstall', { defaultValue: '一键装配' });
+    let bg = 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)'; 
+    let shadowColor = 'rgba(13, 148, 136, 0.3)';
+    let icon = <DownloadCloud size={14} />;
+    let isSpinning = false;
+    let isDisabled = false;
+
+    switch (status) {
+      case 'validating':
+        btnText = t('skills.validating', { defaultValue: '⏳ 安全校验中...' });
+        bg = 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)'; 
+        shadowColor = 'rgba(79, 70, 229, 0.4)';
+        isSpinning = true;
+        isDisabled = true;
+        break;
+      case 'downloading':
+        btnText = t('skills.downloadingProgress', { progress, defaultValue: `📥 正在下载包... ${progress}%` });
+        bg = `linear-gradient(90deg, #a855f7 0%, #7e22ce ${progress}%, #475569 ${progress}%, #475569 100%)`; 
+        shadowColor = 'rgba(126, 34, 206, 0.4)';
+        isSpinning = true;
+        isDisabled = true;
+        break;
+      case 'extracting':
+        btnText = t('skills.extracting', { defaultValue: '🔒 安全提取中...' });
+        bg = 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)'; 
+        shadowColor = 'rgba(236, 72, 153, 0.4)';
+        isSpinning = true;
+        isDisabled = true;
+        break;
+      case 'reloading':
+        btnText = t('skills.reloading', { defaultValue: '🔄 同步中柜重载...' });
+        bg = 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)'; 
+        shadowColor = 'rgba(139, 92, 246, 0.4)';
+        isSpinning = true;
+        isDisabled = true;
+        break;
+      case 'success':
+        btnText = t('skills.installSuccessBtn', { defaultValue: '✨ 装配成功' });
+        bg = 'linear-gradient(135deg, #22c55e 0%, #15803d 100%)'; 
+        shadowColor = 'rgba(34, 197, 94, 0.4)';
+        icon = <Check size={14} />;
+        isDisabled = true;
+        break;
+      default:
+        if (isInstalled) {
+          btnText = t('skills.reinstall', { defaultValue: '重新装配' });
+          bg = 'linear-gradient(135deg, #475569 0%, #334155 100%)'; 
+          shadowColor = 'rgba(71, 85, 105, 0.2)';
+        }
+        break;
+    }
+
+    return (
+      <button
+        onClick={() => handleInstallSkill(skill)}
+        disabled={isDisabled}
+        style={{
+          width: '100%',
+          height: '36px',
+          border: 'none',
+          borderRadius: '8px',
+          background: bg,
+          color: '#ffffff',
+          fontWeight: 600,
+          fontSize: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          cursor: isDisabled ? 'not-allowed' : 'pointer',
+          boxShadow: `0 4px 12px ${shadowColor}`,
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          outline: 'none',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+        onMouseEnter={(e) => {
+          if (!isDisabled) {
+            e.currentTarget.style.transform = 'translateY(-1px)';
+            e.currentTarget.style.boxShadow = `0 6px 16px ${shadowColor}`;
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isDisabled) {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = `0 4px 12px ${shadowColor}`;
+          }
+        }}
+      >
+        {isSpinning && <RefreshCw size={12} className="animate-spin" style={{ marginRight: 2 }} />}
+        {!isSpinning && icon}
+        <span>{btnText}</span>
+      </button>
+    );
+  };
+
   /**
    * 复制技能名称
    */
@@ -275,6 +591,16 @@ export function V3SkillsDrawer({
       return matchSearch && matchType;
     });
   }, [skills, searchText, filterType]);
+
+  const filteredMarketSkills = useMemo(() => {
+    if (filterType !== 'market') return [];
+    return marketSkills.filter((s: any) => {
+      return (
+        s.name.toLowerCase().includes(searchText.toLowerCase()) ||
+        (s.description && s.description.toLowerCase().includes(searchText.toLowerCase()))
+      );
+    });
+  }, [marketSkills, searchText, filterType]);
 
   // 环境依赖详情 Tooltip 排版
   const renderRequirementsTooltip = (s: any) => {
@@ -398,9 +724,15 @@ export function V3SkillsDrawer({
         extra={
           <div style={{ display: 'flex', gap: 8 }}>
             <Button
-              icon={<RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />}
-              onClick={() => fetchSkills(true)}
-              disabled={isLoading}
+              icon={<RefreshCw size={16} className={isLoading || marketLoading ? 'animate-spin' : ''} />}
+              onClick={() => {
+                if (filterType === 'market') {
+                  fetchMarketSkills();
+                } else {
+                  fetchSkills(true);
+                }
+              }}
+              disabled={isLoading || marketLoading}
             />
             <Button icon={<X size={16} />} onClick={() => setOpen(false)} />
           </div>
@@ -429,9 +761,10 @@ export function V3SkillsDrawer({
             value={filterType}
             onChange={(value) => setFilterType(value as any)}
             options={[
-              { label: t('skills.filterAll', { defaultValue: '全部属性' }), value: 'all' },
-              { label: t('skills.globalSkill', { defaultValue: '全局技能' }), value: 'global' },
-              { label: t('skills.privateSkill', { defaultValue: '私有技能' }), value: 'private' }
+              { label: t('skills.filterAll', { defaultValue: '全部' }), value: 'all' },
+              { label: t('skills.globalSkill', { defaultValue: '全局' }), value: 'global' },
+              { label: t('skills.privateSkill', { defaultValue: '私有' }), value: 'private' },
+              { label: '🔍 ' + t('skills.exploreMarket', { defaultValue: '市场' }), value: 'market' }
             ]}
             className="v3-skills-drawer-segmented"
             style={{ borderRadius: '8px' }}
@@ -458,7 +791,153 @@ export function V3SkillsDrawer({
 
         {/* 技能卡片列表 */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {isLoading ? (
+          {filterType === 'market' ? (
+            marketLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '200px', gap: 12 }}>
+                <Spin />
+                <div style={{ color: shell.textMuted, fontSize: 12 }}>{t('skills.marketLoading', { defaultValue: '正在从 ClawHub 获取精选技能...' })}</div>
+              </div>
+            ) : filteredMarketSkills.length === 0 ? (
+              <div style={{ padding: '40px 0', display: 'flex', justifyContent: 'center' }}>
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('common.noContent', { defaultValue: '暂无商城技能' })} />
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {networkStatus === 'offline' && (
+                  <div style={{
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    background: isDarkMode ? 'rgba(234, 179, 8, 0.1)' : '#fef9c3',
+                    border: `1px dashed ${isDarkMode ? 'rgba(234, 179, 8, 0.3)' : '#fef08a'}`,
+                    fontSize: 11,
+                    color: isDarkMode ? '#facc15' : '#854d0e',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 8,
+                    marginBottom: 4
+                  }}>
+                    <WifiOff size={14} style={{ marginTop: 2, flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: 2 }}>{t('skills.bridgeModeActive', { defaultValue: '已激活前端静默网桥模式 (离线自愈)' })}</div>
+                      {t('skills.bridgeModeDesc', { defaultValue: '后端服务器无法访问 ClawHub，前端浏览器已开启静默网络直连中转，装配完全无感。' })}
+                    </div>
+                  </div>
+                )}
+                
+                {filteredMarketSkills.map((s: any) => {
+                  const isInstalled = skills.some((localSkill: any) => localSkill.name === s.name);
+                  const installState = installingSkills[s.name] || { status: 'idle', progress: 0 };
+                  
+                  return (
+                    <div
+                      key={s.name}
+                      onMouseEnter={() => setHoveredSkillName(s.name)}
+                      onMouseLeave={() => setHoveredSkillName(null)}
+                      style={{
+                        background: shell.cardBg,
+                        border: `1px solid ${shell.cardBorder}`,
+                        borderRadius: 12,
+                        padding: '14px 18px',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        position: 'relative',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 12,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 20,
+                            width: 38,
+                            height: 38,
+                            background: isDarkMode ? 'rgba(255,255,255,0.05)' : '#f8fafc',
+                            border: `1px solid ${shell.cardBorder}`,
+                            borderRadius: 8,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}
+                        >
+                          {s.emoji || '📦'}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: 3, flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 700, fontSize: 13.5, color: shell.textPrimary }}>
+                              {s.name}
+                            </span>
+                            <span style={{ fontSize: 9.5, color: shell.textMuted, opacity: 0.8 }}>
+                              v{s.version || '1.0.0'}
+                            </span>
+                            {isInstalled && (
+                              <span style={{
+                                fontSize: 9,
+                                fontWeight: 600,
+                                padding: '1px 5px',
+                                borderRadius: '4px',
+                                background: 'rgba(34, 197, 94, 0.1)',
+                                color: '#22c55e',
+                                border: '1px solid rgba(34, 197, 94, 0.2)'
+                              }}>
+                                {t('skills.installedLabel', { defaultValue: '已装配' })}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 10, color: shell.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span>⭐️ {s.rating || '5.0'}</span>
+                            <span>•</span>
+                            <span>{s.author || 'ClawHub'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: 11.5, color: shell.textMuted, lineHeight: '1.4' }}>
+                        {s.description}
+                      </div>
+
+                      {s.requirements && (s.requirements.bins?.length > 0 || s.requirements.env?.length > 0 || s.requirements.config?.length > 0) && (
+                        <div style={{
+                          background: isDarkMode ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+                          padding: '8px 10px',
+                          borderRadius: 6,
+                          fontSize: 10,
+                          color: shell.textMuted,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 4
+                        }}>
+                          <div style={{ fontWeight: 600, color: shell.textPrimary, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Cpu size={11} /> {t('skills.marketRequirements', { defaultValue: '运行环境依赖' })}:
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                            {s.requirements.bins?.map((bin: string) => (
+                              <span key={bin} style={{ background: isDarkMode ? '#334155' : '#e2e8f0', color: shell.textPrimary, padding: '1px 4px', borderRadius: 3 }}>
+                                bin: {bin}
+                              </span>
+                            ))}
+                            {s.requirements.env?.map((env: string) => (
+                              <span key={env} style={{ background: isDarkMode ? '#334155' : '#e2e8f0', color: shell.textPrimary, padding: '1px 4px', borderRadius: 3 }}>
+                                env: {env}
+                              </span>
+                            ))}
+                            {s.requirements.config?.map((cfg: string) => (
+                              <span key={cfg} style={{ background: isDarkMode ? '#334155' : '#e2e8f0', color: shell.textPrimary, padding: '1px 4px', borderRadius: 3 }}>
+                                cfg: {cfg}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {renderWOWInstallButton(s, installState, isInstalled)}
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          ) : isLoading ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '200px', gap: 12 }}>
               <Spin />
               <div style={{ color: shell.textMuted, fontSize: 12 }}>{t('skills.loading', { defaultValue: '正在努力加载可用技能...' })}</div>

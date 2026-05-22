@@ -315,6 +315,11 @@
 - [x] **V3 聊天可用技能侧栏私有技能物理卸载/删除、Popconfirm确认与状态异步轮询**: 针对私有技能卡片，悬停时支持展示红色 Trash 垃圾桶删除图标；点击删除图标能弹出 Popconfirm 气泡确认，且确认/取消过程中绝对不会引起冒泡事件触发快捷插入标签；点击确认删除后，调用 DELETE API 并发起网关任务轮询对账，任务完成（Completed）瞬间即时物理更新刷新技能抽屉。 `2026-05-22`
 - [x] **V3 聊天会话转技能保存引擎重载与 UI 全局自动刷新联动**: 验证在 V3 会话顶部“转为技能”保存成功后，能够物理触发后端技能引擎重载以扫描新技能，并分发全局自定义事件 `'openclaw:skills-updated'`；验证可用技能抽屉面板（V3SkillsDrawer）和输入框 Mention 选择器（V3MentionSelector）在监听到该事件后，能够即时进行数据刷新，实现新技能无感同步出现在首行。 `2026-05-22`
 - [x] **技能更新时间物理目录 mtime 自动获取与 Mention/Panel 悬停完美展示**: 验证 `GET /v1/openclaw/skills` 返回每个技能物理文件夹目录的最后更新时间 `updated_at` (Unix 时间戳，且对于无物理路径目录的技能自动忽略该字段)；验证 V3 可用技能面板（V3SkillsDrawer）及输入框 Mention 选择器（V3MentionSelector）在鼠标悬停弹出卡片时，能够将此时间戳转换为本地时间（格式为 `YYYY-MM-DD HH:mm:ss`）优雅展示。 `2026-05-22`
+- [x] **ClawHub 商城拉取与探测**: `GET /v1/openclaw/skills/market` 应根据外网连通状态返回 `network_status: "online"` 或 `"offline"`，且离线时正确返回精选兜底技能元数据列表。 `2026-05-22`
+- [x] **ClawHub 技能在线安装与任务百分比**: `POST /v1/openclaw/skills/install` 接收在线 Tarball URL，应返回异步 `taskID` 并提交到任务中心，在安装进度中分步回写进度百分比（0% -> 10% -> 60% -> 80% -> 100%）。 `2026-05-22`
+- [x] **ClawHub 技能离线中转上传与安全解包**: `POST /v1/openclaw/skills/upload` 处理离线网桥中转，接收 Multipart 二进制文件流及元数据，解包并物理装配到工作区。 `2026-05-22`
+- [x] **零信任路径安全校验与熔断自愈**: 解压或装配文件包时，若检测到含 `../` 等目录穿越的越权文件路径，系统应实施强行清场与熔断自愈（移除临时残留），抛出 `403 Forbidden`。 `2026-05-22`
+- [x] **热装配 UI 实时自动对账刷新**: 在侧栏抽屉（V3SkillsDrawer）或 Mention 选择器中，商城技能成功装配后，应触发全局事件 `'openclaw:skills-updated'`，使列表秒级无感同步出现在首行。 `2026-05-22`
 
 ---
 

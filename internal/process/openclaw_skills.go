@@ -1,14 +1,20 @@
 package process
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"openclaw-buddy/internal/utils"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type OpenClawSkill struct {
@@ -370,4 +376,283 @@ func parseSkillName(content string) string {
 		}
 	}
 	return ""
+}
+
+// extractArchive extracts a .tar.gz or .zip file safely to target finalSkillDir
+func extractArchive(archivePath string, finalSkillDir string) error {
+	if err := os.MkdirAll(filepath.Dir(finalSkillDir), 0755); err != nil {
+		return err
+	}
+
+	tempExtractDir, err := os.MkdirTemp(filepath.Dir(finalSkillDir), "tmp_extract_*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tempExtractDir)
+
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	headerBytes := make([]byte, 262)
+	n, _ := f.Read(headerBytes)
+	_, _ = f.Seek(0, 0)
+
+	isZip := false
+	if n >= 4 && string(headerBytes[:4]) == "PK\x03\x04" {
+		isZip = true
+	}
+
+	if isZip {
+		fi, err := f.Stat()
+		if err != nil {
+			return err
+		}
+		zr, err := zip.NewReader(f, fi.Size())
+		if err != nil {
+			return err
+		}
+		for _, file := range zr.File {
+			cleanName := filepath.Clean(file.Name)
+			if strings.HasPrefix(cleanName, "/") || strings.Contains(cleanName, "..") {
+				return fmt.Errorf("security boundary violation: zip contains traversal path: %s", file.Name)
+			}
+			targetPath := filepath.Join(tempExtractDir, cleanName)
+			if !strings.HasPrefix(targetPath, tempExtractDir) {
+				return fmt.Errorf("security boundary violation: zip path outside temp: %s", file.Name)
+			}
+
+			if file.FileInfo().IsDir() {
+				if err := os.MkdirAll(targetPath, 0755); err != nil {
+					return err
+				}
+				continue
+			}
+
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+				return err
+			}
+
+			outFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
+			if err != nil {
+				return err
+			}
+			rc, err := file.Open()
+			if err != nil {
+				outFile.Close()
+				return err
+			}
+			_, err = io.Copy(outFile, rc)
+			rc.Close()
+			outFile.Close()
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		gr, err := gzip.NewReader(f)
+		if err != nil {
+			return fmt.Errorf("failed to create gzip reader (is it a valid tar.gz?): %v", err)
+		}
+		defer gr.Close()
+
+		tr := tar.NewReader(gr)
+		for {
+			hdr, err := tr.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return err
+			}
+
+			cleanName := filepath.Clean(hdr.Name)
+			if strings.HasPrefix(cleanName, "/") || strings.Contains(cleanName, "..") {
+				return fmt.Errorf("security boundary violation: tar contains traversal path: %s", hdr.Name)
+			}
+			targetPath := filepath.Join(tempExtractDir, cleanName)
+			if !strings.HasPrefix(targetPath, tempExtractDir) {
+				return fmt.Errorf("security boundary violation: tar path outside temp: %s", hdr.Name)
+			}
+
+			switch hdr.Typeflag {
+			case tar.TypeDir:
+				if err := os.MkdirAll(targetPath, 0755); err != nil {
+					return err
+				}
+			case tar.TypeReg:
+				if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+					return err
+				}
+				outFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, hdr.FileInfo().Mode())
+				if err != nil {
+					return err
+				}
+				_, err = io.Copy(outFile, tr)
+				outFile.Close()
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	f.Close()
+
+	entries, err := os.ReadDir(tempExtractDir)
+	if err != nil {
+		return err
+	}
+
+	sourceDir := tempExtractDir
+	if len(entries) == 1 && entries[0].IsDir() {
+		sourceDir = filepath.Join(tempExtractDir, entries[0].Name())
+	}
+
+	_ = os.RemoveAll(finalSkillDir)
+
+	if err := os.Rename(sourceDir, finalSkillDir); err != nil {
+		return copyDir(sourceDir, finalSkillDir)
+	}
+
+	return nil
+}
+
+// copyDir recursively copies a directory tree
+func copyDir(src string, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode())
+		}
+
+		srcFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer srcFile.Close()
+
+		dstFile, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode())
+		if err != nil {
+			return err
+		}
+		defer dstFile.Close()
+
+		_, err = io.Copy(dstFile, srcFile)
+		return err
+	})
+}
+
+// InstallSkillFromURL downloads and extracts a skill from an online URL
+func InstallSkillFromURL(tarballURL, targetDir, skillName string, taskID string, configDir string) error {
+	finalSkillDir := filepath.Join(targetDir, skillName)
+
+	if _, err := VerifySkillPath(finalSkillDir, configDir); err != nil {
+		return fmt.Errorf("security validation failed for target path: %v", err)
+	}
+
+	if taskID != "" {
+		UpdateTaskProgress(taskID, 10)
+	}
+
+	tempFile, err := os.CreateTemp(targetDir, "skill_archive_*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary archive file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(tarballURL)
+	if err != nil {
+		return fmt.Errorf("failed to download skill archive: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download skill: server returned status %s", resp.Status)
+	}
+
+	contentLength := resp.ContentLength
+	var downloaded int64
+	buffer := make([]byte, 32*1024)
+	for {
+		nr, er := resp.Body.Read(buffer)
+		if nr > 0 {
+			nw, ew := tempFile.Write(buffer[:nr])
+			if nw > 0 {
+				downloaded += int64(nw)
+			}
+			if ew != nil {
+				return fmt.Errorf("failed to write to temp file: %v", ew)
+			}
+		}
+		if er == io.EOF {
+			break
+		}
+		if er != nil {
+			return fmt.Errorf("error while downloading: %v", er)
+		}
+
+		if contentLength > 0 && taskID != "" {
+			percent := int(10 + (float64(downloaded)/float64(contentLength))*50)
+			if percent > 60 {
+				percent = 60
+			}
+			UpdateTaskProgress(taskID, percent)
+		}
+	}
+	tempFile.Close()
+
+	if taskID != "" {
+		UpdateTaskProgress(taskID, 70)
+	}
+
+	if err := extractArchive(tempFile.Name(), finalSkillDir); err != nil {
+		_ = os.RemoveAll(finalSkillDir)
+		return fmt.Errorf("failed to extract and install skill: %v", err)
+	}
+
+	if taskID != "" {
+		UpdateTaskProgress(taskID, 90)
+	}
+
+	return nil
+}
+
+// InstallSkillFromReader extracts uploaded skill content directly
+func InstallSkillFromReader(r io.Reader, targetDir, skillName string, configDir string) error {
+	finalSkillDir := filepath.Join(targetDir, skillName)
+
+	if _, err := VerifySkillPath(finalSkillDir, configDir); err != nil {
+		return fmt.Errorf("security validation failed for target path: %v", err)
+	}
+
+	tempFile, err := os.CreateTemp(targetDir, "uploaded_skill_archive_*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary archive file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	if _, err := io.Copy(tempFile, r); err != nil {
+		return fmt.Errorf("failed to save uploaded file stream: %v", err)
+	}
+	tempFile.Close()
+
+	if err := extractArchive(tempFile.Name(), finalSkillDir); err != nil {
+		_ = os.RemoveAll(finalSkillDir)
+		return fmt.Errorf("failed to extract uploaded skill archive: %v", err)
+	}
+
+	return nil
 }
