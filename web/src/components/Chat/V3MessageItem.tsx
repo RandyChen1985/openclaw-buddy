@@ -281,7 +281,8 @@ const ArtifactCard: React.FC<{
   isDarkMode: boolean;
   isMobile: boolean;
   t: any;
-}> = ({ type, code, messageId, isDarkMode }) => {
+  isStreaming?: boolean;
+}> = ({ type, code, messageId, isDarkMode, isStreaming = false }) => {
   const { registerArtifact } = useArtifact();
   const [copied, setCopied] = useState(false);
 
@@ -304,9 +305,9 @@ const ArtifactCard: React.FC<{
         type,
         code,
         messageId
-      });
+      }, isStreaming);
     }
-  }, [code, messageId, filename, type, registerArtifact]);
+  }, [code, messageId, filename, type, registerArtifact, isStreaming]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -352,7 +353,10 @@ const ArtifactCard: React.FC<{
           type="primary"
           size="small"
           style={{ borderRadius: 6, fontSize: 11.5, background: '#6366f1' }}
-          onClick={() => registerArtifact({ id: `${messageId}-${filename}`, title: filename, type, code, messageId })}
+          onClick={() => {
+            console.log('[ArtifactDebug] Preview button onClick fired! Filename:', filename, 'messageId:', messageId);
+            registerArtifact({ id: `${messageId}-${filename}`, title: filename, type, code, messageId }, true);
+          }}
         >
           👁️ 预览此应用
         </Button>
@@ -866,6 +870,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
             isDarkMode={isDarkMode}
             isMobile={isMobile}
             t={t}
+            isStreaming={isLast && isTyping}
           />
         );
       }
@@ -878,6 +883,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
             isDarkMode={isDarkMode}
             isMobile={isMobile}
             t={t}
+            isStreaming={isLast && isTyping}
           />
         );
       }
@@ -890,6 +896,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
             isDarkMode={isDarkMode}
             isMobile={isMobile}
             t={t}
+            isStreaming={isLast && isTyping}
           />
         );
       }
