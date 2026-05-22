@@ -3,10 +3,11 @@ import { Avatar, Button, Input, message } from 'antd';
 import { 
   User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, 
   FileText, ChevronRight, ChevronDown, ShieldAlert, ShieldCheck, ListTodo, Loader2, Layers, Search, GitBranch,
-  Save, LayoutTemplate, Check, Download
+  Save, LayoutTemplate, Check, Download, ExternalLink
 } from 'lucide-react';
 import { useArtifact } from '../../views/chatV3/V3ArtifactContext';
 import Tooltip from '../common/AppTooltip';
+import api from '../../api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -323,7 +324,7 @@ const artifactSecondaryButtonStyle: React.CSSProperties = {
 };
 
 const ArtifactCard: React.FC<{
-  type: 'html' | 'mermaid' | 'svg';
+  type: 'html' | 'mermaid' | 'svg' | 'markdown' | 'image';
   code: string;
   messageId: string;
   isDarkMode: boolean;
@@ -336,7 +337,15 @@ const ArtifactCard: React.FC<{
 
   // 提取文件名
   const filename = useMemo(() => {
-    let defaultName = `app_${messageId.slice(0, 5)}.${type === 'html' ? 'html' : type === 'mermaid' ? 'mermaid' : 'svg'}`;
+    let ext = 'svg';
+    if (type === 'html') ext = 'html';
+    else if (type === 'mermaid') ext = 'mermaid';
+    else if (type === 'markdown') ext = 'md';
+    else if (type === 'image') {
+      const match = code.match(/^data:image\/(\w+);base64,/);
+      ext = match ? match[1] : 'png';
+    }
+    let defaultName = `app_${messageId.slice(0, 5)}.${ext}`;
     const commentMatch = code.match(/(?:<!--|\/\*)\s*filename:\s*([a-zA-Z0-9_\-\.]+)\s*(?:-->|\*\/)/);
     if (commentMatch && commentMatch[1]) {
       return commentMatch[1];
@@ -447,6 +456,109 @@ const ArtifactCard: React.FC<{
         </button>
       </div>
     </div>
+  );
+};
+
+const getOpenableFilePath = (raw: string) => {
+  const path = String(raw || '')
+    .trim()
+    .replace(/^['"`]+|['"`.,;:，。；：)）\]}】]+$/g, '');
+  if (!path || !/^(\/|~\/)/.test(path)) return null;
+  if (!/\.(html?|md|markdown|png|jpe?g|gif|webp|bmp|svg|pdf|txt|log|json|ya?ml|ini|conf|sh|py|go|js|tsx?)$/i.test(path)) return null;
+  return path;
+};
+
+const getArtifactTypeFromPath = (path: string): 'html' | 'markdown' | 'image' | 'pdf' | 'text' | 'svg' => {
+  if (/\.html?$/i.test(path)) return 'html';
+  if (/\.svg$/i.test(path)) return 'svg';
+  if (/\.(png|jpe?g|gif|webp|bmp)$/i.test(path)) return 'image';
+  if (/\.pdf$/i.test(path)) return 'pdf';
+  if (/\.(txt|log|json|ya?ml|ini|conf|sh|py|go|js|tsx?)$/i.test(path)) return 'text';
+  return 'markdown';
+};
+
+const getFilenameFromPath = (path: string) => (
+  path.split(/[\\/]/).filter(Boolean).pop() || path
+);
+
+const InlineFileOpenButton: React.FC<{
+  path: string;
+  messageId: string;
+  isDarkMode: boolean;
+}> = ({ path, messageId, isDarkMode }) => {
+  const { registerArtifact } = useArtifact();
+  const [loading, setLoading] = useState(false);
+
+  const handleOpen = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (loading) return;
+
+    setLoading(true);
+    try {
+      const type = getArtifactTypeFromPath(path);
+      let code = '';
+      if (type === 'image' || type === 'pdf') {
+        // 请求二进制下载接口以安全获取图片/PDF二进制数据
+        const res = await api.get(`/v1/openclaw/files/download?path=${encodeURIComponent(path)}`, {
+          responseType: 'blob'
+        });
+        const blob = res.data;
+        code = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error(`${type === 'pdf' ? 'PDF' : '图片'}转换Base64失败`));
+          reader.readAsDataURL(blob);
+        });
+      } else {
+        const res = await api.get(`/v1/openclaw/files/get?path=${encodeURIComponent(path)}`);
+        code = res.data?.content || '';
+      }
+
+      const title = getFilenameFromPath(path);
+      registerArtifact({
+        id: `${messageId}-${path}`,
+        title,
+        type,
+        code,
+        messageId
+      }, true);
+      message.success('已在实时画布打开');
+    } catch (err: any) {
+      console.error('Open file in canvas failed:', err);
+      message.error(err?.message || '打开文件失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onMouseDown={handleOpen}
+      disabled={loading}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        height: 24,
+        marginLeft: 8,
+        padding: '0 8px',
+        borderRadius: 7,
+        border: isDarkMode ? '1px solid #475569' : '1px solid #c7d2fe',
+        background: isDarkMode ? '#1e293b' : '#eef2ff',
+        color: isDarkMode ? '#c7d2fe' : '#4f46e5',
+        fontSize: 12,
+        fontWeight: 700,
+        cursor: loading ? 'wait' : 'pointer',
+        verticalAlign: 'middle',
+        userSelect: 'none'
+      }}
+      title="在实时画布打开"
+    >
+      {loading ? <Loader2 size={12} className="v3-thinking-spinner" /> : <ExternalLink size={12} />}
+      打开
+    </button>
   );
 };
 
@@ -937,8 +1049,9 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       const match = /language-(\w+)/.exec(className || '');
       const language = match ? match[1] : '';
       const codeVal = String(children).replace(/\n$/, '');
+      const isInline = inline !== undefined ? inline : !className;
 
-      if (!inline && language === 'html') {
+      if (!isInline && language === 'html') {
         return (
           <ArtifactCard
             type="html"
@@ -951,7 +1064,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
           />
         );
       }
-      if (!inline && language === 'mermaid') {
+      if (!isInline && language === 'mermaid') {
         return (
           <ArtifactCard
             type="mermaid"
@@ -964,7 +1077,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
           />
         );
       }
-      if (!inline && (language === 'svg' || (language === 'xml' && codeVal.trim().startsWith('<svg')))) {
+      if (!isInline && (language === 'svg' || (language === 'xml' && codeVal.trim().startsWith('<svg')))) {
         return (
           <ArtifactCard
             type="svg"
@@ -978,23 +1091,33 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         );
       }
 
-      if (!inline && isEchartsCodeFenceLanguage(language)) return <ECharts optionStr={codeVal} isTyping={isLast && isTyping} />;
-      if (!inline && language) return <CodeBlock language={language} value={codeVal} isMobile={isMobile} {...props} />;
+      if (!isInline && isEchartsCodeFenceLanguage(language)) return <ECharts optionStr={codeVal} isTyping={isLast && isTyping} />;
+      if (!isInline && language) return <CodeBlock language={language} value={codeVal} isMobile={isMobile} {...props} />;
+      const openablePath = isInline ? getOpenableFilePath(codeVal) : null;
       return (
-        <code
-          {...props}
-          style={{
-            padding: '0.2em 0.4em',
-            backgroundColor: isUser
-              ? 'var(--v3-user-surface, rgba(255,255,255,0.12))'
-              : (isDarkMode ? 'rgba(148, 163, 184, 0.18)' : 'rgba(175, 184, 193, 0.2)'),
-            color: isUser ? 'var(--v3-user-text, #fff)' : (isDarkMode ? '#e2e8f0' : '#1e293b'),
-            borderRadius: '6px',
-            fontSize: '85%',
-          }}
-        >
-          {children}
-        </code>
+        <>
+          <code
+            {...props}
+            style={{
+              padding: '0.2em 0.4em',
+              backgroundColor: isUser
+                ? 'var(--v3-user-surface, rgba(255,255,255,0.12))'
+                : (isDarkMode ? 'rgba(148, 163, 184, 0.18)' : 'rgba(175, 184, 193, 0.2)'),
+              color: isUser ? 'var(--v3-user-text, #fff)' : (isDarkMode ? '#e2e8f0' : '#1e293b'),
+              borderRadius: '6px',
+              fontSize: '85%',
+            }}
+          >
+            {children}
+          </code>
+          {openablePath && !isUser && (
+            <InlineFileOpenButton
+              path={openablePath}
+              messageId={String(msg.id || msg.runId || index)}
+              isDarkMode={isDarkMode}
+            />
+          )}
+        </>
       );
     },
     a: ({ node, href, children, ...props }: any) => {

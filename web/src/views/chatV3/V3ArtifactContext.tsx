@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 export interface Artifact {
   id: string;          // 唯一ID (由 messageId + 索引组合)
   title: string;       // 文件名或图表名 (如 index.html, diagram.mermaid)
-  type: 'html' | 'mermaid' | 'svg';
+  type: 'html' | 'mermaid' | 'svg' | 'markdown' | 'image' | 'pdf' | 'text';
   code: string;        // 实时代码内容
   messageId: string;   // 关联的消息ID
   version: number;     // 版本号 (从 1 开始)

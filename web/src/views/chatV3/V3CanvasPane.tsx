@@ -3,6 +3,9 @@ import { useArtifact } from './V3ArtifactContext';
 import { Button, Select, Radio, Alert, message } from 'antd';
 import { X, Play, Code, ExternalLink } from 'lucide-react';
 import mermaid from 'mermaid';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 
 export const V3CanvasPane: React.FC<{ isDarkMode: boolean; onClose?: () => void }> = ({ isDarkMode, onClose }) => {
   const { activeArtifact, setActiveArtifact, setCanvasVisible, artifactsHistory } = useArtifact();
@@ -181,15 +184,25 @@ export const V3CanvasPane: React.FC<{ isDarkMode: boolean; onClose?: () => void 
         justifyContent: 'space-between',
         padding: '10px 16px',
         background: isDarkMode ? '#1f2937' : '#f9fafb',
-        borderBottom: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`
+        borderBottom: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`,
+        flexWrap: 'nowrap',
+        overflowX: 'auto',
+        msOverflowStyle: 'none', // 隐藏IE滚动条
+        scrollbarWidth: 'none',   // 隐藏Firefox滚动条
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontWeight: 700, fontSize: 13.5, color: isDarkMode ? '#f3f4f6' : '#111827' }}>⚡ 画布</span>
+        {/* 隐藏Chrome滚动条的内联样式 */}
+        <style dangerouslySetInnerHTML={{__html: `
+          div::-webkit-scrollbar {
+            display: none;
+          }
+        `}} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+          <span style={{ fontWeight: 700, fontSize: 13.5, color: isDarkMode ? '#f3f4f6' : '#111827', whiteSpace: 'nowrap' }}>⚡ 画布</span>
           {versionsList.length > 1 && (
             <Select
               size="small"
               value={activeArtifact.version}
-              style={{ width: 110 }}
+              style={{ width: 110, flexShrink: 0 }}
               dropdownStyle={isDarkMode ? { background: '#1f2937' } : undefined}
               onChange={handleVersionChange}
               options={versionsList.map(x => ({
@@ -199,18 +212,23 @@ export const V3CanvasPane: React.FC<{ isDarkMode: boolean; onClose?: () => void 
             />
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Radio.Group size="small" value={viewMode} onChange={e => setViewMode(e.target.value)}>
-            <Radio.Button value="preview" style={isDarkMode ? { background: '#374151', color: '#e5e7eb', borderColor: '#4b5563' } : {}}><Play size={11} style={{ marginRight: 4, display: 'inline', verticalAlign: '-1px' }} />预览</Radio.Button>
-            <Radio.Button value="code" style={isDarkMode ? { background: '#374151', color: '#e5e7eb', borderColor: '#4b5563' } : {}}><Code size={11} style={{ marginRight: 4, display: 'inline', verticalAlign: '-1px' }} />代码</Radio.Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <Radio.Group 
+            size="small" 
+            value={viewMode} 
+            onChange={e => setViewMode(e.target.value)}
+            style={{ flexShrink: 0, display: 'inline-flex', whiteSpace: 'nowrap' }}
+          >
+            <Radio.Button value="preview" style={isDarkMode ? { background: '#374151', color: '#e5e7eb', borderColor: '#4b5563', whiteSpace: 'nowrap' } : { whiteSpace: 'nowrap' }}><Play size={11} style={{ marginRight: 4, display: 'inline-block', verticalAlign: '-1px' }} />预览</Radio.Button>
+            <Radio.Button value="code" style={isDarkMode ? { background: '#374151', color: '#e5e7eb', borderColor: '#4b5563', whiteSpace: 'nowrap' } : { whiteSpace: 'nowrap' }}><Code size={11} style={{ marginRight: 4, display: 'inline-block', verticalAlign: '-1px' }} />代码</Radio.Button>
           </Radio.Group>
           {activeArtifact.type === 'html' && (
-            <Button size="small" icon={<ExternalLink size={12} />} onClick={openFullScreen} style={isDarkMode ? { background: '#374151', color: '#e5e7eb', borderColor: '#4b5563' } : {}}>全屏</Button>
+            <Button size="small" icon={<ExternalLink size={12} />} onClick={openFullScreen} style={isDarkMode ? { background: '#374151', color: '#e5e7eb', borderColor: '#4b5563', flexShrink: 0, whiteSpace: 'nowrap' } : { flexShrink: 0, whiteSpace: 'nowrap' }}>全屏</Button>
           )}
           <Button size="small" type="text" icon={<X size={16} />} onClick={() => {
             setCanvasVisible(false);
             if (onClose) onClose();
-          }} style={isDarkMode ? { color: '#9ca3af' } : {}} />
+          }} style={isDarkMode ? { color: '#9ca3af', flexShrink: 0 } : { flexShrink: 0 }} />
         </div>
       </div>
 
@@ -236,6 +254,100 @@ export const V3CanvasPane: React.FC<{ isDarkMode: boolean; onClose?: () => void 
                   style={{ position: 'absolute', bottom: 12, left: 12, right: 12, zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
                 />
               )}
+            </div>
+          ) : activeArtifact.type === 'markdown' ? (
+            <div style={{
+              padding: 24,
+              overflow: 'auto',
+              flex: 1,
+              background: isDarkMode ? '#0b0f19' : '#fafafa'
+            }}>
+              <div style={{
+                maxWidth: 860,
+                margin: '0 auto',
+                padding: 28,
+                borderRadius: 10,
+                background: isDarkMode ? '#111827' : '#fff',
+                color: isDarkMode ? '#e5e7eb' : '#111827',
+                border: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`
+              }}>
+                <div className={`markdown-body-v3${isDarkMode ? ' v3-model-chat-md--dark' : ''}`}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                    {activeArtifact.code}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            </div>
+          ) : activeArtifact.type === 'image' ? (
+            <div style={{
+              padding: 24,
+              overflow: 'auto',
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: isDarkMode ? '#0b0f19' : '#fafafa'
+            }}>
+              <div style={{
+                maxWidth: '100%',
+                maxHeight: '100%',
+                padding: 16,
+                borderRadius: 12,
+                background: isDarkMode ? '#111827' : '#fff',
+                border: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`,
+                boxShadow: isDarkMode ? 'none' : '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden'
+              }}>
+                <img
+                  src={activeArtifact.code}
+                  alt={activeArtifact.title}
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '70vh',
+                    objectFit: 'contain',
+                    borderRadius: 8,
+                    cursor: 'zoom-in'
+                  }}
+                  onClick={() => {
+                    const newTab = window.open();
+                    if (newTab) {
+                      newTab.document.write(`<img src="${activeArtifact.code}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
+                      newTab.document.title = activeArtifact.title;
+                    }
+                  }}
+                  title="点击在新标签页打开高清原图"
+                />
+              </div>
+            </div>
+          ) : activeArtifact.type === 'pdf' ? (
+            <div style={{ width: '100%', height: '100%', position: 'relative', background: '#fff' }}>
+              <iframe
+                src={activeArtifact.code}
+                title={activeArtifact.title}
+                style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }}
+              />
+            </div>
+          ) : activeArtifact.type === 'text' ? (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+              <pre style={{
+                margin: 0,
+                padding: '24px 32px',
+                flex: 1,
+                overflow: 'auto',
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                fontSize: 13,
+                lineHeight: 1.6,
+                background: isDarkMode ? '#0b0f19' : '#fafafa',
+                color: isDarkMode ? '#e5e7eb' : '#111827',
+                border: 'none',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all'
+              }}>
+                <code>{activeArtifact.code}</code>
+              </pre>
             </div>
           ) : activeArtifact.type === 'mermaid' ? (
             <div style={{
@@ -274,19 +386,37 @@ export const V3CanvasPane: React.FC<{ isDarkMode: boolean; onClose?: () => void 
         ) : (
           // 代码查看模式
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <pre style={{
-              margin: 0,
-              padding: 16,
-              flex: 1,
-              overflow: 'auto',
-              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-              fontSize: 12.5,
-              background: isDarkMode ? '#0b0f19' : '#f8fafc',
-              color: isDarkMode ? '#e5e7eb' : '#111827',
-              border: 'none'
-            }}>
-              <code>{activeArtifact.code}</code>
-            </pre>
+            {activeArtifact.type === 'image' || activeArtifact.type === 'pdf' ? (
+              <div style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'column',
+                gap: 16,
+                background: isDarkMode ? '#0b0f19' : '#f8fafc',
+                color: isDarkMode ? '#9ca3af' : '#64748b',
+                fontSize: 13
+              }}>
+                <Code size={40} strokeWidth={1.5} style={{ opacity: 0.6 }} />
+                <span>该文件为二进制{activeArtifact.type === 'pdf' ? 'PDF' : '图片'}，不提供纯文本代码查看</span>
+                <span style={{ fontSize: 11, opacity: 0.7 }}>Base64 数据大小: {(activeArtifact.code.length / 1024).toFixed(1)} KB</span>
+              </div>
+            ) : (
+              <pre style={{
+                margin: 0,
+                padding: 16,
+                flex: 1,
+                overflow: 'auto',
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                fontSize: 12.5,
+                background: isDarkMode ? '#0b0f19' : '#f8fafc',
+                color: isDarkMode ? '#e5e7eb' : '#111827',
+                border: 'none'
+              }}>
+                <code>{activeArtifact.code}</code>
+              </pre>
+            )}
             {/* 代码快捷操作栏 */}
             <div style={{
               display: 'flex',
