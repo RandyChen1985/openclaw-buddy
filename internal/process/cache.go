@@ -41,7 +41,7 @@ func SyncAllWithConcurrency(configDir string, concurrency int) {
 		{"bots_models", func() (any, error) { return GetOpenClawBotsModels(configDir) }},
 		{"chat_channels", func() (any, error) { return GetChatChannels() }},
 		{"devices", func() (any, error) { return GetOpenClawDevices() }},
-		{"skills", func() (any, error) { return GetOpenClawSkills() }},
+		{"skills", func() (any, error) { return GetOpenClawSkills(configDir) }},
 		{"plugins", func() (any, error) { return GetOpenClawPlugins(configDir) }},
 		{"cron_jobs", func() (any, error) { return GetOpenClawCronJobs() }},
 		{"sessions", func() (any, error) { return GetOpenClawSessions() }},
@@ -86,7 +86,7 @@ func SyncKeySingle(key string, configDir string) error {
 	case "devices":
 		fetcher = func() (any, error) { return GetOpenClawDevices() }
 	case "skills":
-		fetcher = func() (any, error) { return GetOpenClawSkills() }
+		fetcher = func() (any, error) { return GetOpenClawSkills(configDir) }
 	case "plugins":
 		fetcher = func() (any, error) { return GetOpenClawPlugins(configDir) }
 	case "cron_jobs":

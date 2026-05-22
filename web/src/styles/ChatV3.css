@@ -1282,6 +1282,28 @@ button.v3-settings-reasoning-btn--dark:active {
   white-space: nowrap;
 }
 
+.v3-mention-skill-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.v3-mention-skill-badge.global {
+  background: rgba(79, 70, 229, 0.08);
+  color: #4f46e5;
+  border: 1px solid rgba(79, 70, 229, 0.2);
+}
+
+.v3-mention-skill-badge.private {
+  background: rgba(13, 148, 136, 0.08);
+  color: #0d9488;
+  border: 1px solid rgba(13, 148, 136, 0.2);
+}
+
 .v3-mention-item-desc {
   font-size: 11px;
   color: #94a3b8;
@@ -1607,6 +1629,18 @@ button.v3-settings-reasoning-btn--dark:active {
   color: #94a3b8;
 }
 
+.chat-v3-root[data-app-dark="true"] .v3-mention-skill-badge.global {
+  background: rgba(129, 140, 248, 0.15);
+  color: #a5b4fc;
+  border-color: rgba(129, 140, 248, 0.25);
+}
+
+.chat-v3-root[data-app-dark="true"] .v3-mention-skill-badge.private {
+  background: rgba(45, 212, 191, 0.15);
+  color: #5eead4;
+  border-color: rgba(45, 212, 191, 0.25);
+}
+
 .chat-v3-root[data-app-dark="true"] .v3-mention-footer {
   border-top-color: #334155;
   background: #0f172a;
@@ -1642,4 +1676,37 @@ button.v3-settings-reasoning-btn--dark:active {
 .chat-v3-root[data-app-dark="true"] .v3-meta-embedded.markdown-body-v3 {
   background: #0f172a !important;
   border-color: #475569 !important;
+}
+
+/* --- V3 Mention Skill Popover Premium Styles --- */
+.v3-mention-skill-popover-overlay .ant-popover-inner {
+  padding: 12px 14px !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 32px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(99, 102, 241, 0.08) !important;
+  border: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+}
+
+.v3-mention-skill-popover-overlay .ant-popover-arrow::after {
+  background: #ffffff !important;
+}
+
+/* Dark mode adaptive styles for popover container */
+.chat-v3-root[data-app-dark="true"] .v3-mention-skill-popover-overlay .ant-popover-inner {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+}
+
+.chat-v3-root[data-app-dark="true"] .v3-mention-skill-popover-overlay .ant-popover-arrow::after {
+  background: #1e293b !important;
+}
+
+.chat-v3-root[data-app-dark="true"] .v3-skill-popover-path {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+}
+
+.chat-v3-root[data-app-dark="true"] .v3-skill-popover-path div:last-child {
+  color: #cbd5e1 !important;
 }

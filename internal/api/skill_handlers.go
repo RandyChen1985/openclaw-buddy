@@ -52,7 +52,7 @@ func (s *Server) uninstallSkill(c *gin.Context) {
 		Target: name,
 	}
 	s.runAsyncTask(c, task, func() (string, error) {
-		if err := process.UninstallOpenClawSkill(name); err != nil {
+		if err := process.UninstallOpenClawSkill(s.cfg.OpenClawConfigDir, name); err != nil {
 			return "", err
 		}
 		// 自动清理缓存，让下一次获取触发同步
@@ -84,7 +84,7 @@ func (s *Server) getSkillFilesList(c *gin.Context) {
 		return
 	}
 
-	files, err := process.ListSkillResources(path)
+	files, err := process.ListSkillResources(path, s.cfg.OpenClawConfigDir)
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
@@ -99,7 +99,7 @@ func (s *Server) getSkillFileContent(c *gin.Context) {
 		return
 	}
 
-	content, err := process.ReadSkillResource(path)
+	content, err := process.ReadSkillResource(path, s.cfg.OpenClawConfigDir)
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
@@ -118,7 +118,7 @@ func (s *Server) saveSkillFileContent(c *gin.Context) {
 	}
 
 	log.Printf("🎮 [控制] 用户请求: 【保存技能资源文件】 (Path: %s)", req.Path)
-	err := process.SaveSkillResource(req.Path, req.Content)
+	err := process.SaveSkillResource(req.Path, req.Content, s.cfg.OpenClawConfigDir)
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
@@ -138,7 +138,7 @@ func (s *Server) createSkillFile(c *gin.Context) {
 	}
 
 	log.Printf("🎮 [控制] 用户请求: 【新建技能资源文件】 (Dir: %s, Name: %s)", req.Path, req.Filename)
-	destPath, err := process.CreateSkillResourceFile(req.Path, req.Filename, req.Content)
+	destPath, err := process.CreateSkillResourceFile(req.Path, req.Filename, req.Content, s.cfg.OpenClawConfigDir)
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return
@@ -157,7 +157,7 @@ func (s *Server) createSkillDir(c *gin.Context) {
 	}
 
 	log.Printf("🎮 [控制] 用户请求: 【新建技能资源文件夹】 (Dir: %s, Name: %s)", req.Path, req.Dirname)
-	destPath, err := process.CreateSkillResourceDir(req.Path, req.Dirname)
+	destPath, err := process.CreateSkillResourceDir(req.Path, req.Dirname, s.cfg.OpenClawConfigDir)
 	if err != nil {
 		s.Error(c, http.StatusInternalServerError, err.Error())
 		return

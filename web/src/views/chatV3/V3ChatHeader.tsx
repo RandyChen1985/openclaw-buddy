@@ -81,6 +81,9 @@ export interface V3ChatHeaderProps {
   /** 导出当前会话为 Markdown（与聊天区可见内容一致） */
   onExportSession?: () => void;
   exportSessionDisabled?: boolean;
+  /** 从当前会话提炼技能草稿（桌面端显示） */
+  onConvertToSkill?: () => void;
+  convertToSkillDisabled?: boolean;
   /** 打开模型试聊侧栏（仅桌面端显示按钮） */
   onOpenModelChat?: () => void;
   onOpenWorkspace?: () => void;
@@ -126,6 +129,8 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     onToggleFullscreen,
     onExportSession,
     exportSessionDisabled = false,
+    onConvertToSkill,
+    convertToSkillDisabled = false,
     onOpenModelChat,
     onOpenWorkspace,
     showTerminal,
@@ -681,6 +686,19 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
               icon={<Download size={14} />}
               onClick={onExportSession}
               disabled={exportSessionDisabled}
+              style={isDarkMode ? { color: '#cbd5e1' } : undefined}
+            />
+          </Tooltip>
+        )}
+
+        {!isMobile && onConvertToSkill && (
+          <Tooltip title={t('chat.convertToSkill', { defaultValue: '转为技能' })}>
+            <Button
+              size="small"
+              type="text"
+              icon={<Wand2 size={14} />}
+              onClick={onConvertToSkill}
+              disabled={convertToSkillDisabled}
               style={isDarkMode ? { color: '#cbd5e1' } : undefined}
             />
           </Tooltip>

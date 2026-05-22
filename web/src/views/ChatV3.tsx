@@ -16,6 +16,7 @@ import { V3ChatHeader } from './chatV3/V3ChatHeader';
 import { V3FloatingButtons } from './chatV3/V3FloatingButtons';
 import { V3MessagePane } from './chatV3/V3MessagePane';
 import { V3ModelChatDrawer } from './chatV3/V3ModelChatDrawer';
+import { V3SkillDraftDrawer } from './chatV3/V3SkillDraftDrawer';
 import { V3ComposerBar } from './chatV3/V3ComposerBar';
 import { V3TerminalModal } from '../components/Chat/V3TerminalModal';
 import { V3DebugPane } from './chatV3/V3DebugPane';
@@ -268,6 +269,7 @@ const ChatV3: React.FC<ChatV3Props> = ({
   const [sessionSearch, setSessionSearch] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [modelChatOpen, setModelChatOpen] = useState(false);
+  const [skillDraftOpen, setSkillDraftOpen] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [explorerPath, setExplorerPath] = useState('');
   const [explorerTitle, setExplorerTitle] = useState('');
@@ -310,6 +312,22 @@ const ChatV3: React.FC<ChatV3Props> = ({
     },
     [t],
   );
+
+  const skillDraftModelID = React.useMemo(() => {
+    if (sessionModel) return sessionModel;
+    const botId = selectedBot.replace('openclaw:', '');
+    const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
+    if (bot?.model) return bot.model;
+    const firstModel = botsModels?.data?.models?.[0];
+    return firstModel?.id || '';
+  }, [botsModels, selectedBot, sessionModel]);
+
+  const currentWorkspacePath = React.useMemo(() => {
+    if (!sessionKey) return '~/.openclaw/workspace';
+    const { botId } = parseSessionKey(sessionKey);
+    const bot = botsModels?.data?.bots?.find((b: any) => b.id === botId);
+    return bot?.workspace || '~/.openclaw/workspace';
+  }, [botsModels, sessionKey]);
 
   useEffect(() => {
     if (!botsModels?.data?.bots?.length) return;
@@ -893,6 +911,8 @@ const ChatV3: React.FC<ChatV3Props> = ({
           onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
           onExportSession={handleExportCurrentSession}
           exportSessionDisabled={!sessionKey || isLoadingHistory}
+          onConvertToSkill={() => setSkillDraftOpen(true)}
+          convertToSkillDisabled={!sessionKey || isLoadingHistory || messages.length === 0 || status !== 'authenticated' || !skillDraftModelID}
           onOpenModelChat={() => setModelChatOpen(true)}
           onOpenWorkspace={handleOpenWorkspace}
           showTerminal={showTerminal}
@@ -1125,6 +1145,19 @@ const ChatV3: React.FC<ChatV3Props> = ({
         status={status}
         open={modelChatOpen}
         onClose={() => setModelChatOpen(false)}
+        copyToClipboard={copyToClipboard}
+      />
+
+      <V3SkillDraftDrawer
+        t={t}
+        isDarkMode={isDarkMode}
+        open={skillDraftOpen}
+        onClose={() => setSkillDraftOpen(false)}
+        status={status}
+        messages={messages}
+        sessionLabel={sessionLabel}
+        modelID={skillDraftModelID}
+        workspacePath={currentWorkspacePath}
         copyToClipboard={copyToClipboard}
       />
     </>
