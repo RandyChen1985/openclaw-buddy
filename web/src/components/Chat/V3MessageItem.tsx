@@ -872,6 +872,20 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       }
     }
 
+    if (showThinking) {
+      // 💡 当开启「显示思考」时：如果除了折叠元数据块外，正文区域只有纯省略号或空白（AI 推理前期的临时点占位符），
+      // 我们应将其彻底滤除，避免在正文区独立出现三个点的跳动，保证界面极致纯净。
+      const mainTextOnly = content
+        .replace(/(?:>\s*)?:::(?:thinking|plan|toolCall|commandOutput|approval|warning)[\s\S]*?(?::::|$)\n*/g, '')
+        .trim();
+      if (/^[.\s…]*$/g.test(mainTextOnly)) {
+        content = content
+          .replace(/(?:^|\n)\s*[.\s…]+(?=\n|$)/g, '\n')
+          .replace(/^[.\s…]+$/g, '')
+          .trim();
+      }
+    }
+
     // 2. 自动为分析/思考等容器标签补齐 '>' 引用符号（如果缺失），确保进入 blockquote 渲染器
     content = content.replace(/(?:^|\n)(:::(?:analysis|thinking|plan|toolCall|commandOutput|approval|warning)[\s\S]*?:::)/g, (_match: string, p1: string) => {
       return '\n> ' + p1.replace(/\n/g, '\n> ');
