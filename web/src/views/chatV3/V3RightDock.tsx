@@ -20,6 +20,7 @@ export interface V3RightDockProps {
   isDraggingResize: boolean;
   onResizeActiveChange: (active: boolean) => void;
   onCloseAll: () => void;
+  onClosePanel?: (panelId: V3DockPanelId) => void;
   renderPanel: (panelId: V3DockPanelId, columnWidth: number) => React.ReactNode;
 }
 
@@ -47,6 +48,7 @@ export function V3RightDock({
   isDraggingResize,
   onResizeActiveChange,
   onCloseAll,
+  onClosePanel,
   renderPanel,
 }: V3RightDockProps) {
   const { layout, movePanel, resizeColumn, toggleStackedColumns, dockIsStackedMode } =
@@ -380,8 +382,28 @@ export function V3RightDock({
                         defaultValue: '拖动手柄：放到另一面板区域=同列堆叠；放到列间竖条=独立列',
                       })}
                     >
-                      <GripVertical size={14} />
-                      <span>{panelDefaultTitle(t, panelId)}</span>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <GripVertical size={14} />
+                        <span>{panelDefaultTitle(t, panelId)}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="v3-dock-panel-close-btn"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (onClosePanel) {
+                            onClosePanel(panelId);
+                          }
+                        }}
+                        onDragStart={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        title={t('common.close', { defaultValue: '关闭' })}
+                      >
+                        <X size={16} strokeWidth={2.5} />
+                      </button>
                     </div>
                     <div className="v3-dock-panel-body">{renderPanel(panelId, colWidth)}</div>
                     {isDockDragging && draggingPanelRef.current !== panelId && isDragOver && (

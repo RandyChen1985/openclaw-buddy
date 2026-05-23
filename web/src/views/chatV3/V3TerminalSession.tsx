@@ -85,8 +85,19 @@ export const V3TerminalSession = forwardRef<V3TerminalSessionHandle, V3TerminalS
         scrollToBottom: () => {
           xtermRef.current?.scrollToBottom();
         },
+        sendCommand: (cmd: string) => {
+          if (socketRef.current?.readyState === WebSocket.OPEN) {
+            socketRef.current.send('\x03');
+            setTimeout(() => {
+              socketRef.current?.send(cmd + '\n');
+              xtermRef.current?.focus();
+            }, 120);
+          } else {
+            message.warning(t('common.terminalNotConnected', { defaultValue: '终端未连接，请重新连接' }));
+          }
+        }
       }),
-      []
+      [t]
     );
 
     useEffect(() => {
@@ -275,6 +286,54 @@ export const V3TerminalSession = forwardRef<V3TerminalSessionHandle, V3TerminalS
       });
       return () => cancelAnimationFrame(id);
     }, [isActive]);
+
+    useEffect(() => {
+      if (isActive) {
+        (window as any).__ClawTerminal__ = {
+          sendCommand: (cmd: string) => {
+            const trySend = () => {
+              if (socketRef.current?.readyState === WebSocket.OPEN) {
+                socketRef.current.send('\x03');
+                setTimeout(() => {
+                  socketRef.current?.send(cmd + '\n');
+                  xtermRef.current?.focus();
+                }, 120);
+                return true;
+              }
+              return false;
+            };
+
+            // 1. 如果已处于 OPEN 状态，直接运行命令
+            if (trySend()) return;
+
+            // 2. 如果处于 CONNECTING（连接中）状态，启动高频智能轮询排队机制，自适应等待 5 秒
+            const socket = socketRef.current;
+            if (socket && socket.readyState === WebSocket.CONNECTING) {
+              message.info(t('chat.terminalInitializing', { defaultValue: '终端正在连接中，请稍候...' }));
+              let attempts = 0;
+              const interval = setInterval(() => {
+                attempts++;
+                if (trySend()) {
+                  clearInterval(interval);
+                } else if (attempts >= 25) { // 5秒超时上限
+                  clearInterval(interval);
+                  message.warning(t('common.terminalNotConnected', { defaultValue: '终端已断开，请先启动终端' }));
+                }
+              }, 200);
+              return;
+            }
+
+            // 3. 确实为关闭状态，直接警告
+            message.warning(t('common.terminalNotConnected', { defaultValue: '终端已断开，请先启动终端' }));
+          }
+        };
+      }
+      return () => {
+        if (isActive) {
+          // 只做清理标识
+        }
+      };
+    }, [isActive, restartKey, t]);
 
     return (
       <div className="v3-terminal-session-wrap" style={{ position: 'relative', height: '100%', width: '100%', minHeight: 0 }}>

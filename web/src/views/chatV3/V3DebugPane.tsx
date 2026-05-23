@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Button, Empty, Tag, Input, Radio, ConfigProvider, message } from 'antd';
-import { X, Trash2, ArrowUpRight, ArrowDownLeft, Terminal, Copy, ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { Trash2, ArrowUpRight, ArrowDownLeft, Terminal, Copy, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import Tooltip from '../../components/common/AppTooltip';
@@ -9,7 +9,6 @@ interface V3DebugPaneProps {
   t: any;
   logs: any[];
   onClear: () => void;
-  onClose: () => void;
   fillParent?: boolean;
 }
 
@@ -142,7 +141,7 @@ const LogItem = ({ log }: { log: any }) => {
   );
 };
 
-export const V3DebugPane: React.FC<V3DebugPaneProps> = ({ t, logs, onClear, onClose, fillParent = false }) => {
+export const V3DebugPane: React.FC<V3DebugPaneProps> = ({ t, logs, onClear, fillParent = false }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [searchText, setSearchText] = useState('');
   const [direction, setDirection] = useState<'all' | 'in' | 'out'>('all');
@@ -208,13 +207,6 @@ export const V3DebugPane: React.FC<V3DebugPaneProps> = ({ t, logs, onClear, onCl
               style={{ color: '#94a3b8' }}
             />
           </Tooltip>
-          <Button 
-            size="small" 
-            type="text" 
-            icon={<X size={16} />} 
-            onClick={onClose} 
-            style={{ color: '#94a3b8' }}
-          />
         </div>
       </div>
 

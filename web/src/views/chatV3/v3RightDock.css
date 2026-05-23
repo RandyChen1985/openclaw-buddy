@@ -352,6 +352,7 @@
 .v3-dock-drag-bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
   padding: 4px 10px;
   cursor: grab;
@@ -362,6 +363,37 @@
   background: rgba(148, 163, 184, 0.12);
   border-bottom: 1px solid var(--v3-dock-split, #e2e8f0);
   user-select: none;
+}
+
+.v3-dock-panel-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.v3-dock-panel-close-btn:hover {
+  background-color: #ef4444;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.35);
+  transform: scale(1.08);
+}
+
+.chat-v3-root[data-app-dark='true'] .v3-dock-panel-close-btn {
+  color: #cbd5e1;
+}
+
+.chat-v3-root[data-app-dark='true'] .v3-dock-panel-close-btn:hover {
+  background-color: #ef4444;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.45);
 }
 
 .chat-v3-root[data-app-dark='true'] .v3-dock-drag-bar {

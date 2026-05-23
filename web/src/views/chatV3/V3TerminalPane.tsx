@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Button, Tabs } from 'antd';
-import { RotateCcw, XCircle, Terminal as TerminalIcon, X, Maximize2, Minimize2 } from 'lucide-react';
+import { RotateCcw, XCircle, Terminal as TerminalIcon, Maximize2, Minimize2 } from 'lucide-react';
 import { V3TerminalSession, genTerminalTabId, type V3TerminalSessionHandle } from './V3TerminalSession';
 import './v3TerminalTabs.css';
 import Tooltip from '../../components/common/AppTooltip';
@@ -10,7 +10,6 @@ interface V3TerminalPaneProps {
   cwd?: string;
   width?: number;
   onWidthChange?: (width: number) => void;
-  onClose: () => void;
   transition?: string;
   /** 嵌入右侧 Dock 时由父级控制宽高 */
   fillParent?: boolean;
@@ -24,7 +23,6 @@ export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({
   cwd,
   width = 450,
   onWidthChange,
-  onClose,
   transition: customTransition,
   fillParent = false,
   dockExpanded = false,
@@ -174,7 +172,6 @@ export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({
               style={{ color: '#94a3b8' }}
             />
           </Tooltip>
-          <Button size="small" type="text" icon={<X size={16} />} onClick={onClose} style={{ color: '#94a3b8' }} />
         </div>
       </div>
       <Tabs

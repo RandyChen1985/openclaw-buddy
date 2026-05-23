@@ -178,6 +178,22 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
     storage.setItem('v3_show_explorer', 'false');
   }, [setCanvasVisible]);
 
+  const handleClosePanel = useCallback((panelId: V3DockPanelId) => {
+    if (panelId === 'canvas') {
+      setCanvasVisible(false);
+    } else if (panelId === 'debug') {
+      setShowDebug(false);
+      storage.setItem('v3_show_debug', 'false');
+      setWsLogs([]);
+    } else if (panelId === 'terminal') {
+      setShowTerminal(false);
+      storage.setItem('v3_show_terminal', 'false');
+    } else if (panelId === 'explorer') {
+      setShowExplorer(false);
+      storage.setItem('v3_show_explorer', 'false');
+    }
+  }, [setCanvasVisible]);
+
   /** 禁止把右侧 Dock 面板拖进聊天列（仅允许在 Dock 内分列/堆叠） */
   const rejectDockDragOnChat = useCallback((e: React.DragEvent) => {
     if (!isDockPanelDragEvent(e)) return;
@@ -504,6 +520,60 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [editingMsgIndex, quotedMsg, startNewSession]);
+
+  const runCommandInTerminal = React.useCallback((cmd: string) => {
+    if (!cmd) return;
+
+    // 1. 自动滑出运维终端面板
+    setShowTerminal(true);
+    storage.setItem('v3_show_terminal', 'true');
+
+    // 2. 延迟注入并回车运行命令
+    setTimeout(() => {
+      const term = (window as any).__ClawTerminal__;
+      if (term && term.sendCommand) {
+        term.sendCommand(cmd);
+      } else {
+        message.info(t('chat.terminalInitializing', { defaultValue: '终端正在初始化，请稍候...' }));
+        setTimeout(() => {
+          const termRetry = (window as any).__ClawTerminal__;
+          if (termRetry && termRetry.sendCommand) {
+            termRetry.sendCommand(cmd);
+          } else {
+            message.warning(t('chat.terminalUnavailable', { defaultValue: '终端暂不可用，请手动复制并在终端内执行。' }));
+          }
+        }, 800);
+      }
+    }, 300);
+  }, [t]);
+
+  // 在 render 阶段物理强制覆写挂载全局直调代理，防备任何 Effect 重组间隙，保障 100% 连通度
+  (window as any).__ClawTerminalRun__ = runCommandInTerminal;
+
+  useEffect(() => {
+    const handleTerminalRun = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const cmd = customEvent.detail?.command;
+      if (!cmd) return;
+      runCommandInTerminal(cmd);
+    };
+
+    const handleChatSend = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const text = customEvent.detail?.text;
+      if (!text) return;
+      
+      void handleSend(text);
+    };
+
+    window.addEventListener('claw-terminal-run', handleTerminalRun);
+    window.addEventListener('claw-chat-send', handleChatSend);
+
+    return () => {
+      window.removeEventListener('claw-terminal-run', handleTerminalRun);
+      window.removeEventListener('claw-chat-send', handleChatSend);
+    };
+  }, [handleSend, runCommandInTerminal]);
 
   const handleWrappedSend = React.useCallback((text: string, files?: any[]) => {
     if (status !== 'authenticated') {
@@ -1055,6 +1125,7 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
           isDraggingResize={isDraggingRight}
           onResizeActiveChange={setIsDraggingRight}
           onCloseAll={handleCloseAllDockPanels}
+          onClosePanel={handleClosePanel}
           renderPanel={(panelId, columnWidth) => {
             const onWidthChange = (newWidth: number) => {
               if (dockExpanded) return;
@@ -1068,9 +1139,6 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
               return (
                 <V3CanvasPane
                   isDarkMode={isDarkMode}
-                  onClose={() => {
-                    setCanvasVisible(false);
-                  }}
                 />
               );
             }
@@ -1081,11 +1149,6 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
                   logs={wsLogs}
                   fillParent
                   onClear={() => setWsLogs([])}
-                  onClose={() => {
-                    setShowDebug(false);
-                    storage.setItem('v3_show_debug', 'false');
-                    setWsLogs([]);
-                  }}
                 />
               );
             }
@@ -1101,10 +1164,6 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
                   onSendSelectionToChat={handleTerminalSelectionToChat}
                   transition={isDraggingRight ? 'none' : undefined}
                   onWidthChange={onWidthChange}
-                  onClose={() => {
-                    setShowTerminal(false);
-                    storage.setItem('v3_show_terminal', 'false');
-                  }}
                 />
               );
             }

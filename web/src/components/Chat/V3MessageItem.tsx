@@ -459,6 +459,136 @@ const ArtifactCard: React.FC<{
   );
 };
 
+const ActionableCommandCard: React.FC<{
+  command: string;
+  isDarkMode: boolean;
+  t: any;
+}> = ({ command, isDarkMode, t }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await writeTextToClipboard(command);
+      setCopied(true);
+      message.success(t('chat.copySuccess', { defaultValue: '复制成功' }));
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      message.error(t('chat.copyFailed', { defaultValue: '复制失败' }));
+    }
+  };
+
+  const handleRunInTerminal = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      const cmd = command.trim();
+      console.log('[ActionableCommandCard] handleRunInTerminal invoked for:', cmd);
+      
+      const runner = (window as any).__ClawTerminalRun__;
+      console.log('[ActionableCommandCard] window.__ClawTerminalRun__ status:', !!runner);
+      
+      if (typeof runner === 'function') {
+        runner(cmd);
+      } else {
+        console.warn('[ActionableCommandCard] window.__ClawTerminalRun__ is not a function, fallback to Event dispatch.');
+        // 优雅向下兼容的事件降级方案
+        const event = new CustomEvent('claw-terminal-run', {
+          detail: { command: cmd }
+        });
+        window.dispatchEvent(event);
+      }
+
+      if (typeof t === 'function') {
+        message.success(t('chat.commandSentToTerminal', { defaultValue: '已发送至终端执行' }));
+      } else {
+        message.success('已发送至终端执行');
+      }
+    } catch (err: any) {
+      console.error('[ActionableCommandCard] Fatal click error:', err);
+      message.error(`指令发送出错: ${err?.message || err}`);
+    }
+  };
+
+  return (
+    <div style={{
+      margin: '12px 0',
+      borderRadius: 10,
+      background: isDarkMode ? '#0f172a' : '#f8fafc',
+      border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+      overflow: 'hidden',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '8px 12px',
+        background: isDarkMode ? '#1e293b' : '#f1f5f9',
+        borderBottom: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: isDarkMode ? '#94a3b8' : '#475569' }}>
+          <Terminal size={14} className={isDarkMode ? 'text-indigo-400' : 'text-indigo-600'} />
+          <span>Shell 运维指令</span>
+        </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+            fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b', padding: '2px 6px', borderRadius: 4,
+            transition: 'background 0.2s'
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = isDarkMode ? '#334155' : '#e2e8f0'}
+          onMouseLeave={e => e.currentTarget.style.background = 'none'}
+        >
+          {copied ? <Check size={12} /> : <Copy size={12} />}
+          {copied ? '已复制' : '复制'}
+        </button>
+      </div>
+      <div style={{
+        padding: 12,
+        background: '#030712',
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        fontSize: 12.5,
+        lineHeight: 1.5,
+        color: '#e2e8f0',
+        overflowX: 'auto',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-all'
+      }}>
+        <code>{command}</code>
+      </div>
+      <div style={{
+        padding: '8px 12px',
+        background: isDarkMode ? '#1e293b' : '#fff',
+        borderTop: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+        display: 'flex',
+        justifyContent: 'flex-start',
+        gap: 8
+      }}>
+        <Button
+          type="primary"
+          size="small"
+          icon={<Terminal size={12} />}
+          onClick={handleRunInTerminal}
+          style={{
+            borderRadius: 6,
+            fontSize: 12,
+            fontWeight: 600,
+            background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+            border: 'none',
+            boxShadow: '0 2px 4px rgba(79, 70, 229, 0.15)'
+          }}
+        >
+          在终端执行
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 const getOpenableFilePath = (raw: string) => {
   const path = String(raw || '')
     .trim()
@@ -1050,6 +1180,16 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       const language = match ? match[1] : '';
       const codeVal = String(children).replace(/\n$/, '');
       const isInline = inline !== undefined ? inline : !className;
+
+      if (!isInline && (language === 'bash' || language === 'sh' || language === 'shell')) {
+        return (
+          <ActionableCommandCard
+            command={codeVal}
+            isDarkMode={isDarkMode}
+            t={t}
+          />
+        );
+      }
 
       if (!isInline && language === 'html') {
         return (

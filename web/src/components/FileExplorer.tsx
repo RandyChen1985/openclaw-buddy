@@ -174,6 +174,24 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [excelData, setExcelData] = useState<{ columns: any[], dataSource: any[] } | null>(null);
   const [wordHtml, setWordHtml] = useState<string | null>(null);
+
+  // --- Multi-Tab States & Interfaces ---
+  interface OpenedTab {
+    file: FileEntry;
+    content: string;
+    originalContent: string;
+    isDirty: boolean;
+    activeTab: 'edit' | 'preview';
+    imagePreviewUrl?: string | null;
+    pdfPreviewUrl?: string | null;
+    excelData?: { columns: any[], dataSource: any[] } | null;
+    wordHtml?: string | null;
+  }
+
+  const [openTabs, setOpenTabs] = useState<OpenedTab[]>([]);
+  const [activeTabKey, setActiveTabKey] = useState<string | null>(null);
+  const [dirtyCloseTabPath, setDirtyCloseTabPath] = useState<string | null>(null);
+  // -------------------------------------
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(readInitialSidebarWidth);
   const sidebarResizeDragRef = useRef<{ startX: number; startW: number } | null>(null);
@@ -390,6 +408,9 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
       setSelectedFile(null);
       setIsEditing(false);
       setFilterText('');
+      setOpenTabs([]);
+      setActiveTabKey(null);
+      setDirtyCloseTabPath(null);
       
       const initialRoot: TreeDataItem = {
         title: title || 'Root',
@@ -488,7 +509,38 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
       return node;
     });
 
+  // 同步当前激活 Tab 的副作用
+  useEffect(() => {
+    const curTab = openTabs.find(t => t.file.path === activeTabKey);
+    if (curTab) {
+      setSelectedFile(curTab.file);
+      setFileContent(curTab.content);
+      setActiveTab(curTab.activeTab);
+      setImagePreviewUrl(curTab.imagePreviewUrl || null);
+      setPdfPreviewUrl(curTab.pdfPreviewUrl || null);
+      setExcelData(curTab.excelData || null);
+      setWordHtml(curTab.wordHtml || null);
+      setSelectedKeys([curTab.file.path]);
+    } else {
+      setSelectedFile(null);
+      setFileContent('');
+      setImagePreviewUrl(null);
+      setPdfPreviewUrl(null);
+      setExcelData(null);
+      setWordHtml(null);
+      setIsEditing(false);
+    }
+  }, [activeTabKey, openTabs]);
+
   const loadFileContent = async (file: FileEntry) => {
+    const alreadyOpen = openTabs.find(t => t.file.path === file.path);
+    if (alreadyOpen) {
+      setActiveTabKey(file.path);
+      setIsEditing(true);
+      setSelectedKeys([file.path]);
+      return;
+    }
+
     const ext = file.name.split('.').pop()?.toLowerCase();
     const isImg = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext || '');
     const isPDF = ext === 'pdf';
@@ -496,16 +548,13 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
     const isWord = ['docx'].includes(ext || ''); // mammoth mainly supports .docx
 
     if (isImg || isPDF || isExcel || isWord) {
-      setSelectedFile(file);
-      setIsEditing(true);
-      setActiveTab('preview');
       setSelectedKeys([file.path]);
-      
-      // Clear previous previews
-      if (imagePreviewUrl) { URL.revokeObjectURL(imagePreviewUrl); setImagePreviewUrl(null); }
-      if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }
-      setExcelData(null);
-      setWordHtml(null);
+      setLoading(true);
+
+      let imgUrl: string | null = null;
+      let pdfUrl: string | null = null;
+      let exData: { columns: any[], dataSource: any[] } | null = null;
+      let wHtml: string | null = null;
 
       try {
         const token = storage.getItem('guardian_token') || '';
@@ -514,11 +563,11 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
         if (res.ok) {
           if (isImg) {
             const blob = await res.blob();
-            setImagePreviewUrl(URL.createObjectURL(blob));
+            imgUrl = URL.createObjectURL(blob);
           } else if (isPDF) {
             const blob = await res.blob();
             const pdfBlob = new Blob([blob], { type: 'application/pdf' });
-            setPdfPreviewUrl(URL.createObjectURL(pdfBlob));
+            pdfUrl = URL.createObjectURL(pdfBlob);
           } else if (isExcel) {
             const buffer = await res.arrayBuffer();
             const workbook = XLSX.read(buffer, { type: 'array' });
@@ -540,17 +589,37 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                 });
                 return obj;
               });
-              setExcelData({ columns, dataSource });
+              exData = { columns, dataSource };
             }
           } else if (isWord) {
             const buffer = await res.arrayBuffer();
             const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
-            setWordHtml(result.value);
+            wHtml = result.value;
           }
+
+          const newTab: OpenedTab = {
+            file,
+            content: '',
+            originalContent: '',
+            isDirty: false,
+            activeTab: 'preview',
+            imagePreviewUrl: imgUrl,
+            pdfPreviewUrl: pdfUrl,
+            excelData: exData,
+            wordHtml: wHtml
+          };
+
+          setOpenTabs(prev => [...prev, newTab]);
+          setActiveTabKey(file.path);
+          setIsEditing(true);
+        } else {
+          message.error(t('common.loadFailed'));
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to load file preview:', err);
         message.error(t('common.loadFailed'));
+      } finally {
+        setLoading(false);
       }
       return;
     }
@@ -558,18 +627,22 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
     setLoading(true);
     try {
       const res = await api.get(`/v1/openclaw/files/get?path=${encodeURIComponent(file.path)}`);
-      setFileContent(res.data.content || '');
-      setSelectedFile(file);
-      setIsEditing(true);
+      const val = res.data.content || '';
       const isHtml = file.name.endsWith('.html') || file.name.endsWith('.htm');
-      setActiveTab((file.name.endsWith('.md') || isHtml) ? 'preview' : 'edit');
-      setSelectedKeys([file.path]);
+      const defaultActiveTab = (file.name.endsWith('.md') || isHtml) ? 'preview' : 'edit';
       
-      // Clear previous previews
-      if (imagePreviewUrl) { URL.revokeObjectURL(imagePreviewUrl); setImagePreviewUrl(null); }
-      if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }
-      setExcelData(null);
-      setWordHtml(null);
+      const newTab: OpenedTab = {
+        file,
+        content: val,
+        originalContent: val,
+        isDirty: false,
+        activeTab: defaultActiveTab,
+      };
+
+      setOpenTabs(prev => [...prev, newTab]);
+      setActiveTabKey(file.path);
+      setIsEditing(true);
+      setSelectedKeys([file.path]);
     } catch (err: any) {
       message.error(err.response?.data?.error || err.message || t('common.loadFailed'));
     } finally {
@@ -578,7 +651,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
   };
 
   const handleSave = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile || !activeTabKey) return;
     setIsSaving(true);
     try {
       await api.post('/v1/openclaw/files/save', {
@@ -586,11 +659,63 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
         content: fileContent
       });
       message.success(t('common.saveSuccess'));
+      
+      setOpenTabs(prev => prev.map(t => {
+        if (t.file.path === activeTabKey) {
+          return { ...t, originalContent: fileContent, isDirty: false };
+        }
+        return t;
+      }));
     } catch (err: any) {
       message.error(err.response?.data?.error || err.message || t('common.saveFailed'));
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const closeTab = (tabPath: string) => {
+    const tabToClose = openTabs.find(t => t.file.path === tabPath);
+    if (!tabToClose) return;
+
+    if (tabToClose.isDirty) {
+      setDirtyCloseTabPath(tabPath);
+    } else {
+      if (tabToClose.imagePreviewUrl) URL.revokeObjectURL(tabToClose.imagePreviewUrl);
+      if (tabToClose.pdfPreviewUrl) URL.revokeObjectURL(tabToClose.pdfPreviewUrl);
+
+      const nextTabs = openTabs.filter(t => t.file.path !== tabPath);
+      setOpenTabs(nextTabs);
+
+      if (activeTabKey === tabPath) {
+        if (nextTabs.length > 0) {
+          const closedIdx = openTabs.findIndex(t => t.file.path === tabPath);
+          const newActiveIdx = closedIdx > 0 ? closedIdx - 1 : 0;
+          setActiveTabKey(nextTabs[newActiveIdx].file.path);
+        } else {
+          setActiveTabKey(null);
+        }
+      }
+    }
+  };
+
+  const handleContentChange = (val: string) => {
+    setFileContent(val);
+    setOpenTabs(prev => prev.map(t => {
+      if (t.file.path === activeTabKey) {
+        return { ...t, content: val, isDirty: val !== t.originalContent };
+      }
+      return t;
+    }));
+  };
+
+  const handleSubTabChange = (k: 'edit' | 'preview') => {
+    setActiveTab(k);
+    setOpenTabs(prev => prev.map(t => {
+      if (t.file.path === activeTabKey) {
+        return { ...t, activeTab: k };
+      }
+      return t;
+    }));
   };
 
   const handleDelete = async (file: FileEntry) => {
@@ -600,6 +725,26 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
       loadFiles(currentPath);
       const newChildren = await loadTreeChildren(currentPath);
       setTreeData(origin => updateTreeData(origin, currentPath, newChildren));
+      
+      // 同步在 Tab 队列中移除
+      setOpenTabs(prev => {
+        const nextTabs = prev.filter(t => t.file.path !== file.path);
+        if (activeTabKey === file.path) {
+          if (nextTabs.length > 0) {
+            const closedIdx = prev.findIndex(t => t.file.path === file.path);
+            const newActiveIdx = closedIdx > 0 ? closedIdx - 1 : 0;
+            setTimeout(() => {
+              setActiveTabKey(nextTabs[newActiveIdx].file.path);
+            }, 0);
+          } else {
+            setTimeout(() => {
+              setActiveTabKey(null);
+            }, 0);
+          }
+        }
+        return nextTabs;
+      });
+
       if (selectedFile?.path === file.path) {
         setIsEditing(false);
         setSelectedFile(null);
@@ -626,9 +771,26 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
     setLoading(false);
     if (successCount > 0) {
       message.success(t('common.deleteSuccess'));
+      
+      // 批量删除成功后剔除对应 tabs
+      setOpenTabs(prev => {
+        const nextTabs = prev.filter(t => !selectedBulkKeys.includes(t.file.path));
+        if (activeTabKey && selectedBulkKeys.includes(activeTabKey)) {
+          if (nextTabs.length > 0) {
+            setTimeout(() => {
+              setActiveTabKey(nextTabs[0].file.path);
+            }, 0);
+          } else {
+            setTimeout(() => {
+              setActiveTabKey(null);
+            }, 0);
+          }
+        }
+        return nextTabs;
+      });
+
       setSelectedBulkKeys([]);
       loadFiles(currentPath);
-      // Refresh tree
       const newChildren = await loadTreeChildren(currentPath);
       setTreeData(origin => updateTreeData(origin, currentPath, newChildren));
     }
@@ -645,9 +807,21 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
         newPath: newPath
       });
       message.success(t('common.renameSuccess', { defaultValue: '重命名成功' }));
+      
+      // 同步更新已打开标签页中的路径和名字
+      setOpenTabs(prev => prev.map(t => {
+        if (t.file.path === oldRenamePath) {
+          const updatedFile = { ...t.file, name: renameTargetName, path: newPath };
+          return { ...t, file: updatedFile };
+        }
+        return t;
+      }));
+      if (activeTabKey === oldRenamePath) {
+        setActiveTabKey(newPath);
+      }
+
       setRenameModalOpen(false);
       loadFiles(currentPath);
-      // Refresh tree
       if (parentPath) {
         const newChildren = await loadTreeChildren(parentPath);
         setTreeData(origin => updateTreeData(origin, parentPath, newChildren));
@@ -1384,6 +1558,116 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
               </div>
             ) : isEditing ? (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: fe.bg }}>
+                {/* Custom Multi-Tab Bar Container */}
+                <div className="fe-tabs-bar" style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: fe.bgTree,
+                  borderBottom: `1px solid ${fe.border}`,
+                  overflowX: 'auto',
+                  whiteSpace: 'nowrap',
+                  height: 38,
+                  padding: '0 8px',
+                  gap: 4
+                }}>
+                  {openTabs.map(tab => {
+                    const isActive = tab.file.path === activeTabKey;
+                    return (
+                      <div
+                        key={tab.file.path}
+                        className={`fe-tab-item ${isActive ? 'fe-tab-item--active' : ''}`}
+                        onClick={() => setActiveTabKey(tab.file.path)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: '0 12px',
+                          height: 30,
+                          borderRadius: '6px 6px 0 0',
+                          background: isActive ? fe.bg : 'transparent',
+                          border: `1px solid ${isActive ? fe.border : 'transparent'}`,
+                          borderBottom: 'none',
+                          cursor: 'pointer',
+                          position: 'relative',
+                          gap: 6,
+                          minWidth: 80,
+                          maxWidth: 180,
+                          transition: 'all 0.2s ease',
+                          marginTop: 8
+                        }}
+                      >
+                        {getFileIcon(tab.file.name, false, 14)}
+                        <span 
+                          style={{ 
+                            fontSize: 12, 
+                            color: isActive ? fe.text : fe.textMuted,
+                            fontWeight: isActive ? 600 : 400,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            flex: 1
+                          }}
+                          title={tab.file.path}
+                        >
+                          {tab.file.name}
+                        </span>
+                        
+                        <div 
+                          className="fe-tab-close-wrapper"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 16,
+                            height: 16,
+                            borderRadius: '50%',
+                            transition: 'all 0.2s',
+                            position: 'relative'
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            closeTab(tab.file.path);
+                          }}
+                        >
+                          {tab.isDirty ? (
+                            <>
+                              <span className="fe-tab-dirty-dot" style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                background: 'linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%)',
+                                position: 'absolute',
+                                transition: 'opacity 0.2s'
+                              }} />
+                              <X className="fe-tab-close-icon" size={12} style={{
+                                opacity: 0,
+                                transition: 'opacity 0.2s',
+                                color: fe.textMuted
+                              }} />
+                            </>
+                          ) : (
+                            <X className="fe-tab-close-icon-nodirty" size={12} style={{
+                              opacity: 0,
+                              transition: 'opacity 0.2s',
+                              color: fe.textMuted
+                            }} />
+                          )}
+                        </div>
+
+                        {isActive && (
+                          <div style={{
+                            position: 'absolute',
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            height: 3,
+                            background: 'linear-gradient(90deg, #6366f1 0%, #06b6d4 100%)',
+                            borderRadius: '2px 2px 0 0'
+                          }} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
                 <div style={{ padding: '8px 16px', background: fe.editHeaderBg, borderBottom: `1px solid ${fe.editHeaderBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: fe.textSecondary, overflow: 'hidden' }}>
                     {simplified && (
@@ -1396,10 +1680,6 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                         style={{ color: fe.textMuted }}
                       />
                     )}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
-                      {getFileIcon(selectedFile?.name || '', false, 16)}
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: fe.text }}>{selectedFile?.name}</span>
-                    </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     {onSendToChat && selectedFile && !selectedFile.is_dir && canView && (
@@ -1425,7 +1705,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                     )}
                     {canView ? (
                       <Tabs 
-                        size="small" activeKey={activeTab} onChange={(k) => setActiveTab(k as any)}
+                        size="small" activeKey={activeTab} onChange={(k) => handleSubTabChange(k as any)}
                         items={[
                           isText && { key: 'edit', label: <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><PenLine size={14}/>{t('common.edit')}</div> },
                           hasPreview && { key: 'preview', label: <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Eye size={14}/>{t('common.preview')}</div> }
@@ -1599,7 +1879,7 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
                       <CodeMirrorTextEditor
                         filename={selectedFile?.name || ''}
                         value={fileContent}
-                        onChange={(val) => setFileContent(val || '')}
+                        onChange={handleContentChange}
                         isDarkMode={isDarkMode}
                       />
                     </div>
@@ -1858,6 +2138,32 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
         .word-preview-v3 p { margin-bottom: 1em; text-align: justify; }
         .word-preview-v3 table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
         .word-preview-v3 table td, .word-preview-v3 table th { border: 1px solid ${isDarkMode ? 'rgba(255,255,255,0.15)' : '#ddd'}; padding: 8px; }
+
+        /* Multi-Tab Styles */
+        .fe-tabs-bar {
+          scrollbar-width: none;
+        }
+        .fe-tabs-bar::-webkit-scrollbar {
+          display: none;
+        }
+        .fe-tab-item:hover {
+          background: ${isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)'} !important;
+        }
+        .fe-tab-item--active:hover {
+          background: ${fe.bg} !important;
+        }
+        .fe-tab-item:hover .fe-tab-close-icon-nodirty {
+          opacity: 1 !important;
+        }
+        .fe-tab-item:hover .fe-tab-dirty-dot {
+          opacity: 0 !important;
+        }
+        .fe-tab-item:hover .fe-tab-close-icon {
+          opacity: 1 !important;
+        }
+        .fe-tab-close-wrapper:hover {
+          background: ${isDarkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'};
+        }
       `}</style>
       </div>
 
@@ -1902,6 +2208,99 @@ export const FileExplorerContent: React.FC<FileExplorerProps> = ({
             onChange={e => setRenameTargetName(e.target.value)} 
             onPressEnter={handleRename}
           />
+        </div>
+      </Modal>
+
+      {/* Unsaved Changes Confirmation Modal */}
+      <Modal
+        title={t('common.unsavedChangesTitle', { defaultValue: '未保存的更改' })}
+        open={!!dirtyCloseTabPath}
+        onCancel={() => setDirtyCloseTabPath(null)}
+        footer={[
+          <Button key="cancel" onClick={() => setDirtyCloseTabPath(null)}>
+            {t('common.cancel')}
+          </Button>,
+          <Button 
+            key="discard" 
+            danger 
+            onClick={() => {
+              if (dirtyCloseTabPath) {
+                const tabToClose = openTabs.find(t => t.file.path === dirtyCloseTabPath);
+                if (tabToClose) {
+                  if (tabToClose.imagePreviewUrl) URL.revokeObjectURL(tabToClose.imagePreviewUrl);
+                  if (tabToClose.pdfPreviewUrl) URL.revokeObjectURL(tabToClose.pdfPreviewUrl);
+                  
+                  const nextTabs = openTabs.filter(t => t.file.path !== dirtyCloseTabPath);
+                  setOpenTabs(nextTabs);
+                  
+                  if (activeTabKey === dirtyCloseTabPath) {
+                    if (nextTabs.length > 0) {
+                      const closedIdx = openTabs.findIndex(t => t.file.path === dirtyCloseTabPath);
+                      const newActiveIdx = closedIdx > 0 ? closedIdx - 1 : 0;
+                      setActiveTabKey(nextTabs[newActiveIdx].file.path);
+                    } else {
+                      setActiveTabKey(null);
+                    }
+                  }
+                }
+                setDirtyCloseTabPath(null);
+              }
+            }}
+          >
+            {t('common.discardChanges', { defaultValue: '不保存' })}
+          </Button>,
+          <Button 
+            key="save" 
+            type="primary" 
+            loading={isSaving}
+            onClick={async () => {
+              if (dirtyCloseTabPath) {
+                const tabToClose = openTabs.find(t => t.file.path === dirtyCloseTabPath);
+                if (tabToClose) {
+                  setIsSaving(true);
+                  try {
+                    await api.post('/v1/openclaw/files/save', {
+                      path: tabToClose.file.path,
+                      content: tabToClose.content
+                    });
+                    message.success(t('common.saveSuccess'));
+                    
+                    // Proceed to close
+                    if (tabToClose.imagePreviewUrl) URL.revokeObjectURL(tabToClose.imagePreviewUrl);
+                    if (tabToClose.pdfPreviewUrl) URL.revokeObjectURL(tabToClose.pdfPreviewUrl);
+                    
+                    const nextTabs = openTabs.filter(t => t.file.path !== dirtyCloseTabPath);
+                    setOpenTabs(nextTabs);
+                    
+                    if (activeTabKey === dirtyCloseTabPath) {
+                      if (nextTabs.length > 0) {
+                        const closedIdx = openTabs.findIndex(t => t.file.path === dirtyCloseTabPath);
+                        const newActiveIdx = closedIdx > 0 ? closedIdx - 1 : 0;
+                        setActiveTabKey(nextTabs[newActiveIdx].file.path);
+                      } else {
+                        setActiveTabKey(null);
+                      }
+                    }
+                    setDirtyCloseTabPath(null);
+                  } catch (err: any) {
+                    message.error(err.response?.data?.error || err.message || t('common.saveFailed'));
+                  } finally {
+                    setIsSaving(false);
+                  }
+                }
+              }
+            }}
+          >
+            {t('common.save')}
+          </Button>
+        ]}
+      >
+        <div style={{ paddingTop: 10 }}>
+          <p>
+            {t('common.unsavedChangesMessage', {
+              defaultValue: `文件 "${dirtyCloseTabPath ? dirtyCloseTabPath.split(/[/\\]/).pop() : ''}" 已被修改，是否保存您的更改？`
+            })}
+          </p>
         </div>
       </Modal>
     </>
