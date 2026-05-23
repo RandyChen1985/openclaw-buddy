@@ -103,8 +103,8 @@ export function V3MessagePane({
   );
 
   const metaContentByRunId = useMemo(
-    () => buildMetaContentByRunId(messages, showThinking),
-    [messages, showThinking],
+    () => buildMetaContentByRunId(messages),
+    [messages],
   );
 
   // 主气泡"已开始吐字正文"的 runId 集合：meta 折叠区据此自动折叠。

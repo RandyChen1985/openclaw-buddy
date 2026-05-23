@@ -180,7 +180,25 @@ export function V3ComposerBar({
   }, [currentModelInfo, selectedBot, botsModels]);
 
   return (
-    <div style={containerStyle} className="input-container-v3">
+    <>
+      <style>{`
+        @keyframes v3-input-aura {
+          0%, 100% {
+            box-shadow: ${isDarkMode 
+              ? '0 20px 40px -10px rgba(99, 102, 241, 0.22), 0 0 0 4px rgba(165, 180, 252, 0.25), 0 0 12px rgba(99, 102, 241, 0.15)' 
+              : '0 20px 40px -10px rgba(99, 102, 241, 0.25), 0 0 0 4px rgba(99, 102, 241, 0.28), 0 0 12px rgba(99, 102, 241, 0.12)'};
+          }
+          50% {
+            box-shadow: ${isDarkMode 
+              ? '0 22px 45px -8px rgba(99, 102, 241, 0.28), 0 0 0 5px rgba(165, 180, 252, 0.32), 0 0 18px rgba(169, 85, 247, 0.25)' 
+              : '0 22px 45px -8px rgba(99, 102, 241, 0.32), 0 0 0 5px rgba(99, 102, 241, 0.35), 0 0 18px rgba(169, 85, 247, 0.2)'};
+          }
+        }
+        .input-container-v3.v3-input-focused {
+          animation: v3-input-aura 4s infinite ease-in-out !important;
+        }
+      `}</style>
+      <div style={containerStyle} className={`input-container-v3 ${isFocused ? 'v3-input-focused' : ''}`}>
       <div style={{ width: '100%', display: 'flex', alignItems: 'center', padding: isMobile ? '6px 12px 0' : '12px 16px 0', gap: 8, boxSizing: 'border-box' }}>
         <div style={selectBarStyle}>
           <Select
@@ -425,5 +443,6 @@ export function V3ComposerBar({
         botsModels={botsModels}
       />
     </div>
+    </>
   );
 }

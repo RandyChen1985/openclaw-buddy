@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Avatar, Button, Input, message } from 'antd';
 import { 
   User, Bot, Copy, Quote, Pencil, RefreshCw, Zap, Cpu, Terminal, 
-  FileText, ChevronRight, ChevronDown, ShieldAlert, ShieldCheck, ListTodo, Loader2, Layers, Search, GitBranch,
+  FileText, ChevronRight, ChevronDown, Shield, ShieldAlert, ShieldCheck, ListTodo, Loader2, Layers, Search, GitBranch,
   Save, LayoutTemplate, Check, Download, ExternalLink
 } from 'lucide-react';
 import { useArtifact } from '../../views/chatV3/V3ArtifactContext';
@@ -91,6 +91,9 @@ const CollapsibleMeta = ({
   copyText,
   onCopy,
   copyLabel,
+  isThinking = false,
+  elapsedSeconds = 0,
+  iconStyle,
 }: any) => {
   const isControlled = typeof expandedState === 'boolean';
   const [localExpanded, setLocalExpanded] = React.useState(defaultExpanded);
@@ -106,7 +109,7 @@ const CollapsibleMeta = ({
   };
 
   return (
-    <div className={`v3-meta-collapsible ${isExpanded ? 'expanded' : 'collapsed'}`}>
+    <div className={`v3-meta-collapsible ${isExpanded ? 'expanded' : 'collapsed'} ${isThinking ? 'v3-thinking-card-active' : ''}`} style={{ transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
       <div 
         className="v3-meta-header" 
         onClick={() => setExpanded(!isExpanded)}
@@ -118,45 +121,153 @@ const CollapsibleMeta = ({
             setExpanded(!isExpanded);
           }
         }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
       >
-        <div className="v3-meta-header-left">
+        <div className="v3-meta-header-left" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
           <div style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
             <ChevronRight size={14} strokeWidth={2} />
           </div>
-          <Icon size={14} strokeWidth={2} style={{ flexShrink: 0 }} />
-          <span className="v3-meta-header-title">{title}</span>
+          <Icon size={14} strokeWidth={2} className={isThinking ? 'v3-thinking-live-icon' : ''} style={{ flexShrink: 0, transition: 'all 0.25s', ...iconStyle }} />
+          <span className="v3-meta-header-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
         </div>
-        {!!copyText && (
-          <div
-            className="v3-meta-header-actions"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onKeyDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
-            <Tooltip title={copyLabel}>
-              <Button
-                type="text"
-                size="small"
-                className="v3-meta-copy-btn"
-                icon={<Copy size={14} strokeWidth={2} />}
-                onClick={() => onCopy?.(copyText)}
-              />
-            </Tooltip>
-          </div>
-        )}
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {isThinking ? (
+            <span style={{ color: '#7c3aed', background: 'rgba(124, 58, 237, 0.08)', padding: '2px 8px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700 }}>
+              <span className="v3-warning-pulse" style={{ width: 6, height: 6, borderRadius: '50%', background: '#7c3aed' }} />
+              正在思考 {elapsedSeconds}s
+            </span>
+          ) : elapsedSeconds > 0 ? (
+            <span style={{ color: '#94a3b8', background: 'rgba(148, 163, 184, 0.08)', padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700 }}>
+              耗时 {elapsedSeconds}s
+            </span>
+          ) : null}
+
+          {!!copyText && (
+            <div
+              className="v3-meta-header-actions"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onKeyDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+            >
+              <Tooltip title={copyLabel}>
+                <Button
+                  type="text"
+                  size="small"
+                  className="v3-meta-copy-btn"
+                  icon={<Copy size={14} strokeWidth={2} />}
+                  onClick={() => onCopy?.(copyText)}
+                />
+              </Tooltip>
+            </div>
+          )}
+        </div>
       </div>
-      {isExpanded && (
-        <div className="v3-meta-content">
-          {children}
+      
+      <div className={`v3-collapsible-wrapper ${isExpanded ? 'expanded' : ''}`}>
+        <div className="v3-collapsible-content">
+          <div className="v3-meta-content" style={{ padding: '10px 14px' }}>
+            {children}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
+};
+
+interface TerminalBodyProps {
+  children: React.ReactNode;
+  toolColor: string;
+  subtitle: string;
+  scrollState: TerminalScrollState;
+}
+
+interface TerminalScrollState {
+  isAtBottom: boolean;
+  userScrolling: boolean;
+  lastScrollTop: number;
+}
+
+const TerminalBody: React.FC<TerminalBodyProps> = ({ children, toolColor, subtitle, scrollState }) => {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  const handleScroll = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    
+    const scrollTop = el.scrollTop;
+    const isAtBottom = el.scrollHeight - scrollTop - el.clientHeight < 15;
+    const isScrollingUp = scrollTop < scrollState.lastScrollTop - 1;
+
+    if (isAtBottom) {
+      scrollState.isAtBottom = true;
+      scrollState.userScrolling = false;
+    } else if (scrollState.userScrolling || isScrollingUp) {
+      scrollState.isAtBottom = false;
+    }
+
+    scrollState.lastScrollTop = scrollTop;
+  };
+
+  const handleUserInteraction = () => {
+    scrollState.userScrolling = true;
+    scrollState.isAtBottom = false;
+  };
+
+  React.useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (scrollState.isAtBottom) {
+      el.scrollTop = el.scrollHeight;
+      scrollState.lastScrollTop = el.scrollTop;
+      return;
+    }
+
+    const maxScrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    el.scrollTop = Math.min(scrollState.lastScrollTop, maxScrollTop);
+    scrollState.lastScrollTop = el.scrollTop;
+  }, [children]);
+
+  return (
+    <div 
+      ref={containerRef}
+      onScroll={handleScroll}
+      onWheel={handleUserInteraction}
+      onTouchMove={handleUserInteraction}
+      className="v3-terminal-body" 
+      style={{ maxHeight: 360, overflowY: 'auto', overscrollBehavior: 'contain' }}
+    >
+      <div className="v3-terminal-line" style={{ marginBottom: 6 }}>
+        <span className="v3-terminal-prompt" style={{ color: toolColor }}>$</span>
+        <span className="v3-terminal-output" style={{ color: '#f8fafc', fontWeight: 'bold' }}>{subtitle || 'bash'}</span>
+      </div>
+      <div className="v3-terminal-output" style={{ whiteSpace: 'pre-wrap', color: '#10b981' }}>
+        {children}
+      </div>
+    </div>
+  );
+};
+
+const getToolIconAndColor = (name: string) => {
+  const n = String(name || '').toLowerCase();
+  if (n.includes('command') || n.includes('cmd') || n.includes('shell') || n.includes('terminal')) {
+    return { icon: Terminal, color: '#ec4899' }; // 终端命令 (Pink)
+  }
+  if (n.includes('file') || n.includes('read') || n.includes('write') || n.includes('save') || n.includes('view') || n.includes('explorer')) {
+    return { icon: FileText, color: '#0ea5e9' }; // 文件操作 (Light Blue)
+  }
+  if (n.includes('permission') || n.includes('security') || n.includes('ask')) {
+    return { icon: ShieldAlert, color: '#f97316' }; // 安全审批 (Orange)
+  }
+  if (n.includes('mcp') || n.includes('plugin') || n.includes('lifecycle')) {
+    return { icon: Layers, color: '#a855f7' }; // MCP 插件 (Purple)
+  }
+  return { icon: Zap, color: '#eab308' }; // 其他 (Yellow)
 };
 
 const extractCodeFence = (text: string, lang: string) => {
@@ -179,6 +290,13 @@ const prettyJsonMaybe = (raw: string) => {
 const extractToolResultName = (fullText: string) => {
   // 只取 :::toolResult 紧随其后的第一段 **name**，避免误抓正文里的 **xxx**
   const re = /(?:^|\n)\s*(?:>\s*)?:::toolResult\s*\n+\s*(?:>\s*)?\*\*([^*\n]+)\*\*/i;
+  const m = re.exec(fullText || '');
+  return m ? (m[1] || '').trim() : '';
+};
+
+const extractToolCallName = (fullText: string) => {
+  // 只取 :::toolCall 紧随其后的第一段 **name**，避免误抓正文里的 **xxx**
+  const re = /(?:^|\n)\s*(?:>\s*)?:::toolCall\s*\n+\s*(?:>\s*)?\*\*([^*\n]+)\*\*/i;
   const m = re.exec(fullText || '');
   return m ? (m[1] || '').trim() : '';
 };
@@ -707,6 +825,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   // 防止审批按钮重复点击：记录每个 approvalId 是否已点击过“通过”
   const [approvalClicked, setApprovalClicked] = useState<Record<string, boolean>>({});
   const [metaBlockExpandedByKey, setMetaBlockExpandedByKey] = useState<Record<string, boolean>>({});
+  const terminalScrollStateByKeyRef = useRef<Record<string, TerminalScrollState>>({});
 
   /** 编辑框草稿：Virtuoso 下列项重渲染时若反复用父级 editContent 覆盖受控 value，会打断中文 IME */
   const [editDraft, setEditDraft] = useState('');
@@ -827,6 +946,13 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       }
     }
 
+    if (msg.role === 'assistant') {
+      // 💡 针对 Assistant 消息：无论是开启还是关闭显示思考，
+      // 如果正文文本的最开头残留了流式推理或拼接初期的纯省略号/点和空白前缀（如 `...小龙哥`），
+      // 均应将其彻底抹除，以保障首字和元数据块输出的极度清爽和美观。
+      content = content.replace(/^[.\s…]+/g, '');
+    }
+
     // 2. 自动为分析/思考等容器标签补齐 '>' 引用符号（如果缺失），确保进入 blockquote 渲染器
     content = content.replace(/(?:^|\n)(:::(?:analysis|thinking|plan|toolCall|commandOutput|approval|warning)[\s\S]*?:::)/g, (_match: string, p1: string) => {
       return '\n> ' + p1.replace(/\n/g, '\n> ');
@@ -834,6 +960,13 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
 
     return content.trim();
   }, [msg.content, msg.role, showThinking]);
+
+  const processedContentWithoutMeta = useMemo(() => {
+    if (msg.role !== 'assistant' || !processedContent) return '';
+    return processedContent
+      .replace(/(?:>\s*)?:::(?:thinking|plan|toolCall|commandOutput|approval|warning)[\s\S]*?(?::::|$)\n*/g, '')
+      .trim();
+  }, [processedContent, msg.role]);
 
   const isUser = msg.role === 'user';
   const isMetaOnly = !!(msg as any)._uiMetaOnly;
@@ -952,6 +1085,17 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       },
     };
   };
+  const getTerminalScrollState = (blockKey: string) => {
+    const key = `${metaBlockBaseKey}:${blockKey}`;
+    if (!terminalScrollStateByKeyRef.current[key]) {
+      terminalScrollStateByKeyRef.current[key] = {
+        isAtBottom: true,
+        userScrolling: false,
+        lastScrollTop: 0,
+      };
+    }
+    return terminalScrollStateByKeyRef.current[key];
+  };
 
   const markdownComponents = {
     p: ({children}: any) => <p style={{margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere'}}>{children}</p>,
@@ -1051,14 +1195,29 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         );
       }
       if (fullText.includes(':::toolCall')) {
+        const toolName = extractToolCallName(fullText);
+        const { icon: ToolIcon, color: toolColor } = getToolIconAndColor(toolName);
+        const headerTitle = toolName
+          ? `${t('chat.toolCallingTitle', { defaultValue: '工具调用' })} · ${toolName}`
+          : t('chat.systemTool', { defaultValue: '系统工具' });
+
         return (
           <CollapsibleMeta
-            title={t('chat.systemTool', { defaultValue: '系统工具' })}
-            icon={Terminal}
+            title={headerTitle}
+            icon={ToolIcon}
+            iconStyle={{ color: toolColor }}
             defaultExpanded={false}
             {...metaBlockExpansionProps('toolCall', false)}
           >
-            {cleanChildren}
+            <div className="v3-terminal-body">
+              <div className="v3-terminal-line">
+                <span className="v3-terminal-prompt" style={{ color: toolColor }}>$</span>
+                <span className="v3-terminal-output" style={{ color: '#f8fafc', fontWeight: 'bold' }}>call {toolName || 'tool'}</span>
+              </div>
+              <div style={{ marginTop: 8, color: '#94a3b8' }}>
+                {cleanChildren}
+              </div>
+            </div>
           </CollapsibleMeta>
         );
       }
@@ -1070,25 +1229,31 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         const headerTitle = toolName
           ? `${t('chat.toolResult', { defaultValue: '工具结果' })} · ${toolName}`
           : t('chat.toolResult', { defaultValue: '工具结果' });
+        const { icon: ToolIcon, color: toolColor } = getToolIconAndColor(toolName);
 
         return (
           <CollapsibleMeta
             title={headerTitle}
-            icon={Terminal}
+            icon={ToolIcon}
+            iconStyle={{ color: toolColor }}
             defaultExpanded={false}
             {...metaBlockExpansionProps(`toolResult:${toolName || 'default'}`, false)}
           >
-            {maybePretty ? (
-              <CodeBlock
-                language="json"
-                value={maybePretty}
-                isMobile={isMobile}
-              />
-            ) : (
-              <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12, lineHeight: 1.5 }}>
-                {cleanChildren}
+            <div className="v3-terminal-body">
+              <div className="v3-terminal-line" style={{ marginBottom: 8, borderBottom: '1px solid #1e293b', paddingBottom: 6 }}>
+                <span className="v3-terminal-prompt" style={{ color: toolColor }}>$</span>
+                <span className="v3-terminal-output" style={{ color: '#94a3b8', fontWeight: 'bold' }}>cat result_{toolName || 'output'}.json</span>
               </div>
-            )}
+              {maybePretty ? (
+                <pre style={{ margin: 0, color: '#10b981', background: 'transparent', border: 'none', padding: 0 }}>
+                  {maybePretty}
+                </pre>
+              ) : (
+                <div style={{ whiteSpace: 'pre-wrap', color: '#10b981' }}>
+                  {cleanChildren}
+                </div>
+              )}
+            </div>
           </CollapsibleMeta>
         );
       }
@@ -1098,6 +1263,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
           <CollapsibleMeta
             title={t('chat.analysisProcess', { defaultValue: '分析过程' })}
             icon={Search}
+            iconStyle={{ color: '#6366f1' }}
             defaultExpanded={false}
             {...metaBlockExpansionProps('analysis', false)}
             copyText={analysisCopyText}
@@ -1112,24 +1278,28 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         const titleMatch = fullText.match(/^\s*:::commandOutput\s*\n+\s*\*\*([^*\n]+)\*\*/);
         const subtitle = titleMatch ? titleMatch[1].trim() : '';
         const headerTitle = subtitle ? `Command Output · ${subtitle}` : 'Command Output';
+        const { icon: ToolIcon, color: toolColor } = getToolIconAndColor('command');
+        const commandCopyText = stripContainerWrapper(fullText, 'commandOutput') || '';
+        const commandBlockKey = `commandOutput:${subtitle || 'default'}`;
+
         return (
           <CollapsibleMeta
             title={headerTitle}
-            icon={Terminal}
+            icon={ToolIcon}
+            iconStyle={{ color: toolColor }}
             defaultExpanded={false}
-            {...metaBlockExpansionProps(`commandOutput:${subtitle || 'default'}`, false)}
+            {...metaBlockExpansionProps(commandBlockKey, false)}
+            copyText={commandCopyText}
+            onCopy={(txt: string) => copyToClipboard(txt)}
+            copyLabel={t('chat.copy', { defaultValue: '复制' })}
           >
-            <div
-              className="v3-command-output-shell"
-              style={{
-                margin: '4px 0', borderRadius: 8, overflow: 'hidden',
-                border: '1px solid #1e293b', background: '#030712', color: '#e2e8f0',
-                padding: '10px 12px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12, lineHeight: 1.5,
-                maxHeight: 360, overflowY: 'auto', whiteSpace: 'pre-wrap'
-              }}
+            <TerminalBody
+              toolColor={toolColor}
+              subtitle={subtitle}
+              scrollState={getTerminalScrollState(commandBlockKey)}
             >
               {cleanChildren}
-            </div>
+            </TerminalBody>
           </CollapsibleMeta>
         );
       }
@@ -1142,13 +1312,40 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         const isClicked = approvalClickKey ? !!approvalClicked[approvalClickKey] : false;
         const isDisabled = alreadyResolved || isClicked;
 
+        const isApproved = rawContent.includes('✅') || rawContent.includes('已批准') || isClicked;
+        const isRejected = rawContent.includes('❌') || rawContent.includes('已拒绝');
+        const isTimeout = rawContent.includes('⏱️') || rawContent.includes('已超时');
+
+        let statusClass = '';
+        if (isApproved) statusClass = 'approved';
+        else if (isRejected) statusClass = 'rejected';
+        else if (isTimeout) statusClass = 'timeout';
+
         return (
-          <div style={{ margin: '12px 0', padding: '16px', background: isDarkMode ? 'rgba(127, 29, 29, 0.35)' : '#fef2f2', border: isDarkMode ? '1px solid #991b1b' : '1px solid #fee2e2', borderRadius: 12, boxShadow: isDarkMode ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.05)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: isDarkMode ? '#fca5a5' : '#ef4444' }}>
-              <ShieldAlert size={18} />
-              <span style={{ fontWeight: 600, fontSize: 14 }}>{t('chat.approvalRequired')}</span>
+          <div className={`v3-approval-shield-card ${statusClass}`} style={{ margin: '12px 0', padding: '16px', borderRadius: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: isApproved ? '#10b981' : (isRejected ? '#ef4444' : (isTimeout ? '#94a3b8' : '#f97316')) }}>
+              {isApproved ? <ShieldCheck size={18} /> : (isRejected ? <ShieldAlert size={18} /> : <Shield size={18} />)}
+              <span style={{ fontWeight: 600, fontSize: 14 }}>
+                {isApproved 
+                  ? t('chat.approvedAndExecuting', { defaultValue: '安全授权已核准' })
+                  : isRejected 
+                    ? t('chat.rejectedAction', { defaultValue: '授权请求已拒绝' })
+                    : isTimeout 
+                      ? t('chat.approvalTimeout', { defaultValue: '授权请求已超时' })
+                      : t('chat.approvalRequired', { defaultValue: '需要安全授权审批' })}
+              </span>
             </div>
-            <div style={{ marginBottom: 12, opacity: 0.9, color: isDarkMode ? '#fecaca' : undefined }}>{cleanChildren}</div>
+            
+            <div style={{ marginBottom: 12, padding: '10px 12px', background: '#030712', borderRadius: 8, border: '1px solid #1e293b' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, color: '#fca5a5', fontFamily: 'ui-monospace, monospace', fontSize: 11 }}>
+                <ShieldAlert size={12} style={{ color: '#f97316' }} />
+                <span>PROPOSED ACTION</span>
+              </div>
+              <div style={{ opacity: 0.95, color: '#f3f4f6', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                {cleanChildren}
+              </div>
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <Button type="primary" danger block icon={<ShieldCheck size={16} />} disabled={isDisabled} onClick={() => { if (!approvalId || isDisabled) return; setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true })); onSend(`/approve ${approvalId} allow-once`); message.success(t('chat.approvalSent', { defaultValue: '已提交审批指令' })); }} style={{ borderRadius: 8, fontWeight: 600, height: 36 }}>{t('chat.approveNow')}</Button>
               <Button block icon={<ShieldCheck size={16} />} disabled={isDisabled} onClick={() => { if (!approvalId || isDisabled) return; setApprovalClicked(prev => ({ ...prev, [approvalClickKey]: true })); onSend(`/approve ${approvalId} allow-always`); message.success(t('chat.approvalSentAlways', { defaultValue: '已提交永久审批' })); }} style={{ borderRadius: 8, fontWeight: 600, height: 36 }}>{t('chat.approveAllowAlways')}</Button>
@@ -1287,13 +1484,143 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   };
 
   return (
-    <div 
-      className={`message-in ${isUser ? 'v3-message-user' : 'v3-message-assistant'}`} 
-      style={{ 
-        display: 'flex', gap: 14, flexDirection: isUser ? 'row-reverse' : 'row',
-        animation: 'v3-message-enter 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards' 
-      }}
-    >
+    <>
+      <style>{`
+        /* 芯片呼吸自转 */
+        @keyframes v3-thinking-chip-spin {
+          0% { transform: rotate(0deg) scale(1); filter: drop-shadow(0 0 2px rgba(124, 58, 237, 0.4)); }
+          50% { transform: rotate(180deg) scale(1.1); filter: drop-shadow(0 0 8px rgba(124, 58, 237, 0.75)); }
+          100% { transform: rotate(360deg) scale(1); filter: drop-shadow(0 0 2px rgba(124, 58, 237, 0.4)); }
+        }
+        .v3-thinking-live-icon {
+          animation: v3-thinking-chip-spin 3s linear infinite !important;
+          color: #7c3aed !important;
+        }
+        
+        /* 芯片外环发光带 */
+        @keyframes v3-thinking-card-glow {
+          0%, 100% { border-color: rgba(124, 58, 237, 0.15); box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
+          50% { border-color: rgba(124, 58, 237, 0.35); box-shadow: 0 6px 20px rgba(124, 58, 237, 0.12); }
+        }
+        .v3-thinking-card-active {
+          animation: v3-thinking-card-glow 3s infinite ease-in-out !important;
+          border: 1px solid rgba(124, 58, 237, 0.25) !important;
+        }
+
+        /* 极客终端等宽样式与提示符 */
+        .v3-terminal-body {
+          background: #030712 !important;
+          border: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'} !important;
+          border-radius: 8px !important;
+          padding: 12px 14px !important;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+          color: #10b981 !important;
+          font-size: 12px !important;
+          line-height: 1.6 !important;
+          overflow-x: auto !important;
+          box-shadow: inset 0 2px 8px rgba(0,0,0,0.6) !important;
+        }
+        .v3-terminal-line {
+          display: flex;
+          align-items: flex-start;
+          gap: 6px;
+        }
+        .v3-terminal-prompt {
+          color: #3b82f6 !important;
+          font-weight: bold;
+          user-select: none;
+        }
+         .v3-terminal-output {
+          color: #10b981 !important;
+        }
+        /* 终极文字亮白保护：强制终端内所有文本标签以亮白显示，动态赋色元素及提示符自动保留 */
+        .v3-terminal-body *:not([class*="prompt"]):not([style*="color"]) {
+          color: #f8fafc !important;
+        }
+
+        /* 极客物理弹跳打字点动画 */
+        @keyframes v3-dots-pulse {
+          0%, 100% { opacity: 0.35; transform: translateY(0) scale(1); }
+          50% { opacity: 1; transform: translateY(-4.5px) scale(1.2); }
+        }
+        .v3-typing-dots {
+          display: inline-flex;
+          align-items: center;
+          gap: 2px;
+          margin-left: 4px;
+        }
+        .v3-typing-dots span {
+          animation: v3-dots-pulse 1.0s infinite cubic-bezier(0.18, 0.89, 0.32, 1.28);
+          font-weight: 900;
+          font-size: 15px;
+          line-height: 1;
+          color: inherit;
+        }
+        .v3-typing-dots span:nth-child(1) { animation-delay: 0s; }
+        .v3-typing-dots span:nth-child(2) { animation-delay: 0.08s; }
+        .v3-typing-dots span:nth-child(3) { animation-delay: 0.16s; }
+        .v3-typing-dots span:nth-child(4) { animation-delay: 0.24s; }
+        .v3-typing-dots span:nth-child(5) { animation-delay: 0.32s; }
+        .v3-typing-dots span:nth-child(6) { animation-delay: 0.4s; }
+
+        .v3-stream-stall-hint {
+          padding: 6px 12px !important;
+          margin-top: 6px !important;
+          margin-bottom: 6px !important;
+        }
+        .v3-stream-stall-hint-text {
+          display: inline-flex !important;
+          align-items: center !important;
+        }
+
+        /* 折叠平滑阻尼卷轴过渡 */
+        .v3-collapsible-wrapper {
+          display: grid;
+          grid-template-rows: 0fr;
+          transition: grid-template-rows 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+          overflow: hidden;
+        }
+        .v3-collapsible-wrapper.expanded {
+          grid-template-rows: 1fr;
+        }
+        .v3-collapsible-content {
+          min-height: 0;
+          transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        .v3-collapsible-wrapper.expanded .v3-collapsible-content {
+          opacity: 1;
+          transform: translateY(0);
+          transition-delay: 0.05s;
+        }
+
+        /* 零信任安全盾牌审批卡片 */
+        @keyframes v3-shield-breathing {
+          0%, 100% { box-shadow: 0 4px 16px rgba(0,0,0,0.03), 0 0 0 1px rgba(249, 115, 22, 0.15); }
+          50% { box-shadow: 0 8px 24px rgba(249, 115, 22, 0.12), 0 0 0 3px rgba(249, 115, 22, 0.35); }
+        }
+        .v3-approval-shield-card {
+          border: 1px solid rgba(249, 115, 22, 0.25) !important;
+          background: ${isDarkMode ? 'rgba(30, 41, 59, 0.45)' : 'rgba(255, 251, 235, 0.35)'} !important;
+          animation: v3-shield-breathing 3s infinite ease-in-out !important;
+          backdrop-filter: blur(12px) !important;
+          transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1) !important;
+        }
+        .v3-approval-shield-card.approved {
+          border-color: rgba(16, 185, 129, 0.4) !important;
+          background: ${isDarkMode ? 'rgba(6, 78, 59, 0.25)' : 'rgba(240, 253, 250, 0.45)'} !important;
+          animation: none !important;
+          box-shadow: 0 4px 16px rgba(16, 185, 129, 0.08) !important;
+        }
+      `}</style>
+      <div 
+        className={`message-in ${isUser ? 'v3-message-user' : 'v3-message-assistant'}`} 
+        style={{ 
+          display: 'flex', gap: 14, flexDirection: isUser ? 'row-reverse' : 'row',
+          animation: 'v3-message-enter 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards' 
+        }}
+      >
       {isUser ? (
         <div style={{ flexShrink: 0, marginTop: 4, visibility: 'visible', position: 'relative' }}>
           <Avatar icon={<User size={18} />} style={{ background: '#1e293b', flexShrink: 0 }} />
@@ -1420,59 +1747,127 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                 id={`msg-content-v3-${index}`}
                 style={isMetaOnly && !metaExpanded ? { display: 'none' } : undefined}
               >
-                <ReactMarkdown 
-                  remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
-                  rehypePlugins={[rehypeKatex, [rehypeSanitize, katexSanitizeSchema]]}
-                  components={markdownComponents as any}
-                  urlTransform={(url) => {
-                    if (url.startsWith('quick:')) return url;
-                    return defaultUrlTransform(url);
-                  }}
-                >
-                  {processedContent}
-                </ReactMarkdown>
+                {!processedContentWithoutMeta && isTyping && isLast && msg.role === 'assistant' ? (
+                  <div
+                    className="v3-stream-stall-hint"
+                    style={{ margin: 0, padding: 0, border: 'none', background: 'transparent' }}
+                  >
+                    <span className="v3-stream-stall-hint-text" style={{ color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: '13px', fontWeight: 500 }}>
+                      {t('chat.streamStalledHint', { defaultValue: 'Lobster 正在思考回复中' }).replace(/[\.\.。…\s]+$/, '')}
+                      <span className="v3-typing-dots">
+                        <span>.</span><span>.</span><span>.</span><span>.</span><span>.</span><span>.</span>
+                      </span>
+                    </span>
+                  </div>
+                ) : (
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
+                    rehypePlugins={[rehypeKatex, [rehypeSanitize, katexSanitizeSchema]]}
+                    components={markdownComponents as any}
+                    urlTransform={(url) => {
+                      if (url.startsWith('quick:')) return url;
+                      return defaultUrlTransform(url);
+                    }}
+                  >
+                    {processedContent}
+                  </ReactMarkdown>
+                )}
               </div>
 
               {hasEmbeddedMeta && (() => {
                 // 嵌入式折叠区：挂在主气泡正文最底部
                 const thinkingShort = t('chat.metaFoldThinkingShort', { defaultValue: '思考中…' });
+                const toolCount = (processedMetaContent.match(/:::toolCall\b/g) || []).length;
+                const toolCountSuffix = toolCount > 0 ? `，已调用 ${toolCount} 轮工具` : '';
+                const toolCountSuffixCompleted = toolCount > 0 ? ` (共调用 ${toolCount} 轮工具)` : '';
+
                 const suffixLabel = metaExpanded
-                  ? t('chat.metaFoldCollapse', { defaultValue: '点击折叠本次思考或工具调用' })
+                  ? `${t('chat.metaFoldCollapse', { defaultValue: '点击折叠本次思考或工具调用' })}${toolCountSuffixCompleted}`
                   : metaFoldGenerationUi
                     ? (metaFoldIsToolCallGenerating
-                      ? t('chat.metaFoldExpandLiveTool', { defaultValue: '工具调用生成中' })
-                      : t('chat.metaFoldExpandLive', { defaultValue: '点击展开查看思考或工具调用' }))
-                    : t('chat.metaFoldExpand', { defaultValue: '点击展开本次思考或工具调用' });
+                      ? `${t('chat.metaFoldExpandLiveTool', { defaultValue: '工具调用生成中' })}${toolCountSuffix}`
+                      : `${t('chat.metaFoldExpandLive', { defaultValue: '点击展开查看思考或工具调用' })}${toolCountSuffix}`)
+                    : `${t('chat.metaFoldExpand', { defaultValue: '点击展开本次思考或工具调用' })}${toolCountSuffixCompleted}`;
                 const embedLabel =
                   !metaExpanded && metaFoldGenerationUi ? `${thinkingShort} · ${suffixLabel}` : suffixLabel;
                 return (
                   <div style={{ marginTop: 10 }}>
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      aria-label={embedLabel}
-                      aria-expanded={metaExpanded}
-                      onClick={toggleMetaExpanded}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          toggleMetaExpanded();
-                        }
-                      }}
-                      title={embedLabel}
-                      className={`v3-meta-fold-chip${metaFoldGenerationUi ? ' v3-meta-fold-chip--live' : ''}${metaExpanded ? ' v3-meta-fold-chip--expanded' : ''}`}
-                    >
-                      {!metaExpanded && metaFoldGenerationUi && (
-                        <>
-                          <Loader2 size={14} strokeWidth={2} className="v3-thinking-spinner v3-meta-fold-chip-spinner" aria-hidden />
-                          <span className="v3-meta-fold-chip-thinking">{thinkingShort}</span>
-                          <span className="v3-meta-fold-chip-sep" aria-hidden>·</span>
-                        </>
-                      )}
-                      {metaExpanded ? <ChevronDown size={14} strokeWidth={2} style={{ flexShrink: 0 }} /> : <ChevronRight size={14} strokeWidth={2} style={{ flexShrink: 0 }} />}
-                      <Layers size={15} strokeWidth={2} aria-hidden style={{ flexShrink: 0, opacity: 0.92 }} />
-                      <span style={{ flex: 1, minWidth: 0 }}>{suffixLabel}</span>
-                    </div>
+                    {!showThinking ? (() => {
+                      // 💡 当关闭「显示思考」时：渲染不可点击的静态信息。
+                      // 运行中以带虚线渐变、旋转 Loader 的胶囊卡片来安抚用户；已完成则以翠绿色打勾的极简系统小注脚（Caption）展示，消除按钮错觉。
+                      const toolCount = (processedMetaContent.match(/:::toolCall\b/g) || []).length;
+                      const isLive = metaFoldGenerationUi || (isTyping && isLast);
+                      const statusText = isLive
+                        ? t('chat.metaFoldOfflineLive', { defaultValue: `思考或工具调用中，已调用 ${toolCount} 轮工具，请稍后...` })
+                        : t('chat.metaFoldOfflineCompleted', { defaultValue: `思考与工具调用已完成，共调用 ${toolCount} 轮工具` });
+
+                      if (!isLive) {
+                        return (
+                          <div
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '11px',
+                              color: isDarkMode ? '#64748b' : '#94a3b8',
+                              padding: '2px 4px',
+                              userSelect: 'none',
+                              marginTop: '2px',
+                              lineHeight: '1.2'
+                            }}
+                          >
+                            <Check size={12} strokeWidth={3} style={{ color: '#10b981', flexShrink: 0 }} aria-hidden />
+                            <span style={{ fontWeight: 500 }}>{statusText}</span>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          className="v3-meta-fold-chip"
+                          style={{ 
+                            cursor: 'default', 
+                            userSelect: 'none',
+                            borderStyle: 'dashed',
+                            background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.95) 0%, rgba(238, 242, 255, 0.95) 100%)',
+                            color: '#4f46e5',
+                            borderColor: '#c7d2fe',
+                            boxShadow: 'none',
+                            animation: 'none'
+                          }}
+                        >
+                          <Loader2 size={14} strokeWidth={2} className="v3-thinking-spinner" style={{ color: '#4f46e5', flexShrink: 0 }} aria-hidden />
+                          <span style={{ fontWeight: 600 }}>{statusText}</span>
+                        </div>
+                      );
+                    })() : (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        aria-label={embedLabel}
+                        aria-expanded={metaExpanded}
+                        onClick={toggleMetaExpanded}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleMetaExpanded();
+                          }
+                        }}
+                        title={embedLabel}
+                        className={`v3-meta-fold-chip${metaFoldGenerationUi ? ' v3-meta-fold-chip--live' : ''}${metaExpanded ? ' v3-meta-fold-chip--expanded' : ''}`}
+                      >
+                        {!metaExpanded && metaFoldGenerationUi && (
+                          <>
+                            <Loader2 size={14} strokeWidth={2} className="v3-thinking-spinner v3-meta-fold-chip-spinner" aria-hidden />
+                            <span className="v3-meta-fold-chip-thinking">{thinkingShort}</span>
+                            <span className="v3-meta-fold-chip-sep" aria-hidden>·</span>
+                          </>
+                        )}
+                        {metaExpanded ? <ChevronDown size={14} strokeWidth={2} style={{ flexShrink: 0 }} /> : <ChevronRight size={14} strokeWidth={2} style={{ flexShrink: 0 }} />}
+                        <Layers size={15} strokeWidth={2} aria-hidden style={{ flexShrink: 0, opacity: 0.92 }} />
+                        <span style={{ flex: 1, minWidth: 0 }}>{suffixLabel}</span>
+                      </div>
+                    )}
                     {metaExpanded && (
                       <div
                         className="markdown-body-v3 v3-meta-embedded"
@@ -1500,16 +1895,18 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                 );
               })()}
 
-              {!isMetaOnly && isStalled && isTyping && isLast && msg.role === 'assistant' && (
+              {!isMetaOnly && !hasEmbeddedMeta && isStalled && isTyping && isLast && msg.role === 'assistant' && (
                 <div
                   className="v3-stream-stall-hint"
                   role="status"
                   aria-live="polite"
                   aria-relevant="additions text"
                 >
-                  <Loader2 size={16} className="v3-thinking-spinner" aria-hidden />
                   <span className="v3-stream-stall-hint-text">
-                    {t('chat.streamStalledHint', { defaultValue: 'AI 还在思考中，请稍等一下...' })}
+                    {t('chat.streamStalledHint', { defaultValue: 'AI 还在思考中，请稍等一下' }).replace(/[\.\.。…\s]+$/, '')}
+                    <span className="v3-typing-dots">
+                      <span>.</span><span>.</span><span>.</span><span>.</span><span>.</span><span>.</span>
+                    </span>
                   </span>
                 </div>
               )}
@@ -1574,6 +1971,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         )}
       </div>
     </div>
+  </>
   );
 };
 

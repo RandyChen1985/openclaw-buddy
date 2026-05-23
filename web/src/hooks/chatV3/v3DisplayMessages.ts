@@ -78,10 +78,9 @@ export function filterVisibleV3Messages(messages: Message[], opts: V3VisibleMess
   });
 }
 
-/** 按 runId 聚合 _uiMetaOnly 气泡内容（showThinking 关闭时为空） */
-export function buildMetaContentByRunId(messages: Message[], showThinking: boolean): Map<string, string> {
+/** 按 runId 聚合 _uiMetaOnly 气泡内容 */
+export function buildMetaContentByRunId(messages: Message[]): Map<string, string> {
   const map = new Map<string, string>();
-  if (!showThinking) return map;
   for (const m of messages) {
     if (!(m as any)._uiMetaOnly) continue;
     if (!m.runId || !m.content) continue;
@@ -99,7 +98,7 @@ export function sanitizeMetaContentForExport(meta: string): string {
  */
 export function prepareMessagesForV3Export(messages: Message[], opts: V3VisibleMessagesOptions): Message[] {
   const visible = filterVisibleV3Messages(messages, opts);
-  const metaMap = buildMetaContentByRunId(messages, opts.showThinking);
+  const metaMap = buildMetaContentByRunId(messages);
 
   return visible.map(m => {
     if (m.role !== 'assistant' || !m.runId) return m;

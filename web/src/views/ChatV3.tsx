@@ -144,6 +144,7 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
   const [showDebug, setShowDebug] = useState(() => storage.getItem('v3_show_debug') === 'true');
   const [showTerminal, setShowTerminal] = useState(() => storage.getItem('v3_show_terminal') === 'true');
   const [showExplorer, setShowExplorer] = useState(() => storage.getItem('v3_show_explorer') === 'true');
+  const [showQuickCommandsBar, setShowQuickCommandsBar] = useState<boolean>(() => storage.getItem('v3_show_quick_commands_bar') !== 'false');
   const [wsLogs, setWsLogs] = useState<any[]>([]);
 
   const handleAddLog = useCallback((log: any) => {
@@ -1000,6 +1001,11 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
             setShowExplorer(val);
             storage.setItem('v3_show_explorer', val ? 'true' : 'false');
           }}
+          showQuickCommandsBar={showQuickCommandsBar}
+          setShowQuickCommandsBar={(val) => {
+            setShowQuickCommandsBar(val);
+            storage.setItem('v3_show_quick_commands_bar', val ? 'true' : 'false');
+          }}
         />
   
         <V3MessagePane
@@ -1060,23 +1066,31 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
 
         <div
           style={{
+            position: 'relative',
+            zIndex: 10,
             padding: isMobile ? '8px 12px' : '0 24px 20px',
             background: isDarkMode ? '#0f172a' : '#fafafa',
-            borderTop: quickCommandsExpanded ? (isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9') : 'none',
+            borderTop: (showQuickCommandsBar && quickCommandsExpanded) ? (isDarkMode ? '1px solid #334155' : '1px solid #f1f5f9') : 'none',
             width: '100%',
             boxSizing: 'border-box',
           }}
         >
 
-           <V3QuickCommands
-             t={t}
-             status={status}
-             onSend={handleWrappedSend}
-             isMobile={!!isMobile}
-             isDarkMode={isDarkMode}
-             sendBlocked={isCreatingNewSession}
-             onExpandedChange={setQuickCommandsExpanded}
-           />
+          {showQuickCommandsBar && (
+            <V3QuickCommands
+              t={t}
+              status={status}
+              onSend={handleWrappedSend}
+              isMobile={!!isMobile}
+              isDarkMode={isDarkMode}
+              sendBlocked={isCreatingNewSession}
+              onExpandedChange={setQuickCommandsExpanded}
+              onClose={() => {
+                setShowQuickCommandsBar(false);
+                storage.setItem('v3_show_quick_commands_bar', 'false');
+              }}
+            />
+          )}
 
             <V3ComposerBar
               t={t}
