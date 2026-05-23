@@ -1437,8 +1437,8 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
 
         /* 极客物理弹跳打字点动画 */
         @keyframes v3-dots-pulse {
-          0%, 100% { opacity: 0.25; transform: translateY(0); }
-          50% { opacity: 1; transform: translateY(-2px); }
+          0%, 100% { opacity: 0.35; transform: translateY(0) scale(1); }
+          50% { opacity: 1; transform: translateY(-4.5px) scale(1.2); }
         }
         .v3-typing-dots {
           display: inline-flex;
@@ -1447,25 +1447,27 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
           margin-left: 4px;
         }
         .v3-typing-dots span {
-          animation: v3-dots-pulse 1.4s infinite ease-in-out;
-          font-weight: 800;
-          font-size: 14px;
+          animation: v3-dots-pulse 1.0s infinite cubic-bezier(0.18, 0.89, 0.32, 1.28);
+          font-weight: 900;
+          font-size: 15px;
           line-height: 1;
           color: inherit;
         }
         .v3-typing-dots span:nth-child(1) { animation-delay: 0s; }
-        .v3-typing-dots span:nth-child(2) { animation-delay: 0.2s; }
-        .v3-typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+        .v3-typing-dots span:nth-child(2) { animation-delay: 0.08s; }
+        .v3-typing-dots span:nth-child(3) { animation-delay: 0.16s; }
+        .v3-typing-dots span:nth-child(4) { animation-delay: 0.24s; }
+        .v3-typing-dots span:nth-child(5) { animation-delay: 0.32s; }
+        .v3-typing-dots span:nth-child(6) { animation-delay: 0.4s; }
 
-        /* 思考胶囊大字整体柔和漂浮浮动动画 (Nested Animation) */
-        @keyframes v3-hint-float {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-1.2px); }
+        .v3-stream-stall-hint {
+          padding: 6px 12px !important;
+          margin-top: 6px !important;
+          margin-bottom: 6px !important;
         }
         .v3-stream-stall-hint-text {
           display: inline-flex !important;
           align-items: center !important;
-          animation: v3-hint-float 2.2s infinite ease-in-out !important;
         }
 
         /* 折叠平滑阻尼卷轴过渡 */
@@ -1730,9 +1732,9 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                   aria-relevant="additions text"
                 >
                   <span className="v3-stream-stall-hint-text">
-                    {t('chat.streamStalledHint', { defaultValue: 'AI 还在思考中，请稍等一下' })}
+                    {t('chat.streamStalledHint', { defaultValue: 'AI 还在思考中，请稍等一下' }).replace(/[\.\.。…\s]+$/, '')}
                     <span className="v3-typing-dots">
-                      <span>.</span><span>.</span><span>.</span>
+                      <span>.</span><span>.</span><span>.</span><span>.</span><span>.</span><span>.</span>
                     </span>
                   </span>
                 </div>
