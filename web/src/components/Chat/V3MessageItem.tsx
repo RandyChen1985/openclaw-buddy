@@ -1677,8 +1677,8 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                       const toolCount = (processedMetaContent.match(/:::toolCall\b/g) || []).length;
                       const isLive = metaFoldGenerationUi || (isTyping && isLast);
                       const statusText = isLive
-                        ? t('chat.metaFoldOfflineLive', { defaultValue: `思考或工具调用中，已调用 ${toolCount} 个工具，请稍后...` })
-                        : t('chat.metaFoldOfflineCompleted', { defaultValue: `思考与工具调用已完成，共调用 ${toolCount} 个工具` });
+                        ? t('chat.metaFoldOfflineLive', { defaultValue: `思考或工具调用中，已调用 ${toolCount} 轮工具，请稍后...` })
+                        : t('chat.metaFoldOfflineCompleted', { defaultValue: `思考与工具调用已完成，共调用 ${toolCount} 轮工具` });
 
                       if (!isLive) {
                         return (
