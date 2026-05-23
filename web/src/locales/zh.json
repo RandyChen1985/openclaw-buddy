@@ -461,6 +461,7 @@
     "thinkingLevelHelpBody": "当你通过 /reasoning 等方式开启思考模式后，Think Level 决定模型在推理阶段愿意投入多少「精力」、大致会生成多少推理类 token。不同挡位通常对应不同的推理策略，以及不同的耗时与算力成本。",
     "dropToUpload": "松开即可上传文件",
     "showThinking": "显示思考或工具调用",
+    "showOnlineChat": "显示在线聊天",
     "showDebug": "显示推送日志",
     "showDebugHint": "仅 debug 调试用，开启可能占用 CPU",
     "reasoningMode": "思考模式",

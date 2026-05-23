@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Form, Input, Modal, message } from 'antd';
-import { ChevronDown, ChevronUp, Command, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Command, Plus, Trash2, X } from 'lucide-react';
 
 export interface V3QuickCommandsProps {
   t: any;
@@ -13,6 +13,7 @@ export interface V3QuickCommandsProps {
   sendBlocked?: boolean;
   /** 折叠/展开状态变化通知（用于上层控制分割线等 UI） */
   onExpandedChange?: (expanded: boolean) => void;
+  onClose?: () => void;
 }
 
 /**
@@ -29,7 +30,8 @@ export function V3QuickCommands({
   isMobile,
   isDarkMode = false,
   sendBlocked = false,
-  onExpandedChange
+  onExpandedChange,
+  onClose
 }: V3QuickCommandsProps) {
   const [quickCommands, setQuickCommands] = useState<any[]>([]);
   const [showQuickActions, setShowQuickActions] = useState<boolean>(() => localStorage.getItem('v3_show_quick_actions') !== 'false');
@@ -188,9 +190,10 @@ export function V3QuickCommands({
                 onClick={() => setIsManageModalOpen(true)}
               />
               <Button
-                type="text" size="small" icon={<ChevronUp size={16} />}
+                type="text" size="small" icon={<X size={16} />}
                 style={iconBtnStyle}
-                onClick={() => { setShowQuickActions(false); localStorage.setItem('v3_show_quick_actions', 'false'); }}
+                onClick={onClose}
+                title={t('common.close', { defaultValue: '关闭' })}
               />
             </div>
           </>

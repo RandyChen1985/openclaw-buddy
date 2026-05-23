@@ -53,6 +53,9 @@ export interface V3ChatHeaderProps {
   showExplorer: boolean;
   setShowExplorer: (val: boolean) => void;
 
+  showQuickCommandsBar: boolean;
+  setShowQuickCommandsBar: (val: boolean) => void;
+
   /** 发送 `/reasoning …` 等用户消息（需在已连接且非生成中时由父组件校验） */
   onSendReasoningCommand?: (text: string) => void;
 
@@ -136,7 +139,9 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
     showTerminal,
     setShowTerminal,
     showExplorer,
-    setShowExplorer
+    setShowExplorer,
+    showQuickCommandsBar,
+    setShowQuickCommandsBar
   } = props;
 
   const [themeModalOpen, setThemeModalOpen] = useState(false);
@@ -261,6 +266,15 @@ export function V3ChatHeader(props: V3ChatHeaderProps) {
             {t('chat.showThinking', { defaultValue: '显示思考或工具调用' })}
           </div>
           <Switch size="small" checked={showThinking} onChange={(val) => setShowThinking(val)} />
+        </div>
+
+        <div style={{ height: 1, background: settingsDivider }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div style={{ fontSize: 12, color: settingsLabel, fontWeight: 700 }}>
+            {t('chat.showQuickCommands', { defaultValue: '显示快捷指令' })}
+          </div>
+          <Switch size="small" checked={showQuickCommandsBar} onChange={(val) => { setShowQuickCommandsBar(val); setSettingsOpen(false); }} />
         </div>
 
         <div style={{ height: 1, background: settingsDivider }} />
