@@ -872,18 +872,11 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       }
     }
 
-    if (showThinking) {
-      // 💡 当开启「显示思考」时：如果除了折叠元数据块外，正文区域只有纯省略号或空白（AI 推理前期的临时点占位符），
-      // 我们应将其彻底滤除，避免在正文区独立出现三个点的跳动，保证界面极致纯净。
-      const mainTextOnly = content
-        .replace(/(?:>\s*)?:::(?:thinking|plan|toolCall|commandOutput|approval|warning)[\s\S]*?(?::::|$)\n*/g, '')
-        .trim();
-      if (/^[.\s…]*$/g.test(mainTextOnly)) {
-        content = content
-          .replace(/(?:^|\n)\s*[.\s…]+(?=\n|$)/g, '\n')
-          .replace(/^[.\s…]+$/g, '')
-          .trim();
-      }
+    if (msg.role === 'assistant') {
+      // 💡 针对 Assistant 消息：无论是开启还是关闭显示思考，
+      // 如果正文文本的最开头残留了流式推理或拼接初期的纯省略号/点和空白前缀（如 `...小龙哥`），
+      // 均应将其彻底抹除，以保障首字和元数据块输出的极度清爽和美观。
+      content = content.replace(/^[.\s…]+/g, '');
     }
 
     // 2. 自动为分析/思考等容器标签补齐 '>' 引用符号（如果缺失），确保进入 blockquote 渲染器
@@ -893,6 +886,13 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
 
     return content.trim();
   }, [msg.content, msg.role, showThinking]);
+
+  const processedContentWithoutMeta = useMemo(() => {
+    if (msg.role !== 'assistant' || !processedContent) return '';
+    return processedContent
+      .replace(/(?:>\s*)?:::(?:thinking|plan|toolCall|commandOutput|approval|warning)[\s\S]*?(?::::|$)\n*/g, '')
+      .trim();
+  }, [processedContent, msg.role]);
 
   const isUser = msg.role === 'user';
   const isMetaOnly = !!(msg as any)._uiMetaOnly;
@@ -1658,17 +1658,31 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                 id={`msg-content-v3-${index}`}
                 style={isMetaOnly && !metaExpanded ? { display: 'none' } : undefined}
               >
-                <ReactMarkdown 
-                  remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
-                  rehypePlugins={[rehypeKatex, [rehypeSanitize, katexSanitizeSchema]]}
-                  components={markdownComponents as any}
-                  urlTransform={(url) => {
-                    if (url.startsWith('quick:')) return url;
-                    return defaultUrlTransform(url);
-                  }}
-                >
-                  {processedContent}
-                </ReactMarkdown>
+                {!processedContentWithoutMeta && isTyping && isLast && msg.role === 'assistant' ? (
+                  <div
+                    className="v3-stream-stall-hint"
+                    style={{ margin: 0, padding: 0, border: 'none', background: 'transparent' }}
+                  >
+                    <span className="v3-stream-stall-hint-text" style={{ color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: '13px', fontWeight: 500 }}>
+                      {t('chat.streamStalledHint', { defaultValue: 'Lobster 正在思考回复中' }).replace(/[\.\.。…\s]+$/, '')}
+                      <span className="v3-typing-dots">
+                        <span>.</span><span>.</span><span>.</span><span>.</span><span>.</span><span>.</span>
+                      </span>
+                    </span>
+                  </div>
+                ) : (
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
+                    rehypePlugins={[rehypeKatex, [rehypeSanitize, katexSanitizeSchema]]}
+                    components={markdownComponents as any}
+                    urlTransform={(url) => {
+                      if (url.startsWith('quick:')) return url;
+                      return defaultUrlTransform(url);
+                    }}
+                  >
+                    {processedContent}
+                  </ReactMarkdown>
+                )}
               </div>
 
               {hasEmbeddedMeta && (() => {
