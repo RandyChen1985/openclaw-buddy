@@ -1671,32 +1671,82 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                   !metaExpanded && metaFoldGenerationUi ? `${thinkingShort} · ${suffixLabel}` : suffixLabel;
                 return (
                   <div style={{ marginTop: 10 }}>
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      aria-label={embedLabel}
-                      aria-expanded={metaExpanded}
-                      onClick={toggleMetaExpanded}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          toggleMetaExpanded();
-                        }
-                      }}
-                      title={embedLabel}
-                      className={`v3-meta-fold-chip${metaFoldGenerationUi ? ' v3-meta-fold-chip--live' : ''}${metaExpanded ? ' v3-meta-fold-chip--expanded' : ''}`}
-                    >
-                      {!metaExpanded && metaFoldGenerationUi && (
-                        <>
-                          <Loader2 size={14} strokeWidth={2} className="v3-thinking-spinner v3-meta-fold-chip-spinner" aria-hidden />
-                          <span className="v3-meta-fold-chip-thinking">{thinkingShort}</span>
-                          <span className="v3-meta-fold-chip-sep" aria-hidden>·</span>
-                        </>
-                      )}
-                      {metaExpanded ? <ChevronDown size={14} strokeWidth={2} style={{ flexShrink: 0 }} /> : <ChevronRight size={14} strokeWidth={2} style={{ flexShrink: 0 }} />}
-                      <Layers size={15} strokeWidth={2} aria-hidden style={{ flexShrink: 0, opacity: 0.92 }} />
-                      <span style={{ flex: 1, minWidth: 0 }}>{suffixLabel}</span>
-                    </div>
+                    {!showThinking ? (() => {
+                      // 💡 当关闭「显示思考」时：渲染不可点击的静态信息。
+                      // 运行中以带虚线渐变、旋转 Loader 的胶囊卡片来安抚用户；已完成则以翠绿色打勾的极简系统小注脚（Caption）展示，消除按钮错觉。
+                      const toolCount = (processedMetaContent.match(/:::toolCall\b/g) || []).length;
+                      const isLive = metaFoldGenerationUi || (isTyping && isLast);
+                      const statusText = isLive
+                        ? t('chat.metaFoldOfflineLive', { defaultValue: `思考或工具调用中，已调用 ${toolCount} 个工具，请稍后...` })
+                        : t('chat.metaFoldOfflineCompleted', { defaultValue: `思考与工具调用已完成，共调用 ${toolCount} 个工具` });
+
+                      if (!isLive) {
+                        return (
+                          <div
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '11px',
+                              color: isDarkMode ? '#64748b' : '#94a3b8',
+                              padding: '2px 4px',
+                              userSelect: 'none',
+                              marginTop: '2px',
+                              lineHeight: '1.2'
+                            }}
+                          >
+                            <Check size={12} strokeWidth={3} style={{ color: '#10b981', flexShrink: 0 }} aria-hidden />
+                            <span style={{ fontWeight: 500 }}>{statusText}</span>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          className="v3-meta-fold-chip"
+                          style={{ 
+                            cursor: 'default', 
+                            userSelect: 'none',
+                            borderStyle: 'dashed',
+                            background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.95) 0%, rgba(238, 242, 255, 0.95) 100%)',
+                            color: '#4f46e5',
+                            borderColor: '#c7d2fe',
+                            boxShadow: 'none',
+                            animation: 'none'
+                          }}
+                        >
+                          <Loader2 size={14} strokeWidth={2} className="v3-thinking-spinner" style={{ color: '#4f46e5', flexShrink: 0 }} aria-hidden />
+                          <span style={{ fontWeight: 600 }}>{statusText}</span>
+                        </div>
+                      );
+                    })() : (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        aria-label={embedLabel}
+                        aria-expanded={metaExpanded}
+                        onClick={toggleMetaExpanded}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleMetaExpanded();
+                          }
+                        }}
+                        title={embedLabel}
+                        className={`v3-meta-fold-chip${metaFoldGenerationUi ? ' v3-meta-fold-chip--live' : ''}${metaExpanded ? ' v3-meta-fold-chip--expanded' : ''}`}
+                      >
+                        {!metaExpanded && metaFoldGenerationUi && (
+                          <>
+                            <Loader2 size={14} strokeWidth={2} className="v3-thinking-spinner v3-meta-fold-chip-spinner" aria-hidden />
+                            <span className="v3-meta-fold-chip-thinking">{thinkingShort}</span>
+                            <span className="v3-meta-fold-chip-sep" aria-hidden>·</span>
+                          </>
+                        )}
+                        {metaExpanded ? <ChevronDown size={14} strokeWidth={2} style={{ flexShrink: 0 }} /> : <ChevronRight size={14} strokeWidth={2} style={{ flexShrink: 0 }} />}
+                        <Layers size={15} strokeWidth={2} aria-hidden style={{ flexShrink: 0, opacity: 0.92 }} />
+                        <span style={{ flex: 1, minWidth: 0 }}>{suffixLabel}</span>
+                      </div>
+                    )}
                     {metaExpanded && (
                       <div
                         className="markdown-body-v3 v3-meta-embedded"
@@ -1724,7 +1774,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
                 );
               })()}
 
-              {!isMetaOnly && isStalled && isTyping && isLast && msg.role === 'assistant' && (
+              {!isMetaOnly && !hasEmbeddedMeta && isStalled && isTyping && isLast && msg.role === 'assistant' && (
                 <div
                   className="v3-stream-stall-hint"
                   role="status"

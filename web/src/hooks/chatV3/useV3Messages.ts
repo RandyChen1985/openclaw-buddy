@@ -964,8 +964,6 @@ export function useV3Messages({
     };
 
     if (phase === 'start' || phase === '') {
-      if (!showThinkingRef.current) return;
-      
       const cache = getOrCreateSessionCache(evtKey);
       if (runId) cache.activeRuns.add(runId);
 
