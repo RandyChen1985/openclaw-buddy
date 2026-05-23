@@ -114,6 +114,56 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
 }) => {
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
+  const renderSkeleton = () => {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 8px' }}>
+        {[1, 2, 3, 4].map(idx => (
+          <div 
+            key={idx} 
+            className="v3-skeleton-card"
+            style={{ 
+              padding: '12px 14px', 
+              borderRadius: 10, 
+              background: isDarkMode ? 'rgba(255, 255, 255, 0.02)' : 'rgba(15, 23, 42, 0.01)',
+              border: '1px solid',
+              borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.04)' : 'rgba(15, 23, 42, 0.03)',
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 12,
+              height: 62,
+              position: 'relative',
+              overflow: 'hidden'
+            }}
+          >
+            {/* 头像占位 */}
+            <div style={{ 
+              width: 32, 
+              height: 32, 
+              borderRadius: '50%', 
+              background: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(15, 23, 42, 0.04)',
+              flexShrink: 0 
+            }} />
+            {/* 文字占位 */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+              <div style={{ 
+                width: '65%', 
+                height: 12, 
+                borderRadius: 4, 
+                background: isDarkMode ? 'rgba(255, 255, 255, 0.06)' : 'rgba(15, 23, 42, 0.05)' 
+              }} />
+              <div style={{ 
+                width: '45%', 
+                height: 8, 
+                borderRadius: 3, 
+                background: isDarkMode ? 'rgba(255, 255, 255, 0.04)' : 'rgba(15, 23, 42, 0.03)' 
+              }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const handleScroll = React.useCallback((e: React.UIEvent<HTMLDivElement>) => {
     if (!fetchMoreSessions || !hasMoreSessions || loadingSessions || sessionSearch) return;
     const target = e.currentTarget;
@@ -307,6 +357,119 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
         .v3-dots span:nth-child(3) { animation-delay: 320ms; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 悬浮精细滚动条 */
+        .v3-session-list-scroll::-webkit-scrollbar {
+          width: 4px;
+          height: 4px;
+        }
+        .v3-session-list-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .v3-session-list-scroll::-webkit-scrollbar-thumb {
+          background: ${isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.05)'};
+          border-radius: 99px;
+          transition: all 0.25s ease;
+        }
+        .v3-session-list-scroll:hover::-webkit-scrollbar-thumb {
+          background: ${isDarkMode ? 'rgba(255, 255, 255, 0.22)' : 'rgba(79, 70, 229, 0.18)'};
+        }
+
+        /* 骨架屏波纹流光扫光 */
+        @keyframes v3-skeleton-shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        .v3-skeleton-card {
+          position: relative;
+          overflow: hidden;
+        }
+        .v3-skeleton-card::after {
+          content: '';
+          position: absolute;
+          top: 0; right: 0; bottom: 0; left: 0;
+          background: linear-gradient(
+            90deg, 
+            transparent 0%, 
+            ${isDarkMode ? 'rgba(255, 255, 255, 0.04)' : 'rgba(255, 255, 255, 0.6)'} 50%, 
+            transparent 100%
+          );
+          transform: translateX(-100%);
+          animation: v3-skeleton-shimmer 1.6s infinite ease-in-out;
+        }
+
+        /* 空搜索状态呼吸 */
+        @keyframes v3-empty-pulse {
+          0%, 100% { transform: scale(1); opacity: 0.95; }
+          50% { transform: scale(1.04); opacity: 0.85; }
+        }
+        .v3-empty-icon-wrap {
+          animation: v3-empty-pulse 2s infinite ease-in-out;
+        }
+
+        /* 置顶卡片 Sparkle 旋转 */
+        @keyframes v3-sparkle-spin {
+          0% { transform: scale(1) rotate(0deg); opacity: 0.8; }
+          50% { transform: scale(1.15) rotate(180deg); opacity: 1; }
+          100% { transform: scale(1) rotate(360deg); opacity: 0.8; }
+        }
+        .v3-sparkle-active {
+          animation: v3-sparkle-spin 3s linear infinite;
+        }
+
+        /* 会话卡片基础交互动效升级 */
+        .session-item, .session-item-main {
+          position: relative;
+          overflow: hidden;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .session-item:hover, .session-item-main:hover {
+          transform: translateX(4px);
+          background: ${isDarkMode ? 'rgba(255, 255, 255, 0.03)' : 'rgba(15, 23, 42, 0.02)'} !important;
+          box-shadow: ${isDarkMode ? '0 8px 20px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.15)' : '0 6px 16px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.02)'} !important;
+        }
+
+        /* 动作按钮滑入弹性动效 */
+        .session-item .session-actions,
+        .session-item-main .session-actions {
+          opacity: 0;
+          transform: translateX(8px);
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .session-item:hover .session-actions,
+        .session-item-main:hover .session-actions {
+          opacity: 1 !important;
+          transform: translateX(0) !important;
+        }
+
+        /* 头像悬浮物理回弹 */
+        .session-item .ant-avatar,
+        .session-item-main .ant-avatar {
+          transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+        }
+        .session-item:hover .ant-avatar,
+        .session-item-main:hover .ant-avatar {
+          transform: scale(1.08);
+        }
+
+        /* 激活态左侧彩色发光指示条 */
+        .session-item.active::before,
+        .session-item-main.active::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 12%;
+          height: 76%;
+          width: 3.5px;
+          background: var(--v3-primary, #4f46e5);
+          border-radius: 0 4px 4px 0;
+          box-shadow: 0 0 8px var(--v3-primary, #4f46e5);
+          animation: v3-indicator-grow 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        @keyframes v3-indicator-grow {
+          from { transform: scaleY(0); opacity: 0; }
+          to { transform: scaleY(1); opacity: 1; }
+        }
       `}</style>
       <div style={{ padding: isMobile ? '12px 12px' : '16px', borderBottom: `1px solid ${shell.hairline}`, display: 'flex', gap: isMobile ? 6 : 8, alignItems: 'center' }}>
         <Button 
@@ -357,6 +520,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
       <div 
         ref={scrollRef}
         onScroll={handleScroll}
+        className="v3-session-list-scroll"
         style={{ flex: 1, overflowY: 'auto', padding: '8px' }}
       >
         {botsInSessions.length > 0 && (
@@ -444,7 +608,7 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
         </div>
 
         {loadingSessions && sessions.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 20 }}><Spin size="small" /></div>
+          renderSkeleton()
         ) : sessions.length === 0 ? (
           <div style={{ padding: '40px 20px', textAlign: 'center', color: '#cbd5e1' }}>
               <History size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
@@ -476,6 +640,62 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
                     const { source } = parseSessionKey(s.key);
                     return source === activeSource;
                 });
+            }
+
+            // 空过滤与空搜索状态
+            if (!mainSession && otherSessions.length === 0) {
+              const isSearching = !!sessionSearch;
+              
+              return (
+                <div style={{ 
+                  padding: '48px 24px', 
+                  textAlign: 'center', 
+                  background: isDarkMode ? 'rgba(255, 255, 255, 0.01)' : 'rgba(15, 23, 42, 0.01)',
+                  borderRadius: 12,
+                  margin: '12px 8px',
+                  border: '1px dashed',
+                  borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.06)' : 'rgba(15, 23, 42, 0.06)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backdropFilter: 'blur(4px)'
+                }} className="v3-empty-state">
+                  <div style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: '50%',
+                    background: isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(79, 70, 229, 0.04)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 16,
+                    border: '1px solid',
+                    borderColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(79, 70, 229, 0.08)',
+                  }} className="v3-empty-icon-wrap">
+                    <Search size={22} color="var(--v3-primary, #4f46e5)" />
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: isDarkMode ? '#e2e8f0' : '#1e293b', marginBottom: 4 }}>
+                    {isSearching ? t('chat.searchNoResult', { defaultValue: '未找到匹配的会话' }) : t('chat.filterNoResult', { defaultValue: '该筛选条件下暂无会话' })}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 16 }}>
+                    {isSearching ? t('chat.searchNoResultSub', { defaultValue: '请尝试更换其他关键词重新搜索' }) : t('chat.filterNoResultSub', { defaultValue: '您可以重置 Bot 或渠道筛选条件' })}
+                  </div>
+                  <Button 
+                    size="small" 
+                    type="primary" 
+                    ghost 
+                    style={{ borderRadius: 6, fontSize: 11, height: 28 }}
+                    onClick={() => {
+                      if (isSearching) setSessionSearch('');
+                      setActiveBotId('all');
+                      setActiveSource('all');
+                    }}
+                  >
+                    {isSearching ? t('chat.clearSearch', { defaultValue: '清空搜索' }) : t('chat.resetFilters', { defaultValue: '重置筛选' })}
+                  </Button>
+                </div>
+              );
             }
 
             // 分组逻辑
@@ -690,133 +910,136 @@ const V3SessionList: React.FC<V3SessionListProps> = ({
               <>
                 {mainSession && (
                   <div style={{ marginBottom: 12 }}>
-                    <div className="session-group-header">
-                      <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--v3-primary, #6366f1)', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Shield size={10} />
-                        {t('chat.pinnedSession', { defaultValue: '置顶会话' })}
-                      </span>
-                    </div>
                     {(() => {
                       const mainForbidden = isSessionForbidden(mainSession.key);
                       const isActive = sessionKey === mainSession.key;
                       const showMainActive = isActive && !mainForbidden;
                       return (
-                        <div 
-                            key={mainSession.key}
-                            title={mainForbidden ? sessionNoAccessTitle : undefined}
-                            onClick={() => {
-                              if (mainForbidden) return;
-                              onSelectSession(mainSession.key);
-                              if (isMobile) setShowSider(false);
-                            }}
-                            style={{ 
-                                padding: '10px 12px', borderRadius: 10, cursor: mainForbidden ? 'not-allowed' : 'pointer', marginBottom: 4, transition: 'all 0.2s',
-                                background: showMainActive ? 'var(--v3-pinned-bg-active, linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(79, 70, 229, 0.16) 100%))' : shell.pinnedIdleBg,
-                                border: '1px solid', borderColor: showMainActive ? shell.pinnedBorderActive : shell.pinnedBorder,
-                                display: 'flex', alignItems: 'center', gap: 12, position: 'relative',
-                                boxShadow: showMainActive ? '0 4px 12px rgba(0, 0, 0, 0.04)' : 'none',
-                                opacity: mainForbidden ? 0.52 : 1,
-                                filter: mainForbidden ? 'grayscale(0.25)' : undefined,
-                            }}
-                            className="session-item-main"
-                            aria-disabled={mainForbidden ? true : undefined}
-                        >
-                            <div style={{ position: 'relative', flexShrink: 0 }}>
-                              <Avatar 
-                                size={32} 
-                                icon={<Shield size={16} fill={showMainActive ? '#fff' : 'var(--v3-primary, #6366f1)'} />} 
-                                style={{ 
-                                  background: showMainActive ? 'var(--v3-primary, #4f46e5)' : 'rgba(79, 70, 229, 0.12)', 
-                                  color: showMainActive ? '#fff' : 'var(--v3-primary-strong, #4338ca)',
+                        <>
+                          <div className="session-group-header">
+                            <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--v3-primary, #6366f1)', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <Shield size={10} />
+                              {t('chat.pinnedSession', { defaultValue: '置顶会话' })}
+                            </span>
+                            <Sparkles size={11} className={showMainActive ? "v3-sparkle-active" : ""} style={{ color: 'var(--v3-primary, #6366f1)', opacity: 0.8 }} />
+                          </div>
+                          <div 
+                              key={mainSession.key}
+                              title={mainForbidden ? sessionNoAccessTitle : undefined}
+                              onClick={() => {
+                                if (mainForbidden) return;
+                                onSelectSession(mainSession.key);
+                                if (isMobile) setShowSider(false);
+                              }}
+                              style={{ 
+                                  padding: '10px 12px', borderRadius: 10, cursor: mainForbidden ? 'not-allowed' : 'pointer', marginBottom: 4, transition: 'all 0.2s',
+                                  background: showMainActive ? 'var(--v3-pinned-bg-active, linear-gradient(135deg, rgba(79, 70, 229, 0.06) 0%, rgba(139, 92, 246, 0.08) 100%))' : shell.pinnedIdleBg,
+                                  border: '1px solid', borderColor: showMainActive ? 'rgba(139, 92, 246, 0.3)' : shell.pinnedBorder,
+                                  display: 'flex', alignItems: 'center', gap: 12, position: 'relative',
+                                  boxShadow: showMainActive ? '0 4px 12px rgba(0, 0, 0, 0.04)' : 'none',
+                                  opacity: mainForbidden ? 0.52 : 1,
+                                  filter: mainForbidden ? 'grayscale(0.25)' : undefined,
+                              }}
+                              className="session-item-main"
+                              aria-disabled={mainForbidden ? true : undefined}
+                          >
+                              <div style={{ position: 'relative', flexShrink: 0 }}>
+                                <Avatar 
+                                  size={32} 
+                                  icon={<Shield size={16} fill={showMainActive ? '#fff' : 'var(--v3-primary, #6366f1)'} />} 
+                                  style={{ 
+                                    background: showMainActive ? 'var(--v3-primary, #4f46e5)' : 'rgba(79, 70, 229, 0.12)', 
+                                    color: showMainActive ? '#fff' : 'var(--v3-primary-strong, #4338ca)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    boxShadow: showMainActive ? '0 0 0 2px rgba(0, 0, 0, 0.06)' : 'none'
+                                  }} 
+                                />
+                                <div style={{
+                                  position: 'absolute',
+                                  bottom: -2,
+                                  right: -2,
+                                  width: 16,
+                                  height: 16,
+                                  background: shell.avatarRingBg as any,
+                                  borderRadius: '50%',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
-                                  boxShadow: showMainActive ? '0 0 0 2px rgba(0, 0, 0, 0.06)' : 'none'
-                                }} 
-                              />
-                              <div style={{
-                                position: 'absolute',
-                                bottom: -2,
-                                right: -2,
-                                width: 16,
-                                height: 16,
-                                background: shell.avatarRingBg as any,
-                                borderRadius: '50%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: 10,
-                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                                border: `1px solid ${shell.avatarRingBorder}`
-                              }}>
-                                {mainSession.avatar ? <img src={mainSession.avatar} style={{ width: '100%', height: '100%', borderRadius: '50%' }} /> : (mainSession.emoji || '⚡')}
+                                  fontSize: 10,
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                  border: `1px solid ${shell.avatarRingBorder}`
+                                }}>
+                                  {mainSession.avatar ? <img src={mainSession.avatar} style={{ width: '100%', height: '100%', borderRadius: '50%' }} /> : (mainSession.emoji || '⚡')}
+                                </div>
                               </div>
-                            </div>
 
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-                                  <div style={{ fontSize: 13, fontWeight: 800, color: showMainActive ? (isDarkMode ? '#f1f5f9' : 'var(--v3-text, #0f172a)') : (isDarkMode ? '#e2e8f0' : 'var(--v3-primary-strong, #3730a3)'), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                      {t('chat.mainSession', { defaultValue: '主会话' })}
-                                      {mainForbidden && (
-                                        <span style={{
-                                          display: 'inline-flex', alignItems: 'center', gap: 3,
-                                          fontSize: 10, fontWeight: 700, color: '#94a3b8',
-                                          flexShrink: 0,
-                                        }}>
-                                          <Lock size={11} />
-                                          {t('chat.sessionForbiddenShort', { defaultValue: '无权限' })}
-                                        </span>
-                                      )}
-                                      <SessionStatusIcon status={mainSession.status} t={t} />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                                    <div style={{ fontSize: 13, fontWeight: 800, color: showMainActive ? (isDarkMode ? '#f1f5f9' : 'var(--v3-text, #0f172a)') : (isDarkMode ? '#e2e8f0' : 'var(--v3-primary-strong, #3730a3)'), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        {t('chat.mainSession', { defaultValue: '主会话' })}
+                                        {mainForbidden && (
+                                          <span style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: 3,
+                                            fontSize: 10, fontWeight: 700, color: '#94a3b8',
+                                            flexShrink: 0,
+                                          }}>
+                                            <Lock size={11} />
+                                            {t('chat.sessionForbiddenShort', { defaultValue: '无权限' })}
+                                          </span>
+                                        )}
+                                        <SessionStatusIcon status={mainSession.status} t={t} />
+                                    </div>
+                                    {mainSession.messagesCount !== undefined && (
+                                      <div style={{ 
+                                        fontSize: 10, background: isDarkMode ? 'rgba(165, 180, 252, 0.18)' : 'rgba(79, 70, 229, 0.1)', 
+                                        color: isDarkMode ? '#e0e7ff' : 'var(--v3-primary, #4f46e5)', padding: '0 6px', 
+                                        borderRadius: 6, fontWeight: 600, flexShrink: 0
+                                      }}>
+                                        {mainSession.messagesCount}
+                                      </div>
+                                    )}
                                   </div>
-                                  {mainSession.messagesCount !== undefined && (
-                                    <div style={{ 
-                                      fontSize: 10, background: isDarkMode ? 'rgba(165, 180, 252, 0.18)' : 'rgba(79, 70, 229, 0.1)', 
-                                      color: isDarkMode ? '#e0e7ff' : 'var(--v3-primary, #4f46e5)', padding: '0 6px', 
-                                      borderRadius: 6, fontWeight: 600, flexShrink: 0
-                                    }}>
-                                      {mainSession.messagesCount}
-                                    </div>
+                                  <div style={{ fontSize: 9, color: isDarkMode ? '#a5b4fc' : 'var(--v3-primary, #6366f1)', opacity: isDarkMode ? 0.9 : 0.7, marginTop: 1, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
+                                      <span>{new Date(mainSession.updatedAt || mainSession.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                      <span>•</span>
+                                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>CORE SYSTEM</span>
+                                  </div>
+                                  {/* Token 水位线 (主会话同步补全) */}
+                                  {mainSession.contextTokens > 0 && (
+                                      <div style={{ marginTop: 6, width: '100%' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, fontSize: 9, fontWeight: 700 }}>
+                                          <span style={{ color: isDarkMode ? '#a5b4fc' : 'var(--v3-primary, #6366f1)', opacity: 0.85, transform: 'scale(0.9)', transformOrigin: 'left', fontWeight: 900 }}>
+                                            {(() => {
+                                              const bot = botsModels?.data?.bots?.find((b: any) => b.id === 'main');
+                                              return bot?.name || t('chat.mainBotName', { defaultValue: '系统主机器人' });
+                                            })()}
+                                          </span>
+                                          <span style={{ 
+                                              color: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : (isDarkMode ? '#a5b4fc' : 'var(--v3-primary, #4f46e5)'),
+                                              opacity: 0.85
+                                          }}>
+                                              <span style={{ opacity: 0.6, marginRight: 4, fontWeight: 400 }}>CONTEXT</span>
+                                              {Math.round((mainSession.totalTokens / mainSession.contextTokens) * 100)}%
+                                          </span>
+                                      </div>
+                                      <div style={{ height: 3, width: '100%', background: isDarkMode ? 'rgba(165, 180, 252, 0.14)' : 'rgba(79, 70, 229, 0.15)', borderRadius: 2, overflow: 'hidden' }}>
+                                          <div style={{ 
+                                              height: '100%', 
+                                              width: `${Math.min(100, (mainSession.totalTokens / mainSession.contextTokens) * 100)}%`,
+                                              background: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : (isDarkMode ? '#818cf8' : 'var(--v3-primary, #6366f1)'),
+                                              transition: 'width 0.3s ease'
+                                          }} />
+                                      </div>
+                                      </div>
                                   )}
-                                </div>
-                                <div style={{ fontSize: 9, color: isDarkMode ? '#a5b4fc' : 'var(--v3-primary, #6366f1)', opacity: isDarkMode ? 0.9 : 0.7, marginTop: 1, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
-                                    <span>{new Date(mainSession.updatedAt || mainSession.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                    <span>•</span>
-                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>CORE SYSTEM</span>
-                                </div>
-                                {/* Token 水位线 (主会话同步补全) */}
-                                {mainSession.contextTokens > 0 && (
-                                    <div style={{ marginTop: 6, width: '100%' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, fontSize: 9, fontWeight: 700 }}>
-                                        <span style={{ color: isDarkMode ? '#a5b4fc' : 'var(--v3-primary, #6366f1)', opacity: 0.85, transform: 'scale(0.9)', transformOrigin: 'left', fontWeight: 900 }}>
-                                          {(() => {
-                                            const bot = botsModels?.data?.bots?.find((b: any) => b.id === 'main');
-                                            return bot?.name || t('chat.mainBotName', { defaultValue: '系统主机器人' });
-                                          })()}
-                                        </span>
-                                        <span style={{ 
-                                            color: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : (isDarkMode ? '#a5b4fc' : 'var(--v3-primary, #4f46e5)'),
-                                            opacity: 0.85
-                                        }}>
-                                            <span style={{ opacity: 0.6, marginRight: 4, fontWeight: 400 }}>CONTEXT</span>
-                                            {Math.round((mainSession.totalTokens / mainSession.contextTokens) * 100)}%
-                                        </span>
-                                    </div>
-                                    <div style={{ height: 3, width: '100%', background: isDarkMode ? 'rgba(165, 180, 252, 0.14)' : 'rgba(79, 70, 229, 0.15)', borderRadius: 2, overflow: 'hidden' }}>
-                                        <div style={{ 
-                                            height: '100%', 
-                                            width: `${Math.min(100, (mainSession.totalTokens / mainSession.contextTokens) * 100)}%`,
-                                            background: (mainSession.totalTokens / mainSession.contextTokens) > 0.8 ? '#ef4444' : (isDarkMode ? '#818cf8' : 'var(--v3-primary, #6366f1)'),
-                                            transition: 'width 0.3s ease'
-                                        }} />
-                                    </div>
-                                    </div>
-                                )}
-                            </div>
-                            <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>
-                                <Button size="small" type="text" icon={<Copy size={12} />} onClick={(e) => { e.stopPropagation(); copyToClipboard(mainSession.key); }} />
-                            </div>
-                        </div>
+                              </div>
+                              <div className="session-actions" style={{ display: 'flex', gap: 4, opacity: 0, transition: '0.2s' }}>
+                                  <Button size="small" type="text" icon={<Copy size={12} />} onClick={(e) => { e.stopPropagation(); copyToClipboard(mainSession.key); }} />
+                              </div>
+                          </div>
+                        </>
                       );
                     })()}
                   </div>
