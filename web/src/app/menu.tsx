@@ -63,6 +63,19 @@ export function createMenuItems(params: {
 
   const rawMenuItems = [
     {
+      key: 'grp-assets',
+      label: t('common.assets'),
+      icon: <Boxes size={16} />,
+      children: [
+        { key: 'chat', label: t('common.chat'), icon: <MessageSquare size={14} /> },
+        { key: 'tui', label: t('common.tuiChat'), icon: <Terminal size={14} /> },
+        { key: 'bots-models', label: t('common.bots'), icon: <Boxes size={14} /> },
+        { key: 'skills', label: t('common.skills'), icon: <Puzzle size={14} /> },
+        { key: 'plugins', label: t('plugins.title'), icon: <Zap size={14} /> },
+        { key: 'experts', label: t('common.expertMarket'), icon: <Rocket size={14} /> },
+      ],
+    },
+    {
       key: 'grp-monitor',
       label: t('common.monitor'),
       icon: <Activity size={16} />,
@@ -100,19 +113,6 @@ export function createMenuItems(params: {
         { key: 'shell', label: t('common.shell'), icon: <Terminal size={14} /> },
         { key: 'security', label: t('security.title'), icon: <ShieldCheck size={14} /> },
         { key: 'cron', label: t('common.cron'), icon: <Clock size={14} /> },
-      ],
-    },
-    {
-      key: 'grp-assets',
-      label: t('common.assets'),
-      icon: <Boxes size={16} />,
-      children: [
-        { key: 'chat', label: t('common.chat'), icon: <MessageSquare size={14} /> },
-        { key: 'tui', label: t('common.tuiChat'), icon: <Terminal size={14} /> },
-        { key: 'bots-models', label: t('common.bots'), icon: <Boxes size={14} /> },
-        { key: 'skills', label: t('common.skills'), icon: <Puzzle size={14} /> },
-        { key: 'plugins', label: t('plugins.title'), icon: <Zap size={14} /> },
-        { key: 'experts', label: t('common.expertMarket'), icon: <Rocket size={14} /> },
       ],
     },
     {
