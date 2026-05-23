@@ -178,6 +178,22 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
     storage.setItem('v3_show_explorer', 'false');
   }, [setCanvasVisible]);
 
+  const handleClosePanel = useCallback((panelId: V3DockPanelId) => {
+    if (panelId === 'canvas') {
+      setCanvasVisible(false);
+    } else if (panelId === 'debug') {
+      setShowDebug(false);
+      storage.setItem('v3_show_debug', 'false');
+      setWsLogs([]);
+    } else if (panelId === 'terminal') {
+      setShowTerminal(false);
+      storage.setItem('v3_show_terminal', 'false');
+    } else if (panelId === 'explorer') {
+      setShowExplorer(false);
+      storage.setItem('v3_show_explorer', 'false');
+    }
+  }, [setCanvasVisible]);
+
   /** 禁止把右侧 Dock 面板拖进聊天列（仅允许在 Dock 内分列/堆叠） */
   const rejectDockDragOnChat = useCallback((e: React.DragEvent) => {
     if (!isDockPanelDragEvent(e)) return;
@@ -1109,6 +1125,7 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
           isDraggingResize={isDraggingRight}
           onResizeActiveChange={setIsDraggingRight}
           onCloseAll={handleCloseAllDockPanels}
+          onClosePanel={handleClosePanel}
           renderPanel={(panelId, columnWidth) => {
             const onWidthChange = (newWidth: number) => {
               if (dockExpanded) return;
@@ -1122,9 +1139,6 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
               return (
                 <V3CanvasPane
                   isDarkMode={isDarkMode}
-                  onClose={() => {
-                    setCanvasVisible(false);
-                  }}
                 />
               );
             }
@@ -1135,11 +1149,6 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
                   logs={wsLogs}
                   fillParent
                   onClear={() => setWsLogs([])}
-                  onClose={() => {
-                    setShowDebug(false);
-                    storage.setItem('v3_show_debug', 'false');
-                    setWsLogs([]);
-                  }}
                 />
               );
             }
@@ -1155,10 +1164,6 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
                   onSendSelectionToChat={handleTerminalSelectionToChat}
                   transition={isDraggingRight ? 'none' : undefined}
                   onWidthChange={onWidthChange}
-                  onClose={() => {
-                    setShowTerminal(false);
-                    storage.setItem('v3_show_terminal', 'false');
-                  }}
                 />
               );
             }

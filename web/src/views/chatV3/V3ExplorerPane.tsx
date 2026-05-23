@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from 'antd';
-import { X, Folder, Maximize2, Minimize2 } from 'lucide-react';
+import { Folder, Maximize2, Minimize2 } from 'lucide-react';
 import { FileExplorerContent } from '../../components/FileExplorer';
 import Tooltip from '../../components/common/AppTooltip';
 
@@ -107,13 +107,6 @@ export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({
               style={{ color: shell.icon }}
             />
           </Tooltip>
-          <Button 
-            size="small" 
-            type="text" 
-            icon={<X size={16} />} 
-            onClick={onClose} 
-            style={{ color: shell.icon }}
-          />
         </div>
       </div>
       <div style={{ flex: 1, overflow: 'hidden' }}>

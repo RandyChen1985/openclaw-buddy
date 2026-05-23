@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useArtifact } from './V3ArtifactContext';
 import { Button, Select, Radio, Alert, message, Input } from 'antd';
-import { X, Play, Code, ExternalLink, Sparkles } from 'lucide-react';
+import { Play, Code, ExternalLink, Sparkles } from 'lucide-react';
 import mermaid from 'mermaid';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -9,11 +9,10 @@ import remarkBreaks from 'remark-breaks';
 
 interface V3CanvasPaneProps {
   isDarkMode: boolean;
-  onClose?: () => void;
 }
 
-export const V3CanvasPane: React.FC<V3CanvasPaneProps> = ({ isDarkMode, onClose }) => {
-  const { activeArtifact, setActiveArtifact, setCanvasVisible, artifactsHistory, registerArtifact } = useArtifact();
+export const V3CanvasPane: React.FC<V3CanvasPaneProps> = ({ isDarkMode }) => {
+  const { activeArtifact, setActiveArtifact, artifactsHistory, registerArtifact } = useArtifact();
   const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview');
   const [sandboxError, setSandboxError] = useState<{ message: string; line?: number } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -276,10 +275,6 @@ ${activeArtifact.code}
           {activeArtifact.type === 'html' && (
             <Button size="small" icon={<ExternalLink size={12} />} onClick={openFullScreen} style={isDarkMode ? { background: '#374151', color: '#e5e7eb', borderColor: '#4b5563', flexShrink: 0, whiteSpace: 'nowrap' } : { flexShrink: 0, whiteSpace: 'nowrap' }}>全屏</Button>
           )}
-          <Button size="small" type="text" icon={<X size={16} />} onClick={() => {
-            setCanvasVisible(false);
-            if (onClose) onClose();
-          }} style={isDarkMode ? { color: '#9ca3af', flexShrink: 0 } : { flexShrink: 0 }} />
         </div>
       </div>
 
