@@ -1,19 +1,34 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useArtifact } from './V3ArtifactContext';
-import { Button, Select, Radio, Alert, message } from 'antd';
-import { X, Play, Code, ExternalLink } from 'lucide-react';
+import { Button, Select, Radio, Alert, message, Input } from 'antd';
+import { X, Play, Code, ExternalLink, Sparkles } from 'lucide-react';
 import mermaid from 'mermaid';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 
-export const V3CanvasPane: React.FC<{ isDarkMode: boolean; onClose?: () => void }> = ({ isDarkMode, onClose }) => {
-  const { activeArtifact, setActiveArtifact, setCanvasVisible, artifactsHistory } = useArtifact();
+interface V3CanvasPaneProps {
+  isDarkMode: boolean;
+  onClose?: () => void;
+}
+
+export const V3CanvasPane: React.FC<V3CanvasPaneProps> = ({ isDarkMode, onClose }) => {
+  const { activeArtifact, setActiveArtifact, setCanvasVisible, artifactsHistory, registerArtifact } = useArtifact();
   const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview');
   const [sandboxError, setSandboxError] = useState<{ message: string; line?: number } | null>(null);
   const [copied, setCopied] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const mermaidRef = useRef<HTMLDivElement>(null);
+
+  // 微调状态
+  const [editCode, setEditCode] = useState('');
+
+  // 同步微调代码
+  useEffect(() => {
+    if (activeArtifact) {
+      setEditCode(activeArtifact.code);
+    }
+  }, [activeArtifact]);
 
   // 监听并接收 iframe 沙箱传上来的报错
   useEffect(() => {
@@ -141,6 +156,42 @@ export const V3CanvasPane: React.FC<{ isDarkMode: boolean; onClose?: () => void 
     window.open(url, '_blank');
   };
 
+  // 微调代码保存并预览
+  const handleSaveAndPreview = () => {
+    if (!activeArtifact) return;
+    registerArtifact({
+      id: activeArtifact.id,
+      title: activeArtifact.title,
+      type: activeArtifact.type,
+      code: editCode,
+      messageId: activeArtifact.messageId
+    }, true);
+    setViewMode('preview');
+    message.success('微调已保存并重新渲染预览！');
+  };
+
+  // 一键向 AI 发送报错修复请求
+  const handleFixSandboxError = () => {
+    if (!activeArtifact || !sandboxError) return;
+    const promptText = `我在运行刚刚生成的 Canvas \`${activeArtifact.title}\` (类型: \`${activeArtifact.type}\`) 时遇到了以下运行时报错：
+
+> ❌ \`${sandboxError.message}\` (第 \`${sandboxError.line}\` 行)
+
+这是我当前的代码：
+\`\`\`${activeArtifact.type}
+${activeArtifact.code}
+\`\`\`
+
+请帮我分析报错原因，并给我一份修复后的代码。`;
+
+    const event = new CustomEvent('claw-chat-send', {
+      detail: { text: promptText }
+    });
+    window.dispatchEvent(event);
+    message.success('已自动向 AI 发送报错分析指令');
+    setSandboxError(null);
+  };
+
   // 在 iframe 中运行 safe srcDoc，并注入 window.onerror 以将子页面报错 postMessage 到父级捕获
   const getSafeSrcDoc = () => {
     if (activeArtifact.type !== 'html') return '';
@@ -246,7 +297,21 @@ export const V3CanvasPane: React.FC<{ isDarkMode: boolean; onClose?: () => void 
               />
               {sandboxError && (
                 <Alert
-                  message={`运行时错误: ${sandboxError.message} (第 ${sandboxError.line} 行)`}
+                  message={
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <span>{`运行时错误: ${sandboxError.message} (第 ${sandboxError.line} 行)`}</span>
+                      <Button
+                        size="small"
+                        type="primary"
+                        danger
+                        icon={<Sparkles size={11} />}
+                        onClick={handleFixSandboxError}
+                        style={{ alignSelf: 'flex-start', borderRadius: 6, fontSize: 11, height: 24, padding: '0 8px' }}
+                      >
+                        一键发送给 AI 修复
+                      </Button>
+                    </div>
+                  }
                   type="error"
                   showIcon
                   closable
@@ -403,19 +468,25 @@ export const V3CanvasPane: React.FC<{ isDarkMode: boolean; onClose?: () => void 
                 <span style={{ fontSize: 11, opacity: 0.7 }}>Base64 数据大小: {(activeArtifact.code.length / 1024).toFixed(1)} KB</span>
               </div>
             ) : (
-              <pre style={{
-                margin: 0,
-                padding: 16,
-                flex: 1,
-                overflow: 'auto',
-                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                fontSize: 12.5,
-                background: isDarkMode ? '#0b0f19' : '#f8fafc',
-                color: isDarkMode ? '#e5e7eb' : '#111827',
-                border: 'none'
-              }}>
-                <code>{activeArtifact.code}</code>
-              </pre>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+                <Input.TextArea
+                  value={editCode}
+                  onChange={(e) => setEditCode(e.target.value)}
+                  style={{
+                    flex: 1,
+                    margin: 0,
+                    padding: 16,
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    fontSize: '12.5px',
+                    background: isDarkMode ? '#0b0f19' : '#f8fafc',
+                    color: isDarkMode ? '#e5e7eb' : '#111827',
+                    border: 'none',
+                    borderRadius: 0,
+                    resize: 'none',
+                    height: '100%'
+                  }}
+                />
+              </div>
             )}
             {/* 代码快捷操作栏 */}
             <div style={{
@@ -426,6 +497,20 @@ export const V3CanvasPane: React.FC<{ isDarkMode: boolean; onClose?: () => void 
               background: isDarkMode ? '#1f2937' : '#f3f4f6',
               borderTop: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`
             }}>
+              {!(activeArtifact.type === 'image' || activeArtifact.type === 'pdf') && (
+                <Button 
+                  size="small" 
+                  type="primary" 
+                  onClick={handleSaveAndPreview}
+                  style={{
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    border: 'none',
+                    boxShadow: '0 2px 4px rgba(16, 185, 129, 0.15)'
+                  }}
+                >
+                  保存并预览
+                </Button>
+              )}
               <Button size="small" onClick={handleCopy} style={isDarkMode ? { background: '#374151', color: '#e5e7eb', borderColor: '#4b5563' } : {}}>
                 {copied ? '已复制' : '复制代码'}
               </Button>
