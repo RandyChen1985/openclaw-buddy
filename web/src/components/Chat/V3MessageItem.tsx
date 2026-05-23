@@ -1688,13 +1688,17 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
               {hasEmbeddedMeta && (() => {
                 // 嵌入式折叠区：挂在主气泡正文最底部
                 const thinkingShort = t('chat.metaFoldThinkingShort', { defaultValue: '思考中…' });
+                const toolCount = (processedMetaContent.match(/:::toolCall\b/g) || []).length;
+                const toolCountSuffix = toolCount > 0 ? `，已调用 ${toolCount} 轮工具` : '';
+                const toolCountSuffixCompleted = toolCount > 0 ? ` (共调用 ${toolCount} 轮工具)` : '';
+
                 const suffixLabel = metaExpanded
-                  ? t('chat.metaFoldCollapse', { defaultValue: '点击折叠本次思考或工具调用' })
+                  ? `${t('chat.metaFoldCollapse', { defaultValue: '点击折叠本次思考或工具调用' })}${toolCountSuffixCompleted}`
                   : metaFoldGenerationUi
                     ? (metaFoldIsToolCallGenerating
-                      ? t('chat.metaFoldExpandLiveTool', { defaultValue: '工具调用生成中' })
-                      : t('chat.metaFoldExpandLive', { defaultValue: '点击展开查看思考或工具调用' }))
-                    : t('chat.metaFoldExpand', { defaultValue: '点击展开本次思考或工具调用' });
+                      ? `${t('chat.metaFoldExpandLiveTool', { defaultValue: '工具调用生成中' })}${toolCountSuffix}`
+                      : `${t('chat.metaFoldExpandLive', { defaultValue: '点击展开查看思考或工具调用' })}${toolCountSuffix}`)
+                    : `${t('chat.metaFoldExpand', { defaultValue: '点击展开本次思考或工具调用' })}${toolCountSuffixCompleted}`;
                 const embedLabel =
                   !metaExpanded && metaFoldGenerationUi ? `${thinkingShort} · ${suffixLabel}` : suffixLabel;
                 return (
