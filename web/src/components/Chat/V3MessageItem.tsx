@@ -180,6 +180,79 @@ const CollapsibleMeta = ({
   );
 };
 
+interface TerminalBodyProps {
+  children: React.ReactNode;
+  toolColor: string;
+  subtitle: string;
+  scrollState: TerminalScrollState;
+}
+
+interface TerminalScrollState {
+  isAtBottom: boolean;
+  userScrolling: boolean;
+  lastScrollTop: number;
+}
+
+const TerminalBody: React.FC<TerminalBodyProps> = ({ children, toolColor, subtitle, scrollState }) => {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  const handleScroll = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    
+    const scrollTop = el.scrollTop;
+    const isAtBottom = el.scrollHeight - scrollTop - el.clientHeight < 15;
+    const isScrollingUp = scrollTop < scrollState.lastScrollTop - 1;
+
+    if (isAtBottom) {
+      scrollState.isAtBottom = true;
+      scrollState.userScrolling = false;
+    } else if (scrollState.userScrolling || isScrollingUp) {
+      scrollState.isAtBottom = false;
+    }
+
+    scrollState.lastScrollTop = scrollTop;
+  };
+
+  const handleUserInteraction = () => {
+    scrollState.userScrolling = true;
+    scrollState.isAtBottom = false;
+  };
+
+  React.useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (scrollState.isAtBottom) {
+      el.scrollTop = el.scrollHeight;
+      scrollState.lastScrollTop = el.scrollTop;
+      return;
+    }
+
+    const maxScrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    el.scrollTop = Math.min(scrollState.lastScrollTop, maxScrollTop);
+    scrollState.lastScrollTop = el.scrollTop;
+  }, [children]);
+
+  return (
+    <div 
+      ref={containerRef}
+      onScroll={handleScroll}
+      onWheel={handleUserInteraction}
+      onTouchMove={handleUserInteraction}
+      className="v3-terminal-body" 
+      style={{ maxHeight: 360, overflowY: 'auto', overscrollBehavior: 'contain' }}
+    >
+      <div className="v3-terminal-line" style={{ marginBottom: 6 }}>
+        <span className="v3-terminal-prompt" style={{ color: toolColor }}>$</span>
+        <span className="v3-terminal-output" style={{ color: '#f8fafc', fontWeight: 'bold' }}>{subtitle || 'bash'}</span>
+      </div>
+      <div className="v3-terminal-output" style={{ whiteSpace: 'pre-wrap', color: '#10b981' }}>
+        {children}
+      </div>
+    </div>
+  );
+};
+
 const getToolIconAndColor = (name: string) => {
   const n = String(name || '').toLowerCase();
   if (n.includes('command') || n.includes('cmd') || n.includes('shell') || n.includes('terminal')) {
@@ -752,6 +825,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   // 防止审批按钮重复点击：记录每个 approvalId 是否已点击过“通过”
   const [approvalClicked, setApprovalClicked] = useState<Record<string, boolean>>({});
   const [metaBlockExpandedByKey, setMetaBlockExpandedByKey] = useState<Record<string, boolean>>({});
+  const terminalScrollStateByKeyRef = useRef<Record<string, TerminalScrollState>>({});
 
   /** 编辑框草稿：Virtuoso 下列项重渲染时若反复用父级 editContent 覆盖受控 value，会打断中文 IME */
   const [editDraft, setEditDraft] = useState('');
@@ -1011,6 +1085,17 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       },
     };
   };
+  const getTerminalScrollState = (blockKey: string) => {
+    const key = `${metaBlockBaseKey}:${blockKey}`;
+    if (!terminalScrollStateByKeyRef.current[key]) {
+      terminalScrollStateByKeyRef.current[key] = {
+        isAtBottom: true,
+        userScrolling: false,
+        lastScrollTop: 0,
+      };
+    }
+    return terminalScrollStateByKeyRef.current[key];
+  };
 
   const markdownComponents = {
     p: ({children}: any) => <p style={{margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere'}}>{children}</p>,
@@ -1194,23 +1279,27 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
         const subtitle = titleMatch ? titleMatch[1].trim() : '';
         const headerTitle = subtitle ? `Command Output · ${subtitle}` : 'Command Output';
         const { icon: ToolIcon, color: toolColor } = getToolIconAndColor('command');
+        const commandCopyText = stripContainerWrapper(fullText, 'commandOutput') || '';
+        const commandBlockKey = `commandOutput:${subtitle || 'default'}`;
+
         return (
           <CollapsibleMeta
             title={headerTitle}
             icon={ToolIcon}
             iconStyle={{ color: toolColor }}
             defaultExpanded={false}
-            {...metaBlockExpansionProps(`commandOutput:${subtitle || 'default'}`, false)}
+            {...metaBlockExpansionProps(commandBlockKey, false)}
+            copyText={commandCopyText}
+            onCopy={(txt: string) => copyToClipboard(txt)}
+            copyLabel={t('chat.copy', { defaultValue: '复制' })}
           >
-            <div className="v3-terminal-body" style={{ maxHeight: 360, overflowY: 'auto' }}>
-              <div className="v3-terminal-line" style={{ marginBottom: 6 }}>
-                <span className="v3-terminal-prompt" style={{ color: toolColor }}>$</span>
-                <span className="v3-terminal-output" style={{ color: '#f8fafc', fontWeight: 'bold' }}>{subtitle || 'bash'}</span>
-              </div>
-              <div className="v3-terminal-output" style={{ whiteSpace: 'pre-wrap', color: '#10b981' }}>
-                {cleanChildren}
-              </div>
-            </div>
+            <TerminalBody
+              toolColor={toolColor}
+              subtitle={subtitle}
+              scrollState={getTerminalScrollState(commandBlockKey)}
+            >
+              {cleanChildren}
+            </TerminalBody>
           </CollapsibleMeta>
         );
       }
