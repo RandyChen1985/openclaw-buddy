@@ -292,6 +292,118 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
       onDragOver={handleWorkspacePathDragOver}
       onDrop={handleWorkspacePathDrop}
     >
+      <style>{`
+        /* 动作菜单 Plus 悬浮微动效与毛玻璃 */
+        .v3-plus-dropdown-menu {
+          backdrop-filter: blur(16px) !important;
+          background: ${isDarkMode ? 'rgba(15, 23, 42, 0.85)' : 'rgba(255, 255, 255, 0.85)'} !important;
+          border: 1px solid ${isDarkMode ? '#334155' : 'rgba(226, 232, 240, 0.8)'} !important;
+        }
+        .v3-plus-menu-item {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 8px 12px;
+          border-radius: 8px;
+          color: ${isDarkMode ? '#cbd5e1' : '#475569'};
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .v3-plus-menu-item:hover {
+          background: ${isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(79, 70, 229, 0.05)'} !important;
+          color: var(--v3-primary, #4f46e5) !important;
+        }
+        .v3-plus-menu-item:hover .v3-plus-menu-icon {
+          transform: scale(1.12) translateY(-1px);
+          color: var(--v3-primary, #4f46e5);
+        }
+        .v3-plus-menu-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: #94a3b8;
+          transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* 极光发送/停止按钮微交互与物理按压 */
+        .v3-composer-btn-send {
+          background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%) !important;
+          box-shadow: 0 4px 14px rgba(79, 70, 229, 0.3) !important;
+          border: none !important;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .v3-composer-btn-send:hover {
+          filter: brightness(1.08);
+          box-shadow: 0 6px 18px rgba(79, 70, 229, 0.45) !important;
+        }
+        .v3-composer-btn-send:active {
+          transform: scale(0.92) !important;
+          filter: brightness(0.95);
+        }
+
+        .v3-composer-btn-stop {
+          background: linear-gradient(135deg, #ef4444 0%, #f43f5e 100%) !important;
+          box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3) !important;
+          border: none !important;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .v3-composer-btn-stop:hover {
+          filter: brightness(1.08);
+          box-shadow: 0 6px 18px rgba(239, 68, 68, 0.45) !important;
+        }
+        .v3-composer-btn-stop:active {
+          transform: scale(0.92) !important;
+          filter: brightness(0.95);
+        }
+
+        /* 警告指示灯闪烁 */
+        @keyframes v3-warning-pulse {
+          0%, 100% { opacity: 0.9; transform: scale(1); }
+          50% { opacity: 0.6; transform: scale(1.1); }
+        }
+        .v3-warning-pulse {
+          animation: v3-warning-pulse 1.5s infinite ease-in-out;
+        }
+
+        /* 舱门渐显动画 */
+        @keyframes fadeIn {
+          from { opacity: 0; transform: scale(0.98); }
+          to { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
+
+      {/* 拖拽文件太空舱蒙层 */}
+      {workspacePathDropActive && (
+        <div style={{
+          position: 'absolute',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: isDarkMode ? 'rgba(30, 41, 59, 0.75)' : 'rgba(239, 246, 255, 0.75)',
+          borderRadius: 20,
+          border: '2px dashed var(--v3-primary, #3b82f6)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 12,
+          zIndex: 100,
+          pointerEvents: 'none',
+          boxShadow: '0 0 25px rgba(59, 130, 246, 0.25)',
+          backdropFilter: 'blur(8px)',
+          animation: 'fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both'
+        }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: '50%',
+            background: isDarkMode ? 'rgba(99, 102, 241, 0.15)' : 'rgba(59, 130, 246, 0.1)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 0 15px rgba(59, 130, 246, 0.2)',
+            animation: 'v3-warning-pulse 1.8s infinite ease-in-out'
+          }}>
+            <Plus size={20} color="var(--v3-primary, #3b82f6)" />
+          </div>
+          <span style={{ fontSize: 13, fontWeight: 700, color: isDarkMode ? '#93c5fd' : '#1e3a8a', letterSpacing: '0.5px' }}>
+            {t('chat.dropFilesHere', { defaultValue: '释放上传为对话附件 context' })}
+          </span>
+        </div>
+      )}
       
       {/* 提及选择器弹出层 */}
       {showMentionSelector && (
@@ -311,18 +423,20 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
       {/* 图像能力告警 */}
       {files.some(f => f.ext.replace(/^\./, '').match(/^(jpg|jpeg|png|gif|webp|svg)$/i) && !f.type) && !supportsImage && (
         <div style={{ 
-          background: isDarkMode ? 'rgba(251, 191, 36, 0.12)' : '#fff7ed', 
-          borderTop: isDarkMode ? '1px solid rgba(251, 191, 36, 0.35)' : '1px solid #ffedd5', 
-          padding: '6px 16px', 
+          background: isDarkMode ? 'rgba(251, 191, 36, 0.08)' : 'linear-gradient(90deg, #fffbeb 0%, #fff7ed 100%)', 
+          borderTop: isDarkMode ? '1px solid rgba(251, 191, 36, 0.25)' : '1px solid #ffedd5', 
+          padding: '8px 16px', 
           display: 'flex', 
           alignItems: 'center', 
           gap: 8,
+          boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.01)',
+          backdropFilter: 'blur(4px)',
           animation: 'fadeIn 0.3s'
         }}>
-          <div style={{ background: '#f59e0b', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <X size={10} color="#fff" />
+          <div className="v3-warning-pulse" style={{ background: '#f59e0b', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 6px rgba(245,158,11,0.4)' }}>
+            <X size={9} color="#fff" strokeWidth={3} />
           </div>
-          <span style={{ fontSize: 11, color: isDarkMode ? '#fcd34d' : '#9a3412', fontWeight: 500 }}>
+          <span style={{ fontSize: 11, color: isDarkMode ? '#fbbf24' : '#b45309', fontWeight: 600 }}>
             {t('chat.modelNoImageSupport', { defaultValue: '当前模型不支持图片，请切换到“图片型”模型后再发送。' })}
           </span>
         </div>
@@ -413,6 +527,7 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
           <Dropdown
             trigger={['click']}
             disabled={uploading || inputLocked}
+            overlayClassName="v3-plus-dropdown-menu"
             overlayStyle={{ borderRadius: 12, overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.15)' }}
             menu={{
               items: [
@@ -550,9 +665,10 @@ const V3InputAreaInner: React.ForwardRefRenderFunction<InputAreaHandle, V3InputA
         </div>
         <Button
           type="primary"
-          icon={isTyping ? <Square size={16} fill="#fff" /> : <Send size={17} />}
+          icon={isTyping ? <Square size={14} fill="#fff" /> : <Send size={16} />}
           onClick={isTyping ? onStop : handleInnerSend}
           disabled={!canSend}
+          className={!canSend ? '' : isTyping ? 'v3-composer-btn-stop' : 'v3-composer-btn-send'}
           style={buttonStyle as React.CSSProperties}
         />
       </div>
