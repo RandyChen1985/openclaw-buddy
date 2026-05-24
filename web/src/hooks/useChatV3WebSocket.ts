@@ -79,7 +79,9 @@ export const useChatV3WebSocket = ({
     latencyHistory,
     pulse,
     registerHandlers,
-    unregisterHandlers
+    unregisterHandlers,
+    reconnectCount,
+    reconnectDelayLeft
   } = useV3Gateway();
   // --- States ---
   const [sessionKey, setSessionKey] = useState<string | null>(() => storage.getItem('v3_current_session_key'));
@@ -370,6 +372,8 @@ export const useChatV3WebSocket = ({
     hasMoreSessions,
     sendRPC,
     connect,
+    reconnectCount,
+    reconnectDelayLeft,
     showScrollBtnRef
   };
 };

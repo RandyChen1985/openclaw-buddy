@@ -265,6 +265,7 @@ func (s *Server) setupRoutes() {
 			oc.POST("/skills/files/save", RequirePermission(permSkills), s.saveSkillFileContent)
 			oc.POST("/skills/files/create", RequirePermission(permSkills), s.createSkillFile)
 			oc.POST("/skills/files/mkdir", RequirePermission(permSkills), s.createSkillDir)
+			oc.POST("/skills/share", RequirePermission(permSkills), s.shareSkill)
 
 			// Generic File Explorer
 			oc.GET("/files/list", s.getExplorerFilesList)

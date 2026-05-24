@@ -6,11 +6,21 @@ interface ChatV3AuthProps {
   status: 'disconnected' | 'connecting' | 'challenging' | 'authorizing' | 'authenticated' | 'error';
   isMobile: boolean;
   onConnect: () => void;
+  reconnectCount?: number;
+  reconnectDelayLeft?: number | null;
   t: any;
   isDarkMode?: boolean;
 }
 
-const ChatV3Auth: React.FC<ChatV3AuthProps> = ({ status, isMobile, onConnect, t, isDarkMode = false }) => {
+const ChatV3Auth: React.FC<ChatV3AuthProps> = ({ 
+  status, 
+  isMobile, 
+  onConnect, 
+  reconnectCount = 0, 
+  reconnectDelayLeft = null, 
+  t, 
+  isDarkMode = false 
+}) => {
   if (status === 'authenticated') return null;
 
   const titleColor = isDarkMode ? '#f1f5f9' : '#1e293b';
@@ -71,17 +81,24 @@ const ChatV3Auth: React.FC<ChatV3AuthProps> = ({ status, isMobile, onConnect, t,
           ) : t('chat.v3SecureDesc', { defaultValue: 'SECURE_CHANNEL_V3 // ED25519_HARDWARE_KEY' })}
         </div>
         
-        {status === 'error' && (
-          <Button 
-            type="primary" 
-            size="large" 
-            onClick={onConnect} 
-            icon={<RefreshCw size={18} />}
-            style={{ width: '100%', height: 46, borderRadius: 12, background: '#2563eb', fontWeight: 600, border: 'none', boxShadow: '0 4px 15px rgba(37, 99, 235, 0.3)' }}
-          >
-            {t('chat.v3RetryBtn', { defaultValue: 'RETRY_CONNECTION' })}
-          </Button>
-        )}
+        <Button 
+          type="primary" 
+          size="large" 
+          onClick={onConnect} 
+          loading={['connecting', 'challenging', 'authorizing', 'identifying'].includes(status)}
+          icon={(!['connecting', 'challenging', 'authorizing', 'identifying'].includes(status) && reconnectDelayLeft === null) && <RefreshCw size={18} />}
+          style={{ width: '100%', height: 46, borderRadius: 12, background: '#2563eb', border: 'none', fontWeight: 600, boxShadow: '0 4px 15px rgba(37, 99, 235, 0.3)' }}
+        >
+          {['connecting', 'challenging', 'authorizing', 'identifying'].includes(status)
+            ? (reconnectCount > 0 
+                ? t('chat.v3ReconnectingWithCount', { count: reconnectCount, defaultValue: `正在重连 (第 ${reconnectCount} 次)...` })
+                : t('chat.v3Reconnecting', { defaultValue: `正在重连...` }))
+            : (reconnectDelayLeft !== null
+                ? t('chat.v3AutoReconnect', { seconds: reconnectDelayLeft, defaultValue: `自动重连中 (${reconnectDelayLeft}s)` })
+                : (status === 'error' 
+                    ? t('chat.v3RetryBtn', { defaultValue: '重试连接' }) 
+                    : t('chat.v3ManualConnect', { defaultValue: '手动重连' })))}
+        </Button>
 
         <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 4 }}>
             {[1,2,3,4].map(i => (

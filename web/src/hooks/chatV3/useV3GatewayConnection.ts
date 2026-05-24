@@ -103,6 +103,7 @@ export function useV3GatewayConnection({
   const pendingRequests = useRef<Map<string, (res: any) => void>>(new Map());
   const reconnectCountRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const connectInFlightRef = useRef(false);
   const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gatewayTokenCacheRef = useRef<{ token: string; at: number } | null>(null);
@@ -113,6 +114,9 @@ export function useV3GatewayConnection({
   const [lastHealth, setLastHealth] = useState<{ ok: boolean; latency: number; ts: number; target?: string; port?: number } | null>(null);
   const [latencyHistory, setLatencyHistory] = useState<number[]>([]);
   const [pulse, setPulse] = useState(0);
+
+  const [reconnectCount, setReconnectCount] = useState(0);
+  const [reconnectDelayLeft, setReconnectDelayLeft] = useState<number | null>(null);
 
   /**
    * 统一失败回调所有挂起中的 RPC 请求，避免断连后 Promise 悬挂导致 UI 卡死。
@@ -298,20 +302,31 @@ export function useV3GatewayConnection({
   /**
    * 建立连接：创建新 ws，替换旧 ws，并挂载 onopen/onmessage/onclose/onerror。
    */
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (isManual: boolean = false) => {
     if (!keyPair || !deviceId) return;
     if (connectionPausedRef.current) {
       connectInFlightRef.current = false;
       return;
     }
-    // 防抖：避免多次点击导致 close/new ws 抖动
-    if (connectInFlightRef.current) return;
-    connectInFlightRef.current = true;
 
-    // 手动调用或业务拉起时，尝试恢复状态机：如果当前处于错误状态，清除计数给一次重连机会
-    if (status === 'error' || status === 'disconnected') {
-      reconnectCountRef.current = 0;
+    // 如果是手动强连，重置重连寿命并清除一切自动重试倒计时定时器
+    if (isManual) {
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+      }
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      reconnectCountRef.current = 1;
+      setReconnectCount(1);
+      setReconnectDelayLeft(null);
     }
+
+    // 防抖：避免多次点击导致 close/new ws 抖动
+    if (connectInFlightRef.current && !isManual) return;
+    connectInFlightRef.current = true;
 
     dispatch({ type: 'CONNECT_REQUEST' });
     
@@ -396,6 +411,8 @@ export function useV3GatewayConnection({
       // 4001 = gateway auth rotated; reset reconnect counter for immediate retry
       if (ev.code === 4001) {
         reconnectCountRef.current = 0;
+        setReconnectCount(0);
+        setReconnectDelayLeft(null);
         gatewayTokenCacheRef.current = null;
         // eslint-disable-next-line no-console
         console.warn('⚠️ [V3] 网关认证已轮换 (4001)，立即重连');
@@ -427,13 +444,49 @@ export function useV3GatewayConnection({
       return;
     }
     const delay = reconnectCountRef.current === 0 ? 0 : Math.min(2000 * reconnectCountRef.current, 10000);
-    reconnectTimerRef.current = setTimeout(() => {
-      reconnectCountRef.current++;
-      connect();
-    }, delay);
-    return () => {
+    
+    if (delay > 0) {
+      let secondsLeft = Math.ceil(delay / 1000);
+      setReconnectDelayLeft(secondsLeft);
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = setInterval(() => {
+        secondsLeft--;
+        if (secondsLeft <= 0) {
+          if (countdownTimerRef.current) {
+            clearInterval(countdownTimerRef.current);
+            countdownTimerRef.current = null;
+          }
+          setReconnectDelayLeft(null);
+        } else {
+          setReconnectDelayLeft(secondsLeft);
+        }
+      }, 1000);
+
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-    };
+      reconnectTimerRef.current = setTimeout(() => {
+        if (countdownTimerRef.current) {
+          clearInterval(countdownTimerRef.current);
+          countdownTimerRef.current = null;
+        }
+        setReconnectDelayLeft(null);
+        reconnectCountRef.current++;
+        setReconnectCount(reconnectCountRef.current);
+        connect(false);
+      }, delay);
+
+      return () => {
+        if (countdownTimerRef.current) {
+          clearInterval(countdownTimerRef.current);
+          countdownTimerRef.current = null;
+        }
+        setReconnectDelayLeft(null);
+        if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      };
+    } else {
+      reconnectCountRef.current++;
+      setReconnectCount(reconnectCountRef.current);
+      connect(false);
+    }
   }, [status, keyPair, maxReconnects, connect]);
 
   const setConnectionPaused = useCallback(
@@ -443,6 +496,10 @@ export function useV3GatewayConnection({
         if (reconnectTimerRef.current) {
           clearTimeout(reconnectTimerRef.current);
           reconnectTimerRef.current = null;
+        }
+        if (countdownTimerRef.current) {
+          clearInterval(countdownTimerRef.current);
+          countdownTimerRef.current = null;
         }
         connectInFlightRef.current = false;
         if (connectTimeoutRef.current) {
@@ -459,14 +516,20 @@ export function useV3GatewayConnection({
         rejectAllPendingRequests('Gateway connection paused');
       } else {
         reconnectCountRef.current = 0;
-        connect();
+        setReconnectCount(0);
+        setReconnectDelayLeft(null);
+        connect(false);
       }
     },
     [connect, rejectAllPendingRequests]
   );
 
   useEffect(() => {
-    if (status === 'authenticated') reconnectCountRef.current = 0;
+    if (status === 'authenticated') {
+      reconnectCountRef.current = 0;
+      setReconnectCount(0);
+      setReconnectDelayLeft(null);
+    }
   }, [status]);
 
   /**
@@ -495,8 +558,10 @@ export function useV3GatewayConnection({
       lastHealth,
       latencyHistory,
       pulse,
-      setConnectionPaused
+      setConnectionPaused,
+      reconnectCount,
+      reconnectDelayLeft
     };
-  }, [status, connect, sendRPC, rejectAllPendingRequests, lastHealth, latencyHistory, pulse, setConnectionPaused]);
+  }, [status, connect, sendRPC, rejectAllPendingRequests, lastHealth, latencyHistory, pulse, setConnectionPaused, reconnectCount, reconnectDelayLeft]);
 }
 
