@@ -65,6 +65,7 @@ export const ECharts = ({ optionStr, isTyping }: { optionStr: string, isTyping?:
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [hasValidRender, setHasValidRender] = React.useState(false);
+  const prevOptionStrRef = useRef<string>(''); // 💡 引入前一次渲染成功 option 的缓存序列化串，防止重复及无意义重绘
 
   // 初始化与销毁逻辑
   useEffect(() => {
@@ -153,7 +154,35 @@ export const ECharts = ({ optionStr, isTyping }: { optionStr: string, isTyping?:
 
     if (option && typeof option === 'object') {
       try {
-        chartInstanceRef.current?.setOption(option, true);
+        // 💡 体验极致打磨：如果仍在流式生成中 (isTyping)，强制关闭动画，避免频繁更新产生的缩放闪烁；
+        // 生成结束后才启用动画，保证流畅的最终呈现。
+        const finalOption = { ...option };
+        if (isTyping) {
+          finalOption.animation = false;
+          // 同时为了万无一失，如果 series 内部也包含子项 animation 属性，也强制关闭
+          if (Array.isArray(finalOption.series)) {
+            finalOption.series = finalOption.series.map((s: any) => {
+              if (s && typeof s === 'object') {
+                return { ...s, animation: false };
+              }
+              return s;
+            });
+          } else if (finalOption.series && typeof finalOption.series === 'object') {
+            finalOption.series.animation = false;
+          }
+        }
+
+        const optStr = JSON.stringify(finalOption);
+        if (prevOptionStrRef.current !== optStr) {
+          // 在流式打字中，我们使用增量更新 (notMerge = false) 并配合 lazyUpdate，实现静默、平滑、零闪烁渲染；
+          // 打字生成结束后，我们采用不合并 (notMerge = true) 完全刷新，从而呈现出最终动画
+          chartInstanceRef.current?.setOption(finalOption, {
+            notMerge: !isTyping,
+            lazyUpdate: true
+          });
+          prevOptionStrRef.current = optStr;
+        }
+
         setError(null);
         setHasValidRender(true);
       } catch (renderErr: any) {
