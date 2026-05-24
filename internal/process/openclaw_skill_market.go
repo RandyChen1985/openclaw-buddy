@@ -86,7 +86,7 @@ func FetchSkillMarket(configDir string) (string, []MarketSkill, error) {
 		Timeout: 8 * time.Second,
 	}
 
-	req, err := http.NewRequest("GET", "https://api.clawhub.ai/v1/skills", nil)
+	req, err := http.NewRequest("GET", "https://clawhub.ai/api/v1/skills", nil)
 	if err != nil {
 		// Request creation failed, return offline and presets
 		return "offline", GetPresetMarketSkills(), nil
@@ -107,12 +107,69 @@ func FetchSkillMarket(configDir string) (string, []MarketSkill, error) {
 	var apiResp struct {
 		Status string        `json:"status"`
 		Data   []MarketSkill `json:"data"`
+		Items  []struct {
+			Slug          string `json:"slug"`
+			DisplayName   string `json:"displayName"`
+			Summary       string `json:"summary"`
+			LatestVersion struct {
+				Version string `json:"version"`
+			} `json:"latestVersion"`
+		} `json:"items"`
 	}
 
 	decoder := json.NewDecoder(resp.Body)
 	if err := decoder.Decode(&apiResp); err != nil {
 		// JSON decoding failed, return offline and presets
 		return "offline", GetPresetMarketSkills(), nil
+	}
+
+	// If items field is present (ClawHub API V1), transform to MarketSkill list
+	if len(apiResp.Items) > 0 {
+		var skills []MarketSkill
+		for _, item := range apiResp.Items {
+			name := item.Slug
+			if name == "" {
+				name = item.DisplayName
+			}
+
+			reqs := MarketSkillRequirements{
+				Bins: []string{"python3"},
+				Env:  []string{},
+			}
+
+			// Map default emojis for recognized categories
+			emoji := "🧩"
+			if item.Slug == "fast-ppt" {
+				emoji = "📊"
+			} else if item.Slug == "golang-testing" {
+				emoji = "🧪"
+			} else if item.Slug == "virustotal3" {
+				emoji = "🛡️"
+			} else if item.Slug == "skill-docker" {
+				emoji = "🐳"
+			} else if item.Slug == "yq-image-creator" {
+				emoji = "🎨"
+			} else if item.Slug == "yq-gif-sticker-generator" {
+				emoji = " Q"
+			}
+
+			version := item.LatestVersion.Version
+			if version == "" {
+				version = "1.0.0"
+			}
+
+			skills = append(skills, MarketSkill{
+				Name:         name,
+				Description:  item.Summary,
+				Emoji:        emoji,
+				Version:      version,
+				TarballURL:   "https://clawhub.ai/api/v1/packages/" + item.Slug + "/download",
+				Author:       "ClawHub Team",
+				Rating:       4.8,
+				Requirements: reqs,
+			})
+		}
+		return "online", skills, nil
 	}
 
 	if len(apiResp.Data) == 0 {

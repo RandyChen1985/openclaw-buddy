@@ -1122,13 +1122,6 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
             />
 
           </div>
-        <ChatV3Auth
-          status={status}
-          isMobile={!!isMobile}
-          onConnect={connect}
-          t={t}
-          isDarkMode={isDarkMode}
-        />
       </div>
       <V3RightDock
           visiblePanels={dockVisiblePanels}
@@ -1202,6 +1195,13 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
           }}
         />
       </div>
+      <ChatV3Auth
+        status={status}
+        isMobile={!!isMobile}
+        onConnect={connect}
+        t={t}
+        isDarkMode={isDarkMode}
+      />
       </div>
 
       <FileExplorer

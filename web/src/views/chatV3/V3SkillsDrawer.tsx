@@ -149,6 +149,7 @@ export function V3SkillsDrawer({
     setSearchText('');
     setFilterType('all');
     fetchSkills();
+    fetchMarketSkills();
   };
 
   /**
@@ -761,10 +762,10 @@ export function V3SkillsDrawer({
             value={filterType}
             onChange={(value) => setFilterType(value as any)}
             options={[
-              { label: t('skills.filterAll', { defaultValue: '全部' }), value: 'all' },
-              { label: t('skills.globalSkill', { defaultValue: '全局' }), value: 'global' },
-              { label: t('skills.privateSkill', { defaultValue: '私有' }), value: 'private' },
-              { label: '🔍 ' + t('skills.exploreMarket', { defaultValue: '市场' }), value: 'market' }
+              { label: `${t('skills.filterAll', { defaultValue: '全部' })} (${skills.length})`, value: 'all' },
+              { label: `${t('skills.globalSkill', { defaultValue: '全局' })} (${skills.filter((s: any) => s.is_global).length})`, value: 'global' },
+              { label: `${t('skills.privateSkill', { defaultValue: '私有' })} (${skills.filter((s: any) => !s.is_global).length})`, value: 'private' },
+              { label: `🔍 ${t('skills.exploreMarket', { defaultValue: '市场' })} (${marketSkills.length})`, value: 'market' }
             ]}
             className="v3-skills-drawer-segmented"
             style={{ borderRadius: '8px' }}

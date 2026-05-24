@@ -71,17 +71,18 @@ const ChatV3Auth: React.FC<ChatV3AuthProps> = ({ status, isMobile, onConnect, t,
           ) : t('chat.v3SecureDesc', { defaultValue: 'SECURE_CHANNEL_V3 // ED25519_HARDWARE_KEY' })}
         </div>
         
-        {status === 'error' && (
-          <Button 
-            type="primary" 
-            size="large" 
-            onClick={onConnect} 
-            icon={<RefreshCw size={18} />}
-            style={{ width: '100%', height: 46, borderRadius: 12, background: '#2563eb', fontWeight: 600, border: 'none', boxShadow: '0 4px 15px rgba(37, 99, 235, 0.3)' }}
-          >
-            {t('chat.v3RetryBtn', { defaultValue: 'RETRY_CONNECTION' })}
-          </Button>
-        )}
+        <Button 
+          type="primary" 
+          size="large" 
+          onClick={onConnect} 
+          loading={['connecting', 'challenging', 'authorizing', 'identifying'].includes(status)}
+          icon={!['connecting', 'challenging', 'authorizing', 'identifying'].includes(status) && <RefreshCw size={18} />}
+          style={{ width: '100%', height: 46, borderRadius: 12, background: '#2563eb', fontWeight: 600, border: 'none', boxShadow: '0 4px 15px rgba(37, 99, 235, 0.3)' }}
+        >
+          {status === 'error' 
+            ? t('chat.v3RetryBtn', { defaultValue: '重试连接' }) 
+            : t('chat.v3ManualConnect', { defaultValue: '手动重连' })}
+        </Button>
 
         <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 4 }}>
             {[1,2,3,4].map(i => (
