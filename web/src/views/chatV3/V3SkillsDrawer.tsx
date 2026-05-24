@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Drawer, Input, Spin, Button, message, Tooltip, Segmented, Empty, Popconfirm } from 'antd';
-import { Puzzle, RefreshCw, X, Copy, Search, CheckCircle2, AlertCircle, Trash2, DownloadCloud, Check, Cpu, WifiOff } from 'lucide-react';
+import { Drawer, Input, Spin, Button, message, Tooltip, Segmented, Empty, Popconfirm, Modal, Checkbox } from 'antd';
+import { Puzzle, RefreshCw, X, Copy, Search, CheckCircle2, AlertCircle, Trash2, DownloadCloud, Check, Cpu, WifiOff, Share2 } from 'lucide-react';
 import api from '../../api';
 
 export interface V3SkillsDrawerProps {
@@ -29,6 +29,60 @@ export function V3SkillsDrawer({
   const [filterType, setFilterType] = useState<'all' | 'global' | 'private' | 'market'>('all');
   const [hoveredSkillName, setHoveredSkillName] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  // --- 共享技能相关状态 ---
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [sharingSkillName, setSharingSkillName] = useState<string>('');
+  const [sharingFromBotID, setSharingFromBotID] = useState<string>('');
+  const [targetBotIDs, setTargetBotIDs] = useState<string[]>([]);
+  const [isSharing, setIsSharing] = useState(false);
+  const [allBotsList, setAllBotsList] = useState<any[]>([]);
+  const [loadingBots, setLoadingBots] = useState(false);
+
+  const handleOpenShare = async (e: any, skillName: string, fromBotId: string) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    setSharingSkillName(skillName);
+    setSharingFromBotID(fromBotId);
+    setTargetBotIDs([]);
+    setIsShareModalOpen(true);
+
+    try {
+      setLoadingBots(true);
+      const res = await api.get('/v1/openclaw/bots-models');
+      const list = res.data?.data?.bots || res.data?.bots || [];
+      // 过滤排除当前 BotID
+      setAllBotsList(list.filter((b: any) => b.id !== fromBotId));
+    } catch (err) {
+      console.error('Failed to load bots list:', err);
+    } finally {
+      setLoadingBots(false);
+    }
+  };
+
+  const handleConfirmShare = async () => {
+    if (targetBotIDs.length === 0) {
+      message.warning(t('skills.noAvailableBotsToShare', { defaultValue: '请选择要共享的目标智能体' }));
+      return;
+    }
+    try {
+      setIsSharing(true);
+      message.loading(t('common.processing', { defaultValue: '正在处理中...' }), 1.5);
+      await api.post('/v1/openclaw/skills/share', {
+        skill_name: sharingSkillName,
+        from_bot_id: sharingFromBotID,
+        to_bot_ids: targetBotIDs
+      });
+      message.success(t('skills.shareSuccess', { defaultValue: '技能共享成功，系统引擎已重载！' }));
+      setIsShareModalOpen(false);
+      // 触发全局对账更新
+      window.dispatchEvent(new CustomEvent('openclaw:skills-updated'));
+    } catch (err: any) {
+      console.error('Failed to share skill:', err);
+      message.error(err.response?.data?.error || t('common.error', { defaultValue: '共享技能失败' }));
+    } finally {
+      setIsSharing(false);
+    }
+  };
 
   const [marketSkills, setMarketSkills] = useState<any[]>([]);
   const [marketLoading, setMarketLoading] = useState(false);
@@ -992,7 +1046,15 @@ export function V3SkillsDrawer({
                       boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0, paddingRight: 32 }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 14,
+                      flex: 1,
+                      minWidth: 0,
+                      paddingRight: isHovered ? (isGlobal ? 48 : 108) : 32,
+                      transition: 'padding-right 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                    }}>
                       <div
                         style={{
                           fontSize: 20,
@@ -1052,8 +1114,7 @@ export function V3SkillsDrawer({
                     <div style={{
                       position: 'absolute',
                       right: 14,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
+                      top: 14,
                       display: 'flex',
                       alignItems: 'center',
                       gap: 6,
@@ -1061,6 +1122,27 @@ export function V3SkillsDrawer({
                       visibility: isHovered ? 'visible' : 'hidden',
                       transition: 'all 0.2s ease-in-out'
                     }}>
+                      {!isGlobal && (
+                        <Tooltip title={t('skills.shareToBots', { defaultValue: '共享到其他智能体' })}>
+                          <Button
+                            size="small"
+                            type="text"
+                            icon={<Share2 size={13} />}
+                            onClick={(e) => handleOpenShare(e, s.name, s.bot_id)}
+                            style={{
+                              width: 28,
+                              height: 28,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: '6px',
+                              background: isDarkMode ? '#334155' : '#f1f5f9',
+                              color: shell.textPrimary
+                            }}
+                          />
+                        </Tooltip>
+                      )}
+
                       <Tooltip title={t('common.copy', { defaultValue: '复制技能名' })}>
                         <Button
                           size="small"
@@ -1137,6 +1219,74 @@ export function V3SkillsDrawer({
           </div>
         </div>
       </Drawer>
+
+      {/* 共享技能多选 Modal */}
+      <Modal
+        title={<span style={{ fontWeight: 700, color: isDarkMode ? '#f1f5f9' : '#1e293b' }}>{t('skills.shareSkill', { defaultValue: '共享技能' })}: <code style={{ color: '#0d9488' }}>{sharingSkillName}</code></span>}
+        open={isShareModalOpen}
+        onOk={handleConfirmShare}
+        onCancel={() => setIsShareModalOpen(false)}
+        confirmLoading={isSharing}
+        okText={t('common.confirm', { defaultValue: '确认' })}
+        cancelText={t('common.cancel', { defaultValue: '取消' })}
+        okButtonProps={{ style: { background: '#2563eb', border: 'none' } }}
+        modalRender={(modal) => (
+          <div style={{
+            backdropFilter: 'blur(16px)',
+            background: isDarkMode ? 'rgba(30, 41, 59, 0.75)' : 'rgba(255, 255, 255, 0.75)',
+            border: isDarkMode ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)',
+            borderRadius: 16,
+            boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
+            overflow: 'hidden'
+          }}>
+            {modal}
+          </div>
+        )}
+        bodyStyle={{ padding: '16px 24px' }}
+      >
+        {loadingBots ? (
+          <div style={{ padding: '24px 0', textAlign: 'center' }}>
+            <Spin size="small" />
+          </div>
+        ) : allBotsList.length === 0 ? (
+          <div style={{ padding: '16px 0', textAlign: 'center', color: shell.textMuted }}>
+            {t('skills.noAvailableBotsToShare', { defaultValue: '无可共享的其他智能体' })}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ fontSize: 12, color: shell.textMuted, marginBottom: 4 }}>
+              {t('skills.selectTargetBots', { defaultValue: '选择要共享的目标智能体（支持多选）：' })}
+            </div>
+            <Checkbox.Group
+              value={targetBotIDs}
+              onChange={(vals: any[]) => setTargetBotIDs(vals)}
+              style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}
+            >
+              {allBotsList.map((b: any) => (
+                <Checkbox
+                  key={b.id}
+                  value={b.id}
+                  style={{
+                    color: shell.textPrimary,
+                    fontSize: 13,
+                    marginLeft: 0,
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    background: isDarkMode ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)',
+                    border: `1px solid ${shell.cardBorder}`,
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  <span style={{ fontWeight: 600, marginRight: 6 }}>{b.name || b.id}</span>
+                  <span style={{ fontSize: 11, color: shell.textMuted }}>({b.id})</span>
+                </Checkbox>
+              ))}
+            </Checkbox.Group>
+          </div>
+        )}
+      </Modal>
     </>
   );
 }

@@ -514,14 +514,14 @@ func extractArchive(archivePath string, finalSkillDir string) error {
 	_ = os.RemoveAll(finalSkillDir)
 
 	if err := os.Rename(sourceDir, finalSkillDir); err != nil {
-		return copyDir(sourceDir, finalSkillDir)
+		return CopyDir(sourceDir, finalSkillDir)
 	}
 
 	return nil
 }
 
-// copyDir recursively copies a directory tree
-func copyDir(src string, dst string) error {
+// CopyDir recursively copies a directory tree
+func CopyDir(src string, dst string) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -654,5 +654,63 @@ func InstallSkillFromReader(r io.Reader, targetDir, skillName string, configDir 
 		return fmt.Errorf("failed to extract uploaded skill archive: %v", err)
 	}
 
+	return nil
+}
+
+// SharePrivateSkill recursively copies a private skill directory to target Bots and reloads skills
+func SharePrivateSkill(configDir string, skillName string, fromBotID string, toBotIDs []string) error {
+	// 1. 获取源物理路径
+	sources := GetDynamicSkillDirSources(configDir)
+	var sourceSkillPath string
+	for _, src := range sources {
+		if !src.IsGlobal && src.BotID == fromBotID {
+			if p := findSkillPathInDir(src.Path, skillName); p != "" {
+				sourceSkillPath = p
+				break
+			}
+		}
+	}
+	if sourceSkillPath == "" {
+		return fmt.Errorf("failed to locate private skill source directory for bot %s and skill %s", fromBotID, skillName)
+	}
+
+	// 2. 复制到每一个目标 Bot 专属目录中
+	for _, toBotID := range toBotIDs {
+		var targetSkillsDir string
+		for _, src := range sources {
+			if !src.IsGlobal && src.BotID == toBotID {
+				targetSkillsDir = src.Path
+				break
+			}
+		}
+		// 如果目标 Bot 还未初始化 skills 目录，则动态推算并自动创建
+		if targetSkillsDir == "" {
+			cfgDir := configDir
+			if cfgDir == "" {
+				cfgDir = utils.ExpandPath("~/.openclaw")
+			}
+			suffix := "workspace"
+			if toBotID != "" && toBotID != "main" {
+				suffix = "workspace_" + toBotID
+			}
+			targetSkillsDir = filepath.Join(cfgDir, suffix, "skills")
+		}
+
+		if err := os.MkdirAll(targetSkillsDir, 0755); err != nil {
+			return fmt.Errorf("failed to create target skills directory for bot %s: %v", toBotID, err)
+		}
+
+		targetSkillPath := filepath.Join(targetSkillsDir, skillName)
+		// 物理删除安全清场，支持一键升级覆盖
+		_ = os.RemoveAll(targetSkillPath)
+
+		// 执行物理目录复制
+		if err := CopyDir(sourceSkillPath, targetSkillPath); err != nil {
+			return fmt.Errorf("failed to copy skill %s to bot %s: %v", skillName, toBotID, err)
+		}
+	}
+
+	// 3. 触发列表缓存同步
+	SyncKeySingle("skills", configDir)
 	return nil
 }

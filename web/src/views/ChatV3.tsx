@@ -254,6 +254,8 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
     handleThinkingLevelChange,
     sendRPC,
     connect,
+    reconnectCount,
+    reconnectDelayLeft,
     showScrollBtnRef
   } = useChatV3WebSocket({
     selectedBot,
@@ -924,7 +926,7 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
           lastHealth={lastHealth}
           latencyHistory={latencyHistory}
           pulse={pulse}
-          onReconnect={connect}
+          onReconnect={() => connect(true)}
           sessionKey={sessionKey}
           sessionLabel={sessionLabel}
           isSummarizing={isSummarizing}
@@ -1198,7 +1200,9 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
       <ChatV3Auth
         status={status}
         isMobile={!!isMobile}
-        onConnect={connect}
+        onConnect={() => connect(true)}
+        reconnectCount={reconnectCount}
+        reconnectDelayLeft={reconnectDelayLeft}
         t={t}
         isDarkMode={isDarkMode}
       />

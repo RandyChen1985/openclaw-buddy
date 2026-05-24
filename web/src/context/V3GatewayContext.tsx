@@ -7,7 +7,7 @@ import type { V3WsStatus, SendRpcResult, V3GatewayConnectionHandlers } from '../
 
 interface V3GatewayContextType {
   status: V3WsStatus;
-  connect: () => Promise<void>;
+  connect: (isManual?: boolean) => Promise<void>;
   sendRPC: (method: string, params: any) => Promise<SendRpcResult>;
   /** 暂停网关 WS（不重连）；恢复时自动 connect */
   setConnectionPaused: (paused: boolean) => void;
@@ -19,6 +19,8 @@ interface V3GatewayContextType {
   healthData: any | null;
   registerHandlers: (id: string, handlers: V3GatewayConnectionHandlers) => void;
   unregisterHandlers: (id: string) => void;
+  reconnectCount: number;
+  reconnectDelayLeft: number | null;
 }
 
 const V3GatewayContext = createContext<V3GatewayContextType | null>(null);
@@ -75,7 +77,9 @@ export const V3GatewayProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setConnectionPaused,
     lastHealth,
     latencyHistory,
-    pulse
+    pulse,
+    reconnectCount,
+    reconnectDelayLeft
   } = useV3GatewayConnection({
     keyPair,
     deviceId,
@@ -120,8 +124,10 @@ export const V3GatewayProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     keyPair,
     healthData,
     registerHandlers,
-    unregisterHandlers
-  }), [status, connect, sendRPC, setConnectionPaused, lastHealth, latencyHistory, pulse, deviceId, keyPair, healthData, registerHandlers, unregisterHandlers]);
+    unregisterHandlers,
+    reconnectCount,
+    reconnectDelayLeft
+  }), [status, connect, sendRPC, setConnectionPaused, lastHealth, latencyHistory, pulse, deviceId, keyPair, healthData, registerHandlers, unregisterHandlers, reconnectCount, reconnectDelayLeft]);
 
   return (
     <V3GatewayContext.Provider value={value}>
