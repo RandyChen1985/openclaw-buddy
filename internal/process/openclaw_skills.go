@@ -257,6 +257,109 @@ func GetOpenClawSkills(configDir string) (any, error) {
 		}
 	}
 
+	// 💡 磁盘扫描物理补全机制：Claw 引擎底层仅基于单活动 workspace 执行 CLI list，会导致其他隔离 Bot 下的专属私有技能无法列出。
+	// 这里通过 Go 后端主动物理遍历所有 Bot 私有技能目录，将漏掉的私有技能动态补全回列表。
+	existingSkills := make(map[string]bool)
+	for _, s := range skills {
+		existingSkills[s.Name] = true
+	}
+
+	for _, src := range sources {
+		if src.IsGlobal {
+			continue
+		}
+		if _, err := os.Stat(src.Path); err != nil {
+			continue
+		}
+
+		entries, err := os.ReadDir(src.Path)
+		if err != nil {
+			continue
+		}
+
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			subDirPath := filepath.Join(src.Path, entry.Name())
+			
+			var skillName string
+			var skillDesc string
+			var skillEmoji string
+
+			// 优先读取并解析 plugin.json
+			pluginJsonPath := filepath.Join(subDirPath, "plugin.json")
+			if info, err := os.Stat(pluginJsonPath); err == nil && !info.IsDir() {
+				if data, err := os.ReadFile(pluginJsonPath); err == nil {
+					var meta map[string]interface{}
+					if err := json.Unmarshal(data, &meta); err == nil {
+						if n, ok := meta["name"].(string); ok && n != "" {
+							skillName = n
+						}
+						if d, ok := meta["description"].(string); ok {
+							skillDesc = d
+						}
+						if e, ok := meta["emoji"].(string); ok {
+							skillEmoji = e
+						}
+					}
+				}
+			}
+
+			// 回退读取并解析 SKILL.md 或 skill.yaml
+			if skillName == "" {
+				for _, filename := range []string{"SKILL.md", "skill.yaml"} {
+					p := filepath.Join(subDirPath, filename)
+					if info, err := os.Stat(p); err == nil && !info.IsDir() {
+						if data, err := readFirstBytes(p, 1024); err == nil {
+							if n := parseSkillName(data); n != "" {
+								skillName = n
+								skillDesc = parseSkillField(data, "description:")
+								skillEmoji = parseSkillField(data, "emoji:")
+								break
+							}
+						}
+					}
+				}
+			}
+
+			// 如果实在没有配置，以文件夹名称兜底
+			if skillName == "" {
+				skillName = entry.Name()
+			}
+
+			// 防重查
+			if existingSkills[skillName] {
+				continue
+			}
+
+			var mTime int64
+			if info, err := os.Stat(subDirPath); err == nil {
+				mTime = info.ModTime().Unix()
+			}
+
+			if skillDesc == "" {
+				skillDesc = "私有克隆专属技能 // isolated private skill"
+			}
+
+			newSkill := OpenClawSkill{
+				Name:        skillName,
+				Description: skillDesc,
+				Emoji:       skillEmoji,
+				Eligible:    true,
+				Disabled:    false,
+				Source:      "openclaw-workspace",
+				Bundled:     false,
+				Path:        subDirPath,
+				IsGlobal:    false,
+				BotID:       src.BotID,
+				UpdatedAt:   mTime,
+			}
+			skills = append(skills, newSkill)
+			existingSkills[skillName] = true
+		}
+	}
+
 	return map[string]any{"skills": skills}, nil
 }
 
@@ -370,6 +473,22 @@ func parseSkillName(content string) string {
 			if len(parts) == 2 {
 				val := strings.TrimSpace(parts[1])
 				// 去掉两边的引号
+				val = strings.Trim(val, `"'`)
+				return val
+			}
+		}
+	}
+	return ""
+}
+
+func parseSkillField(content string, fieldPrefix string) string {
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, fieldPrefix) {
+			parts := strings.SplitN(trimmed, ":", 2)
+			if len(parts) == 2 {
+				val := strings.TrimSpace(parts[1])
 				val = strings.Trim(val, `"'`)
 				return val
 			}
@@ -700,7 +819,13 @@ func SharePrivateSkill(configDir string, skillName string, fromBotID string, toB
 			return fmt.Errorf("failed to create target skills directory for bot %s: %v", toBotID, err)
 		}
 
-		targetSkillPath := filepath.Join(targetSkillsDir, skillName)
+		// 💡 架构设计加固：为复制过去的私有技能名称附加目标 Bot ID 后缀，彻底解决 Claw 引擎底层在全局按 name 去重导致的同名冲突问题。
+		targetSkillName := skillName
+		if toBotID != "" && toBotID != fromBotID {
+			targetSkillName = skillName + "_" + toBotID
+		}
+
+		targetSkillPath := filepath.Join(targetSkillsDir, targetSkillName)
 		// 物理删除安全清场，支持一键升级覆盖
 		_ = os.RemoveAll(targetSkillPath)
 
@@ -708,9 +833,50 @@ func SharePrivateSkill(configDir string, skillName string, fromBotID string, toB
 		if err := CopyDir(sourceSkillPath, targetSkillPath); err != nil {
 			return fmt.Errorf("failed to copy skill %s to bot %s: %v", skillName, toBotID, err)
 		}
+
+		// 3. 同步改写复制后目标文件夹下所有配置文件的 name 属性，防止引擎加载重合
+		if targetSkillName != skillName {
+			// 3.1 修改 plugin.json
+			pluginJsonPath := filepath.Join(targetSkillPath, "plugin.json")
+			if info, err := os.Stat(pluginJsonPath); err == nil && !info.IsDir() {
+				if data, err := os.ReadFile(pluginJsonPath); err == nil {
+					var meta map[string]interface{}
+					if err := json.Unmarshal(data, &meta); err == nil {
+						meta["name"] = targetSkillName
+						if newData, err := json.MarshalIndent(meta, "", "  "); err == nil {
+							_ = os.WriteFile(pluginJsonPath, newData, 0644)
+						}
+					}
+				}
+			}
+
+			// 3.2 修改 skill.yaml 和 SKILL.md
+			for _, filename := range []string{"skill.yaml", "SKILL.md"} {
+				p := filepath.Join(targetSkillPath, filename)
+				if info, err := os.Stat(p); err == nil && !info.IsDir() {
+					if data, err := os.ReadFile(p); err == nil {
+						lines := strings.Split(string(data), "\n")
+						modified := false
+						for i, line := range lines {
+							trimmed := strings.TrimSpace(line)
+							if strings.HasPrefix(trimmed, "name:") {
+								idx := strings.Index(line, "name:")
+								indent := line[:idx]
+								lines[i] = indent + "name: " + targetSkillName
+								modified = true
+								break // 只改第一个匹配项
+							}
+						}
+						if modified {
+							_ = os.WriteFile(p, []byte(strings.Join(lines, "\n")), 0644)
+						}
+					}
+				}
+			}
+		}
 	}
 
-	// 3. 触发列表缓存同步
+	// 4. 触发列表缓存同步
 	SyncKeySingle("skills", configDir)
 	return nil
 }
