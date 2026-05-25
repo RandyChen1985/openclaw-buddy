@@ -32,6 +32,7 @@ interface BotsManagerProps {
   onNavigateToDashboard?: () => void;
   onNavigateToChat?: (botId: string) => void;
   isDarkMode?: boolean;
+  allowedBotIDs?: string[] | null;
 }
 
 const BotsManager: React.FC<BotsManagerProps> = ({ 
@@ -40,7 +41,8 @@ const BotsManager: React.FC<BotsManagerProps> = ({
   activeTasks = [],
   onNavigateToDashboard,
   onNavigateToChat,
-  isDarkMode = false
+  isDarkMode = false,
+  allowedBotIDs
 }) => {
   const { t } = useTranslation();
   const lightCardColors = [
@@ -613,6 +615,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
               <Row gutter={[20, 20]}>
                 {botsModels.data.bots.map((bot: any, index: number) => {
                   const color = cardColors[index % cardColors.length];
+                  const hasNoPermission = Array.isArray(allowedBotIDs) && !allowedBotIDs.includes(bot.id);
                   return (
                     <Col xs={24} sm={12} md={8} lg={8} xl={8} key={bot.id}>
                       <Card
@@ -620,14 +623,18 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                         styles={{ body: { padding: '16px 20px' } }}
                         style={{ 
                           borderRadius: 24, 
-                          border: `1px solid ${color.border}`,
-                          background: `linear-gradient(135deg, ${color.bg} 0%, ${gradEnd} 100%)`,
+                          border: hasNoPermission 
+                            ? `1px solid ${isDarkMode ? '#334155' : '#cbd5e1'}` 
+                            : `1px solid ${color.border}`,
+                          background: hasNoPermission 
+                            ? (isDarkMode ? '#1e293b' : '#f8fafc') 
+                            : `linear-gradient(135deg, ${color.bg} 0%, ${gradEnd} 100%)`,
                           height: '100%',
                           transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
                           position: 'relative',
                           overflow: 'hidden',
-                          boxShadow: `0 10px 25px -12px ${color.theme}40`, // 主题色阴影
-                          opacity: isBotProcessing(bot.id) ? 0.7 : 1,
+                          boxShadow: hasNoPermission ? 'none' : `0 10px 25px -12px ${color.theme}40`, // 主题色阴影
+                          opacity: isBotProcessing(bot.id) ? 0.7 : (hasNoPermission ? 0.75 : 1),
                           pointerEvents: isBotProcessing(bot.id) ? 'none' : 'auto'
                         }}
                         className="bot-card card-float"
@@ -665,19 +672,25 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                 icon={<MessageSquare size={16} />}
                                 onClick={() => onNavigateToChat(bot.id)}
                                 style={{ color: '#0ea5e9' }}
+                                disabled={hasNoPermission}
                               />
                             )}
-                            <Button type="text" size="small" icon={<Pencil size={16} />} onClick={() => handleEditClick(bot)} style={{ color: '#94a3b8' }} />
+                            <Button type="text" size="small" icon={<Pencil size={16} />} onClick={() => handleEditClick(bot)} style={{ color: '#94a3b8' }} disabled={hasNoPermission} />
                             {bot.id !== 'main' && (
-                              <Button type="text" size="small" icon={<Trash2 size={16} />} onClick={() => showDeleteConfirm(bot.id)} style={{ color: '#94a3b8' }} className="delete-hover" />
+                              <Button type="text" size="small" icon={<Trash2 size={16} />} onClick={() => showDeleteConfirm(bot.id)} style={{ color: '#94a3b8' }} className="delete-hover" disabled={hasNoPermission} />
                             )}
                           </div>
                         </div>
 
                         <div style={{ position: 'relative', zIndex: 1 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                            <div style={{ fontSize: 20, fontWeight: 900, color: pageHeading, letterSpacing: '-0.5px' }}>{bot.displayName || bot.name || bot.id}</div>
-                            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', border: isDarkMode ? '2px solid #0f172a' : '2px solid #fff', boxShadow: '0 0 10px rgba(34, 197, 94, 0.4)', flexShrink: 0 }} className="status-pulse" />
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                            <div style={{ fontSize: 20, fontWeight: 900, color: hasNoPermission ? pageMuted : pageHeading, letterSpacing: '-0.5px' }}>{bot.displayName || bot.name || bot.id}</div>
+                            {!hasNoPermission && <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', border: isDarkMode ? '2px solid #0f172a' : '2px solid #fff', boxShadow: '0 0 10px rgba(34, 197, 94, 0.4)', flexShrink: 0 }} className="status-pulse" />}
+                            {hasNoPermission && (
+                              <Tag color="error" style={{ borderRadius: 6, margin: 0, fontSize: 10, fontWeight: 700, border: 'none' }}>
+                                无权限
+                              </Tag>
+                            )}
                             <div 
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -705,13 +718,14 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                 <Button 
                                   type="text" 
                                   size="small" 
-                                  icon={<Brain size={16} color="#8b5cf6" />} 
+                                  icon={<Brain size={16} color={hasNoPermission ? undefined : "#8b5cf6"} />} 
                                   onClick={() => handleOpenFileEditor(bot.id, 'soul')}
+                                  disabled={hasNoPermission}
                                   style={{ 
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     width: 28, height: 28, borderRadius: 8,
-                                    background: isDarkMode ? 'rgba(139, 92, 246, 0.18)' : '#f5f3ff',
-                                    border: isDarkMode ? '1px solid rgba(167, 139, 250, 0.4)' : '1px solid #ddd6fe'
+                                    background: hasNoPermission ? undefined : (isDarkMode ? 'rgba(139, 92, 246, 0.18)' : '#f5f3ff'),
+                                    border: hasNoPermission ? undefined : (isDarkMode ? '1px solid rgba(167, 139, 250, 0.4)' : '1px solid #ddd6fe')
                                   }}
                                 />
                               </Tooltip>
@@ -719,13 +733,14 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                 <Button 
                                   type="text" 
                                   size="small" 
-                                  icon={<ShieldCheck size={16} color="#2563eb" />} 
+                                  icon={<ShieldCheck size={16} color={hasNoPermission ? undefined : "#2563eb"} />} 
                                   onClick={() => handleOpenFileEditor(bot.id, 'identity')}
+                                  disabled={hasNoPermission}
                                   style={{ 
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     width: 28, height: 28, borderRadius: 8,
-                                    background: isDarkMode ? 'rgba(37, 99, 235, 0.2)' : '#eff6ff',
-                                    border: isDarkMode ? '1px solid rgba(96, 165, 250, 0.45)' : '1px solid #dbeafe'
+                                    background: hasNoPermission ? undefined : (isDarkMode ? 'rgba(37, 99, 235, 0.2)' : '#eff6ff'),
+                                    border: hasNoPermission ? undefined : (isDarkMode ? '1px solid rgba(96, 165, 250, 0.45)' : '1px solid #dbeafe')
                                   }}
                                 />
                               </Tooltip>
@@ -733,16 +748,17 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                 <Button 
                                   type="text" 
                                   size="small" 
-                                  icon={<BrainCircuit size={16} color="#059669" />} 
+                                  icon={<BrainCircuit size={16} color={hasNoPermission ? undefined : "#059669"} />} 
                                   onClick={() => {
                                     setActiveMemoryTab('long');
                                     handleOpenFileEditor(bot.id, 'memory');
                                   }}
+                                  disabled={hasNoPermission}
                                   style={{ 
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     width: 28, height: 28, borderRadius: 8,
-                                    background: isDarkMode ? 'rgba(5, 150, 105, 0.2)' : '#ecfdf5',
-                                    border: isDarkMode ? '1px solid rgba(52, 211, 153, 0.4)' : '1px solid #d1fae5'
+                                    background: hasNoPermission ? undefined : (isDarkMode ? 'rgba(5, 150, 105, 0.2)' : '#ecfdf5'),
+                                    border: hasNoPermission ? undefined : (isDarkMode ? '1px solid rgba(52, 211, 153, 0.4)' : '1px solid #d1fae5')
                                   }}
                                 />
                               </Tooltip>
@@ -750,13 +766,14 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                 <Button 
                                   type="text" 
                                   size="small" 
-                                  icon={<Heart size={16} color="#f97316" />} 
+                                  icon={<Heart size={16} color={hasNoPermission ? undefined : "#f97316"} />} 
                                   onClick={() => handleOpenFileEditor(bot.id, 'heartbeat')}
+                                  disabled={hasNoPermission}
                                   style={{ 
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     width: 28, height: 28, borderRadius: 8,
-                                    background: isDarkMode ? 'rgba(249, 115, 22, 0.18)' : '#fff7ed',
-                                    border: isDarkMode ? '1px solid rgba(251, 146, 60, 0.42)' : '1px solid #ffedd5'
+                                    background: hasNoPermission ? undefined : (isDarkMode ? 'rgba(249, 115, 22, 0.18)' : '#fff7ed'),
+                                    border: hasNoPermission ? undefined : (isDarkMode ? '1px solid rgba(251, 146, 60, 0.42)' : '1px solid #ffedd5')
                                   }}
                                 />
                               </Tooltip>
@@ -764,13 +781,14 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                 <Button 
                                   type="text" 
                                   size="small" 
-                                  icon={<Users size={16} color="#0891b2" />} 
+                                  icon={<Users size={16} color={hasNoPermission ? undefined : "#0891b2"} />} 
                                   onClick={() => handleOpenFileEditor(bot.id, 'agents')}
+                                  disabled={hasNoPermission}
                                   style={{ 
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     width: 28, height: 28, borderRadius: 8,
-                                    background: isDarkMode ? 'rgba(8, 145, 178, 0.2)' : '#ecfeff',
-                                    border: isDarkMode ? '1px solid rgba(34, 211, 238, 0.4)' : '1px solid #cffafe'
+                                    background: hasNoPermission ? undefined : (isDarkMode ? 'rgba(8, 145, 178, 0.2)' : '#ecfeff'),
+                                    border: hasNoPermission ? undefined : (isDarkMode ? '1px solid rgba(34, 211, 238, 0.4)' : '1px solid #cffafe')
                                   }}
                                 />
                               </Tooltip>
@@ -812,6 +830,7 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                   <span 
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      if (hasNoPermission) return;
                                       if (bot.workspace) {
                                         setExplorerPath(bot.workspace);
                                         setExplorerTitle(`${bot.name} ${t('bots.workspace')}`);
@@ -821,14 +840,15 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                                     style={{ 
                                       fontSize: 11, 
                                       fontWeight: 700, 
-                                      color: isDarkMode ? '#38bdf8' : '#0ea5e9', 
+                                      color: hasNoPermission ? '#94a3b8' : (isDarkMode ? '#38bdf8' : '#0ea5e9'), 
                                       overflow: 'hidden', 
                                       textOverflow: 'ellipsis', 
                                       whiteSpace: 'nowrap', 
                                       fontFamily: 'monospace',
-                                      cursor: 'pointer',
-                                      textDecoration: 'underline',
-                                      textDecorationStyle: 'dotted'
+                                      cursor: hasNoPermission ? 'not-allowed' : 'pointer',
+                                      textDecoration: hasNoPermission ? 'none' : 'underline',
+                                      textDecorationStyle: 'dotted',
+                                      opacity: hasNoPermission ? 0.6 : 1
                                     }}
                                   >
                                     {bot.workspace?.length > 18 ? bot.workspace.substring(0, 8) + '...' + bot.workspace.substring(bot.workspace.length - 8) : bot.workspace}
@@ -859,16 +879,31 @@ const BotsManager: React.FC<BotsManagerProps> = ({
                         </div>
                       );
                     }},
-                    { title: t('bots.displayName'), dataIndex: 'name', key: 'name', render: (name: string, record: any) => name || record.id },
+                    { title: t('bots.displayName'), dataIndex: 'name', key: 'name', render: (name: string, record: any) => {
+                      const hasNoPermission = Array.isArray(allowedBotIDs) && !allowedBotIDs.includes(record.id);
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ color: hasNoPermission ? pageMuted : undefined }}>{name || record.id}</span>
+                          {hasNoPermission && (
+                            <Tag color="error" style={{ borderRadius: 4, margin: 0, fontSize: 10, border: 'none' }}>
+                              无权限
+                            </Tag>
+                          )}
+                        </div>
+                      );
+                    }},
                     { title: t('bots.currentModel'), dataIndex: 'model', key: 'model', render: (m: string) => <Tag color="blue" style={{ borderRadius: 6 }}>{m}</Tag> },
-                    { title: t('common.action'), key: 'action', width: 120, render: (_, record: any) => (
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <Button size="small" type="text" icon={<Pencil size={14} />} onClick={() => handleEditClick(record)} />
-                        {record.id !== 'main' && (
-                          <Button size="small" type="text" danger icon={<Trash2 size={14} />} onClick={() => showDeleteConfirm(record.id)} />
-                        )}
-                      </div>
-                    )}
+                    { title: t('common.action'), key: 'action', width: 120, render: (_, record: any) => {
+                      const hasNoPermission = Array.isArray(allowedBotIDs) && !allowedBotIDs.includes(record.id);
+                      return (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <Button size="small" type="text" icon={<Pencil size={14} />} onClick={() => handleEditClick(record)} disabled={hasNoPermission} />
+                          {record.id !== 'main' && (
+                            <Button size="small" type="text" danger icon={<Trash2 size={14} />} onClick={() => showDeleteConfirm(record.id)} disabled={hasNoPermission} />
+                          )}
+                        </div>
+                      );
+                    }}
                   ]}
                 />
               </Card>

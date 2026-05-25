@@ -580,9 +580,9 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate, isDar
                           </div>
                         ),
                         children: (
-                          <Form.Item name="identity_md" style={{ marginBottom: 0 }}>
-                            <div style={{ position: 'relative', height: 380 }}>
-                              <TokenBadge text={form.getFieldValue('identity_md') || ''} />
+                          <div style={{ position: 'relative', height: 380 }}>
+                            <TokenBadge text={form.getFieldValue('identity_md') || ''} />
+                            <Form.Item name="identity_md" noStyle>
                               <Input.TextArea 
                                 onChange={(e) => setIdTokens(estimateTokens(e.target.value))}
                                 style={{ 
@@ -594,8 +594,8 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate, isDar
                                   color: isDarkMode ? '#e2e8f0' : undefined
                                 }} 
                               />
-                            </div>
-                          </Form.Item>
+                            </Form.Item>
+                          </div>
                         )
                       },
                       {
@@ -610,9 +610,9 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate, isDar
                           </div>
                         ),
                         children: (
-                          <Form.Item name="soul" style={{ marginBottom: 0 }}>
-                            <div style={{ position: 'relative', height: 380 }}>
-                              <TokenBadge text={form.getFieldValue('soul') || ''} />
+                          <div style={{ position: 'relative', height: 380 }}>
+                            <TokenBadge text={form.getFieldValue('soul') || ''} />
+                            <Form.Item name="soul" noStyle>
                               <Input.TextArea 
                                 onChange={(e) => setSoulTokens(estimateTokens(e.target.value))}
                                 style={{ 
@@ -624,8 +624,8 @@ const ExpertMarket: React.FC<ExpertMarketProps> = ({ isMobile, onNavigate, isDar
                                   color: isDarkMode ? '#e2e8f0' : undefined
                                 }} 
                               />
-                            </div>
-                          </Form.Item>
+                            </Form.Item>
+                          </div>
                         )
                       }
                     ]}

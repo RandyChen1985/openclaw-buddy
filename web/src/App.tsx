@@ -1174,6 +1174,7 @@ const Dashboard = ({ isDarkMode, toggleTheme }: { isDarkMode: boolean, toggleThe
           activeTasks={activeTasks}
           isRunning={isRunning}
           isDarkMode={isDarkMode}
+          allowedBotIDs={authMe?.bot_ids}
           onNavigateToDashboard={() => {
             setActiveTab('dashboard');
             window.location.hash = 'actions';
