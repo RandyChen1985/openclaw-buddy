@@ -7,10 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
+
+var rbacMu sync.Mutex
 
 // User 系统用户记录
 type User struct {
@@ -447,6 +450,8 @@ func GetRolePermissionKeys(roleID int64) ([]string, error) {
 
 // SetRolePermissions 用给定的 permission keys 覆盖角色权限绑定。
 func SetRolePermissions(roleID int64, permissionKeys []string) error {
+	rbacMu.Lock()
+	defer rbacMu.Unlock()
 	if DB == nil {
 		return fmt.Errorf("database not initialized")
 	}
@@ -480,6 +485,8 @@ func GetUserDirectPermissionKeys(userID int64) ([]string, error) {
 
 // SetUserPermissions 用给定的 permission keys 覆盖用户权限绑定。
 func SetUserPermissions(userID int64, permissionKeys []string) error {
+	rbacMu.Lock()
+	defer rbacMu.Unlock()
 	if DB == nil {
 		return fmt.Errorf("database not initialized")
 	}
@@ -532,6 +539,8 @@ func GetUserBotIDs(userID int64) ([]string, error) {
 
 // SetUserBots 覆盖更新用户可见的 bot_id 列表。
 func SetUserBots(userID int64, botIDs []string) error {
+	rbacMu.Lock()
+	defer rbacMu.Unlock()
 	if DB == nil {
 		return fmt.Errorf("database not initialized")
 	}
@@ -556,6 +565,8 @@ func SetUserBots(userID int64, botIDs []string) error {
 
 // AssignRolesToUser 用给定 role key 列表覆盖用户的角色绑定。
 func AssignRolesToUser(userID int64, roleKeys []string) error {
+	rbacMu.Lock()
+	defer rbacMu.Unlock()
 	if DB == nil {
 		return fmt.Errorf("database not initialized")
 	}
