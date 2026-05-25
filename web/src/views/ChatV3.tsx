@@ -451,24 +451,7 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
     }
   }, [sessionKey, botsModels, explorerPath, terminalCwd]);
 
-  const copyToClipboard = (text: string) => {
-    if (!text) return;
-    
-    // 优先尝试现代 Clipboard API
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(() => {
-        message.success(t('chat.copySuccess'));
-      }).catch(err => {
-        console.warn('Modern Clipboard API failed, trying fallback:', err);
-        fallbackCopyTextToClipboard(text);
-      });
-    } else {
-      // API 不可用（如非安全上下文）时使用后备方案
-      fallbackCopyTextToClipboard(text);
-    }
-  };
-
-  const fallbackCopyTextToClipboard = (text: string) => {
+  const fallbackCopyTextToClipboard = useCallback((text: string) => {
     try {
       const textArea = document.createElement("textarea");
       textArea.value = text;
@@ -495,7 +478,24 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
       console.error('Fallback copy failed:', err);
       message.error(t('chat.copyFailed', { defaultValue: '复制失败，请手动复制' }));
     }
-  };
+  }, [t]);
+
+  const copyToClipboard = useCallback((text: string) => {
+    if (!text) return;
+
+    // 优先尝试现代 Clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        message.success(t('chat.copySuccess'));
+      }).catch(err => {
+        console.warn('Modern Clipboard API failed, trying fallback:', err);
+        fallbackCopyTextToClipboard(text);
+      });
+    } else {
+      // API 不可用（如非安全上下文）时使用后备方案
+      fallbackCopyTextToClipboard(text);
+    }
+  }, [fallbackCopyTextToClipboard, t]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

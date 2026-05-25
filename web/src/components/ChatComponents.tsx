@@ -60,7 +60,60 @@ function autoFixOptionStr(str: string): string {
   return fixed;
 }
 
-export const ECharts = ({ optionStr, isTyping }: { optionStr: string, isTyping?: boolean }) => {
+function normalizeEchartsOptionForChat(option: any, isTyping?: boolean) {
+  const finalOption = { ...option };
+  const seriesCount = Array.isArray(finalOption.series) ? finalOption.series.length : (finalOption.series ? 1 : 0);
+  const hasLegend = finalOption.legend !== false && (finalOption.legend || seriesCount > 1);
+  const hasTitle = !!finalOption.title;
+
+  const gridDefaults = {
+    left: 52,
+    right: 28,
+    top: hasTitle ? 78 : 44,
+    bottom: hasLegend ? 86 : 44,
+    containLabel: true,
+  };
+
+  if (Array.isArray(finalOption.grid)) {
+    finalOption.grid = finalOption.grid.map((grid: any) => ({ ...gridDefaults, ...(grid || {}) }));
+  } else {
+    finalOption.grid = { ...gridDefaults, ...(finalOption.grid || {}) };
+  }
+
+  if (hasLegend) {
+    const legendDefaults = {
+      type: 'scroll',
+      bottom: 8,
+      left: 'center',
+      itemWidth: 16,
+      itemHeight: 10,
+      textStyle: { fontSize: 12 },
+    };
+    if (Array.isArray(finalOption.legend)) {
+      finalOption.legend = finalOption.legend.map((legend: any) => ({ ...legendDefaults, ...(legend || {}) }));
+    } else {
+      finalOption.legend = { ...legendDefaults, ...(finalOption.legend || {}) };
+    }
+  }
+
+  if (isTyping) {
+    finalOption.animation = false;
+    if (Array.isArray(finalOption.series)) {
+      finalOption.series = finalOption.series.map((s: any) => {
+        if (s && typeof s === 'object') {
+          return { ...s, animation: false };
+        }
+        return s;
+      });
+    } else if (finalOption.series && typeof finalOption.series === 'object') {
+      finalOption.series = { ...finalOption.series, animation: false };
+    }
+  }
+
+  return finalOption;
+}
+
+const EChartsInner = ({ optionStr, isTyping }: { optionStr: string, isTyping?: boolean }) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -154,23 +207,7 @@ export const ECharts = ({ optionStr, isTyping }: { optionStr: string, isTyping?:
 
     if (option && typeof option === 'object') {
       try {
-        // 💡 体验极致打磨：如果仍在流式生成中 (isTyping)，强制关闭动画，避免频繁更新产生的缩放闪烁；
-        // 生成结束后才启用动画，保证流畅的最终呈现。
-        const finalOption = { ...option };
-        if (isTyping) {
-          finalOption.animation = false;
-          // 同时为了万无一失，如果 series 内部也包含子项 animation 属性，也强制关闭
-          if (Array.isArray(finalOption.series)) {
-            finalOption.series = finalOption.series.map((s: any) => {
-              if (s && typeof s === 'object') {
-                return { ...s, animation: false };
-              }
-              return s;
-            });
-          } else if (finalOption.series && typeof finalOption.series === 'object') {
-            finalOption.series.animation = false;
-          }
-        }
+        const finalOption = normalizeEchartsOptionForChat(option, isTyping);
 
         const optStr = JSON.stringify(finalOption);
         if (prevOptionStrRef.current !== optStr) {
@@ -210,7 +247,8 @@ export const ECharts = ({ optionStr, isTyping }: { optionStr: string, isTyping?:
       position: 'relative',
       minHeight: '200px',
       display: 'flex',
-      flexDirection: 'column'
+      flexDirection: 'column',
+      overflowX: 'auto'
     }}>
       {/* 顶部标题栏（可选） */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '0 4px' }}>
@@ -241,7 +279,8 @@ export const ECharts = ({ optionStr, isTyping }: { optionStr: string, isTyping?:
         ref={chartRef} 
         style={{ 
           width: '100%', 
-          height: '320px',
+          minWidth: '560px',
+          height: '360px',
           visibility: (hasValidRender && !error) ? 'visible' : 'hidden',
           position: (hasValidRender && !error) ? 'relative' : 'absolute',
           opacity: (hasValidRender && !error) ? 1 : 0,
@@ -251,6 +290,10 @@ export const ECharts = ({ optionStr, isTyping }: { optionStr: string, isTyping?:
     </div>
   );
 };
+
+export const ECharts = React.memo(EChartsInner, (prev, next) => (
+  prev.optionStr === next.optionStr && prev.isTyping === next.isTyping
+));
 
 // --- Mermaid Component ---
 export const Mermaid = ({ chart }: { chart: string }) => {

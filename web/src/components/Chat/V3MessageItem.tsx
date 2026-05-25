@@ -967,6 +967,10 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       .replace(/(?:>\s*)?:::(?:thinking|plan|toolCall|commandOutput|approval|warning)[\s\S]*?(?::::|$)\n*/g, '')
       .trim();
   }, [processedContent, msg.role]);
+  const hasEchartsBlock = useMemo(
+    () => !isMobile && msg.role === 'assistant' && /```(?:echarts|chart)\b/i.test(processedContent),
+    [isMobile, msg.role, processedContent],
+  );
 
   const isUser = msg.role === 'user';
   const isMetaOnly = !!(msg as any)._uiMetaOnly;
@@ -1656,7 +1660,8 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       )}
       
       <div style={{ 
-        maxWidth: isMobile ? '92%' : '85%',
+        width: hasEchartsBlock ? 'min(860px, calc(100% - 56px))' : undefined,
+        maxWidth: isMobile ? '92%' : (hasEchartsBlock ? '92%' : '85%'),
         padding: isMetaOnly ? (isMobile ? '8px 12px' : '10px 14px') : (isMobile ? '10px 14px' : '12px 18px'),
         borderRadius: isUser ? '18px 18px 4px 18px' : (isMetaOnly ? 12 : '4px 18px 18px 18px'),
         background: isUser
