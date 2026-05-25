@@ -136,7 +136,7 @@ func VerifySkillPath(path string, configDir ...string) (string, error) {
 	}
 
 	if !isAllowed {
-		return "", fmt.Errorf("access denied: path '%s' is outside allowed skill directories", path)
+		return "", fmt.Errorf("拒绝访问：路径 '%s' 不在允许的技能目录范围内", path)
 	}
 
 	return cleanPath, nil

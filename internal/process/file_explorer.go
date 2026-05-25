@@ -163,7 +163,7 @@ func VerifyExplorerPath(path, configDir string) (string, error) {
 	}
 
 	if !isAllowed {
-		return "", fmt.Errorf("access denied: path is outside allowed directories")
+		return "", fmt.Errorf("拒绝访问：路径不在允许的目录范围内")
 	}
 
 	return cleanPath, nil
