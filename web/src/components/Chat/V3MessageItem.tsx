@@ -43,6 +43,7 @@ interface V3MessageItemProps {
   isDarkMode?: boolean;
   showThinking: boolean;
   selectedBot: string;
+  currentWorkspacePath?: string;
   editingMsgIndex: number | null;
   editContent: string;
   setEditContent: (val: string) => void;
@@ -729,13 +730,55 @@ const getFilenameFromPath = (path: string) => (
   path.split(/[\\/]/).filter(Boolean).pop() || path
 );
 
+const joinWorkspacePath = (base: string, relativePath: string) => {
+  const cleanedBase = String(base || '').trim().replace(/\/+$/g, '');
+  const cleanedRel = String(relativePath || '').trim().replace(/^\/+/g, '');
+  if (!cleanedBase || !cleanedRel) return '';
+  return `${cleanedBase}/${cleanedRel}`;
+};
+
+const getOpenPathCandidates = (path: string, currentWorkspacePath?: string) => {
+  const candidates = [path];
+  const workspaceMatch = /^\/workspace\/(.+)$/.exec(path);
+  if (workspaceMatch) {
+    const relPath = workspaceMatch[1];
+    const mappedCurrent = joinWorkspacePath(currentWorkspacePath || '', relPath);
+    const mappedDefault = joinWorkspacePath('~/.openclaw/workspace', relPath);
+    if (mappedCurrent) candidates.push(mappedCurrent);
+    candidates.push(mappedDefault);
+  }
+  return Array.from(new Set(candidates.filter(Boolean)));
+};
+
 const InlineFileOpenButton: React.FC<{
   path: string;
   messageId: string;
   isDarkMode: boolean;
-}> = ({ path, messageId, isDarkMode }) => {
+  currentWorkspacePath?: string;
+}> = ({ path, messageId, isDarkMode, currentWorkspacePath }) => {
   const { registerArtifact } = useArtifact();
   const [loading, setLoading] = useState(false);
+
+  const readFileForCanvas = async (candidatePath: string) => {
+    const type = getArtifactTypeFromPath(candidatePath);
+    if (type === 'image' || type === 'pdf') {
+      // 请求二进制下载接口以安全获取图片/PDF二进制数据
+      const res = await api.get(`/v1/openclaw/files/download?path=${encodeURIComponent(candidatePath)}`, {
+        responseType: 'blob'
+      });
+      const blob = res.data;
+      const code = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error(`${type === 'pdf' ? 'PDF' : '图片'}转换Base64失败`));
+        reader.readAsDataURL(blob);
+      });
+      return { type, code };
+    }
+
+    const res = await api.get(`/v1/openclaw/files/get?path=${encodeURIComponent(candidatePath)}`);
+    return { type, code: res.data?.content || '' };
+  };
 
   const handleOpen = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -743,41 +786,34 @@ const InlineFileOpenButton: React.FC<{
     if (loading) return;
 
     setLoading(true);
+    let lastErr: any = null;
     try {
-      const type = getArtifactTypeFromPath(path);
-      let code = '';
-      if (type === 'image' || type === 'pdf') {
-        // 请求二进制下载接口以安全获取图片/PDF二进制数据
-        const res = await api.get(`/v1/openclaw/files/download?path=${encodeURIComponent(path)}`, {
-          responseType: 'blob'
-        });
-        const blob = res.data;
-        code = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error(`${type === 'pdf' ? 'PDF' : '图片'}转换Base64失败`));
-          reader.readAsDataURL(blob);
-        });
-      } else {
-        const res = await api.get(`/v1/openclaw/files/get?path=${encodeURIComponent(path)}`);
-        code = res.data?.content || '';
+      const candidates = getOpenPathCandidates(path, currentWorkspacePath);
+      for (const candidatePath of candidates) {
+        try {
+          const { type, code } = await readFileForCanvas(candidatePath);
+          const title = getFilenameFromPath(candidatePath);
+          registerArtifact({
+            id: `${messageId}-${candidatePath}`,
+            title,
+            type,
+            code,
+            messageId
+          }, true);
+          message.success(candidatePath === path ? '已在实时画布打开' : '已映射到工作区并在实时画布打开');
+          return;
+        } catch (err) {
+          lastErr = err;
+        }
       }
-
-      const title = getFilenameFromPath(path);
-      registerArtifact({
-        id: `${messageId}-${path}`,
-        title,
-        type,
-        code,
-        messageId
-      }, true);
-      message.success('已在实时画布打开');
     } catch (err: any) {
-      console.error('Open file in canvas failed:', err);
-      message.error(err?.message || '打开文件失败');
+      lastErr = err;
     } finally {
       setLoading(false);
     }
+
+    console.error('Open file in canvas failed:', lastErr);
+    message.error(lastErr?.response?.data?.message || lastErr?.message || '打开文件失败');
   };
 
   return (
@@ -812,6 +848,7 @@ const InlineFileOpenButton: React.FC<{
 
 const V3MessageItem: React.FC<V3MessageItemProps> = ({ 
   msg, index, isMobile, isDarkMode = false, showThinking,
+  currentWorkspacePath,
   editingMsgIndex, editContent, setEditContent,
   onEdit, onSaveEdit, onCancelEdit, onQuote, onSend, onSaveToWorkspace, onRegenerate,
   copyToClipboard, isTyping, isLast, isStalled, tpsData, mainHasTranscript, metaContent, t
@@ -1456,6 +1493,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
               path={openablePath}
               messageId={String(msg.id || msg.runId || index)}
               isDarkMode={isDarkMode}
+              currentWorkspacePath={currentWorkspacePath}
             />
           )}
         </>
@@ -1991,6 +2029,7 @@ export default React.memo(V3MessageItem, (prev, next) => {
          prev.index === next.index &&
          prev.t === next.t &&
          prev.selectedBot === next.selectedBot &&
+         prev.currentWorkspacePath === next.currentWorkspacePath &&
          prev.setEditContent === next.setEditContent &&
          prev.onEdit === next.onEdit &&
          prev.onSaveEdit === next.onSaveEdit &&

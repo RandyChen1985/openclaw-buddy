@@ -1021,6 +1021,7 @@ const ChatV3Inner: React.FC<ChatV3Props> = ({
           isLoadingHistory={isLoadingHistory}
           tpsData={tpsData}
           selectedBot={selectedBot}
+          currentWorkspacePath={currentWorkspacePath}
           scrollRef={scrollRef}
           virtuosoRef={virtuosoRef}
           inputAreaRef={inputAreaRef}
