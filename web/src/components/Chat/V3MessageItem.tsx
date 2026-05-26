@@ -754,8 +754,9 @@ const InlineFileOpenButton: React.FC<{
   path: string;
   messageId: string;
   isDarkMode: boolean;
+  isMobile: boolean;
   currentWorkspacePath?: string;
-}> = ({ path, messageId, isDarkMode, currentWorkspacePath }) => {
+}> = ({ path, messageId, isDarkMode, isMobile, currentWorkspacePath }) => {
   const { registerArtifact } = useArtifact();
   const [loading, setLoading] = useState(false);
 
@@ -783,6 +784,10 @@ const InlineFileOpenButton: React.FC<{
   const handleOpen = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isMobile) {
+      message.warning('移动端下空间有限，暂不支持打开画布');
+      return;
+    }
     if (loading) return;
 
     setLoading(true);
@@ -1493,6 +1498,7 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
               path={openablePath}
               messageId={String(msg.id || msg.runId || index)}
               isDarkMode={isDarkMode}
+              isMobile={isMobile}
               currentWorkspacePath={currentWorkspacePath}
             />
           )}
