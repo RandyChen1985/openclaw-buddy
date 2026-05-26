@@ -247,7 +247,7 @@ ${activeArtifact.code}
           }
         `}} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-          <span style={{ fontWeight: 700, fontSize: 13.5, color: isDarkMode ? '#f3f4f6' : '#111827', whiteSpace: 'nowrap' }}>⚡ 画布</span>
+          <span style={{ fontWeight: 700, fontSize: 13.5, color: isDarkMode ? '#f3f4f6' : '#111827', whiteSpace: 'nowrap' }}>⚡</span>
           {versionsList.length > 1 && (
             <Select
               size="small"
