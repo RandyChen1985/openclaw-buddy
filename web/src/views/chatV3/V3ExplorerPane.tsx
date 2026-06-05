@@ -66,8 +66,8 @@ export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({
           <div 
             onClick={handleBackToRoot}
             style={{ 
-              fontSize: 13, 
-              fontWeight: 800, 
+              fontSize: 11, 
+              fontWeight: 500, 
               cursor: 'pointer', 
               whiteSpace: 'nowrap', 
               overflow: 'hidden', 
@@ -78,9 +78,8 @@ export const V3ExplorerPane: React.FC<V3ExplorerPaneProps> = ({
             }}
             className="hover:text-sky-600 transition-colors"
           >
-            <span style={{ flexShrink: 0 }}>{t('bots.workspace', { defaultValue: '工作区' })}</span>
-            <span style={{ color: shell.sub, fontWeight: 400, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              ({rootPath})
+            <span style={{ color: shell.text, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {rootPath}
             </span>
           </div>
         </div>

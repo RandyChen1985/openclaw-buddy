@@ -43,6 +43,7 @@ interface V3MessageItemProps {
   isDarkMode?: boolean;
   showThinking: boolean;
   selectedBot: string;
+  currentWorkspacePath?: string;
   editingMsgIndex: number | null;
   editContent: string;
   setEditContent: (val: string) => void;
@@ -729,55 +730,95 @@ const getFilenameFromPath = (path: string) => (
   path.split(/[\\/]/).filter(Boolean).pop() || path
 );
 
+const joinWorkspacePath = (base: string, relativePath: string) => {
+  const cleanedBase = String(base || '').trim().replace(/\/+$/g, '');
+  const cleanedRel = String(relativePath || '').trim().replace(/^\/+/g, '');
+  if (!cleanedBase || !cleanedRel) return '';
+  return `${cleanedBase}/${cleanedRel}`;
+};
+
+const getOpenPathCandidates = (path: string, currentWorkspacePath?: string) => {
+  const candidates = [path];
+  const workspaceMatch = /^\/workspace\/(.+)$/.exec(path);
+  if (workspaceMatch) {
+    const relPath = workspaceMatch[1];
+    const mappedCurrent = joinWorkspacePath(currentWorkspacePath || '', relPath);
+    const mappedDefault = joinWorkspacePath('~/.openclaw/workspace', relPath);
+    if (mappedCurrent) candidates.push(mappedCurrent);
+    candidates.push(mappedDefault);
+  }
+  return Array.from(new Set(candidates.filter(Boolean)));
+};
+
 const InlineFileOpenButton: React.FC<{
   path: string;
   messageId: string;
   isDarkMode: boolean;
-}> = ({ path, messageId, isDarkMode }) => {
+  isMobile: boolean;
+  currentWorkspacePath?: string;
+}> = ({ path, messageId, isDarkMode, isMobile, currentWorkspacePath }) => {
   const { registerArtifact } = useArtifact();
   const [loading, setLoading] = useState(false);
+
+  const readFileForCanvas = async (candidatePath: string) => {
+    const type = getArtifactTypeFromPath(candidatePath);
+    if (type === 'image' || type === 'pdf') {
+      // 请求二进制下载接口以安全获取图片/PDF二进制数据
+      const res = await api.get(`/v1/openclaw/files/download?path=${encodeURIComponent(candidatePath)}`, {
+        responseType: 'blob'
+      });
+      const blob = res.data;
+      const code = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error(`${type === 'pdf' ? 'PDF' : '图片'}转换Base64失败`));
+        reader.readAsDataURL(blob);
+      });
+      return { type, code };
+    }
+
+    const res = await api.get(`/v1/openclaw/files/get?path=${encodeURIComponent(candidatePath)}`);
+    return { type, code: res.data?.content || '' };
+  };
 
   const handleOpen = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isMobile) {
+      message.warning('移动端下空间有限，暂不支持打开画布');
+      return;
+    }
     if (loading) return;
 
     setLoading(true);
+    let lastErr: any = null;
     try {
-      const type = getArtifactTypeFromPath(path);
-      let code = '';
-      if (type === 'image' || type === 'pdf') {
-        // 请求二进制下载接口以安全获取图片/PDF二进制数据
-        const res = await api.get(`/v1/openclaw/files/download?path=${encodeURIComponent(path)}`, {
-          responseType: 'blob'
-        });
-        const blob = res.data;
-        code = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error(`${type === 'pdf' ? 'PDF' : '图片'}转换Base64失败`));
-          reader.readAsDataURL(blob);
-        });
-      } else {
-        const res = await api.get(`/v1/openclaw/files/get?path=${encodeURIComponent(path)}`);
-        code = res.data?.content || '';
+      const candidates = getOpenPathCandidates(path, currentWorkspacePath);
+      for (const candidatePath of candidates) {
+        try {
+          const { type, code } = await readFileForCanvas(candidatePath);
+          const title = getFilenameFromPath(candidatePath);
+          registerArtifact({
+            id: `${messageId}-${candidatePath}`,
+            title,
+            type,
+            code,
+            messageId
+          }, true);
+          message.success(candidatePath === path ? '已在实时画布打开' : '已映射到工作区并在实时画布打开');
+          return;
+        } catch (err) {
+          lastErr = err;
+        }
       }
-
-      const title = getFilenameFromPath(path);
-      registerArtifact({
-        id: `${messageId}-${path}`,
-        title,
-        type,
-        code,
-        messageId
-      }, true);
-      message.success('已在实时画布打开');
     } catch (err: any) {
-      console.error('Open file in canvas failed:', err);
-      message.error(err?.message || '打开文件失败');
+      lastErr = err;
     } finally {
       setLoading(false);
     }
+
+    console.error('Open file in canvas failed:', lastErr);
+    message.error(lastErr?.response?.data?.message || lastErr?.message || '打开文件失败');
   };
 
   return (
@@ -812,6 +853,7 @@ const InlineFileOpenButton: React.FC<{
 
 const V3MessageItem: React.FC<V3MessageItemProps> = ({ 
   msg, index, isMobile, isDarkMode = false, showThinking,
+  currentWorkspacePath,
   editingMsgIndex, editContent, setEditContent,
   onEdit, onSaveEdit, onCancelEdit, onQuote, onSend, onSaveToWorkspace, onRegenerate,
   copyToClipboard, isTyping, isLast, isStalled, tpsData, mainHasTranscript, metaContent, t
@@ -826,6 +868,8 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   const [approvalClicked, setApprovalClicked] = useState<Record<string, boolean>>({});
   const [metaBlockExpandedByKey, setMetaBlockExpandedByKey] = useState<Record<string, boolean>>({});
   const terminalScrollStateByKeyRef = useRef<Record<string, TerminalScrollState>>({});
+  /** 同一条消息内多段同类型 meta 卡片（如 analysis）需按渲染顺序分配独立 key */
+  const metaBlockInstanceIndexRef = useRef<Record<string, number>>({});
 
   /** 编辑框草稿：Virtuoso 下列项重渲染时若反复用父级 editContent 覆盖受控 value，会打断中文 IME */
   const [editDraft, setEditDraft] = useState('');
@@ -967,6 +1011,10 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       .replace(/(?:>\s*)?:::(?:thinking|plan|toolCall|commandOutput|approval|warning)[\s\S]*?(?::::|$)\n*/g, '')
       .trim();
   }, [processedContent, msg.role]);
+  const hasEchartsBlock = useMemo(
+    () => !isMobile && msg.role === 'assistant' && /```(?:echarts|chart)\b/i.test(processedContent),
+    [isMobile, msg.role, processedContent],
+  );
 
   const isUser = msg.role === 'user';
   const isMetaOnly = !!(msg as any)._uiMetaOnly;
@@ -1072,6 +1120,13 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
 
   // ReactMarkdown 的 components 配置，抽出来是为了在主气泡和嵌入式 meta 折叠区里复用同一套渲染器。
   const metaBlockBaseKey = String((msg as any).id || msg.runId || index);
+  // 每次渲染重置，使同消息内多段同类型卡片（如 analysis）按出现顺序获得独立展开 key
+  metaBlockInstanceIndexRef.current = {};
+  const allocMetaBlockInstanceKey = (blockType: string) => {
+    const next = metaBlockInstanceIndexRef.current[blockType] ?? 0;
+    metaBlockInstanceIndexRef.current[blockType] = next + 1;
+    return `${blockType}:${next}`;
+  };
   const metaBlockExpansionProps = (blockKey: string, defaultExpanded: boolean) => {
     const key = `${metaBlockBaseKey}:${blockKey}`;
     return {
@@ -1259,13 +1314,14 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       }
       if (fullText.includes(':::analysis')) {
         const analysisCopyText = stripContainerWrapper(fullText, 'analysis') || '';
+        const analysisBlockKey = allocMetaBlockInstanceKey('analysis');
         return (
           <CollapsibleMeta
             title={t('chat.analysisProcess', { defaultValue: '分析过程' })}
             icon={Search}
             iconStyle={{ color: '#6366f1' }}
             defaultExpanded={false}
-            {...metaBlockExpansionProps('analysis', false)}
+            {...metaBlockExpansionProps(analysisBlockKey, false)}
             copyText={analysisCopyText}
             onCopy={(txt: string) => copyToClipboard(txt)}
             copyLabel={t('chat.copy', { defaultValue: '复制' })}
@@ -1452,6 +1508,8 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
               path={openablePath}
               messageId={String(msg.id || msg.runId || index)}
               isDarkMode={isDarkMode}
+              isMobile={isMobile}
+              currentWorkspacePath={currentWorkspacePath}
             />
           )}
         </>
@@ -1656,7 +1714,8 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       )}
       
       <div style={{ 
-        maxWidth: isMobile ? '92%' : '85%',
+        width: hasEchartsBlock ? 'min(860px, calc(100% - 56px))' : undefined,
+        maxWidth: isMobile ? '92%' : (hasEchartsBlock ? '92%' : '85%'),
         padding: isMetaOnly ? (isMobile ? '8px 12px' : '10px 14px') : (isMobile ? '10px 14px' : '12px 18px'),
         borderRadius: isUser ? '18px 18px 4px 18px' : (isMetaOnly ? 12 : '4px 18px 18px 18px'),
         background: isUser
@@ -1986,6 +2045,7 @@ export default React.memo(V3MessageItem, (prev, next) => {
          prev.index === next.index &&
          prev.t === next.t &&
          prev.selectedBot === next.selectedBot &&
+         prev.currentWorkspacePath === next.currentWorkspacePath &&
          prev.setEditContent === next.setEditContent &&
          prev.onEdit === next.onEdit &&
          prev.onSaveEdit === next.onSaveEdit &&

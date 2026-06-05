@@ -23,6 +23,7 @@ export interface V3MessagePaneProps {
   isLoadingHistory: boolean;
   tpsData: number[];
   selectedBot: string;
+  currentWorkspacePath?: string;
 
   // refs
   scrollRef: React.RefObject<HTMLDivElement>;
@@ -74,6 +75,7 @@ export function V3MessagePane({
   isLoadingHistory,
   tpsData,
   selectedBot,
+  currentWorkspacePath,
   scrollRef,
   virtuosoRef,
   inputAreaRef,
@@ -322,6 +324,7 @@ export function V3MessagePane({
                   isDarkMode={isDarkMode}
                   showThinking={showThinking}
                   selectedBot={selectedBot}
+                  currentWorkspacePath={currentWorkspacePath}
                   editingMsgIndex={editingMsgIndex}
                   editContent={editContent}
                   setEditContent={setEditContent}

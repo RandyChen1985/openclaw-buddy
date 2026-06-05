@@ -1073,25 +1073,25 @@ button.v3-settings-reasoning-btn--dark:active {
   transition: none !important;
 }
 
-/* 聊天区与右侧 Dock 分界（略深描边 + 轻阴影，比顶栏横线更易辨认） */
+/* 聊天区与右侧 Dock 分界（移除多余描边与重叠阴影以避免双边框，靠 Dock 自身的 border-left 作极细 1px 划分） */
 .v3-chat-column--with-dock {
-  border-right: 1px solid #cbd5e1;
-  box-shadow: 6px 0 14px -8px rgba(15, 23, 42, 0.12);
+  border-right: none;
+  box-shadow: none;
   z-index: 1;
 }
 
 .chat-v3-root[data-app-dark='true'] .v3-chat-column--with-dock {
-  border-right-color: #475569;
-  box-shadow: 6px 0 18px -8px rgba(0, 0, 0, 0.45);
+  border-right: none;
+  box-shadow: none;
 }
 
 .v3-right-dock-wrap {
-  border-left: 1px solid #cbd5e1;
+  border-left: 1px solid #e2e8f0;
   background: var(--v3-surface, #fff);
 }
 
 .chat-v3-root[data-app-dark='true'] .v3-right-dock-wrap {
-  border-left-color: #475569;
+  border-left-color: #334155;
   background: #0f172a;
 }
 

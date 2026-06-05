@@ -15,7 +15,7 @@ interface LoginViewProps {
 
 type LoginMode = 'password' | 'token';
 
-const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
+const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, isDarkMode = false }) => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<LoginMode>('password');
@@ -105,8 +105,20 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  const inputStyle = { borderRadius: 14, padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0' };
-  const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' };
+  const inputStyle = {
+    borderRadius: 14,
+    padding: '10px 14px',
+    background: isDarkMode ? '#1e293b' : '#f8fafc',
+    border: isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0',
+    color: isDarkMode ? '#f1f5f9' : '#0f172a'
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 700,
+    color: isDarkMode ? '#94a3b8' : '#475569',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em'
+  };
   const horizontalFormLayout = {
     // 用 flex 而非栅格：更紧凑，避免左侧留白过大导致不美观
     labelCol: { flex: '72px' },
@@ -209,7 +221,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
   return (
     <div style={{
-      display: 'flex', minHeight: '100vh', background: '#fff',
+      display: 'flex', minHeight: '100vh', background: isDarkMode ? '#0f172a' : '#fff',
       flexDirection: isMobileLogin ? 'column' : 'row',
       overflow: 'hidden',
     }}>
@@ -288,7 +300,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       )}
 
       <div style={{
-        flex: isMobileLogin ? 1 : 3, background: '#fff',
+        flex: isMobileLogin ? 1 : 3, background: isDarkMode ? '#0f172a' : '#fff',
         display: 'flex', flexDirection: 'column',
         padding: isMobileLogin ? '40px 24px 8px' : '60px 48px 8px',
         position: 'relative',
@@ -307,13 +319,13 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: 10,
-                border: '1px solid #e2e8f0',
-                background: '#fff',
-                color: '#334155',
+                border: isDarkMode ? '1px solid #334155' : '1px solid #e2e8f0',
+                background: isDarkMode ? '#1e293b' : '#fff',
+                color: isDarkMode ? '#cbd5e1' : '#334155',
                 textDecoration: 'none',
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#334155" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isDarkMode ? '#cbd5e1' : '#334155'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.28 1.15-.28 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" />
                 <path d="M9 18c-4.51 2-5-2-7-2" />
               </svg>
@@ -332,8 +344,8 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             </div>
 
             <div style={{ marginBottom: 24, textAlign: 'center' }}>
-              <h2 style={{ fontSize: 32, fontWeight: 800, color: '#1e293b', margin: '0 0 10px', letterSpacing: '-0.02em' }}>{t('login.welcomeBack')}</h2>
-              <p style={{ fontSize: 15, color: '#64748b', margin: 0 }}>{t('login.credentialsTip')}</p>
+              <h2 style={{ fontSize: 32, fontWeight: 800, color: isDarkMode ? '#f1f5f9' : '#1e293b', margin: '0 0 10px', letterSpacing: '-0.02em' }}>{t('login.welcomeBack')}</h2>
+              <p style={{ fontSize: 15, color: isDarkMode ? '#94a3b8' : '#64748b', margin: 0 }}>{t('login.credentialsTip')}</p>
             </div>
 
             <Tabs

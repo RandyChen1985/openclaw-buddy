@@ -27,6 +27,7 @@ const ShellView: React.FC = () => {
   const [tabIds, setTabIds] = useState<string[]>(() => [seedRef.current!]);
   const [activeKey, setActiveKey] = useState<string>(() => seedRef.current!);
   const [restartByTab, setRestartByTab] = useState<Record<string, number>>(() => ({ [seedRef.current!]: 0 }));
+  const [showWarning, setShowWarning] = useState(true);
 
   const sessionRefs = useRef<Map<string, V3TerminalSessionHandle>>(new Map());
 
@@ -257,6 +258,61 @@ const ShellView: React.FC = () => {
           </Tooltip>
         </Space>
       </div>
+
+      {showWarning && (
+        <div 
+          style={{ 
+            padding: '8px 16px', 
+            background: 'rgba(239, 68, 68, 0.08)', 
+            borderBottom: '1px solid rgba(239, 68, 68, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px',
+            color: '#fca5a5',
+            fontSize: '12px',
+            fontWeight: 600,
+            zIndex: 90
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              padding: '2px 6px', 
+              background: 'rgba(239, 68, 68, 0.2)', 
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              borderRadius: '4px', 
+              fontSize: '10px', 
+              fontWeight: 800, 
+              color: '#ef4444',
+              letterSpacing: '0.5px'
+            }}>
+              ALERT
+            </span>
+            <span>能力越大，责任越大，谨慎操作！</span>
+          </div>
+          <Button 
+            type="text" 
+            size="small" 
+            icon={<XCircle size={14} />} 
+            onClick={() => {
+              setShowWarning(false);
+            }}
+            style={{ 
+              color: '#fca5a5', 
+              opacity: 0.6,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+              width: 20,
+              height: 20
+            }}
+            className="hover:opacity-100 transition-opacity"
+          />
+        </div>
+      )}
 
       <div
         style={{

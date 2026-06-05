@@ -7,10 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
+
+var rbacMu sync.Mutex
 
 // User 系统用户记录
 type User struct {
@@ -447,10 +450,18 @@ func GetRolePermissionKeys(roleID int64) ([]string, error) {
 
 // SetRolePermissions 用给定的 permission keys 覆盖角色权限绑定。
 func SetRolePermissions(roleID int64, permissionKeys []string) error {
+	rbacMu.Lock()
+	defer rbacMu.Unlock()
 	if DB == nil {
 		return fmt.Errorf("database not initialized")
 	}
-	if _, err := DB.Exec(`DELETE FROM role_permissions WHERE role_id = ?`, roleID); err != nil {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM role_permissions WHERE role_id = ?`, roleID); err != nil {
 		return err
 	}
 	for _, k := range permissionKeys {
@@ -459,12 +470,12 @@ func SetRolePermissions(roleID int64, permissionKeys []string) error {
 			continue
 		}
 		var pid int64
-		if err := DB.QueryRow(`SELECT id FROM permissions WHERE key = ?`, k).Scan(&pid); err != nil {
+		if err := tx.QueryRow(`SELECT id FROM permissions WHERE key = ?`, k).Scan(&pid); err != nil {
 			continue
 		}
-		_, _ = DB.Exec(`INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, roleID, pid)
+		_, _ = tx.Exec(`INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, roleID, pid)
 	}
-	return nil
+	return tx.Commit()
 }
 
 func GetUserDirectPermissionKeys(userID int64) ([]string, error) {
@@ -474,10 +485,18 @@ func GetUserDirectPermissionKeys(userID int64) ([]string, error) {
 
 // SetUserPermissions 用给定的 permission keys 覆盖用户权限绑定。
 func SetUserPermissions(userID int64, permissionKeys []string) error {
+	rbacMu.Lock()
+	defer rbacMu.Unlock()
 	if DB == nil {
 		return fmt.Errorf("database not initialized")
 	}
-	if _, err := DB.Exec(`DELETE FROM user_permissions WHERE user_id = ?`, userID); err != nil {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM user_permissions WHERE user_id = ?`, userID); err != nil {
 		return err
 	}
 	for _, k := range permissionKeys {
@@ -486,12 +505,12 @@ func SetUserPermissions(userID int64, permissionKeys []string) error {
 			continue
 		}
 		var pid int64
-		if err := DB.QueryRow(`SELECT id FROM permissions WHERE key = ?`, k).Scan(&pid); err != nil {
+		if err := tx.QueryRow(`SELECT id FROM permissions WHERE key = ?`, k).Scan(&pid); err != nil {
 			continue
 		}
-		_, _ = DB.Exec(`INSERT OR IGNORE INTO user_permissions (user_id, permission_id) VALUES (?, ?)`, userID, pid)
+		_, _ = tx.Exec(`INSERT OR IGNORE INTO user_permissions (user_id, permission_id) VALUES (?, ?)`, userID, pid)
 	}
-	return nil
+	return tx.Commit()
 }
 
 // GetUserBotIDs 返回用户被授权可见的 bot_id 列表。
@@ -520,10 +539,18 @@ func GetUserBotIDs(userID int64) ([]string, error) {
 
 // SetUserBots 覆盖更新用户可见的 bot_id 列表。
 func SetUserBots(userID int64, botIDs []string) error {
+	rbacMu.Lock()
+	defer rbacMu.Unlock()
 	if DB == nil {
 		return fmt.Errorf("database not initialized")
 	}
-	if _, err := DB.Exec(`DELETE FROM user_bots WHERE user_id = ?`, userID); err != nil {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM user_bots WHERE user_id = ?`, userID); err != nil {
 		return err
 	}
 	for _, id := range botIDs {
@@ -531,21 +558,29 @@ func SetUserBots(userID int64, botIDs []string) error {
 		if id == "" {
 			continue
 		}
-		_, _ = DB.Exec(`INSERT OR IGNORE INTO user_bots (user_id, bot_id) VALUES (?, ?)`, userID, id)
+		_, _ = tx.Exec(`INSERT OR IGNORE INTO user_bots (user_id, bot_id) VALUES (?, ?)`, userID, id)
 	}
-	return nil
+	return tx.Commit()
 }
 
 // AssignRolesToUser 用给定 role key 列表覆盖用户的角色绑定。
 func AssignRolesToUser(userID int64, roleKeys []string) error {
+	rbacMu.Lock()
+	defer rbacMu.Unlock()
 	if DB == nil {
 		return fmt.Errorf("database not initialized")
 	}
-	if _, err := DB.Exec(`DELETE FROM user_roles WHERE user_id = ?`, userID); err != nil {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM user_roles WHERE user_id = ?`, userID); err != nil {
 		return err
 	}
 	if len(roleKeys) == 0 {
-		return nil
+		return tx.Commit()
 	}
 	for _, k := range roleKeys {
 		k = strings.TrimSpace(k)
@@ -553,12 +588,12 @@ func AssignRolesToUser(userID int64, roleKeys []string) error {
 			continue
 		}
 		var rid int64
-		if err := DB.QueryRow(`SELECT id FROM roles WHERE key = ?`, k).Scan(&rid); err != nil {
+		if err := tx.QueryRow(`SELECT id FROM roles WHERE key = ?`, k).Scan(&rid); err != nil {
 			continue
 		}
-		_, _ = DB.Exec(`INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)`, userID, rid)
+		_, _ = tx.Exec(`INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)`, userID, rid)
 	}
-	return nil
+	return tx.Commit()
 }
 
 // CreateSession 为用户签发一条新的会话记录。

@@ -31,6 +31,7 @@ func InitDB(dbPath string, existingToken string) (string, error) {
 
 	// 开启 WAL 模式提高并发性能
 	_, _ = DB.Exec("PRAGMA journal_mode=WAL;")
+	_, _ = DB.Exec("PRAGMA busy_timeout = 5000;")
 
 	if err = DB.Ping(); err != nil {
 		return "", fmt.Errorf("failed to ping database: %v", err)

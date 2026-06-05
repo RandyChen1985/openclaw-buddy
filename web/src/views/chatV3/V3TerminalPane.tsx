@@ -129,7 +129,6 @@ export const V3TerminalPane: React.FC<V3TerminalPaneProps> = ({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f8fafc' }}>
           <TerminalIcon size={14} className="text-indigo-400" />
-          <span style={{ fontSize: 13, fontWeight: 800 }}>{t('common.terminal', { defaultValue: '运维终端' })}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <Tooltip title={t('common.interrupt', { defaultValue: '中断 (Ctrl+C)' })}>

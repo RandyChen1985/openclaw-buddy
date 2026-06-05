@@ -26,6 +26,16 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
   const { t } = useTranslation();
   const logoutText = principalName ? `${t('common.logout')}(${principalName})` : t('common.logout');
 
+  const [openKeys, setOpenKeys] = React.useState<string[]>(collapsed ? [] : ['grp-monitor', 'grp-assets', 'grp-binding']);
+
+  React.useEffect(() => {
+    if (collapsed) {
+      setOpenKeys([]);
+    } else {
+      setOpenKeys(['grp-monitor', 'grp-assets', 'grp-binding']);
+    }
+  }, [collapsed]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: SIDEBAR_SHELL }}>
       {/* Logo Area：56px 与主顶栏同高便于对齐；壳色与下方菜单一致，不随全局主题变白 */}
@@ -161,7 +171,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, collapsed, onSelect, onLog
         <Menu
           mode="inline"
           selectedKeys={[activeTab]}
-          defaultOpenKeys={['grp-monitor', 'grp-assets', 'grp-binding']}
+          openKeys={openKeys}
+          onOpenChange={(keys) => setOpenKeys(keys)}
           onClick={({ key }) => onSelect(key)}
           items={navItems}
           theme="dark"
