@@ -9,9 +9,9 @@
 
 [![GitHub stars](https://img.shields.io/github/stars/RandyChen1985/openclaw-buddy?style=flat-square&logo=github)](https://github.com/RandyChen1985/openclaw-buddy/stargazers) [![GitHub forks](https://img.shields.io/github/forks/RandyChen1985/openclaw-buddy?style=flat-square&logo=github)](https://github.com/RandyChen1985/openclaw-buddy/network/members) [![GitHub Release](https://img.shields.io/github/v/release/RandyChen1985/openclaw-buddy?label=release&logo=github&style=flat-square)](https://github.com/RandyChen1985/openclaw-buddy/releases) [![Go Report Card](https://goreportcard.com/badge/github.com/RandyChen1985/openclaw-buddy?style=flat-square)](https://goreportcard.com/report/github.com/RandyChen1985/openclaw-buddy) [![Go Version](https://img.shields.io/github/go-mod/go-version/RandyChen1985/openclaw-buddy?color=blue&style=flat-square)](https://github.com/RandyChen1985/openclaw-buddy/blob/main/go.mod) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-orange.svg?style=flat-square)](https://github.com/RandyChen1985/openclaw-buddy/pulls) [![Last Commit](https://img.shields.io/github/last-commit/RandyChen1985/openclaw-buddy?style=flat-square)](https://github.com/RandyChen1985/openclaw-buddy/commits) [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
-**OpenClaw Buddy** 是一款专为 **OpenClaw (小龙虾 AI Agent)** 打造的专业级带外管理 (Out-of-band Management) 与自愈伴侣系统。
+**OpenClaw Buddy** 是专为 **OpenClaw（小龙虾 AI Agent）** 打造的 **零门槛 Web 管理台与对话伴侣**。
 
-面对 AI 代理由于配置误改、插件冲突导致的“失联”风险，Buddy 作为独立运行的“监控哨兵”，提供了极佳的实时监控、流式登录捕获及自动化故障恢复能力，是每一位 OpenClaw 深度用户的必备运维利器。
+无需熟记 CLI，**非技术人员也能上手**：Bot/模型/插件/渠道在面板里点点即可配置；**Chat V3** 提供类似 **Codex** 的一体化体验——**聊天、Workspace 文件、Skills 技能、Console 终端** 同屏打通，边聊边改文件、调技能、看输出；网关异常时还有独立守护与自愈兜底。一个浏览器，搞定日常管虾、聊虾、绑渠道。
 
 ---
 
@@ -29,11 +29,13 @@
 
 ## ✨ 核心特性
 
-- **🛡️ 独立哨兵 (OOB)**：Buddy 独立进程运行；即使 OpenClaw 网关崩溃，仍可远程重启、回滚并救回系统。
+- **🎯 零门槛上手**：告别 CLI 与手写配置，可视化向导完成 Bot 创建、模型绑定、渠道接入与设备授权；运维背景不是必需品，打开浏览器就能用。
+- **🧪 Codex 式对话工作台 (Chat V3)**：流式聊天、多会话与渠道过滤、LLM **自动总结会话标题**；**Workspace 文件、Skills 技能、Console 终端** 与对话同屏打通，边聊边改文件、调技能、跑命令；支持快捷指令、Markdown 与 **`?embed=true` 纯净嵌入**（详见下文）。
 - **🖥️ 现代 Web 控制面板**：React + Ant Design + Lucide，响应式布局，支持 **WebSocket 实时日志追踪**。
-- **🧪 极客对话实验室 (Chat V3)**：流式在线聊天、多会话与渠道归类过滤、LLM **自动总结会话标题**；深度打通 Bot 专属 **Workspace** 与 **免 CD 运维终端**；快捷指令与 Markdown；支持 **`?embed=true` 纯净免登嵌入**（详见下文 Premium 章节）。
 - **🤖 虾兵蟹将 (Bots/Models)**：自动解析 `openclaw.json` 展示架构，可视化管理模型映射，支持资产强制刷新与实时同步。
+- **🧩 Skills 与插件可视化管理**：在 Web 面板查看、安装、启用 Skills 与底层功能插件（微信、Telegram 等），热重载配置，无需手动改文件或敲命令。
 - **📡 多渠道绑定与可视化配置**：支持 **微信、飞书 (Lark)、Telegram、QQ Bot** 等，在 Web 面板中完成插件安装/启用、绑定状态与参数的可视化管理；对微信等需扫码登录的渠道，监听网关输出并 **流式捕获登录二维码**，扫码秒级完成授权。
+- **🛡️ 独立守护**：Buddy 独立进程运行；即使 OpenClaw 网关崩溃，仍可远程重启、回滚并救回系统。
 - **🩺 智能自愈**：心跳探针与多阶段自愈，异常时自动回滚与备份快照；优先从 `backups/` 恢复健康配置；巡检与自愈事件经 **SQLite** 持久化，便于审计与趋势分析。
 - **📱 设备中心与授权**：区分「待处理连接」与「已配对设备」，支持在 Web 中在线批准新设备接入。
 - **📊 运维看板与指标**：实时掌握 CPU、内存、磁盘、API 延迟与系统/审计日志，并支持延迟等指标趋势展示。
@@ -41,30 +43,31 @@
 - **🔄 异步任务**：网关重启等关键操作为异步任务，支持 **Task ID** 查询进度。
 - **🔗 龙虾面板透传**：内置 Reverse Proxy，配合 `EXTERNAL_DASHBOARD_URL` 在公网安全访问原生 OpenClaw UI。
 
-## 🧪 极致的在线聊天与对话实验室 (Premium Chat V3)
+## 🧪 Codex 式对话工作台 (Chat V3)
 
-> 💡 **“不止是对话调试，更是将聊天、终端、代码编辑与 Workspace 无缝打通的全功能 AI Agent 生产力沙箱。”**
+> 💡 **「像 Codex 一样，聊天、文件、技能、终端在一个界面里完成——不用记命令，不用切窗口。」**
 
 ![Chat V3 Premium Panel](docs/images/chat_v3_premium.png)
 
-原生 OpenClaw 的聊天交互较为基础。**OpenClaw Buddy** 针对该痛点，在业界率先打造了兼具**运维测试、开发交互、文件隔离与极客美学**的降维打击级“对话实验室 (Chat V3)”这一极具代表性的**生产力工具**，提供远超原生体验的六大重磅特性：
+原生 OpenClaw 以 CLI 和基础 UI 为主，对非技术用户门槛偏高。**OpenClaw Buddy** 的 **Chat V3** 把 **对话、Workspace、Skills、Console** 收进同一块画布：左侧管会话，中间聊，右侧改文件、看技能、开终端——**Codex 式的一体化体验**，六大能力如下：
 
-### 1. 📂 与 Workspace 文件夹的深度打通 (Deep Workspace Integration)
-* **会话与物理文件双向流转**：系统自动感知当前会话机器人（Bot）的专属工作区。在右侧侧边栏无缝集成 **Workspace 在线文件浏览器**，支持新建、重命名、文件在线编辑保存。
+### 1. 📂 Workspace 文件同屏编辑 (Deep Workspace Integration)
+* **会话与物理文件双向流转**：系统自动感知当前会话机器人（Bot）的专属工作区。在右侧侧边栏无缝集成 **Workspace 在线文件浏览器**，支持新建、重命名、文件在线编辑保存——**不用记路径，点文件就能改**。
 * **物理路径直达与文件上传隔离**：聊天上传的文件会自动精准落入对应 Bot 的 `workspace/uploads/` 物理目录，机器人的私有知识库文件完美隔离，物理路径（`absPath`）可直接被专家或 Bot 在后台调用。
 * **快速交互**：可在文件浏览器中一键将物理文件以富文本/引用形式附加发送到聊天框，或右键将特定的会话内容/日志一键打包保存回 Bot 的 Workspace 中。
+* **Skills 上下文联动**：Bot 绑定的 **Skills** 与工作区文件在同一界面可见，改文件、调技能、继续对话无需切换工具。
 
-### 2. 📟 免 CD 的 PTY 运维终端打通 (Terminal Integration)
-* 聊天界面右侧侧边栏无缝集成基于 WebSocket 实时长连接的**远程运维终端 (Remote PTY Terminal)**。
-* **智能路径感知**：当点击“打开终端”时，PTY 会自动识别当前聊天 Bot 的 Workspace 物理路径并**自动免 CD 定位**至该目录。运维人员可边聊天边一键测试编译、部署、执行特定 Bot 的指令，真正实现“聊天调试 + 命令行运维”的双剑合璧。
+### 2. 📟 Console 终端同屏可用 (Terminal Integration)
+* 聊天界面右侧侧边栏无缝集成基于 WebSocket 的**远程终端 (Console / PTY)**，一键打开，无需 SSH 或记路径。
+* **智能路径感知**：终端自动定位到当前 Bot 的 Workspace 目录。非技术用户也能边聊边看命令输出；需要时再由进阶用户执行编译、部署等操作。
 
 ### 3. 💬 多会话管理与渠道归类过滤 (Channel & Session Management)
 * **智能会话标题总结 (Auto-summarize)**：集成基于 LLM 的智能会话标题总结。在用户开启聊天后，系统会自动提炼前几句上下文并调用 AI 总结出 10 字以内的精准标题，彻底摆脱枯燥单一的“未命名会话”。
 * **全渠道流式捕获**：深度整合并清晰标识小龙虾网关捕获的微信 (`weixin`)、飞书 (`feishu`)、Telegram (`telegram`)、管理后台 (`dashboard`)、外部 API (`openai-user`)、子代理 (`subagent`) 等多渠道产生的会话，支持在左侧会话列表中根据不同渠道的图标与颜色标识快速进行分类、检索与过滤。
 
-### 4. ⚡ 双轨制快捷指令与 Prompt 模版 (Quick Commands)
-* 在输入框上方提供可视化的快捷指令工具条。
-* 预设系统级高频话术与命令，同时支持用户动态新增、修改与删除自定义 Prompt，一键插入或快捷发送，大幅提升日常调试与 Bot 训练效率。
+### 4. ⚡ 快捷指令与 Prompt 模版 (Quick Commands)
+* 输入框上方提供可视化快捷指令工具条，**不懂命令也能一键发送**常用话术。
+* 预设系统级高频 Prompt；进阶用户可自定义、增删，一键插入聊天框。
 
 ### 5. 🔌 完美的 Standalone 纯净嵌入 (Seamless Embedding Support)
 * **免登免侵入级集成**：完美支持外部业务系统、监控大屏或 `<iframe>` 容器集成。只需在 URL 中追加 `?embed=true` 开启**纯净模式**，侧边栏、页头等所有多余元素会自动隐藏，只保留高格调的纯净聊天核心区。
@@ -78,7 +81,7 @@
 
 ## 🏗️ 系统架构
 
-OpenClaw Buddy 采用非侵入式的“侧挂”架构，通过监控回路与管理链路实现对 OpenClaw 的全方位加固。
+OpenClaw Buddy 采用非侵入式的「侧挂」架构：在浏览器里把 OpenClaw 的 **Workspace、Skills、Console 与对话** 合成一个低门槛入口，同时保留独立守护能力。
 
 ```text
        [ 现代浏览器 / 移动端 ]

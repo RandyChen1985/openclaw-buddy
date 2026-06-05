@@ -9,9 +9,9 @@
 
 [![GitHub stars](https://img.shields.io/github/stars/RandyChen1985/openclaw-buddy?style=flat-square&logo=github)](https://github.com/RandyChen1985/openclaw-buddy/stargazers) [![GitHub forks](https://img.shields.io/github/forks/RandyChen1985/openclaw-buddy?style=flat-square&logo=github)](https://github.com/RandyChen1985/openclaw-buddy/network/members) [![GitHub Release](https://img.shields.io/github/v/release/RandyChen1985/openclaw-buddy?label=release&logo=github&style=flat-square)](https://github.com/RandyChen1985/openclaw-buddy/releases) [![Go Report Card](https://goreportcard.com/badge/github.com/RandyChen1985/openclaw-buddy?style=flat-square)](https://goreportcard.com/report/github.com/RandyChen1985/openclaw-buddy) [![Go Version](https://img.shields.io/github/go-mod/go-version/RandyChen1985/openclaw-buddy?color=blue&style=flat-square)](https://github.com/RandyChen1985/openclaw-buddy/blob/main/go.mod) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-orange.svg?style=flat-square)](https://github.com/RandyChen1985/openclaw-buddy/pulls) [![Last Commit](https://img.shields.io/github/last-commit/RandyChen1985/openclaw-buddy?style=flat-square)](https://github.com/RandyChen1985/openclaw-buddy/commits) [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
-**OpenClaw Buddy** is a professional-grade Out-of-band Management (OOB) and self-healing companion system designed specifically for **OpenClaw (Crawfish AI Agent)**.
+**OpenClaw Buddy** is a **zero-barrier Web console and conversation companion** built for **OpenClaw (Crawfish AI Agent)**.
 
-Facing risks of "disconnection" caused by configuration errors or plugin conflicts, Buddy serves as an independent "Watchdog Sentinel," providing excellent real-time monitoring, streaming login capture, and automated failure recovery—an essential O/M tool for every power user of OpenClaw.
+No CLI memorization required—**non-technical users can get started too**: configure Bots, models, plugins, and channels with clicks in the panel. **Chat V3** delivers a **Codex-like unified experience**—**chat, Workspace files, Skills, and Console terminal** on one screen: edit files, tune skills, and watch output while you talk. When the gateway misbehaves, independent guardian & self-healing has your back. One browser for daily manage, chat, and channel binding.
 
 ---
 
@@ -29,11 +29,13 @@ Facing risks of "disconnection" caused by configuration errors or plugin conflic
 
 ## ✨ Core Features
 
-- **🛡️ Independent Sentinel (OOB)**: Buddy runs as its own process. If the OpenClaw gateway fails, you can still remotely restart, roll back, and recover the system.
+- **🎯 Zero Barrier to Entry**: Skip the CLI and hand-edited configs—visual wizards for Bot creation, model binding, channel setup, and device approval. No ops background required; open a browser and go.
+- **🧪 Codex-Style Dialog Workspace (Chat V3)**: Streaming chat, multi-session and channel filtering, **LLM auto-generated session titles**; **Workspace files, Skills, and Console terminal** on the same screen—edit files, tune skills, and run commands while you chat; quick commands, Markdown, and **`?embed=true` clean embedding** (see below).
 - **🖥️ Modern Web Control Panel**: React + Ant Design + Lucide, responsive layout, and **WebSocket real-time log streaming**.
-- **🧪 Premium Dialog Lab (Chat V3)**: Streaming online chat, multi-session and channel filtering, **LLM auto-generated session titles**; deep integration with per-bot **Workspace** and **no-`cd` O/M terminal**; quick commands and Markdown; **clean standalone embedding** with `?embed=true` (see the Premium section below).
 - **🤖 Bots & Models**: Parses `openclaw.json` for architecture visualization, manages model mappings, and supports forced asset refresh and live sync.
+- **🧩 Visual Skills & Plugin Management**: View, install, enable Skills and underlying plugins (WeChat, Telegram, etc.) from the Web UI; hot-reload configs without editing files or running commands.
 - **📡 Multi-channel binding & visual setup**: **WeChat, Feishu/Lark, Telegram, QQ Bot**, and more—install/enable plugins, binding status, and options from the Web UI; for QR-based logins (e.g. WeChat), the console listens to gateway output and **streams the login QR code** for near-instant authorization.
+- **🛡️ Independent Guardian**: Buddy runs as its own process. If the OpenClaw gateway fails, you can still remotely restart, roll back, and recover the system.
 - **🩺 Intelligent Self-Healing**: Heartbeat probes and multi-stage recovery with automatic rollback and snapshots; prefers healthy configs from `backups/`; inspection and healing events **persisted in SQLite** for audit and trends.
 - **📱 Device Center & Authorization**: Separates pending connection requests from paired devices; approve new devices from the Web UI.
 - **📊 O/M Dashboard & Metrics**: CPU, memory, disk, API latency, and system/audit logs at a glance, with trend views where applicable.
@@ -41,30 +43,31 @@ Facing risks of "disconnection" caused by configuration errors or plugin conflic
 - **🔄 Async Tasks**: Gateway restart and similar operations run asynchronously with **Task ID** status tracking.
 - **🔗 Native UI Passthrough**: Built-in reverse proxy; pair with `EXTERNAL_DASHBOARD_URL` for safe public access to the native OpenClaw UI.
 
-## 🧪 Premium Online Chat & Dialog Laboratory (Chat V3)
+## 🧪 Codex-Style Dialog Workspace (Chat V3)
 
-> 💡 **"More than just a chat debugger, it is a full-featured AI Agent productivity sandbox that seamlessly bridges chat, terminal, code editing, and Workspace."**
+> 💡 **"Like Codex: chat, files, skills, and terminal in one view—no commands to memorize, no window hopping."**
 
 ![Chat V3 Premium Panel](docs/images/chat_v3_premium.png)
 
-The native OpenClaw chat interaction is relatively basic. **OpenClaw Buddy** addresses this pain point by pioneering an O/M testing, development, and file-isolated "Dialog Laboratory (Chat V3)" as an ultimate **productivity tool**, featuring developer aesthetics and delivering six powerhouse capabilities far beyond native:
+Native OpenClaw leans on CLI and a basic UI, which raises the bar for non-technical users. **Buddy's Chat V3** puts **conversation, Workspace, Skills, and Console** on one canvas: sessions on the left, chat in the center, files/skills/terminal on the right—a **Codex-like unified experience** with six core capabilities:
 
-### 1. 📂 Deep Workspace Integration
-* **Bi-directional Flow**: The system automatically detects the workspace folder of the current active bot. An **online Workspace File Explorer** is seamlessly integrated into the right sidebar, supporting creation, renaming, and online editing/saving of files.
-* **Isolated File Uploads**: Uploaded files automatically land in the specific bot's `workspace/uploads/` physical folder. This keeps each bot's private files completely isolated, while allowing direct access to the physical path (`absPath`) by backend scripts.
-* **Rapid Action**: Effortlessly attach/send physical files to the chat box as rich-text or blockquotes with a single click, or right-click files/folders in the explorer to save current chat contents back to the Workspace.
+### 1. 📂 Workspace Files on the Same Screen (Deep Workspace Integration)
+* **Bi-directional flow**: The system detects the active bot's workspace. An **online Workspace file explorer** lives in the right sidebar—create, rename, and edit/save files **without memorizing paths; click to edit**.
+* **Isolated file uploads**: Uploaded files land in the bot's `workspace/uploads/` folder; each bot's files stay isolated while backend scripts can use the physical path (`absPath`).
+* **Quick actions**: Attach files to the chat in one click, or save conversation content back to the Workspace from the explorer.
+* **Skills in context**: **Skills** bound to the bot stay visible alongside workspace files—tune skills and keep chatting without switching tools.
 
-### 2. 📟 No-CD PTY Terminal Integration
-* An interactive **Remote PTY Terminal** based on WebSocket real-time persistent connections is embedded right inside the sidebar.
-* **Smart Path Awareness**: Clicking "Open Terminal" automatically locates the current active Bot's Workspace physical path and **instantly auto-CDs** to that directory. Developers can execute build scripts, test commands, or manage bot deployments while chatting, bringing "Chat Debugging + CLI O/M" together seamlessly.
+### 2. 📟 Console Terminal on the Same Screen (Terminal Integration)
+* A **remote Console / PTY terminal** (WebSocket) is embedded in the right sidebar—open with one click, no SSH or path juggling.
+* **Smart path awareness**: The terminal auto-locates the active bot's Workspace. Non-technical users can watch output while chatting; power users can run builds and deploys when needed.
 
 ### 3. 💬 Channel & Session Management
 * **Intelligent Title Summary (Auto-summarize)**：Powered by LLM, the system dynamically analyzes the first few exchanges in a conversation to auto-generate a precise, contextual title under 10 words, putting an end to generic "Untitled Sessions."
 * **Full-Channel Streaming Capture**: Consolidates and clearly tags sessions routed from WeChat (`weixin`), Feishu/Lark (`feishu`), Telegram (`telegram`), System Dashboard (`dashboard`), API keys (`openai-user`), and sub-agents (`subagent`). Users can quickly classify, search, and filter sessions by channel icons and distinct colors.
 
-### 4. ⚡ Dual-Track Quick Commands
-* A visual quick-action command bar is located right above the input area.
-* Prefills system-level high-frequency prompts/commands, and allows users to dynamically add, edit, or delete custom Prompts, enabling one-click insertion and instant sending to drastically improve O/M efficiency.
+### 4. ⚡ Quick Commands & Prompt Templates
+* A visual quick-command bar above the input—**send common prompts in one click, no commands required**.
+* System presets for frequent tasks; power users can add, edit, or remove custom prompts and insert them instantly.
 
 ### 5. 🔌 Seamless Standalone Embedding Support
 * **Zero-Auth iframe Integration**: Perfect for integrating chat interfaces into dashboards, portals, or other systems. Simply append `?embed=true` to enable **Clean Mode**, hiding headers, sidebars, and all unnecessary controls.
@@ -80,7 +83,7 @@ The native OpenClaw chat interaction is relatively basic. **OpenClaw Buddy** add
 
 ## 🏗️ System Architecture
 
-OpenClaw Buddy adopts a non-intrusive "Sidecar" architecture, providing all-around reinforcement for OpenClaw through monitoring loops and management links.
+OpenClaw Buddy uses a non-intrusive sidecar architecture: in the browser, it merges OpenClaw's **Workspace, Skills, Console, and chat** into one low-barrier entry point, with independent guardian capabilities when things go wrong.
 
 ```text
        [ Modern Browser / Mobile ]
