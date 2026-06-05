@@ -868,6 +868,8 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
   const [approvalClicked, setApprovalClicked] = useState<Record<string, boolean>>({});
   const [metaBlockExpandedByKey, setMetaBlockExpandedByKey] = useState<Record<string, boolean>>({});
   const terminalScrollStateByKeyRef = useRef<Record<string, TerminalScrollState>>({});
+  /** 同一条消息内多段同类型 meta 卡片（如 analysis）需按渲染顺序分配独立 key */
+  const metaBlockInstanceIndexRef = useRef<Record<string, number>>({});
 
   /** 编辑框草稿：Virtuoso 下列项重渲染时若反复用父级 editContent 覆盖受控 value，会打断中文 IME */
   const [editDraft, setEditDraft] = useState('');
@@ -1118,6 +1120,13 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
 
   // ReactMarkdown 的 components 配置，抽出来是为了在主气泡和嵌入式 meta 折叠区里复用同一套渲染器。
   const metaBlockBaseKey = String((msg as any).id || msg.runId || index);
+  // 每次渲染重置，使同消息内多段同类型卡片（如 analysis）按出现顺序获得独立展开 key
+  metaBlockInstanceIndexRef.current = {};
+  const allocMetaBlockInstanceKey = (blockType: string) => {
+    const next = metaBlockInstanceIndexRef.current[blockType] ?? 0;
+    metaBlockInstanceIndexRef.current[blockType] = next + 1;
+    return `${blockType}:${next}`;
+  };
   const metaBlockExpansionProps = (blockKey: string, defaultExpanded: boolean) => {
     const key = `${metaBlockBaseKey}:${blockKey}`;
     return {
@@ -1305,13 +1314,14 @@ const V3MessageItem: React.FC<V3MessageItemProps> = ({
       }
       if (fullText.includes(':::analysis')) {
         const analysisCopyText = stripContainerWrapper(fullText, 'analysis') || '';
+        const analysisBlockKey = allocMetaBlockInstanceKey('analysis');
         return (
           <CollapsibleMeta
             title={t('chat.analysisProcess', { defaultValue: '分析过程' })}
             icon={Search}
             iconStyle={{ color: '#6366f1' }}
             defaultExpanded={false}
-            {...metaBlockExpansionProps('analysis', false)}
+            {...metaBlockExpansionProps(analysisBlockKey, false)}
             copyText={analysisCopyText}
             onCopy={(txt: string) => copyToClipboard(txt)}
             copyLabel={t('chat.copy', { defaultValue: '复制' })}
