@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenClaw Buddy v1.0.15：权限守边界，画布识路径</title>
+</head>
+<body style="margin: 0; padding: 0; background: #eef2ff; font-family: -apple-system, BlinkMacSystemFont, -apple-system-font, 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif; color: #0f172a;">
+  <main style="max-width: 680px; margin: 0 auto; background: #ffffff;">
+    <section style="padding: 28px 22px 18px; background: #0f172a; color: #ffffff;">
+      <p style="margin: 0 0 10px; color: #93c5fd; font-size: 13px; letter-spacing: 1px; font-weight: 800;">OPENCLAW BUDDY RELEASE</p>
+      <h1 style="margin: 0; font-size: 28px; line-height: 1.25; font-weight: 900; color: #ffffff;">OpenClaw Buddy v1.0.15：权限守边界，画布识路径</h1>
+      <p style="margin: 14px 0 0; color: #cbd5e1; font-size: 15px; line-height: 1.8;">权限守边界，画布识路径。为微信公众号准备的完整 HTML 版本，保留 Markdown 全量内容。</p>
+    </section>
+    <section style="padding: 0; line-height: 0; background: #0f172a;">
+      <img src="./banner-v1.0.15.png" alt="OpenClaw Buddy v1.0.15" style="display: block; width: 100%; height: auto; margin: 0;">
+    </section>
+    <article style="padding: 24px 18px 34px;">
+        <section style="margin: 20px 0 28px; padding: 18px 18px 14px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0;">
+          <p style="margin: 0 0 12px; color: #334155; font-size: 15px; line-height: 1.85;">先跟大家报个平安：这段时间我主要精力在另一个新项目——<strong style="font-weight: 800; color: #0f172a;">云枢智能体平台</strong>上，忙着做多 Agent 编排、ChatBI 数据洞察和企业级落地；但 <strong style="font-weight: 800; color: #0f172a;">OpenClaw Buddy</strong> 一直没停更，v1.0.15 照常来了。</p>
+          <p style="margin: 0 0 12px; color: #334155; font-size: 15px; line-height: 1.85;">如果你对「多智能体协作 + RAG 知识库 + 物理数据源直连 + 安全沙箱 + Token 审计看板」这类企业级玩法感兴趣，欢迎顺路看看云枢：</p>
+          <p style="margin: 0 0 12px; color: #334155; font-size: 15px; line-height: 1.85;"><a href="https://github.com/RandyChen1985/yunshu-ai-agent-platform" style="color: #2563eb; text-decoration: none; border-bottom: 1px solid #93c5fd; font-weight: 700;">github.com/RandyChen1985/yunshu-ai-agent-platform</a></p>
+          <p style="margin: 0; color: #64748b; font-size: 14px; line-height: 1.8;">Star 一下是对两个项目最好的鼓励。下面进入 Buddy 本版更新 👇</p>
+        </section>
+        <section style="margin: 18px 0 28px; padding: 16px; border-radius: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-left: 5px solid #2563eb;">
+          <p style="margin: 0; font-size: 13px; line-height: 1.9; color: #334155; font-weight: 700;"><strong style="font-weight: 800; color: #0f172a;">版本 (Version)</strong>: v1.0.15<br><strong style="font-weight: 800; color: #0f172a;">发布日期 (Date)</strong>: 2026-06-12<br><strong style="font-weight: 800; color: #0f172a;">基准代码 (Base)</strong>: <code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">fbd8a3c</code><br><strong style="font-weight: 800; color: #0f172a;">当前提交 (Commit)</strong>: <code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">8e3ebeb</code><br><strong style="font-weight: 800; color: #0f172a;">核心主题</strong>: RBAC 权限 UI 加固（无权限 Bot 禁用与水印、运维终端安全警示）、画布 <code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">/workspace/</code> 虚拟路径自动映射、SQLite RBAC 写操作互斥锁、Dock/侧栏/登录页/ECharts/analysis 卡片等体验修复、README 零门槛与 Codex 式体验定位重构。</p>
+        </section>
+        <section style="margin: 34px 0 18px; padding: 14px 0 0; border-top: 3px solid #0f172a;">
+          <h2 style="margin: 0; font-size: 22px; line-height: 1.35; font-weight: 900; color: #0f172a;">🚀 新增特性 (New Features)</h2>
+        </section>
+        <section style="margin: 18px 0 22px; padding: 16px; border-radius: 12px; background: #ffffff; border: 1px solid #e2e8f0; border-left: 6px solid #2563eb; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);">
+          <h3 style="margin: 0 0 12px; font-size: 18px; line-height: 1.5; font-weight: 900; color: #2563eb;">1. RBAC 权限边界可视化：无权限 Bot 禁用与水印 🔐</h3>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> <strong style="font-weight: 800; color: #0f172a;">智能体中心权限感知</strong>：<code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">BotsManager</code> 接入 <code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">allowedBotIDs</code>，对 RBAC 普通用户无权访问的 Bot 卡片实施全面 UI 降级——卡片灰显、渐变背景收束、在线状态灯隐藏，并醒目打上红色「无权限」标签。</p>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> <strong style="font-weight: 800; color: #0f172a;">操作按钮级禁用</strong>：编辑 Soul/Identity/Memory/Heartbeat/Agents、跳转聊天、工作区浏览、卡片/列表视图的编辑与删除等按钮，在无权限时一律 <code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">disabled</code>，从交互层杜绝越权操作。</p>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> <strong style="font-weight: 800; color: #0f172a;">列表视图同步</strong>：表格模式下同样展示「无权限」标签并禁用操作列按钮，卡片与列表双视图体验一致。</p>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> <strong style="font-weight: 800; color: #0f172a;">运维终端安全警示栏</strong>：<code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">ShellView</code> 顶部新增可关闭的 ALERT 警示条——「能力越大，责任越大，谨慎操作！」，提醒操作者终端具备真实系统权限，降低误操作风险。</p>
+          <p style="margin: 14px 0 12px; padding: 13px 14px; border-radius: 10px; background: #ecfeff; border-left: 4px solid #0891b2; color: #164e63; font-size: 14px; line-height: 1.8; font-weight: 700;"><strong style="font-weight: 800; color: #0f172a;">💡 大白话：</strong> 普通用户登录后，只能动自己有权管的 Bot；没权限的虾兵一眼就能认出来，按钮也点不动。开运维终端时还会先看到一条红色提醒，别手滑删错东西。</p>
+          </section>
+        <section style="margin: 18px 0 22px; padding: 16px; border-radius: 12px; background: #ffffff; border: 1px solid #e2e8f0; border-left: 6px solid #059669; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);">
+          <h3 style="margin: 0 0 12px; font-size: 18px; line-height: 1.5; font-weight: 900; color: #059669;">2. 画布虚拟路径自动对账与映射 🗺️</h3>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> <strong style="font-weight: 800; color: #0f172a;">多候选路径重试</strong>：在 Chat V3 消息流中点击文件「打开」按钮时，若路径形如 <code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">/workspace/xxx</code>，系统自动生成候选物理路径列表——优先拼接当前 Bot 的 <code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">currentWorkspacePath</code>，兜底 <code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">~/.openclaw/workspace</code>，依次请求后端读取并自动重试。</p>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> <strong style="font-weight: 800; color: #0f172a;">成功反馈含映射状态</strong>：文件读取成功后弹出提示，告知用户实际使用的映射路径，便于在多沙箱/隔离环境下排查路径问题。</p>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> <strong style="font-weight: 800; color: #0f172a;">移动端友好拦截</strong>：移动端点击「打开」时提示「移动端下空间有限，暂不支持打开画布」，避免小屏强行拉起右侧画布导致布局错乱。</p>
+          <p style="margin: 14px 0 12px; padding: 13px 14px; border-radius: 10px; background: #ecfeff; border-left: 4px solid #0891b2; color: #164e63; font-size: 14px; line-height: 1.8; font-weight: 700;"><strong style="font-weight: 800; color: #0f172a;">💡 大白话：</strong> AI 经常输出 <code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">/workspace/报告.pdf</code> 这类虚拟路径，以前可能打不开；现在 Buddy 会自动帮你翻译成真实磁盘路径并挨个试，试通了就直接在画布里预览。</p>
+          </section>
+        <section style="margin: 34px 0 18px; padding: 14px 0 0; border-top: 3px solid #0f172a;">
+          <h2 style="margin: 0; font-size: 22px; line-height: 1.35; font-weight: 900; color: #0f172a;">🛠️ 稳定性、修复与体验打磨 (Fixes &amp; Chores)</h2>
+        </section>
+        <section style="margin: 18px 0 22px; padding: 16px; border-radius: 12px; background: #ffffff; border: 1px solid #e2e8f0; border-left: 6px solid #2563eb; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);">
+          <h3 style="margin: 0 0 12px; font-size: 18px; line-height: 1.5; font-weight: 900; color: #2563eb;">1. SQLite RBAC 死锁根治 🔒</h3>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> <strong style="font-weight: 800; color: #0f172a;">互斥锁同步写操作</strong>：在 <code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">internal/utils/rbac.go</code> 引入 <code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">rbacMu sync.Mutex</code>，对所有 RBAC 写操作加锁串行化，彻底终结前端并发保存用户/角色/权限时触发的 <code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">database is locked</code> SQLite 死锁冲突。</p>
+          <p style="margin: 14px 0 12px; padding: 13px 14px; border-radius: 10px; background: #ecfeff; border-left: 4px solid #0891b2; color: #164e63; font-size: 14px; line-height: 1.8; font-weight: 700;"><strong style="font-weight: 800; color: #0f172a;">💡 大白话：</strong> 用户管理页面如果多人同时改权限、或者前端连续点保存，以前可能撞库锁死；现在后端排队写，稳了。</p>
+          </section>
+        <section style="margin: 18px 0 22px; padding: 16px; border-radius: 12px; background: #ffffff; border: 1px solid #e2e8f0; border-left: 6px solid #059669; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);">
+          <h3 style="margin: 0 0 12px; font-size: 18px; line-height: 1.5; font-weight: 900; color: #059669;">2. 前端 UI/UX 细节修复 ✨</h3>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> <strong style="font-weight: 800; color: #0f172a;">多段 analysis 卡片展开联动修复</strong>：同一条消息内若有多张 analysis 思考卡片，以前共用展开 key 导致点一张全部展开；现按渲染顺序分配独立 key，各卡片展开状态互不干扰。</p>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> <strong style="font-weight: 800; color: #0f172a;">登录页暗黑模式对比度</strong>：修复 Token 登录 Tab 与输入框在暗黑主题下文字/边框看不清的问题，登录首屏可读性显著提升。</p>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> <strong style="font-weight: 800; color: #0f172a;">右侧 Dock 面板精简</strong>：文件浏览器、实时画布、运维终端三个子面板移除与外部拖拽条重复的文字标题，仅保留文件夹、闪电、命令行等图标，界面更紧凑清爽。</p>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> <strong style="font-weight: 800; color: #0f172a;">侧栏 ghost 菜单残留修复</strong>：侧栏折叠时 ghost 悬浮菜单不再残留于页面，避免误触与视觉干扰。</p>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> <strong style="font-weight: 800; color: #0f172a;">Dock 视觉对齐</strong>：右侧 Dock 分界线与细线样式统一对齐，整体视觉一致性提升。</p>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> <strong style="font-weight: 800; color: #0f172a;">ECharts 图表性能优化</strong>：聊天气泡内 ECharts 图表显示效果与渲染性能调优；复制函数以 <code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">useCallback</code> 重构，减少不必要的组件重渲染。</p>
+          </section>
+        <section style="margin: 34px 0 18px; padding: 14px 0 0; border-top: 3px solid #0f172a;">
+          <h2 style="margin: 0; font-size: 22px; line-height: 1.35; font-weight: 900; color: #0f172a;">📦 发布产物 (Release Artifacts)</h2>
+        </section>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> 🐧 <strong style="font-weight: 800; color: #0f172a;">Linux (amd64)</strong>: <code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">openclaw-buddy-linux-1.0.15.tar.gz</code></p>
+          <p style="margin: 0 0 10px; color: #334155; font-size: 15px; line-height: 1.85;"><span style="color: #2563eb; font-weight: 900;">•</span> 🍎 <strong style="font-weight: 800; color: #0f172a;">macOS (Universal)</strong>: <code style="font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #0f172a; background: #e2e8f0; border-radius: 4px; padding: 2px 5px;">openclaw-buddy-mac-1.0.15.tar.gz</code></p>
+          <p style="margin: 0 0 12px; color: #334155; font-size: 15px; line-height: 1.85; ">🔗 <strong style="font-weight: 800; color: #0f172a;">下载地址</strong>: <a href="https://github.com/RandyChen1985/openclaw-buddy/releases/tag/1.0.15" style="color: #2563eb; text-decoration: none; border-bottom: 1px solid #93c5fd; font-weight: 700;">GitHub Releases v1.0.15</a></p>
+        <section style="margin: 34px 0 18px; padding: 14px 0 0; border-top: 3px solid #0f172a;">
+          <h2 style="margin: 0; font-size: 22px; line-height: 1.35; font-weight: 900; color: #0f172a;">❤️ 特别致谢</h2>
+        </section>
+          <p style="margin: 0 0 12px; color: #334155; font-size: 15px; line-height: 1.85; ">感谢每一位在 RBAC 权限边界与画布路径映射场景里帮我们踩坑、提 Issue 的同伴——你们在多 Bot 隔离环境里的每一次「打不开」与「点不动」，最后都变成了这一版更透明、更可靠的体验。</p>
+        <section style="margin: 20px 0 28px; padding: 18px 18px 8px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0;">
+          <p style="margin: 0 0 12px; color: #334155; font-size: 15px; line-height: 1.85; font-style: italic; color: #1e293b;">"权限若清晰，操作才安心。"</p>
+        </section>
+    </article>
+    <footer style="padding: 24px 18px 30px; background: #0f172a; color: #cbd5e1; text-align: center;">
+      <p style="margin: 0 0 12px; font-size: 13px; line-height: 1.8;">RandyChen1985 / openclaw-buddy / 2026</p>
+      <a href="https://github.com/RandyChen1985/openclaw-buddy/releases/tag/1.0.15" style="display: inline-block; color: #ffffff; background: #2563eb; text-decoration: none; border-radius: 999px; padding: 10px 16px; font-size: 14px; font-weight: 800;">GitHub Releases v1.0.15</a>
+    </footer>
+  </main>
+</body>
+</html>
